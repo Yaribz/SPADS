@@ -1,0 +1,769 @@
+getDefaultModOptions.pl:
+=======================
+0.1: first public version (beta)
+0.2: add "resetmodoptions" to generated battle settings
+0.2a: fix "wrong option type" errors in unitsync.log
+      add optional parameter for Spring data directory
+0.3: new optional parameter to specify an output file instead of using stdout (the unitsync library now pollutes stdout)
+     avoid unitsync re-inits during Spring archives load (use "RemoveAllArchives" unitsync function instead)
+0.4: "games" folder is also listed as subdirectory of spring data directory
+     battle setting "resetmodoptions" is replaced by "resetoptions" (impacts both mod settings and map settings)
+     removed the deprecated unitsync functions calls
+     improved error message when failing to load Perl Unitsync module
+     fixed option sections misrecognized
+0.4a: "packages" folder is also listed as subdirectory of spring data directory
+0.4b: fixed section separator line appearing even when comments are disabled
+0.4c: "mods" folder is no longer listed as subdirectory of spring data directory
+      make Spring 95 behave like previous versions concerning writable data directory location
+
+help.dat:
+========
+0.1: first public version (beta)
+0.2a: typo in !reloadArchives
+0.3.0: new commands: mapLink, nextMap, nextPreset, update (commands.conf must be updated, refer to configuration templates for default rights)
+0.3.0a: typo in !status
+0.3.1: new optional !list parameters (map filters for "!list maps", "all" for "!list [hb]settings")
+0.4.0: new command aliases: "!spec <name>" (= "!force <name> spec"), and "!cv <command>" (= "!callvote <command>")
+0.5.0: new commands: boss, cheat
+0.5.1: add help for "!help bset <battleSetting>" syntax (battle settings help added)
+0.5.2: add help for "!reloadConf keepSettings" syntax (configuration reload without altering current settings)
+0.6.0: new command: rebalance
+0.7.0: new command: learnMaps
+0.8.0: new commands: auth, chpasswd
+0.8.1: new optional !reloadConf parameters: configuration macros (re)definitions (persistent if "keepMacros" is specified)
+       new optional !restart parameters: configuration macros (re)definitions
+0.8.2: update help for !help command (all settings help is now implemented)
+0.9.0: new commands: banIp, banIps, chrank, coop, kickBan, searchUser, smurfs, specAfk, unbanIp, unbanIps
+       add "ip" filter in !ban syntax
+0.9.0a: new optional !smurfs parameter ("all")
+0.9.0b: new optional !clearBox parameter ("extra")
+0.9.0c: the "!smurfs" command without parameter now performs smurf detection on all players in battle
+0.9.1: add example for accountId ban type
+0.9.1a: add examples for ban durations using time units ("y": year, "m": month, "w": week, "d": day, "h": hour)
+0.10.0: new "#<accountId>" syntax for !ban, !banIp, !banIps, !smurfs, !unbanIp and !unbanIps commands
+        new "@<ipFilter>" syntax for !searchUser command
+        new commands: !sendLobby, !whois
+0.10.0a: improve "unlock" command description
+0.10.1: new "spec" optional parameter for !quit/!restart commands
+0.10.2: !nextMap and !nextPreset now use the same rotation mode as rotationEndGame (if end game rotation is disabled, "random" is still used as previously)
+0.11: new commands: addBot, advert, joinAs, loadBoxes, removeBot
+      the "!force" command can now be used for local AI bots too
+      the "!nextMap" and "!nextPreset" commands are now configured by "rotationManual" preset setting (previously the same setting as end game rotation was used)
+0.11.1: new command: !stats
+0.11.2: add rotationMaps parameter description for "!list" command
+0.12.0: new aliases: "!b" = "!vote b", "!n" = "!vote n", "!y" = "!vote y"
+        new commands: "!chskill","!plugin"
+        new !list parameters: "plugins","pSettings"
+0.12.0a: fix !balance description (commShare has been renamed to nbPlayerById years ago)
+0.12.0b: fix typo in !chskill description
+
+helpSettings.dat:
+================
+0.1.0: first public version (beta)
+0.1.1: remove blank lines which aren't shown in help output anyway
+       typos
+0.1.1a: bad type for "votePvMsgDelay" preference
+0.1.1b: SPADS no longer installs/updates/uses its own unitsync.dll (Windows) [backport of 0.2.1b]
+0.2.0: new global settings: kickBanDuration, minLevelForIpAddr, userDataRetention
+       new preset settings: extraBox, idShareMode, handleSuggestions, rankMode, shareId
+       new preferences: handleSuggestions, rankMode, shareId
+       add help for preference "password"
+0.2.1: new allowed value for "idShareMode" setting: "clan"
+0.2.1a: "contrib" release type added (contains external unchecked patches)
+0.2.1b: SPADS no longer installs/updates/uses its own unitsync.dll (Windows)
+0.2.1c: max value of the maxPlayers hosting setting is now 251
+0.3.0: new global settings: onBadSpringVersion, maxSpecsImmuneLevel, minVoteParticipation, useWin32Process
+       new preset settings: ircColors, spoofProtection, clanMode, autoStop, noSpecChat, noSpecDraw
+       new preferences: spoofProtection, ircColors, clan
+0.3.1: new "whenOnlySpec" value for "autoRestartForUpdate" global setting
+0.3.2: map names no longer contain ".smf" extension
+0.3.3: new "autoSaveBoxes" value allowed: "2" (auto-save map boxes only if there is no start box saved for this map yet)
+       "%M" is now allowed in mapLink preset setting (map archive name)
+0.3.4: new "freeSettings" syntax allowed to restrict free values of each setting
+0.3.4a: add "not supported by TASClient" information about "ircColors" preference
+0.3.5: new "idShareMode" value allowed: "off" (workaround for 16 IDs max lobby limitation: it totally disables shared IDs, disregarding what is set in battle lobby)
+       "rotationEndGame" now also determines the rotation mode used for !nextMap and !nextPreset commands
+       it is now possible to set "map" setting to an empty value in configuration files to use the first map of current map list
+0.3.5a: typo
+0.3.5b: added syntax for multi-lines welcome messages and private welcome messages
+0.3.5c: "%t" is now allowed in welcome messages (time elapsed since game start)
+0.4.0: new global settings: forceHostIp, springConfig, springServerType, statusFloodAutoKick, broadcastChannels
+       new preset settings: rotationManual, minTeamSize, endGameCommand, endGameCommandEnv, maxRemoteBots, maxLocalBots, autoAddBotNb, localBots, allowedLocalAIs,
+                            allowMapOptionsValues, midGameSpecLevel, ghostMapLink, advertDelay, advertMsg
+       battle lobby message flood and status-change flood detections are now configured by 2 distinct parameters (previously they were both handled by "msgFloodAutoKick")
+       global setting "msgFloodAutoBan" has been renamed to "kickFloodAutoBan"
+       global setting "masterChannel" no longer specifies a channel where SPADS reports basic game status mesages (new "broadcastChannels" global setting is used instead)
+       preset setting "rotationEndGame" no longer determines the rotation modes used by !nextMap and !nextPreset commands (new "rotationManual" global setting is used instead)
+       preset setting "allowGhostMaps" behaviour now depends on new "springServerType" global setting (ghost maps can't be used with headless server)
+       preset setting "nbTeams" can take special value "1" for "chicken" type games
+       preset setting "mapLink" is now only used for local maps
+       battle setting "resetmodoptions" has been renamed to "resetoptions" and now concerns both mod options and map options
+       various typos
+0.4.0a: fix advertDelay description (advertMessage -> advertMsg)
+        nbPlayerById, nbTeams and teamSize must be non-null
+0.4.1: new preset setting: endGameCommandMsg
+0.4.1a: added a few placeholders for end game command settings (startPlayingTimestamp, endPlayingTimestamp, gameDuration)
+0.4.2: new preset setting: endGameAwards
+       minor update for %structure placeholder in endGameCommad and endGameCommandEnv settings
+0.5.0: new global settings: pluginsDir, autoLoadPlugins
+       new preset settings: speedControl, skillMode
+       new preference: skillMode
+       rankMode preference now only applies if skillMode preference is set to "clan"
+       default clanMode is now "tag;pref(5)" (was "tag;pref(10)")
+0.5.1: "rank" has been renamed to "skill" in balanceMode setting values ("skill","clan;skill")
+       fix "password" hosting setting description
+0.5.1a: updated "modName" hosting setting description: the mod can also be located in "games" and "packages" subdirectories of Spring data directory
+0.5.1b: "statusFloodAutoKick" global setting was misnamed "Message flood auto-kick thresholds"
+        updated "minLevelForIpAddr" global setting description
+0.5.1c: updated "speedControl" allowed values (new range: 1-2)
+0.5.2: updated "onBadSpringVersion" description for multi-engine lobby protocol extension
+0.5.2a: minor fix in "autoUpdateBinaries" description
+0.5.2b: updated "modName" hosting setting description: the mod can no longer be located in "mods" subdirectory of Spring data directory
+
+spads.pl:
+========
+0.0.3: first public version (beta)
+0.0.4a: fix disconnection from lobby server when adding 2 start boxes for same team
+0.0.4b: fix "!list users" output for filter values of "0"
+0.0.4c: add update.pl component
+        SpadsUpdate can now print messages on standard output
+        !exit added to Springie emulated commands
+0.0.4d: fix minor autoBalance and autoFixColors bug when autoBlock* settings were activated
+0.1.0: new functionnality: load a preset automatically when a map is changed
+       new functionnality: prevent starting a game with too few players
+       add an explicit message when teams are "auto-blocked" and someone tries to use "!force <player> team/id ..." commands
+       add auto-update version in !version output
+0.1.0a: map rotation now also auto-loads map presets when autoLoadMapPreset is activated
+0.1.0b: improve vote messages for away-vote mode
+        make auto-balance works when there is less players than nbTeams (for advanced auto-balance mode with FFA)
+        add current mod and map to !status output
+0.1.0c: !exit is now an alias for "!stop" only, instead of possibly "!callvote stop" when autoCallVote is enabled (springie emulation)
+0.1.0d: fix perm bans with reason (it wasn't possible to add a permanent ban when setting a ban reason)
+0.1.1: if needed, the latest players who joined are automatically set as spectators on nbTeams or nbPlayerById settings change
+       decrease verbosity of master channel messages
+       improve force-spec and bot-kicking messages for autoSpecExtraPlayers functionnality in FFA mode (teamSize=1)
+0.1.1a: fix autoSpecExtraPlayers behaviour on nbTeams or nbPlayerById change
+0.1.1b: when autoLoadMapPreset is enabled and no map preset is found for a map, the "_DEFAULT_.smf" preset is loaded instead if available
+0.1.1c: it is now possible to make SPADS join passworded channels by adding the password after the channel name
+0.1.1d: fix for passworded channels
+0.1.1e: improve auto-update information in !version output
+0.2.0: new commands: !mapLink, !nextMap, !nextPreset, !update (commands.conf must be updated, refer to configuration templates for default rights)
+       %a can now be used in welcomeMsg setting for map link url
+0.2.0a: fix !exit alias (springie emulation)
+0.2.0b: do not show mapLink in "!list settings"
+0.2.0c: remove welcomeMsgInGame from "!list settings" output too
+0.2.1: preset auto-rotation (and map auto-rotation when using map presets) is no longer allowed to auto-load a preset that would force players to spec
+       it is now possible to apply another filter on current map list to select specific maps used for auto-rotation
+       prevent starting with already in-game players (but spectators sync and in-game status are now ignored)
+       auto-force start when only unsynced or already in-game spectators are missing
+       auto-cancel a forceStart vote when game starts
+       added an optional parameter to "!map list" command to filter maps
+       !status output improved: "Not connected" is now used when a player hasn't connected yet, and current vote status is printed if a vote is in progress
+       end-game message now contains game duration
+       fix command parsing (when severall spaces are added between command and parameters)
+       fix minor bug in vote status output
+       use more explicit force-spec messages (explains how to change the teamSize value)
+0.2.2: fix map rotation when using sub-maplists
+       fix detection of preset compatibility with current number of players (auto-rotation)
+       print the in-game ratio in !hostStats output
+       "!list settings", "!list hSettings" and "!list bSettings" now print the modifiable settings only (add "all" parameter to see all settings)
+0.2.2a: map preset rotation optimized
+        CPU model is now printed in !hostStats output if available
+        use explicit messages when rotation cannot be achieved
+        when only modifiable settings are listed with !list command, it is made explicit in output heading
+        improve debug message for auto-rotation
+0.2.2b: fix bug in in-game ratio calculation
+        show "map" setting in "!list settings" output
+        make force-spec messages shorter
+        print more detailed info in !status output
+0.2.2c: fix minor !status output formatting problem
+        take current battle into account to compute in-game ratio
+0.2.2d: when listing modifiable settings only (default "!list settings" output), explain how to list all settings
+0.2.2e: fix "Argument isn't numeric in addition (+) at ./spads.pl line 247" message
+0.2.2f: add OS and RAM amount in !hostStats output
+        improve force spec/kick bot messages (they must fit on 1 line at client side to avoid spaming)
+0.2.2g: fix restart with macros containg spaces
+0.3.0: new command aliases: "!spec <name>" and "!cv <command>" (commands.conf must be updated, refer to templates)
+       command alias management refactored (it is now possible to call a vote for a command which is an alias)
+       the battle lobby chat can now be auto-forwarded into game without requiring "!say" (new setting "forwardLobbyToGame")
+       it is now possible to allow "!<settingName> <value>" syntax instead of "![hbp]set <settingName> <value>" (new setting "allowSettingsShortcut")
+       same for "!<objects>" instead of "!list <objects>" (example: "!presets" instead of "!list presets")
+       prevent perl error when configuration cannot be loaded
+       print the account total in-game time in !hostStats output
+0.3.0a: fix game chat duplication when forwardLobbyToGame is on
+0.3.0b: fix auto-force start checks
+0.3.0c: fix startPosType detection for auto-force start
+0.3.1: avoid automatic map rotation when battle is empty and a game is running
+       refactored !status output (made more generic): new status ("Loading") and new field for Spring detailed version ("Version")
+0.3.1a: fix !send command
+0.3.1b: typo (fix "Use of uninitialized value in numeric ne (!=) at ./spads.pl line [5634|5678]" messages)
+0.3.2: update startscript format ("Gametype" is now set to Mod name instead of archive name, and "MyPlayerName" and "IsHost" tags are now generated)
+       system uptime added in !hostStats output
+       status of players who disconnected before finishing loading Spring is now shown correctly in !status output (spring-dedicated bug workaround)
+0.3.2a: fix crashes when invalid regexp are used in SPADS commands
+0.4.0: new command: !boss - reduces rights of people whose access level is insufficient to execute !boss
+       new command: !cheat - provides various ways of using cheat commands (commands.conf must be updated, refer to configuration templates)
+       new alert system: sends private messages to admins when recoverable errors occur (new settings: alertLevel, alertDelay, alertDuration)
+       workaround for spring-dedicated premature end (when process dies before SERVER_QUIT is received on AutoHost interface)
+       mod specific sides are now used instead of hard-coded ARM/CORE
+       colorSensitivity for fixColors functionnality is now configurable (new global setting: colorSensitivity)
+       callvote messages are now printed on 2 lines instead of 1 (they were too long to fit on 1 line at client side anyway)
+       minor away-vote mode changes: away-votes are now triggered after 20 seconds instead of 10, and vote state is printed after away-votes
+       when a game is in progress (server is running AND game has started), !ring doesn't ring anyone if no vote is in progress
+       check game is running for !say and !send commands
+       when boss mode is enabled, bosses are listed in !status output
+0.4.0a: prevent adding start boxes when startpostype != 2
+        remove unneeded special cases for "disabledunits" battle setting handling
+0.4.1: full generic mod options support through unitsync (mod options no longer need to be defined in battle presets to be modifiable)
+       "!help bset <battleSetting>" syntax added for battle settings help (global and hosting settings help will come later)
+       format of logged game chat messages has changed (whispered messages are now logged correctly)
+       add feedback when "set" commands are issued in private (messages were only sent in battle and masterChannel)
+0.4.1a: add hint about "!help bSet <battleSetting>" command in "!list bSettings" output
+0.4.2: it is now possible to use a regexp in the "modName" hosting setting with syntax "~<regExp>", for instance: "modName:~Balanced Annihilation V\d+\.\d+"
+         (it automatically chooses the latest mod matching the regexp each time the "modName" hosting setting changes or !loadArchive command is called)
+       add support for configuration reload without altering current settings values ("!reloadConf keepSettings")
+       !voteboss alias added for springieEmulation mode
+       a mark is added after the default preset in "!list presets" output
+0.4.2a: when a regexp is used for "modName" hosting setting, the real mod name is showed in "!list hSettings" output instead of the regexp
+0.4.2b: backport of fix 0.5.0c
+0.5.0: archives can now be reloaded automatically, based on archive directories modification times (new global setting "autoReloadArchivesMinDelay")
+       the new preset setting "allowModOptionsValues" specifies if mod options undefined in current battle preset can be modified
+       "resetmodoptions" battle setting added, it determines if modoptions are reset to default mod values before loading the battle preset
+       new command: !rebalance - re-balances teams (it changes the random seed before balancing, whereas !balance always balances the same way)
+       broadcast a message when !stop command is used, so that it cannot be hidden when executed in private
+0.5.0a: correct random seed generation for 32-bit systems
+0.5.0b: if a quit, restart, close battle, or rehost is scheduled, it is now shown in !status output
+        if some pending settings need rehosting to be applied, it is also shown in !status output
+0.5.0c: fix disconnection from lobby server when trying to remove a non-existing start box
+0.6.0: ghost map hosting: it is now possible to host a map in "Choose start position" mode without having it on the server if "allowGhostMaps" is set to 1 (new preset setting)
+       new command: !learnMaps - learn map hashes from other hosted battles so that it's possible to host them in ghost map mode
+       maps can be auto-learned for ghost map hosting if the new global setting "autoLearnMaps" is set to 1
+       refactored "!list maps" output for ghost maps
+       prevent setting start boxes with split command when startpostype != 2
+0.6.1: it is now possible to launch SPADS without any map (but at least the default map must have been "learned" before)
+       fix "wrong option type" errors in unitsync.log
+       improve output flood protection (prevent filling network buffer)
+       "vote*" springie emulated commands always call a vote, even if the user has sufficient rights to execute the command directly
+       log command execution start/end in debug messages
+       do not send "!list maps" result when more than 200 maps match the search
+0.6.2: refactor loading users handling (it is now performed in PerlAutoHostInterface module and should fix some errors in spads.log)
+0.6.2a: when a user has insufficient rights to execute a command due to boss mode, explain it in deny message
+        output a message when map boxes are saved successfully with !saveBoxes command
+0.6.2b: log battle join/leave for the AutoHost too (not only for players) in battle.log if logBattleJoinLeave is set to 1
+0.6.2c: do not answer to invalid commands sent on master channel (this command could be handled by another bot)
+        dump preferences and learned map hashes on configuration reload
+        fix !update output not showing due to output flood protection changes introduced in 0.6.1
+0.6.2d: fix battle leave message never showing for AutoHost
+0.6.2e: fix SPADS auto-forcing start when players connected but didn't finish loading
+0.6.2f: dump dynamic data before reloading configuration on !reloadConf call, not after...
+0.6.2g: take ghost maps into account when computing the map list of a map preset
+0.6.2h: download settings help file
+0.7.0: experimental Windows support
+       when the lobby server doesn't require a specific Spring version, Unitsync Spring version is used for ghost map hosting (not "*")
+       new global setting: autoUpdateBinaries (for Linux/UNIX: only "no" is allowed; for Windows: "yes", "unitsync", "server" and "no" are allowed)
+       new preference: "password" (for AutoHost level authentication)
+       new command: !chpasswd - (re)init a user password for AutoHost level authentication
+       new command: !auth - authenticate to the AutoHost with the "password" preference
+       new "auth" field in users.conf (if set to "1", the user must authenticate himself when the lobby server is running in LAN mode)
+       the !pSet command now requires AutoHost level authentication if the lobby server is running in LAN mode
+       when connecting to a lobby server running in LAN mode, recommend using AutoHost level authentication through notice messages
+0.7.1: optional parameters added for !reloadConf and !restart commands to (re)define configuration macros dynamically
+       refactor command line arguments parsing and "exec" calls to avoid shell commands injection in new !reloadConf/!restart optional parameters
+       send ping messages during Spring archives reloads (should avoid timeout on servers with a lot of maps and low RAM)
+       keep trying to reconnect to lobby server when disconnected due to join flood protection
+0.7.1a: disable pending auto-force checks when game start has been forced manually
+0.7.1b: fix minor bugs when SPADS is disconnected from lobby server while players are in the battle lobby
+0.7.2: TASClient and SpringLobby suggestion messages are now processed as SPADS commands so that it's possible to use the GUI instead of typing commands
+0.7.2a: fix error message when trying to lock a battle already locked
+0.7.2b: do not learn null map hashes
+0.7.2c: fix restart on Windows when installation path contains spaces
+        download settings help file
+0.7.3: all settings help is now available through !help command (!help set <setting>, !help hSet <hostingSetting>, ...)
+0.7.4: SPADS HTML doc can now be generated by adding "--doc" to the command line
+0.7.4a: fix repository location (planetspring -> planetspads)
+0.7.4b: battle is now auto-closed when Unitsync version doesn't match the required version on lobby server
+0.7.4c: SPADS no longer installs/updates/uses its own unitsync.dll (Windows) [backport of 0.8.2d]
+0.8.0: user data rentention ability: SPADS can now maintain locally a persistent cache of all Spring accounts (names, ranks, ips ...)
+       new command: !chrank - alters the rank used by SPADS for a specific user when auto-balancing
+       new command: !coop (alias for "!pSet shareId")
+       new command: !kickBan - kicks a user and ban him temporarily
+       new command: !searchUser - gives information about all known users matching filter (requires user data retention)
+       new command: !smurfs - tries to identify all smurfs accounts of a user (requires user data retention)
+       new command: !specAfk - specs all unreay AFK players
+       new commands: !banIp, !banIps, !unbanIp, !unbanIps - ban/unban by IP (requires user data retention)
+       broadcast a message when a new version of current mod is found locally (requires archive auto-reload)
+       extra box management to save map boxes of special game types (King of the Hill ...)
+       it is now possible to detect smurfs and use their real ranks when auto-balancing (requires user data retention)
+       several ID share modes are now available through new "idShareMode" preset setting and "shareId" preference (coop mode compatibility)
+       known IPs are now shown in "!status" and "!list bans" output, according to new "minLevelForIpAddr" global setting (requires user data retention)
+       TASClient and SpringLobby suggestion messages processing (added in SPADS 0.7.2) is now optional (new preference \"handleSuggestions\")
+0.8.1: the "idShareMode" preset setting can now be set to "clan" for clan coop by default
+       improved "!list settings/hSettings/bSettings/pref", "!smurfs" and "!coop" outputs
+       fixed a bug where SPADS could crash instead of restarting when a game just finished and battle was empty
+0.8.1a: added "extra" optional parameter for !clearBox command, to remove all extra boxes (boxes whose number is greater than current number of teams)
+0.8.1b: fix !specAfk not detecting away players correctly
+0.8.1c: fix repository location (planetspring -> planetspads)
+0.8.1d: fix on Windows: starts spring-dedicated.exe from Spring install dir so all DLLs dependencies shoud be found
+0.8.1e: battle is now auto-closed when Unitsync version doesn't match the required version on lobby server
+0.8.1f: SPADS no longer installs/updates/uses its own unitsync.dll (Windows) [backport of 0.8.2d]
+0.8.2: lobby connection stability improved (do not rely on PONG messages only to detect timeouts)
+       send ping messages during dynamic data dump (should avoid timeout with heavy user data retention and low RAM)
+       workaround for ghost connection issue on lobby server improved
+       an error is now logged when an account for which Spring Lobby agreement hasn't been accepted is used (instead of failing silently)
+       use unsigned map hashes only in startscript (should fix sync issues at game server connection step with some ghost maps)
+       fix the "!cv smurfs" trick that allowed users to call "!smurfs" directly
+       the "new mod version detected" message is no longer triggered when manually changing the mod
+       fix the "Cancelling forceStart vote" message being printed when not needed
+0.8.2a: the "new mod version detected" message is no longer triggered when the mod is changed during a configuration reload
+0.8.2b: when reloading archives, do not perform full scan of mods whose checksum didn't change (decrease reload time a lot!)
+        do not count internal computation time for timeout detection
+0.8.2c: "contrib" release type added (contains external unchecked patches)
+0.8.2d: SPADS no longer installs/updates/uses its own unitsync.dll (Windows)
+0.8.2e: when a game is running, clients IP address and port are shown in "!status" output
+0.8.2f: avoid unitsync re-inits during Spring archives load (use "RemoveAllArchives" unitsync function instead)
+        the "!smurfs" command without parameter now performs smurf detection on all players in battle
+        lobby ranks and effective ranks are now available for privileged users (those who can run !chrank) in "!status" output
+        fix wrong spectator being kicked on some circunstances when enforcing "maxSpecs" setting
+0.8.2g: allow starting games with more than 32 clients (engine can now manage 250 clients)
+        spring-dedicated.exe output is now redirected into spring-dedicated.log log file (Windows only)
+0.8.2h: provide the 'a' compatibility flag when logging on lobby server to receive accountIds
+0.8.2i: fix ip-ban dodging
+0.8.2j: battle is auto-closed when Unitsync version doesn't match the required version on lobby server
+0.8.2k: spring-dedictated.exe can now be installed in a path containing spaces (Windows)
+0.8.3: accountIds can now be used for ban and access level filters
+       accountIds bans are now default ban types instead of username bans (for !ban, !kickban, auto-bans on flood...)
+       it is now possible to ban by IP even if userDataRetention is disabled (nat traversal must be used and user must be in battle when !banip is called)
+       accountIds are now shown in !status output
+0.8.4: added support for JOINBATTLEREQUEST/JOINBATTLEACCEPT/JOINBATTLEDENY requests for true battle ban instead of auto-kick
+       preferences are now indexed by AccountId if available, username else (old format preferences are automatically imported)
+       teams are now automatically rebalanced after each game even if players are the same
+       fix port being shown for spectators in "IP" field of !status output when game is running
+       "/me" type battle messages are now also checked for message flood protection (not just command flood protection)
+0.8.4a: only allow !chrank and !chpasswd to be applied on users whose accountId is known (preferences are now indexed by account ID instead of user name)
+0.8.4b: it is now possible to use time units in ban durations ("y": year, "m": month, "w": week, "d": day, "h": hour), default unit is still minutes
+        ban reasons containing '|' or ':' are now rejected with an error message (these bans aren't persistent after a restart)
+        unlockSpec command is now forbidden for banned users (they would be auto-kicked when joining anyway)
+0.8.4c: NAT traversal is no longer required to get IP of players joining the battle if lobby server supports JOINBATTLEREQUEST message
+0.8.4d: spring-dedictated.exe can now be installed in a path containing spaces (Windows)
+0.9.0: IRC-style colors can now be used by SPADS to improve output in private messages (new preference "ircColors")
+       alternate fork method using Win32 processes is now available on Windows (new setting "useWin32Process")
+       new command !sendLobby to make SPADS send specific commands to lobby server
+       new command !whois to list detailed information about an account (requires user data retention)
+       new alert 'SPR-001' when spring-dedicated crashes
+       it is now possible to configure the auto-stop-game conditions (new setting "autoStop")
+       alerts are now automatically acknowledged when problem disappears
+       battle is now autolocked when both maximum number of players and spectators are reached
+       new authenticated states (cf users.conf): 0 => unauthenticated, 1 => authenticated by lobby server only, 2 => authenticated by autohost
+       preference shortcuts have higher priority than setting shortcuts (=>"!shareId test" now changes "shareId" preference instead of "shareId" setting)
+       it is now possible to set a minimum vote participation to allow a vote to pass (new "minVoteParticipation" setting)
+       SPADS can now use the new "clan" preference to balance clans, depending on new "clanMode" setting value (thresholds can be set to avoid stacked teams)
+       unbalance indicator (relative standard deviation of estimated skills) is now printed in !balance/!rebalance outputs
+       accountIds are now used to index persistent user data (user data retention), which is much more efficient and makes it possible to track renames
+       new settings "noSpecDraw" and "noSpecChat" to respectively prevent spectators from drawing and chatting with players
+       it is now possible to reference users by accountId using "#<accountId>" syntax for !smurfs,!ban,!unban,!banIp,!unbanIp,!banIps,unbanIps commands
+       user data retention is now automatically disabled when lobby server is running in LAN mode, to prevent storing fake data
+       user data retention statistics are now printed in !hostStats output
+       it is now possible to search users by IP mask for privileged users ("!searchUser @<ipMask>" syntax)
+       configurable behaviour when Unitsync version doesn't match required version on lobby server: quit, close battle... (new "onBadSpringVersion" setting) 
+       privileged users can now join as spectator even if maxSpecs is already reached (new "maxSpecsImmuneLevel" setting)
+       optionnal in-game player spoofing protection (new "spoofProtection" preference)
+       a warning is now printed if SPADS is running as root on non-windows systems
+       fix in-game IP format in !status output on Windows systems
+0.9.1: prints a warning if bot flag isn't set for the lobby account used by SPADS
+       improve behaviour when battle lobby is locked both manually and automatically
+0.9.2: management of new rank ("Ghost")
+       added ability to auto-quit/restart when only spectators are in the battle
+       workaround for corrupted ranks in user data retention
+0.9.2a: learn map hashes from demos too (as side effect, should avoid some crashes due to uberserver bugs...)
+0.9.3: fix compatibility with UnitSync 0.82.2 (map names no longer contain ".smf" extension)
+       add dynamic in-game user management through "/adduser" Spring command
+0.9.3a: remove auto-update of obsolete springserver dynamic library (Windows)
+0.9.3a1: report of 0.9.4a in stable release
+0.9.3b: add 'sp' compatibility flag in LOGIN command to receive start script passwords
+0.9.4: try the rename method when updating a module in use (Windows)
+       "%M" is now allowed in mapLink preset setting (map archive name)
+       improve vote system (wait for minVoteParticipation to be reached even when there only remains "away" voters)
+       new autoSaveBoxes value allowed: "2" (auto-save map boxes only if there is no start box saved for this map yet)
+0.9.4a: split SETSCRIPTTAGS and DISABLEUNITS commands to stay below the server command size limit (1024)
+0.9.4b: fix minor bug in "!list bans" output
+        handle midgame joiners in !status output
+        fix total in-game time retrieving for uberserver
+        use quit messages when exiting/restarting
+        fix auto-stop not working properly when all players quit before game start
+0.9.5: it is now possible to specify allowed values for each setting listed in "freeSettings", so that other values still require vote
+       ranks taken into account by SPADS for balancing are now shown to regular users too in !status and !whois outputs
+       fix for in-game player spoofing protection and in-game IP ban with Spring >= 0.82.3
+       in-game IPs of players using start script passwords are now also stored for userDataRetention
+0.9.5a: do not load UnitSync module when a restart for update is needed at startup (makes it possible to switch from Perl 5.10 to 5.12 easily on Windows)
+        print Perl version in !version output
+0.9.5b: fix CWD for UnitSync module according to change in 0.9.5a (Windows only)
+0.9.6: heavy refactor to prepare database interface for dynamic data
+0.9.6a: workaround for UPDATEBATTLEINFO commands where map name is missing (uberserver bug?)
+0.9.7: added chicken-specific balancing mode when nbTeams is set to 1
+       clan tags are now handled separately from clan preferences
+       players using clan preferences are now shown in !status output
+0.9.7a: fix for new syntax of unitsync Init function
+0.9.8: new "idShareMode" value allowed: "off" (workaround for 16 IDs max lobby limitation: it totally disables shared IDs, disregarding what is set in battle lobby)
+       automatic balancing improved for big battles (32 players limit removed, warning message added when current battle can't be balanced automatically due to lobby limitations)
+       !nextMap and !nextPreset now use the same rotation mode as rotationEndGame (if end game rotation is disabled, "random" is still used as previously)
+       fix "order" map rotation mode not following order of map list filters
+       it is now possible to set "map" setting to an empty value in configuration files to use the first map of current map list
+       improved clan preference presentation in !status output (the real value is now shown for your own clan preference)
+       workaround for invalid CLIENTSTATUS commands sent by uberserver (avoid user data corruption)
+0.9.8a: fix colors being the same for players having same ID in lobby when idShareMode=off
+        improve color fixing system to manage more colors
+0.9.9: added support for map options
+       battle settings management optimized to limit data sent to server
+0.9.9a: welcome message system improved: battle private messages are now possible to avoid spaming battle lobby (uberserver only), and multi-lines messages support added
+        fixed spaces management in !sendLobby command
+0.9.9b: fix bug introduced in 0.9.6 when searching users by IP
+0.9.9c: fix workaround for ghost connection issue on lobby server (message changed in uberserver)
+0.9.9d: reconnect to lobby server when SPADS is unable to send messages through lobby socket
+0.9.9e: fix broken connection detection
+0.9.9f: it is now possible to show time elapsed since game start directly in welcome messages
+0.9.9g: !ring now also rings unsynced players, even when they are ready
+0.9.9h: battle is now unlocked when maxPlayers player count is reached (but not maxSpecs), even if autolock is enabled, because lobby server will autospec additional players anyway
+        fixed bug where players joining a game in progress which hasn't started yet were ringed as if they were unready players
+        Ignore inconsistent CLIENTBATTLESTATUS commands at SPADS kernel level too (was only ignored in lobby interface module)
+0.9.9i: fix for a very rare bug which happens when a game ends while a reconnection to lobby server is in progress
+0.9.10: spring-headless is now auto-downloaded/updated (Windows only)
+        minor ring message change
+0.9.10a: workaround for inconsistent ADDUSER messages (uberserver bug)
+0.9.10b: compute IP rank correctly even if a player is tagged as bot in lobby (was considered as lowest rank before)
+0.9.10c: restore original unitsync Init function syntax (revert 0.9.7a)
+         prevent learning bad map hashes from battles using different engine version ("[engineXXX]" tag in battle name)
+0.9.10d: handle new spring version scheme
+0.9.10e: real Spring internal IDs and team IDs are now shown in game status (previously lobby ones were shown, as in battle status)
+         winning players are now identified from client game over messages and printed in battle room at end of game (inconsistent results are discarded as much as possible)
+0.9.10f: fix wrong identification of winning players
+0.10.0: it is now possible to join a game in progress as player using new !joinAs command
+        a minimum autohost access level can be required for direct midgame join as spectator (new setting "midGameSpecLevel")
+        SPADS should now be fully compatible with spring-headless, with optional specific spring settings file (new settings "springServerType" and "springConfig")
+        when using spring-headless, local AI bots can be (auto)added (new commands !addBot/!removeBot, and new settings "maxLocalBots", "autoAddBotNb", "localBots", "allowedLocalAIs")
+        the !force command can now be used for local AI bots too
+        an external program can now be executed at each game end, to handle demo files for instance (new settings "endGameCommand" and "endGameCommandEnv")
+        multiple channels can now be specified for basic game status reports (new "broadcastChannels" setting), the "masterChannel" is now only used to receive commands
+        the order in which SPADS fills the teams during TeamFFA autobalancing is now configurable (new setting "minTeamSize")
+        new advert system to broadcast messages in battle lobby regularly (new settings "advertMsg" and "advertDelay", and new command !advert)
+        battle lobby flood protection system improved (new setting "statusFloodAutoKick", and setting "msgFloodAutoBan" renamed to "kickFloodAutoBan")
+        battle lobby flood protection data are now purged regularly (this could have caused a very minor memory leak previously)
+        the !bKick, !boss, !cKick, !force, !gKick and !kick commands now refuse to execute in case of ambiguous parameters
+        the !kickBan command now accepts substrings of player name as parameter instead of exact player names (but it refuses to execute if the substring is ambiguous)
+        improved "chicken" balancing mode (now also works with > 16 IDs)
+        a specific map link is now used for ghost maps (new "ghostMapLink" setting)
+        the "games" folder is now also monitored for Spring archives auto-reload
+        a new setting "forceHostIp" has been added as workaround for systems having IPv6 problems with Spring
+        map options undefined in current battle preset can now be set as modifiable or not (new setting "allowMapOptionsValues", works the same way as "allowModOptionsValues")
+        it is now possible to manually load saved startboxes using new !loadBoxes command
+        the !nextMap and !nextPreset commands now follow the "rotationManual" setting value (new setting) instead of using the "rotationEndGame" one
+        improved error message when failing to load Perl Unitsync module
+        removed the deprecated unitsync functions calls
+0.10.1: improved bot information in !status output
+        disabled auto-force start when AI bots are used
+0.10.1a: do not try to add players already declared in startscript at start of game
+0.10.2: timed events refactored in subfunctions
+        better management of spectator kicking when maxSpecs value is changed
+0.10.2a: fix ifconfig path for Gentoo
+0.10.2b: for now %demoName and %gameId are replaced by "UNKNOWN" in endGameCommand and endGameCommandEnv preset settings (will be fixed when Spring 89 is out)
+         fix minTeamSize behaviour
+0.10.2c: do not store IP address of IRC bridge users (they all share same IRC bridge IP address which produces false positives in smurf detection)
+         truncate long values in !list results to avoid badly formatted arrays
+         fix auto-balance with minTeamSize != 1
+0.10.3: it is now possible to print customizable messages after each end-game command execution (new setting: endGameCommandMsg)
+        the actual playing time (not taking into account the time spent waiting for ready players in game) is now used for end game rotation delay
+0.10.4: argparse.py and replay_upload.py python scripts added to SPADS repository (replay auto-upload system)
+        end game command is now executed when Spring server process actually ends (previously it was executed on SERVERQUIT message)
+        implemented fallback method to retrieve game ID and demo name from infolog.txt (for headless and pre-engine version 89 cases)
+        added a few placeholders for end game command settings (startPlayingTimestamp, endPlayingTimestamp, gameDuration)
+        automatic rotation when empty now also works when only bots are in battle
+0.10.4a: allow multiple exit codes in endGameCommandMsg definitions
+0.10.5: awards based on team statistics can now be printed when games end (new setting: endGameAwards)
+        it is now possible to see statistics for last game (new command !stats)
+        channels where battle is promoted when !promote command is used are now printed
+        game data reports are now sent over lobby for historization
+0.10.5a: fix maxChatMessageLength behaviour to be consistent with uberserver (should fix bad GDRs)
+         improve error message when !stats is called while game is running
+0.10.5b: only send GDRs if the GDR bot was online on game start (else it will be discarded anyway)
+         fix vote status message missing when required numnber of yes or no votes is reached but not minimum vote participation
+0.10.6: fix vote participation percentages in vote status messages
+        when rankMode is set to IP, rankMode of other accounts sharing same IP are also checked to inherit from highest "chrank" value
+        prevent learning bad map hashes from battles using different engine version ("Incompatible" tag in battle name)
+        make "domination" tag harder to get for micro award
+0.10.6a: workaround for Ctrl-M at end of line in GDRs (uberserver removes them)
+0.10.6b: do not include chicken-type AI bots in end game awards
+         game duration is now computed even in case of unfinished game (GDRs and end game data)
+0.10.6c: minor award message change
+         try to show real IP address when a player is using IRC bridge
+0.10.6d: show real IP address for spectators using IRC bridge also
+0.10.6e: fixed 2 minor bugs (!pass command and noSpecChat setting) which could lead to invalid GDR data
+0.10.6f: prevent games to be launched manually with !start when autoBalance is enabled and battle hasn't been balanced yet
+         check format of IP addresses coming from uberserver (IRC bridge bug)
+         removed obsolete IRC bridge specific handling
+0.10.6g: added parameter "rotationMaps" to "list" command (show maps of current rotation map list)
+         log levels are now dynamic (changes are taken into account when reloading configuration files)
+         minor fix in logging message
+0.11.0: new dynamic plugin interface, with shared variables, callbacks, helper functions and proxy variables/functions implemented in new SpadsPluginHelper module
+        new built-in player skill management based on TrueSkill ranking algorithm and asynchronous communications with SLDB (new preference: skillMode)
+        commands rights granularity improved (new player status: "playing", for players actually playing currently)
+        improved command alias management (aliases don't need to be declared in commands.conf anymore, the requirements of the real command are used)
+        modified vote status messages to make remaining required votes clearer
+        balance operations can now be delayed if skill isn't available for all players yet
+        the new speedControl preset setting can now be used to configure automatic game speed adjustement based on players CPU usages
+        command !list extended with 2 new parameters for plugins: "plugins" to list currently loaded plugins, and "pSettings" to list plugin settings
+        new command !plugin to load/reload/unload/configure plugins dynamically
+        modified status output management to make it easier for plugins to add custom data
+        current game type is now printed in !status output (corresponding TrueSkill ranking data are used if skillMode is set to TrueSkill)
+        !version now also prints the versions of the plugins currently loaded
+0.11.0a: allow receiving negative skill values
+0.11.0b: added plugin callback to balance battle
+         modified warning on unknown skill ("unknown account" -> "unrated account")
+         minor code cleanup (removed unused return value)
+0.11.0c: fix bug introduced in 0.11.0b which prevented retrieving TrueSkill for first player joining battle
+0.11.0d: minor fix in balancing algo to handle negative skills
+0.11.1: "rank" has been renamed to "skill" in balanceMode setting values ("skill","clan;skill")
+        "updateAliases" plugin callback has been renamed to "updateCmdAliases"
+0.11.1a: renamed SpadsPluginHelper to SpadsPluginApi
+0.11.2: allow disconnected players who didn't lose yet to reconnect to the battle lobby even if the battle is full, so that they can rejoin the game
+        improve !status output for TrueSkill, with privacy preference management
+0.11.2a: rank and skill are now also shown for bots in !status output (based on "botsRank" global setting)
+         unrated accounts are no longer considered as degraded mode regarding TrueSkill retrieving
+0.11.3: add the access level of the user issuing the !status command to updateStatusInfo plugin callback
+        improve !status output again regarding rounded skills (new privacy setting value: 2, for full privacy mode)
+0.11.3a: make full SPADS configuration shared with plugins
+         yet another try to improve vote messages
+0.11.4: votes are now automatically cancelled when the same command is executed directly (this was only enabled for !forceStart command before)
+        support for generic process forking
+        new plugin event callback "onGameEnd"
+        renammed "updateSkill" plugin callback to "updatePlayerSkill"
+        updatePlayerSkill plugin callback now returns a scalar value
+0.11.5: new bans are now applied on the fly when changing banList or preset (this should fix inconsistent states where newly banned players were only kicked when joining game)
+        new plugin event callback "onJoinBattleRequest"
+0.11.5a: improved minVoteParticipation management
+0.11.5b: fix plugin preset settings being unavailable from plugin constructor of manually loaded plugins
+         fix plugins loaded manually losing their configuration on !reloadConf
+         fix minor bug in plugin settings shortcuts check
+         fix minor bug in "!list pSettings" output
+0.11.6: separated UPD-001 alert into 3 more specific alerts UPD-001/UPD-002/UPD-003
+        refactored child processes exit codes handling and added support for exit triggered by signal and core dump detection
+        handle new spring-dedicated exit code (-1 => desync detected during game) instead of treating it as a crash
+        avoid printing vote status message when vote is passing thanks to new minVoteParticipation management
+        fix plugin event callback "onJoinBattleRequest" showing warning when the plugin returns a deny reason
+0.11.6a: fix Perl warnings (Use of uninitialized value) when a vote is called while SPADS is disconnected from lobby
+         fix lobby interface warning (Replacing an existing REDIRECT callback for priority "main") when failing to reconnect to lobby server
+0.11.7: use REMOVESCRIPTTAGS command to remove mapoptions on map change now that it is implemented in uberserver
+        players skills used for balancing are now broadcasted in battle lobby using "game/players/<lowerCasePlayerName>/skill" script tags
+        players skills used for balancing are now written in start scripts ( [GAME] -> [PLAYER<N>] ->  Skill ) and thus accessible from LUA scripts
+0.11.7a: the "packages" folder is now also monitored for Spring archives auto-reload (rapid)
+         fix small variable scope mistake in kickBan handling which could prevent it to work when the banned player is in game but not in lobby
+         prevent games to be launched manually with !start when autoFixColors is enabled and colors haven't been fixed yet
+0.11.7b: prevent executing !unlockSpec command if the player is already in the battle (this case was handled by commands.conf previously)
+0.11.7c: add "hosttype" script tag to let lobby clients know what type of host they are in
+0.11.7d: use new SpeedControl range (1-2)
+0.11.8: the skill uncertainty is now shown in !status output as one or severall '?' after skill values
+0.11.8a: adjusted the uncertainty threshold for '?' in !status output (almost all players had a '?' previously)
+0.11.9: players skill uncertainties are now broadcasted in battle lobby using "game/players/<lowerCasePlayerName>/skilluncertainty" script tags
+        players skill uncertainties are now written in start scripts ( [GAME] -> [PLAYER<N>] ->  SkillUncertainty ) and thus accessible from LUA scripts
+0.11.10: added support for multi-engine lobby protocol extension (automatically enabled when unitsync Spring version doesn't match lobby server default Spring version)
+         new plugin event callbacks "onVoteRequest,postSpadsCommand,preSpadsCommand"
+         new plugin customization callback "filterRotationMaps"
+         IDs are now assigned to players in descending skill order also when idShareMode is set to manual
+         removed warning messages when trying to learn maps from hosts not using map hashes
+0.11.10a: changed lobby connection timeout detection algorithm (should be less intensive on PING command usage)
+          increased lobby timeout from 30s to 1min (should save some disconnections from lobby server, but require more time to detect server downtimes...)
+0.11.10b: use multi-engine protocol extension silently if lobby server does not broadcast any default engine version
+0.11.11: improved handling of special characters in GDRs
+         PerlLobbyInterface and PerlAutoHostInterface renamed respectively to SpringLobbyInterface and SpringAutoHostInterface
+         removed obsolete Springie-ELO retrieving code
+0.11.11a: minor improvement for PING command when lobby server is unresponsive
+0.11.11b: changed rank <-> TrueSkill mapping to be consistent with SLDB initialization values (only impacts unrated players)
+          escape '!' character in GDRs
+0.11.12: distinguish undecided games (= aborted games) from draw games (= tie games)
+0.11.12a: do not request skill when accountId is 0 (uberserver bug)
+          remove temporary getSkill interface version number
+0.11.12b: workaround for bugged unitsync interface on 32-bit Linux systems
+0.11.12c: the "mods" folder is no longer monitored for Spring archives auto-reload
+          make Spring 95 behave like previous versions concerning writable data directory location
+
+SpadsConf.pm:
+============
+0.0.3: first public version (beta)
+0.0.3a: authorize '[' and ']' in channel names
+0.1.0: new SPADS preset settings ("autoLoadMapPreset:0|1", "hideMapPresets:0|1", "minPlayers:2|2-31")
+       modified SPADS preset settings ("autoStart:on|off|advanced")
+0.1.0a: fix preset setting format for map presets
+0.1.0b: lower restrictions on preset names (for map presets)
+0.1.1: "preset" is no longer a mandatory parameter for non-default presets
+0.1.1a: space character is now authorized in channel settings (for channel password)
+0.2.0: new SPADS preset settings: "welcomeMsgInGame" and "mapLink" (refer to configuration templates for default values)
+0.2.1: "rotationType" setting can now contain a sub map list (applied on current map list), example: "rotationType:map;smallMaps")
+       "level" is now allowed as input field in banLists.conf file
+0.3.0: new SPADS global setting ("allowSettingsShortcut:0")
+       new SPADS preset setting ("forwardLobbyTogame:0|1")
+0.4.0: new SPADS global settings ("alertLevel:130", "alertDelay:6", "alertDuration:72", "colorSensitivity:55")
+0.4.1: add support for configuration reload without altering current settings values
+0.4.1a: the first matching ban entry is now used for ban lists specified in banLists.conf, instead of the hardest one
+0.5.0: new SPADS global setting ("autoReloadArchivesMinDelay:30")
+       new SPADS preset setting ("allowModOptionsValues:1|0")
+       new battle setting ("resetmodoptions:0") - this setting is only used when the battle preset is loaded, so alternate values ("|...") are useless
+0.5.0a: backport of fix 0.6.1c
+0.6.0: new SPADS global setting ("autoLearnMaps:0")
+       renamed SPADS global setting from "prefDumpDelay" to "dataDumpDelay"
+       new SPADS preset setting ("allowGhostMaps:0|1")
+       new dynamic data file containing map hashes for ghost map hosting: "mapHashes.dat"
+0.6.1: internal Perl hashes are now used for dynamic data that don't require regexp searches (preferences, map hashes and map boxes)
+         (this should boost SPADS responsiveness for big battles when a lot of user preferences are stored)
+0.6.1a: the special filter "_GHOSTMAPS_" can now be used in mapLists.conf, it matches all ghost maps ("!_GHOSTMAPS_" will filter ghost maps out)
+0.6.1b: do not dump saved boxes if they didn't change
+0.6.1c: getCommandLevels now returns a copy of the data (protect direct data access from outside SpadsConf): fix a case where someone could use !set with insufficient rights
+0.7.0: experimental Windows support
+       new SPADS global setting ("autoUpdateBinaries:no" on Linux/Unix, "autoUpdateBinaries:yes" on Windows)
+       new input field in users.conf: "auth"
+       new preference: "password"
+       when dumping dynamic data, fix invalid field values to keep correctly formatted files (exotic names with Spring lobby server in LAN mode)
+0.7.1: load the new settings help file (helpSettings.dat)
+0.7.2: added function to return case sensitive help data (for HTML doc generation)
+0.8.0: new global settings ("kickBanDuration:120", "minLevelForIpAddr:130", "userDataRetention:0;0")
+       new preset settings ("handleSuggestions:0", "rankMode:account", "shareId:", "extraBox:0|1", "idShareMode:auto|manual|all")
+       new preferences: "handleSuggestions", "rankMode", "shareId"
+       new dynamic data file for user data retention: userData.dat
+       IP ban management: "ip" is now allowed as input field in banLists.conf file (requires user data retention)
+       smurf detection algorithm
+       extra box management to save map boxes of special game types (King of the Hill ...)
+0.8.1: new allowed value for "idShareMode" setting: "clan"
+0.8.1a: IP bans no longer kick users with unknown IPs
+0.8.1b: prints a warning when dynamic data dump takes longer than expected
+0.8.1c: "contrib" release type added (contains external unchecked patches)
+        removed configuration macro management for dynamic data files
+        file parsing optimized
+0.8.1d: user data storing/dumping optimized
+0.8.1e: user preferences dumping optimized
+0.8.1f: do not use recursivity to parse big files (save memory)
+0.8.1g: max value of the maxPlayers hosting setting is now 251
+0.8.1h: fix IP retention when storing unlimited number of IPs ("-1")
+0.8.2: new input field in users.conf and bans.dat: "accountId"
+       dead code removed
+0.8.3: preferences are now indexed by AccountId if available, username else (old format preferences are automatically imported)
+0.8.3a: ',' are now allowed in dynamic data (usefull for dynamic bans on multiple values at the same time)
+0.9.0: new global settings ("onBadSpringVersion:closeBattle", "maxSpecsImmuneLevel:100", "minVoteParticipation:34", "useWin32Process:0")
+       new preset settings ("ircColors:0", "spoofProtection:warn", "clanMode:tag;pref(10)", "autoStop:gameOver", "noSpecChat:0", "noSpecDraw:0")
+       new preferences: "spoofProtection", "ircColors", "clan"
+       user data retention is now indexed on account IDs instead of user names (userData.dat is rewritten from scratch, previous file is saved)
+0.9.0a: it is now possible to specify IP ranges with "<ip1>-<ip2>" syntax
+0.9.1: new "whenOnlySpec" value for "autoRestartForUpdate" global setting
+       new rank value added for "rankMode" setting/preference
+0.9.2: new autoSaveBoxes value allowed: "2" (auto-save map boxes only if there is no start box saved for this map yet)
+0.9.3: new "freeSettings" syntax allowed to restrict free values of each setting
+0.9.4: heavy refactor to prepare database interface for dynamic data
+0.9.5: new "idShareMode" value allowed: "off" (workaround for 16 IDs max lobby limitation: it totally disables shared IDs, disregarding what is set in battle lobby)
+       fix "order" map rotation mode not following order of map list filters
+       it is now possible to set "map" setting to an empty value in configuration files to use the first map of current map list
+0.9.6: added map options cache system
+0.9.6a: small fix for map hash cache system (for maps with ':' in their name)
+0.10.0: new global settings ("forceHostIp:", "springConfig:", "springServerType:", "statusFloodAutoKick:7;7", "broadcastChannels:")
+        new preset settings ("rotationManual:random", "minTeamSize:1", "endGameCommand:", "endGameCommandEnv:", "maxRemoteBots:8", "maxLocalBots:8", "autoAddBotNb:0",
+                             "localBots:joe 0 E323AI;jim core KAIK", "allowedLocalAIs:E323AI;HughAI;KAIK;RAI", "allowMapOptionsValues:1", "midGameSpecLevel:0", ghostMapLink,
+                             "advertDelay:15", "advertMsg:")
+        global setting "msgFloodAutoBan" renamed to "kickFloodAutoBan"
+        battle setting "resetmodoptions" has been renamed to "resetoptions" and now concerns both mod options and map options
+        underscore character "_" no longer allowed in login name
+0.10.0a: value "0" is now forbidden for nbPlayerById, teamSize, and nbTeams preset settings (it makes no sense to allow this value in configuration and it may crash SPADS)
+0.10.1: new preset setting ("endGameCommandMsg:")
+0.10.1a: allow multiple exit codes in endGameCommandMsg definitions
+0.10.2: new preset setting ("endGameAwards:1|0")
+0.10.3: getIpRank function removed (logic is now implemented in SPADS core using getIpAccounts)
+0.10.3a: removed obsolete code
+0.11.0: new global settings ("pluginsDir:%varDir%/plugins", "autoLoadPlugins:")
+        new preset settings ("speedControl:0|1", "skillMode:rank")
+        new preference: "skillMode"
+        SPADS configuration system can now be used by plugins too, including command rights management
+        new filter "playing" can now be used in commnands rights configuration (only matches players actually playing in the current game)
+        commands prefixed with '#' are considered as bot commands and don't require help
+0.11.1: "rank" has been renamed to "skill" in balanceMode setting values ("skill","clan;skill")
+        the "pluginsDir" directory is no longer added to Perl include directories if empty
+0.11.2: plugin help files must now be located in the plugins directory (instead of the var directory)
+0.11.2a: updated "speedControl" allowed values (new range: 1-2)
+0.11.3: dump dynamic data in network byte order to make binary files easily importable on different architectures
+
+spadsInstaller.pl:
+=================
+0.1: first public version (beta)
+0.2: allow using unitsync.so instead of libunitsync.so
+0.3: add update.pl component
+0.4: use release-dependent configuration templates
+0.5: fix unitsync wrapper generation from 0.78.1.1 source files
+0.6: battlePresets.conf no longer needs to contain modoptions, so a template is used like other configuration files
+     ask for activation of new mod version auto-detection if the latest version of a mod is selected as default AutoHost mod
+0.7: experimental Windows support
+     add "-g" command line option to regenerate unitsync interface module only
+0.7a: add "MSVCR71.dll" unitsync dependency (Windows only)
+0.7b: installer should now work when SPADS configuration directory ("etcDir") contains spaces
+0.8: add settings help file
+0.8a: fix unitsync wrapper generation for 0.79.0.2 source files
+0.8b: fix repository location (planetspring -> planetspads)
+0.9: "contrib" release type added (contains external unchecked patches)
+0.9a: SPADS no longer installs/updates/uses its own unitsync.dll (Windows)
+0.9b: remove obsolete springserver dynamic library management
+0.9c: fix for new syntax of unitsync Init function
+0.9d: restore original unitsync Init function syntax (revert 0.9c)
+0.10: spring-headless is now also downloaded,  previously only spring-dedicated was downloaded (Windows only)
+      spring-headless can now be chosen during installation instead of spring-dedicated
+      use timeouts for wget command
+0.10a: argparse.py and replay_upload.py python scripts added to SPADS repository (replay auto-upload system)
+0.11: added new SPADS plugin helper module
+0.11a: renamed SpadsPluginHelper to SpadsPluginApi
+0.12: PerlLobbyInterface and PerlAutoHostInterface renamed respectively to SpringLobbyInterface and SpringAutoHostInterface
+0.12a: "mods" folder is no longer listed as subdirectory of spring data directory
+       make Spring 95 behave like previous versions concerning writable data directory location
+
+SpadsPluginApi.pm:
+=================
+0.1: first public version (beta)
+0.2: added remove handler functions (removeSpadsCommandHandler, removeLobbyCommandHandler and removeSpringCommandHandler)
+0.2a : remove Windows style line endings (grml!)
+0.3: renamed from SpadsPluginHelper to SpadsPluginApi
+0.4: reorganized the API
+     initialized POD documentation
+     renamed getSelf to getPlugin
+0.5: started actual POD documentation writting
+     new plugin event callback "onGameEnd"
+     new plugin API function "forkProcess"
+0.6: new plugin event callback "onJoinBattleRequest"
+     new plugin API function "invalidSyntax"
+     removed some duplicate exports
+0.7: new plugin event callbacks "onVoteRequest,postSpadsCommand,preSpadsCommand"
+     new plugin customization callback "filterRotationMaps"
+0.8: renamed PerlAutoHostInterface to SpringAutoHostInterface
+
+SpadsUpdater.pm:
+===============
+0.1: first public version (beta)
+0.1a: improve warning message when update requires manual actions
+0.1b: fix detection of major version number changes
+0.1c: fix warning message when update requires manual actions
+0.1d: improve (again) warning message: add link to configuration templates
+0.1e: explain how to force update of all packages at the same time in the manual update warning message
+0.2: use a link to a dedicated file for manual update help
+0.3: experimental Windows support
+0.3a: updater should now work correctly when SPADS install path contains spaces
+0.3b: fix repository location (planetspring -> planetspads)
+0.4: try the rename method when updating a module in use (Windows)
+0.5: SPADS modules versions can now depend on Perl version (compatibility with Perl 5.12 added on Windows)
+0.6: compressed files support
+0.6a: do not try to load module "IO::Uncompress::Unzip" on Linux (compressed files support is only needed for Windows binaries)
+0.6b: enable binary mode when extracting zip files (Windows only)
+0.6c: use timeouts for wget commands
+0.6d: add +x flag for python scripts too
+
+update.pl:
+=========
+0.1: first public version (beta)
+0.2: experimental Windows support
+0.3: add settings help file
+0.3a: fix repository location (planetspring -> planetspads)
+0.4: "contrib" release type added (contains external unchecked patches)
+0.4a: SPADS no longer installs/updates/uses its own unitsync.dll (Windows)
+0.4b: remove auto-update of obsolete springserver dynamic library (Windows)
+0.5: add spring-headless module (Windows)
+0.6: add SpadsPluginHelper module
+0.6a: renamed SpadsPluginHelper to SpadsPluginApi
+0.7: PerlLobbyInterface and PerlAutoHostInterface renamed respectively to SpringLobbyInterface and SpringAutoHostInterface

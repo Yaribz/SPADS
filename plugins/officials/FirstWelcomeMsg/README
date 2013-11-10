@@ -1,0 +1,7 @@
+The "first welcome message" must be set in a file named "FirstWelcomeMsg.txt"
+in your SPADS etc directory. The plugin monitors this file in real time, you
+don't need to reload anything when you update it.
+
+The "first welcome message" won't be re-sent even if you modify it. If you want
+to re-send it on first join because you added important information to it, you
+can use the !resendFirstWelcomeMsg command.

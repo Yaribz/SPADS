@@ -1,0 +1,49 @@
+                  Help file for SPADS manual updates
+==============================================================================
+Some SPADS updates require manual modifications in configuration files. When
+this happens, SPADS does NOT auto-update because it wouldn't be able to
+restart without these modifications. Instead, it logs an alert and continues
+running normally.
+
+This file explains for each SPADS manual update how to add the required new
+settings with their default values. You just have to follow the section
+concerning your update. If you need additional information about these new
+settings, you can check the SPADS settings documentation here:
+  http://planetspads.free.fr/spads/doc/spadsDoc.html
+
+You can also check that your modifications are correct by taking a look at the
+up-to-date configuration templates available here (replace <release> by your
+actual SPADS release: "stable", "testing" or "unstable"):
+  http://planetspads.free.fr/spads/conf/templates/<release>/
+
+Then, when the manual actions have been performed, you can force an update of
+all SPADS packages by entering the following command from SPADS installation
+directory (replace <release> by your actual SPADS release: "stable", "testing"
+or "unstable"):
+  on Linux: ./update.pl <release> -f -a
+  on Windows: perl update.pl <release> -f -A
+
+Finally you can take a look at what changed during this update by checking the
+changelog available here:
+  http://planetspads.free.fr/spads/repository/CHANGELOG
+==============================================================================
+
+#######################################
+# help.dat: 0.11.* --> 0.12.*         #
+# helpSettings.dat: 0.4.* --> 0.5.*   #
+# spads.pl: 0.10.* --> 0.11.*         #
+# SpadsConf.pm: 0.10.* --> 0.11.*     #
+#######################################
+- add following global setting definitions in spads.conf:
+"pluginsDir:", "autoLoadPlugins:"
+- add following preset setting definitions in spads.conf:
+"speedControl:0|1", "skillMode:rank"
+- update the "balanceMode" preset setting values by replacing "rank" by "skill" ("clan;rank" --> "clan;skill", "rank" --> "skill")
+- declare new commands in commands.conf by adding following lines:
+[chskill]
+::|120:
+[plugin]
+::|130:
+- remove obsolete definitions in commands.conf for following command aliases:
+"coop","cv","map","spec"
+

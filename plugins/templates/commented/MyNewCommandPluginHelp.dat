@@ -1,0 +1,4 @@
+[myCommand]
+!myCommand [<param1> [<param2> [...]]] - This command only prints a message in SPADS log
+"!myCommand" prints the command in SPADS log
+"!myCommand abcd efgh" prints the command and the parameters in SPADS log

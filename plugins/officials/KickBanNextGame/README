@@ -1,0 +1,5 @@
+This plugin automatically removes temporary bans (bans set using command
+!kickBan) at the end of each game. The temporary ban duration (kickBanDuration
+setting in spads.conf) is still respected, it just becomes the maximum
+temporary ban duration (if no game is played meanwhile). So you have to
+increase your kickBanDuration value for this plugin to have any effect.

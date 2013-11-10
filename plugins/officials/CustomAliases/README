@@ -1,0 +1,4 @@
+Update the "aliases" setting definition in CustomAliases.conf file to add or modify custom aliases.
+
+Syntax is:
+  <alias1>(<command1>);<alias2>(<command2>);...

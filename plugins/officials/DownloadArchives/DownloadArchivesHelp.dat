@@ -1,0 +1,7 @@
+[dlmap]
+!dlmap <mapArchiveUrl> - downloads a map archive in the "maps" subdirectory of Spring data directory
+"!dlmap http://springfiles.com/sites/default/files/downloads/spring/spring-maps/DeltaSiegeDry.sd7" downloads map DeltaSiegeDry
+
+[dlmod]
+!dlmod <modArchiveUrl> - downloads a mod archive in the "games" subdirectory of Spring data directory
+"dlmod http://springfiles.com/sites/default/files/downloads/spring/games/ba772.sdz" downloads Balanced Annihilation v7.72

@@ -1,0 +1,4 @@
+This plugin forces players to join a specific channel before being able to join
+the autohost battle. You must edit the RequiredChannel.conf file to set the
+channel name and the deny message sent to a player if he tries to join the
+battle without being in the channel.

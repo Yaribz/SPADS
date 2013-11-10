@@ -1,0 +1,6 @@
+This plugin automatically specs players whose TrueSkill rating doesn't match
+the configured minimum (minTrueSkill) and maximum (maxTrueSkill) values in
+TrueSkillLimit.conf.
+By default the plugin applies TrueSkill limits on the Team TrueSkill rating.
+You can change this by editing the trueSkillType setting (allowed types are:
+"Duel", "Team", "FFA" and "TeamFFA").

@@ -1,0 +1,104 @@
+BODY {
+  background: white;
+  color: black;
+  font-family: arial,sans-serif;
+  margin: 0;
+  padding: 1ex;
+}
+
+TABLE {
+  border-collapse: collapse;
+  border-spacing: 0;
+  border-width: 0;
+  color: inherit;
+}
+
+TD {
+  margin: 0;
+  padding: 0;
+}
+
+DIV {  border-width: 0; }
+DT { margin-top: 1em; }
+
+TH {
+  background: #bbbbbb;
+  color: inherit;
+  padding: 0.4ex 1ex;
+  text-align: left;
+}
+
+TH A:link, TH A:visited {
+  background: transparent;
+  color: black;
+}
+
+CODE {
+  background: #e3e3e3;
+}
+
+PRE     {
+  background: #dddddd;
+  border: 1px solid black;
+  color: black;
+  padding-top: 1em;
+  padding-bottom: 1em;
+  white-space: pre;
+  margin-left: 40px;
+  width: 800px;
+}
+
+PRE CODE {
+  background: #dddddd;
+}
+
+H1      {
+  background: #ADEBFF;
+  color: #006699;
+  font-size: large;
+}
+
+H2      {
+  background: transparent;
+  color: #006699;
+  font-size: medium;
+}
+
+LI {
+  line-height: 1.2em;
+  list-style-type: none;
+}
+ 
+UL#index {
+  width: 300px;
+  margin: 20px 0 30px 20px;
+  padding: 10px 0px 10px 40px;
+  background: #FFFFCE;
+  -moz-border-radius: 30px 30px 30px 30px;
+  -webkit-border-radius: 30px 30px 30px 30px;
+  border-radius: 30px 30px 30px 30px;
+  -moz-box-shadow: 6px 3px 5px #297CCF;
+  -webkit-box-shadow: 6px 3px 5px #297CCF;
+  box-shadow: 6px 3px 5px #297CCF;
+}
+
+dt {
+  width: 90%;
+  margin-left: 10px;
+  padding: 5px 5px 5px 20px;
+  -moz-border-radius: 15px 15px 15px 15px;
+  -webkit-border-radius: 15px 15px 15px 15px;
+  border-radius: 15px 15px 15px 15px;
+  background: #FFF1D4;
+  background: #F3F3FF;
+  background: #EBFFD6;
+
+}
+
+dt code {
+  background: #EBFFD6;
+}
+
+dd {
+  margin-bottom: 30px;
+}

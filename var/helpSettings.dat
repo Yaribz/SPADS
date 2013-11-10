@@ -1,0 +1,2020 @@
+###############################################################################
+#          Global settings (defined in first part of spads.conf file)         #
+###############################################################################
+[global:lobbyHost]
+Lobby server hostname
+-
+Hostname or IP address of the Spring lobby server
+-
+Routable hostname or IP address
+-
+taspringmaster.clan-sy.com
+
+[global:lobbyPort]
+Lobby server port
+-
+Port of the Spring lobby server
+-
+Any valid port number
+-
+8200
+
+[global:lobbyReconnectDelay]
+Delay before reconnecting to lobby server
+-
+When SPADS is disconnected from lobby server, it tries to reconnect immediately.
+But when it fails to connect due to network problems, it waits this amount of seconds before trying to reconnect.
+A value of 0 disables reconnection.
+-
+Integer
+-
+30
+
+[global:lobbyFollowRedirect]
+Follow lobby server redirection
+-
+If enabled, SPADS will follow redirection orders from Spring lobby server.
+If disabled, it will keep trying to connect to the hostname specified by [global:lobbyHost].
+-
+0: disabled
+1: enabled
+-
+1
+
+[global:lobbyLogin]
+AutoHost lobby name
+-
+Name of the AutoHost in Spring lobby
+-
+Any valid lobby login
+-
+%login% (set during installation, example: "Spads")
+
+[global:lobbyPassword]
+AutoHost lobby password
+-
+Spring lobby password for the AutoHost account
+-
+Any valid lobby password
+-
+%password% (set during installation, example: "abcdefgh")
+
+[global:localLanIp]
+LAN IP of the AutoHost
+-
+If the AutoHost is connected to a LAN, this is the AutoHost IP address on this LAN.
+This parameter is used by the Spring lobby server to allow players from the same LAN to play on this AutoHost.
+-
+<null>: the local LAN IP is auto-detected
+*: the AutoHost isn't connected to a LAN
+Any valid LAN IP address: this IP is sent to lobby server as local LAN IP
+-
+<null>
+
+[global:autoHostPort]
+AutoHost private port
+-
+UDP port used for local communication between AutoHost and Spring server
+-
+Any valid port number
+-
+8454
+
+[global:forceHostIp]
+Force hosting IP address
+-
+By default, Spring server detects the latest IP protocol version and the corresponding network interfaces available on your system, and use them for hosting.
+But if the "forceHostIp" setting is set to a valid IP address, then Spring server will use this IP address for hosting instead of the auto-detected ones.
+If you have problem with hosting on your system and if you think it's related to IPv6, you may want to try setting "forceHostIp" to "0.0.0.0".
+-
+<null>: the auto-detected interfaces are used for hosting
+Any valid IP address: the provided IP address is used for hosting
+-
+<null>
+
+[global:binDir]
+SPADS installation directory
+-
+Location of SPADS binary files
+-
+Any existing directory
+-
+%installDir% (set during installation, examples: "/var/home/spring/spads/", "C:\Program files\Spads")
+
+[global:etcDir]
+SPADS configuration directory
+-
+Location of SPADS configuration files
+-
+Any existing directory
+-
+%etcDir% (set during installation, examples: "/var/home/spring/spads/etc", "C:\Program files\Spads\etc")
+
+[global:varDir]
+SPADS dynamic data directory
+-
+Location of SPADS dynamic data
+-
+Any writable directory
+-
+%varDir% (set during installation, examples: "/var/home/spring/spads/var", "C:\Program files\Spads\var")
+
+[global:logDir]
+SPADS log directory
+-
+Location of SPADS log files
+-
+Any writable directory
+-
+%logDir% (set during installation, examples: "/var/home/spring/spads/var/log", "C:\Program files\Spads\var\log")
+
+[global:autoUpdateRelease]
+Auto-update release
+-
+Name of the SPADS release to auto-update to.
+-
+<null>: auto-update is disabled
+stable: auto-update to "stable" release (latest official release)
+testing: auto-update to "testing" release (public testing release)
+unstable: auto-update to "unstable" release (release in development)
+contrib: auto-update to "contrib" release (public testing release + unchecked external patches)
+-
+%release% (set during installation)
+
+[global:autoUpdateDelay]
+Auto-update delay
+-
+Delay in minutes between checks of SPADS repository for update.
+A value of 0 disables auto-update when SPADS is running, but SPADS keeps auto-updating at start if the <autoUpdateRelease> parameter is defined.
+-
+Integer
+-
+60
+
+[global:autoRestartForUpdate]
+Auto-restart for update
+-
+Specifies if SPADS must check regularly if its packages have been updated, and how it must restart on update.
+-
+off: SPADS doesn't check if its packages have been updated, and thus never auto-restarts for update
+whenEmpty: SPADS auto-restarts for update only when no game is running and battle is empty
+whenOnlySpec: SPADS auto-restarts for update only when no game is running and battle is empty or only contains spectators
+on: SPADS auto-restarts for update when no game is running
+-
+whenEmpty
+
+[global:autoUpdateBinaries]
+Auto-update binaries
+-
+Specifies if SPADS and Spring binary packages must be auto-updated
+-
+no: binary files aren't auto-updated
+unitsync: only Perl unitsync interface files are auto-updated (allowed on Windows platform only)
+server: only Spring server files are auto-updated (allowed on Windows platform only)
+yes: all binary packages are auto-updated (allowed on Windows platform only)
+-
+yes (windows)
+no (other OS)
+
+[global:onBadSpringVersion]
+Action for bad Spring version
+-
+Action to be performed when the Spring version used by the AutoHost doesn't match the default one broadcasted by the lobby server.
+-
+<null>: use experimental multi-engine lobby protocol extension (not implemented by all lobby clients)
+closeBattle: battle lobby is automatically closed
+quit: SPADS exits automatically
+-
+closeBattle
+
+[global:springConfig]
+Spring config file path
+-
+Absolute path of the main Spring configuration file (usually springsettings.cfg).
+This setting is not supported by spring-dedicated, it is only usefull when using SPADS with spring-headless.
+-
+<null>: no configuration file is needed (spring-dedicated case), or default configuration file is used (spring-headless case)
+Absolute path to a correct Spring configuration file: configuration file used by spring-headless
+-
+<null>
+
+[global:springServer]
+Spring server path
+-
+Absolute path of the Spring server binary file
+-
+Any executable file absolute path
+-
+%dedicated% (set during installation, examples: "/var/home/spring/bin/spring-dedicated", "C:\Program files\Spads\spring-headless.exe")
+
+[global:springServerType]
+Spring server type
+-
+Type of Spring server binary used with SPADS.
+-
+<null>: the server type is auto-detected from spring server binary name (see [global:springServer])
+dedicated
+headless
+-
+<null>
+
+[global:springDataDir]
+Spring data directory
+-
+Absolute path of the Spring directory containing maps, mods, base files...
+-
+Any writable directory
+-
+%dataDir% (set during installation, examples: "/share/games/spring", "C:\Program files\Spring")
+
+[global:autoReloadArchivesMinDelay]
+Minimum delay before auto-reloading Spring archives
+-
+SPADS can auto-detect changes in Spring archives, and auto-reload them if needed.
+If the autoReloadArchivesMinDelay is set to 0, then this feature is disabled, else it is enabled.
+When this feature is enabled, the autoReloadArchivesMinDelay contains the minimum delay in seconds to wait since the last change in Spring archives before reloading them automatically (this is useful to avoid reloading incomplete archives that are still being uploaded for instance).
+-
+Integer
+-
+30
+
+[global:autoLearnMaps]
+Automatic map learning
+-
+Specifies if SPADS must learn automatically all the maps hosted by the other hosts, so that it can host them in ghost-map mode later (without having them locally on the server)
+-
+0: disabled
+1: enabled
+-
+0
+
+[global:sendRecordPeriod]
+Send record period for output flood protection
+-
+Period in seconds during which data sent to lobby server is measured to avoid flooding it (see also [global:maxBytesSent] and [global:maxLowPrioBytesSent]).
+A value of '0' disables output flood protection.
+-
+Integer
+-
+10
+
+[global:maxBytesSent]
+Max bytes sent to lobby server
+-
+Amount of bytes that can be sent to lobby server during send record period (see also [global:sendRecordPeriod]).
+Output flood protection is performed by queueing excessive data.
+-
+Integer
+-
+19000
+
+[global:maxLowPrioBytesSent]
+Max low-priority bytes sent to lobby server
+-
+Amount of low-priority bytes (private messages, command responses...) that can be sent to lobby server during send record period (see also [global:sendRecordPeriod]).
+Output flood protection is performed by queueing excessive data in a specific low-priority queue.
+-
+Any integer smaller than the [global:maxBytesSent] value
+-
+18000
+
+[global:maxChatMessageLength]
+Maximum lobby chat message length
+-
+Whenever SPADS needs to send a chat message to lobby server, it will first split the message if needed so that each message will have a maximum length of <maxChatMessageLength> bytes.
+-
+Integer
+-
+1024
+
+[global:maxAutoHostMsgLength]
+Maximum AutoHost message length
+-
+Whenever SPADS needs to send a message on the AutoHost interface, it will first split the message if needed so that each message will have a maximum length of <maxAutoHostMsgLength> bytes.
+-
+Integer
+-
+240
+
+[global:promoteDelay]
+Promote delay
+-
+Minimum delay in seconds between two promote messages (see also [global:promoteChannels])
+-
+Integer
+-
+600
+
+[global:msgFloodAutoKick]
+Message flood auto-kick thresholds
+-
+Specifies the record period and the maximum number of chat messages triggered by a user during this period in the battle lobby before auto-kick for flood protection
+-
+<nbMsg>:<delay>
+  where <nbMsg> is the maximum number of chat messages before kick (integer)
+        <delay> is the record period in seconds (integer)
+-
+7;7
+
+[global:statusFloodAutoKick]
+Status flood auto-kick thresholds
+-
+Specifies the record period and the maximum number of status changes triggered by a user during this period in the battle lobby before auto-kick for flood protection
+-
+<nbMsg>:<delay>
+  where <nbMsg> is the maximum number of status changes before kick (integer)
+        <delay> is the record period in seconds (integer)
+-
+8;8
+
+[global:kickFloodAutoBan]
+Kick flood auto-ban thresholds
+-
+Specifies the record period, the maximum number of times someone can be auto-kicked during this period before being auto-banned, and the duration of this automatic ban for battle lobby flood protection
+-
+<nbAutoKick>:<delay>:<banDuration>
+  where <nbAutoKick> is the maximum number of times someone can be auto-kicked before ban (integer)
+        <delay> is the record period in seconds (integer)
+        <banDuration> is the duration in minutes of the automatic ban for auto-kick floods (integer)
+-
+2;120;5
+
+[global:cmdFloodAutoIgnore]
+Command flood auto-ignore thresholds
+-
+Specifies the record period, the maximum number of commands someone can send to the AutoHost during this period before being auto-ignored, and the duration of this automatic ignore for command flood protection
+-
+<nbCmd>:<delay>:<ignoreDuration>
+  where <nbCmd> is the maximum number of commands someone can send to the AutoHost before ignore (integer)
+        <delay> is the record period in seconds (integer)
+        <ignoreDuration> is the duration in minutes of the automatic ignore for command flood (integer)
+-
+4;4;2
+
+[global:reCallVoteDelay]
+Re-call vote delay
+-
+When a vote ends, SPADS prevents the user who started the vote to call another vote too fast, so that other users have some time to call a vote if they want to (vote flood protection). This is the minimum delay in seconds before someone can call another vote when his previous vote ended.
+-
+Integer
+-
+10
+
+[global:floodImmuneLevel]
+Flood immune level
+-
+When a user has an AutoHost access level superior or equal to this value, he is immune to flood protections.
+-
+Integer
+-
+100
+
+[global:maxSpecsImmuneLevel]
+Spectator limit immune level
+-
+When a user has an AutoHost access level superior or equal to this value, he is immune to maximum number of spectators limit (refer to [set:maxSpecs]).
+-
+Integer
+-
+100
+
+[global:lobbyInterfaceLogLevel]
+Lobby interface log level
+-
+Log level of the lobby interface module
+-
+0: critical
+1: errors
+2: warnings
+3: notices
+4: information
+5: debug (all messages sent and received on the interface are logged!)
+-
+4
+
+[global:autoHostInterfaceLogLevel]
+AutoHost interface log level
+-
+Log level of the AutoHost interface module
+-
+0: critical
+1: errors
+2: warnings
+3: notices
+4: information
+5: debug (all messages sent and received on the interface are logged!)
+-
+4
+
+[global:updaterLogLevel]
+Updater log level
+-
+Log level of the Updater module
+-
+0: critical
+1: errors
+2: warnings
+3: notices
+4: information
+5: debug
+-
+4
+
+[global:spadsLogLevel]
+SPADS main log level
+-
+Log level of the core SPADS component
+-
+0: critical
+1: errors
+2: warnings
+3: notices
+4: information
+5: debug
+-
+4
+
+[global:logChanChat]
+Log channel chat
+-
+Specifies if channel chat must be logged
+-
+0: disabled
+1: enabled
+-
+0
+
+[global:logChanJoinLeave]
+Log channel join/leave
+-
+Specifies if channel join/leave messages must be logged
+-
+0: disabled
+1: enabled
+-
+0
+
+[global:logBattleChat]
+Log battle lobby chat
+-
+Specifies if battle lobby chat must be logged
+-
+0: disabled
+1: enabled
+-
+1
+
+[global:logBattleJoinLeave]
+Log battle lobby join/leave
+-
+Specifies if battle lobby join/leave messages must be logged
+-
+0: disabled
+1: enabled
+-
+1
+
+[global:logGameChat]
+Log game chat
+-
+Specifies if game chat must be logged
+-
+0: disabled
+1: enabled
+-
+1
+
+[global:logGameJoinLeave]
+Log game join/leave
+-
+Specifies if game join/leave messages must be logged
+-
+0: disabled
+1: enabled
+-
+1
+
+[global:logGameServerMsg]
+Log game server messages
+-
+Specifies if game server messages must be logged
+-
+0: disabled
+1: enabled
+-
+1
+
+[global:logPvChat]
+Log private lobby messages
+-
+Specifies if private messages sent to the AutoHost must be logged
+-
+0: disabled
+1: enabled
+-
+1
+
+[global:alertLevel]
+Alert level
+-
+Minimum AutoHost access level required to receive AutoHost alerts (do not set this too low or you will spam everyone !)
+-
+Integer
+-
+130
+
+[global:alertDelay]
+Alert delay
+-
+Delay in hours before re-sending alerts to a user
+-
+Integer
+-
+6
+
+[global:alertDuration]
+Alert duration
+-
+After this delay (in hours), alerts are automatically discared. This delay shouldn't be too low because an AutoHost admin could miss alerts if he doesn't connect to lobby server very often.
+-
+Integer
+-
+72
+
+[global:masterChannel]
+AutoHost master channel
+-
+If specified, the AutoHost will join this channel and listen to AutoHost commands in it. When running multiple AutoHosts, this can be useful to perform commands on severall AutoHosts at once.
+-
+<null> (functionality disabled)
+Any valid lobby channel name
+-
+<null>
+
+[global:opOnMasterChannel]
+Operator on master channel
+-
+Specifies if the AutoHost has operator access on the master channel. If so, it will be able to kick players from channel (for banned players or !bKick command)
+-
+0: no
+1: yes
+-
+0
+
+[global:broadcastChannels]
+List of broadcast channels
+-
+Contains the list of lobby channels in which basic battle status messages are broadcasted.
+-
+<null> (functionality disabled)
+<channel1>[ <password1>][;<channel2>[ <password2>][;...]]
+-
+<null>
+
+[global:promoteChannels]
+List of promote channels
+-
+Contains the list of lobby channels in which messages to promote current battle will be sent when !promote command is used.
+-
+<null> (functionality disabled)
+<channel1>[ <password1>][;<channel2>[ <password2>][;...]]
+-
+<null>
+
+[global:promoteMsg]
+Promote message
+-
+Message sent to promote channels when !promote command is used.
+%u is replaced by the user performing !promote command
+%p is replaced by the number of needed players for current expected battle structure (nbTeams x teamSize x nbPlayerById)
+%b is replaced by the battle name
+%o is replaced by the mod name
+%a is replaced by the map name
+-
+<null> (functionality disabled)
+Any string
+-
+%pplayer(s) needed for battle "%b" [%o, %a] (%u)
+
+[global:defaultPreset]
+Default preset
+-
+It is the default preset name.
+Presets are defined as sections of spads.conf file. The default preset must be complete (i.e. it must define all preset settings)
+-
+Any complete preset defined in spads.conf
+-
+default
+
+[global:restoreDefaultPresetDelay]
+Default preset restore delay
+-
+Number of seconds before restoring the default preset when battle is empty. When set to 0, it disables the auto-restore default preset functionality.
+-
+Integer
+-
+30
+
+[global:autoLockClients]
+Number of clients for auto-lock
+-
+When this number of clients (players or spectators) is in the battle lobby, SPADS auto-locks the battle.
+This is useful when you know your network connection cannot support more than x clients, should they be players or spectators.
+This is different from [hSet:maxPlayers], which limits the number of players only.
+When set to 0, it disables the auto-lock on client count functionality.
+-
+Integer
+-
+31
+
+[global:autoSaveBoxes]
+Auto-save start boxes
+-
+If enabled, SPADS will automatically save the start boxes when a game is launched.
+-
+0: disabled
+1: enabled
+2: enabled only if there is no start box saved for this map yet
+-
+1
+
+[global:botsRank]
+Rank for bots
+-
+This setting defines the rank attibuted to AI bots when auto-balancing the battle.
+-
+0: Newbie
+1: Beginner
+2: Average
+3: Above average
+4: Experienced
+5: Highly experienced
+6: Veteran
+-
+3
+
+[global:voteTime]
+Vote time
+-
+When a vote is called, this is the delay in seconds during which clients are allowed to vote.
+-
+Integer
+-
+45
+
+[global:minVoteParticipation]
+Minimum vote participation
+-
+This is the minimum percent of voters that must have voted manually for a poll to be taken into account by SPADS.
+-
+Integer between 0 and 100 included
+-
+34
+
+[global:pluginsDir]
+SPADS plugins directory
+-
+Location of SPADS plugins
+-
+Any directory
+-
+%varDir%/plugins (set during installation, examples: "/var/home/spring/spads/var/plugins", "C:\Program files\Spads\var\plugins")
+
+[global:autoLoadPlugins]
+Auto-loaded plugins
+-
+Contains the names of the SPADS plugins that will be automatically loaded on start, separated by ';'
+-
+<null>: no plugin loaded autmatically
+<pluginName>[;<pluginName2>[...]]: plugins <pluginName>, <pluginName2>[...] will be automatically loaded on start
+-
+<null>
+
+[global:springieEmulation]
+Springie emulation mode
+-
+Specifies the Springie emulation mode.
+-
+on: Springie commands are emulated
+off: Springie commands are not emulated
+warn: Springie commands are emulated, but a warning message is sent in private to the player when a deprecated command is used
+-
+on
+
+[global:dataDumpDelay]
+Data dump delay
+-
+User preferences and map hashes are stored periodicly into preferences.dat and mapHashes.dat files. This setting defines the delay in minutes between such dumps.
+If set to 0, the functionality is disabled (dynamic data are then dumped only when SPADS exits normally)
+-
+Integer
+-
+60
+
+[global:allowSettingsShortcut]
+Allow settings shortcut
+-
+If enabled, SPADS will allow clients to use following shortuct commands:
+Instead of "!list <dataType>", it is possible to type directly "!<dataType>".
+Instead of "!set <settingName> <value>", it is possible to type directly "!<settingName> <value>" (same for "hSet", "bSet" ...).
+Instead of "!help set <settingName>", it is possible to type directly "!help <settingName>" (same for "hSet", "bSet" ...).
+-
+0: disabled
+1: enabled
+-
+1
+
+[global:colorSensitivity]
+Color sensitivity
+-
+When auto-fixing players colors, SPADS uses a formula to evaluate how much different 2 colors are.
+If the computed color difference is below the value of this setting, SPADS tries to change the offending colors.
+Using a very low value for this setting would allow players to use very similar colors.
+Using a very high value for this setting would change players colors almost every time, even if they seem really different.
+If set to 0, SPADS prevents players from choosing their colors (16 hard-coded colors are used instead)
+-
+Integer
+-
+55 (some colors may seem similar in battle lobby, but usually they are different enough in game)
+
+[global:kickBanDuration]
+Ban duration for kickBan command
+-
+Duration in seconds of the ban applied when using !kickBan command.
+-
+Integer
+-
+120
+
+[global:minLevelForIpAddr]
+Minimum access level to see IP addresses
+-
+Players IP addresses can be shown in some command outputs (!list bans, !searchUser, !smurfs, !status and !whois).
+The "minLevelForIpAddr" global setting specifies the AutoHost access level requirement to be able to see these IP addresses.
+-
+Integer
+-
+130
+
+[global:userDataRetention]
+User data retention
+-
+SPADS can store user data (IP addresses, ranks ...) so that IP bans and anti-smurf are possible.
+The "userDataRetention" global setting contains the number of days during which user data are kept even if the user hasn't been seen online, followed by the maximum number of IPs (useful to deal with dynamic IPs) and the maximum number of names (useful to track renames) that can be bound to an account, separated by ";".
+-
+<retentionPeriod>:<maxIPs>:<maxNames>
+  where <retentionPeriod> is the delay in days during which user data are stored ("-1" => data are kept forever, "0" => user data retention disabled)
+        <maxIPs> is the maximum number of IPs bound to an account ("-1" => all IPs are kept, "0" => IPs aren't stored)
+        <maxNames> is the maximum number of names bound to an account ("-1" => all names are kept, "0" => only one name is stored by account, "1" => max 2 names ...)
+-
+0;0;0
+
+[global:useWin32Process]
+Use Win32 process
+-
+Specifies if SPADS must use an alternate fork method (using Win32 process) on Windows.
+-
+0: Perl fork implementation is used to spawn Spring server process
+1: Win32 process is used to spawn Spring server process (allowed on Windows platform only)
+-
+0
+
+###############################################################################
+#           Preset settings (defined in sections of spads.conf file)          #
+###############################################################################
+
+[set:description]
+Preset description
+-
+Preset description that appears in "!list presets" output.
+This is a special preset setting: it cannot be changed by using !set command.
+-
+Any String
+-
+Default SPADS settings
+
+[set:rotationType]
+Rotation type
+-
+SPADS automatic rotation system can occur at the end of each game and/or when the battle is empty (refer to [set:rotationEndGame] and [set:rotationEmpty]).
+The "rotationType" preset setting specifies whether map rotation or preset rotation is selected.
+When map rotation is selected, a new map is chosen automatically in current map list. A subset of current map list can be specified for map rotation (refer to syntax below)
+When preset rotation is selected, a new preset available from current preset is chosen automatically (refer to [set:preset])
+-
+map: map rotation is selected (any map of current map list can be chosen as next map)
+preset: preset rotation is selected (any preset available form current preset can be chosen as next preset)
+map;<subMapList>: map rotation with sub map list filter is selected (any map belonging to both current map list and <subMapList> can be chosen as next map)
+-
+map
+
+[set:rotationDelay]
+Rotation delay
+-
+SPADS automatic rotation system can occur at the end of each game and/or when the battle is empty (refer to [set:rotationEndGame] and [set:rotationEmpty]).
+The "rotationDelay" preset setting specifies the minimum delay in seconds between two automatic rotations: it is both the minimum game duration for automatic end-game rotation, and the delay between two automatic rotations when battle is empty.
+-
+Integer
+-
+300
+
+[set:rotationEndGame]
+End-game rotation mode
+-
+When a game ends, SPADS can automatically rotate map or preset.
+The "rotationEndgame" preset setting specifies if end-game rotation is enabled, and what mode is enabled.
+-
+off: end-game automatic rotation is disabled
+random: end-game automatic rotation is enabled (maps or presets are chosen randomly)
+order: end-game automatic rotation is enabled (maps or presets are rotated in order)
+-
+off
+
+[set:rotationEmpty]
+Empty battle rotation mode
+-
+When the battle lobby is empty, SPADS can automatically rotate map or preset.
+The "rotationEmpty" preset setting specifies if empty-battle rotation is enabled, and what mode is enabled.
+-
+off: empty-battle automatic rotation is disabled
+random: empty-battle automatic rotation is enabled (maps or presets are chosen randomly)
+order: empty-battle automatic rotation is enabled (maps or presets are rotated in order)
+-
+random
+
+[set:rotationManual]
+Manual rotation mode
+-
+When using !nextMap or !nextPreset commands, SPADS rotates map or preset.
+The "rotationManual" preset setting specifies which rotation mode is used in this case.
+-
+random: maps or presets are chosen randomly
+order: maps or presets are rotated in order
+-
+random
+
+[set:preset]
+Global preset
+-
+This preset setting contains the name of the current global preset.
+This is a special preset setting: it cannot be changed by using !set command (the !preset or !forcePreset commands must be used instead).
+The only purpose of this setting is to allow AutoHost administrators to list the other presets users are allowed to switch to.
+In spads.conf, the first value of this setting (i.e., the default value) must always be the name of the preset being defined, and the alternate values (separated by '|' character) are the other allowed presets users are allowed to switch to from current preset.
+-
+Any global preset name (defined in spads.conf)
+-
+default
+
+[set:hostingPreset]
+Hosting preset
+-
+This preset setting contains the name of the current hosting preset.
+This is a special preset setting: it cannot be changed by using !set command (the !hPreset command must be used instead).
+In spads.conf, it allows AutoHost administrators to both associate a default hosting preset to the preset being defined, and select which hosting presets users are allowed to switch to.
+-
+Any hosting preset name (defined in hostingPresets.conf)
+-
+default
+
+[set:battlePreset]
+Battle preset
+-
+This preset setting contains the name of the current battle preset.
+This is a special preset setting: it cannot be changed by using !set command (the !bPreset command must be used instead).
+In spads.conf, it allows AutoHost administrators to both associate a default battle preset to the preset being defined, and select which battle presets users are allowed to switch to.
+-
+Any battle preset name (defined in battlePresets.conf)
+-
+default
+
+[set:mapList]
+Map list
+-
+Current map list name.
+Only the maps included in this map list will be available for "!list maps", !set map", and "!map" commands (and automatic map rotation).
+-
+Any map list name (defined in mapLists.conf)
+-
+all
+
+[set:map]
+Map name
+-
+Current map name (default is first map of current map list if not set)
+This special preset setting can be changed by using the classic "!set map" command, but also the "!map" alias.
+-
+Any map of current map list (defined in mapLists.conf).
+-
+DeltaSiegeDry
+
+[set:autoLoadMapPreset]
+Auto-load map preset
+-
+If enabled, SPADS will automatically load map presets when map is changed. If the corresponding map preset is not found, the default map preset named "_DEFAULT_.smf" is loaded if it exists.
+A map preset is a global preset defined in spads.conf which has the same name as a map, with .smf suffix.
+Map presets can be useful to automatically adjust allowed team sizes according to the map for instance.
+-
+0: disabled
+1: enabled
+-
+0
+
+[set:hideMapPresets]
+Hide map presets
+-
+If enabled, map presets will not be shown in "!list presets" output.
+A map preset is a global preset defined in spads.conf which has the same name as a map, with .smf suffix.
+-
+0: disabled
+1: enabled
+-
+0
+
+[set:allowGhostMaps]
+Allow ghost maps
+-
+If enabled and if dedicated Spring server is used (see [global:springServerType]), ghost maps will be available for "!list maps", "!set map", and "!map" commands (and automatic map rotation).
+A ghost map is a map which isn't available locally on the server, but whose hash has been learned (refer to [global:autoLearnMaps] and/or "!learnMaps" command). Only the "choose in game" start position type is allowed for such maps.
+Like normal maps, ghost maps still have to be included in current map list to be available (refer to [set:mapList]).
+-
+0: disabled
+1: enabled
+-
+0
+
+[set:autoCallvote]
+Auto-call vote
+-
+When enabled, if a user tries to execute a command directly whereas he only has sufficient rights to call a vote for this command, then SPADS will automaticall call the vote for the user instead of trying to execute the command directly.
+-
+0: disabled
+1: enabled
+-
+1
+
+[set:autoLockRunningBattle]
+Auto-lock running battle
+-
+When enabled, the battle lobby is automatically locked when a game is running (players won't be able to join the battle lobby when the game is in progress).
+-
+0: disabled
+1: enabled
+-
+0
+
+[set:autoLock]
+Auto-lock mode
+-
+Specifies if and when battle lobby must be automatically locked/unlocked, based on the number of players.
+When autoLock is set to "on", the battle lobby is automatically locked when target number of players (1) is reached.
+The "advanced" auto-lock mode works in the same way, except that if there are more players than the target number of players (2) and teams cannot be made even (3), then battle lobby is automatically unlocked until enough players join for teams to be made even again.
+(1) The target number of players is computed from [set:nbTeams], [set:teamSize], and [set:nbPlayerById] (target number of players = nbTeams * teamSize * nbPlayerById)
+(2) This can happen when a spectator unspecs after battle has been automatically locked for instance
+(3) i.e. current number of players in battle lobby isn't a multiple of [set:nbTeams]
+-
+off: auto-lock disabled
+on: auto-lock battle lobby when there are enough players
+advanced: auto-lock battle lobby when there are enough players and teams can be made even
+-
+on
+
+[set:autoSpecExtraPlayers]
+Auto-spec extra players
+-
+When enabled, if the target number of players is reached in the battle lobby then SPADS will automatically force spectator mode for next players who join or try to unspec.
+The target number of players is computed from [set:nbTeams], [set:teamSize], and [set:nbPlayerById] (target number of players = nbTeams * teamSize * nbPlayerById)
+-
+0: disabled
+1: enabled
+-
+1
+
+[set:autoBalance]
+Auto-balance mode
+-
+Specifies if and when teams must be automatically balanced.
+When autoBalance is set to "on", teams are automatically balanced as soon as all following conditions are fulfilled:
+- there are at least [set:minPlayers] players in the battle lobby
+- the target number of players (1) is reached
+- teams can be made even (2)
+The "advanced" auto-balance mode works in the same way, except that it doesn't check if the target number of players is reached. It auto-balances as soon as all other conditions are fulfilled.
+(1) The target number of players is computed from [set:nbTeams], [set:teamSize], and [set:nbPlayerById] (target number of players = nbTeams * teamSize * nbPlayerById)
+(2) i.e. current number of players in battle lobby is a multiple of [set:nbTeams]
+-
+off: auto-balance disabled
+on: auto-balance enabled
+advanced: auto-balance enabled even if target number of players isn't reached
+-
+advanced
+
+[set:autoFixColors]
+Auto-fix colors mode
+-
+Specifies if and when player colors must be automatically fixed.
+When autoFixColors is set to "on", player colors are automatically fixed as soon as all following conditions are fulfilled:
+- there are at least [set:minPlayers] players in the battle lobby
+- the target number of players (1) is reached
+- teams can be made even (2)
+The "advanced" auto-fix colors mode works in the same way, except that it doesn't check if the target number of players is reached. It auto-fixes colors as soon as all other conditions are fulfilled.
+(1) The target number of players is computed from [set:nbTeams], [set:teamSize], and [set:nbPlayerById] (target number of players = nbTeams * teamSize * nbPlayerById)
+(2) i.e. current number of players in battle lobby is a multiple of [set:nbTeams]
+-
+off: auto-fix colors disabled
+on: auto-fix colors enabled
+advanced: auto-fix colors enabled even if target number of players isn't reached
+-
+advanced
+
+[set:autoBlockBalance]
+Auto-block balance
+-
+If enabled, SPADS will prevent players from changing their ID/team once teams have been balanced.
+-
+0: disabled
+1: enabled
+-
+1
+
+[set:autoBlockColors]
+Auto-block colors
+-
+If enabled, SPADS will prevent players from changing their color once colors have been fixed.
+-
+0: disabled
+1: enabled
+-
+0
+
+[set:autoStart]
+Auto-start mode
+-
+Specifies if and when game must be automatically started.
+When autoStart is set to "on", the game is automatically started as soon as all following conditions are fulfilled:
+- there are at least [set:minPlayers] players in the battle lobby
+- the target number of players (1) is reached
+- teams are even
+- no AI bot is enabled
+- all players are ready and synced, and no player is in-game
+The "advanced" auto-start mode works in the same way, except that it doesn't check if the target number of players is reached. It auto-starts as soon as all other conditions are fulfilled.
+(1) The target number of players is computed from [set:nbTeams], [set:teamSize], and [set:nbPlayerById] (target number of players = nbTeams * teamSize * nbPlayerById)
+-
+off: auto-start disabled
+on: auto-start enabled
+advanced: auto-start enabled even if target number of players isn't reached
+-
+on
+
+[set:autoStop]
+Auto-stop mode
+-
+Specifies if and when game must be automatically stopped
+-
+noOpponent: game is auto-stopped when game is over or when there is only one team with connected alive player(s)
+onlySpec: game is auto-stopped when game is over or when only spectators are still connected
+gameOver: game is auto-stopped when game is over only
+off: game is not auto-stopped by AutoHost
+-
+gameOver
+
+[set:balanceMode]
+Balance mode
+-
+This is the balance mode used during both automatic (refer to [set:autoBalance]) and manual (refer to "!balance" command) team balancing operations.
+Four balance modes are currently available:
+The "random" balance mode simply balances players randomly.
+The "clan" balance mode ensures players of the same clans (refer to [set:clanMode]) are in the same teams. Other players are balanced randomly.
+The "skill" balance mode tries to balance teams according to player skills (refer to [pSet:skillMode] and [pSet:rankMode]), without respecting clans.
+The "clan;skill" balance mode tries to balance teams according to player skills (refer to [pSet:skillMode] and [pSet:rankMode]), respecting clans (refer to [set:clanMode]).
+-
+random: balance players randomly, without respecting clans
+clan: balance players randomly, respecting clans
+skill: balance players according to their skill, without respecting clans
+clan;skill: balance players according to their skill, respecting clans
+-
+clan;skill
+
+[set:clanMode]
+Clan mode
+-
+This is the clan mode used during balancing operations if [set:balanceMode] is set to "clan" or "clan;skill".
+It determines how players are recognized as being in the same clan.
+If [set:balanceMode] is set to "clan;skill" and maximum unbalance is specified (see below), it also determines how much unbalance implied by clans is allowed. Unbalance is measured as the relative percent difference of the standard deviation of estimated team skills between optimal balance (without clan management) and requested balance. If <maxUnbalance> cannot be honored, then clans aren't taken into account for balancing.
+-
+tag: players are considered as being in the same clan only if they have same tag in their names
+tag(<maxUnbalance>): same, except clans are only taken into account if <maxUnbalance> (integer) can be honored when balancing
+pref: players are considered as being in the same clan only if they have same [pSet:clan] value
+pref(<maxUnbalance>): same, except clans are only taken into account if <maxUnbalance> can be honored when balancing
+tag(<maxUnbalance1>);pref(<maxUnbalance2>): SPADS tries to balance by clan tag respecting <maxUnbalance1>. If it succeeds, then it also tries to handle [pSet:clan] values respecting <maxUnbalance2> (<maxUnbalance1> and/or <maxUnbalance2> can be omitted to remove balance constraint(s))
+pref(<maxUnbalance1>);tag(<maxUnbalance2>): same, except it tries to respect [pSet:clan] values before clan tags
+-
+tag;pref(5)
+
+[set:nbPlayerById]
+Number of player by ID
+-
+Spring engine supports having multiple players controling the same units. The "nbPlayerById" preset setting specifies the target number of players controling the same units (i.e., sharing the same ID).
+This is one of the three preset settings used by SPADS to determine the target battle structure (for battle auto-management in particular):
+- [set:nbTeams] (number of teams in the game)
+- [set:teamSize] (number of ID by team)
+- [set:nbPlayerById] (number of player by ID)
+-
+Non-null integer
+-
+1
+
+[set:teamSize]
+Team size
+-
+Target size of each team (number of ID by team).
+This is one of the three preset settings used by SPADS to determine the target battle structure (for battle auto-management in particular):
+- [set:nbTeams] (number of teams in the game)
+- [set:teamSize] (number of ID by team)
+- [set:nbPlayerById] (number of player by ID)
+-
+Non-null integer
+-
+6
+
+[set:nbTeams]
+Number of teams
+-
+Target number of teams
+This is one of the three preset settings used by SPADS to determine the target battle structure (for battle auto-management in particular):
+- [set:nbTeams] (number of teams in the game)
+- [set:teamSize] (number of ID by team)
+- [set:nbPlayerById] (number of player by ID)
+If nbTeams is set to 1, then SPADS will put all human players in team 1, and all bots in team 2. This special mode is usefull for "humans vs bots" type of games (chickens...)
+-
+Non-null integer
+-
+2
+
+[set:minTeamSize]
+Minimum team size
+-
+When auto-balancing, normaly [set:nbTeams] has higher priority than [set:teamSize], which means that if there aren't enough players to reach target battle structure, SPADS will try to put at least one player in each team before adding players to existing teams.
+[set:minTeamSize] makes it possible to alter this behaviour: it specifies the minimum team size before starting to fill another team when auto-balancing. This is only useful for Team FFA, when there aren't enough players to fulfill target battle structure: it makes SPADS decrease the number of teams so that there are at least this number of people in each team.
+If minTeamSize is set to 0, it simply makes [set:teamSize] have higher priority than [set:nbTeams] (it acts as if [set:minTeamSize] had same value as [set:teamSize]).
+-
+Integer
+-
+1
+
+[set:extraBox]
+Extra box
+-
+Specifies the number of extra boxes that much be created in addition to normal team start boxes.
+This preset setting is only used by SPADS to separate normal sets of stat boxes from special sets of start boxes when saving/loading map start boxes. That way, saved boxes for King Of The Hill don't overwrite normal team games start boxes for instance.
+-
+Integer
+-
+0
+
+[set:idShareMode]
+ID share mode
+-
+Specifies how SPADS chooses which players are sharing IDs.
+-
+all: all players of each team are sharing ID (SPADS counts the number of players in each team to know if teams are even)
+auto: [set:nbPlayerById] and [set:balanceMode] are used to determine shared IDs (SPADS counts the number of IDs in each team to know if teams are even)
+manual: [pSet:shareId] (coop group) is used to determine shared IDs (SPADS counts the number of players in each team to know if teams are even)
+clan: same as "manual", except that the clan tag is used as default [pSet:shareId] (coop group) value for clan players
+off: ID sharing is totally disabled, even if players are sharing IDs in battle lobby (workaround for 16 IDs limit in lobby protocol)
+-
+auto
+
+[set:minPlayers]
+Minimum number of players
+-
+This is the minimum number of players to start a game without using "!forceStart" command.
+Battle auto-management isn't performed when there is less players (refer to [set:autoStart], [set:autoBalance] and [set:autoFixColors]).
+-
+Integer
+-
+2
+
+[set:endGameCommand]
+End game command
+-
+Specifies a shell command to execute each time a game ends.
+This is a special preset setting: it cannot be changed by using !set command and it is not shown in "!list settings".
+Following placeholders can be used as command parameters:
+%startTimestamp: server start timestamp (example: '1339938200')
+%endTimestamp: server stop timestamp (example: '1339939006')
+%duration: server running time in seconds (example: '806')
+%startPlayingTimestamp: game start timestamp (example: '1339938300')
+%endPlayingTimestamp: game over timestamp (example: '1339939000')
+%gameDuration: game duration in seconds (example: '700')
+%engineVersion: engine major version (example: '89')
+%mod: mod name (example: 'Balanced Annihilation V7.68')
+%map: map name (example: 'DeltaSiegeDry')
+%type: game type ('Solo','Duel','FFA','Team','TeamFFA')
+%structure: structure of the game (examples: '1', '1v1','8-way','8v8','3v3v3')
+%nbBots: number of AI bots (example: '0')
+%ahName: autohost name (example: 'Spads4')
+%ahAccountId: autohost account ID (example: '77888')
+%ahPassword: autohost lobby password (example: 'abcd')
+%ahPassHash: autohost hashed lobby password, as sent to lobby server on login (example: 'ahdPrHyuJJfsPj+bZE+nrw==')
+%demoFile: absolute path to the game replay file (example: '/home/spring/demos/20120617_143502_DeltaSiegeDry_88.sdf')
+%gameId: game hash uniquely identifying the game, as generated by Spring on startup (example: 'c7c6dc4f79cd4f3cfb8fc1a397174d8b')
+%result: end game result ('gameOver','undecided')
+-
+<null> (functionality disabled)
+Valid shell command
+-
+<null>
+
+[set:endGameCommandEnv]
+End game command environment variables
+-
+Specifies the environment variables to define before launching the end game command (refer to [set:endGameCommand])
+This is a special preset setting: it cannot be changed by using !set command and it is not shown in "!list settings".
+Following placeholders can be used in the environment variables values:
+%startTimestamp: server start timestamp (example: '1339938200')
+%endTimestamp: server stop timestamp (example: '1339939006')
+%duration: server running time in seconds (example: '806')
+%startPlayingTimestamp: game start timestamp (example: '1339938300')
+%endPlayingTimestamp: game over timestamp (example: '1339939000')
+%gameDuration: game duration in seconds (example: '700')
+%engineVersion: engine major version (example: '89')
+%mod: mod name (example: 'Balanced Annihilation V7.68')
+%map: map name (example: 'DeltaSiegeDry')
+%type: game type ('Solo','Duel','FFA','Team','TeamFFA')
+%structure: structure of the game (examples: '1', '1v1','8-way','8v8','3v3v3')
+%nbBots: number of AI bots (example: '0')
+%ahName: autohost name (example: 'Spads4')
+%ahAccountId: autohost account ID (example: '77888')
+%ahPassword: autohost lobby password (example: 'abcd')
+%ahPassHash: autohost hashed lobby password, as sent to lobby server on login (example: 'ahdPrHyuJJfsPj+bZE+nrw==')
+%demoFile: absolute path to the game replay file (example: '/home/spring/demos/20120617_143502_DeltaSiegeDry_88.sdf')
+%gameId: game hash uniquely identifying the game, as generated by Spring on startup (example: 'c7c6dc4f79cd4f3cfb8fc1a397174d8b')
+%result: end game result ('gameOver','undecided')
+-
+<null> (functionality disabled)
+Variables assignments, separated by ';'
+-
+<null>
+
+[set:endGameCommandMsg]
+End game command messages
+-
+Specifies the messages sent to battle lobby when the end-game command ends (refer to [set:endGameCommand]).
+Lines are separated by "|", and optionally prefixed by "(<exitCodeRange>)" (in this case they are only printed if the end-game command exit code matches).
+This is a special preset setting: it cannot be changed by using !set command and it is not shown in "!list settings".
+Following placeholders can be used in the messages:
+%engineVersion: engine major version (example: '89')
+%mod: mod name, URL encoded (example: 'Balanced%20Annihilation%20V7.68')
+%map: map name, URL encoded (example: 'Comet%20Catcher%20Redux')
+%type: game type ('Solo','Duel','FFA','Team','TeamFFA')
+%ahName: autohost name (example: 'Spads4')
+%ahAccountId: autohost account ID (example: '77888')
+%demoName: game replay file name, without path and URL encoded (example: '20120617_143502_Comet%20Catcher%20Redux_89.sdf')
+%gameId: game hash uniquely identifying the game, as generated by Spring on startup (example: 'c7c6dc4f79cd4f3cfb8fc1a397174d8b')
+%result: end game result ('gameOver','undecided')
+-
+<null> (functionality disabled)
+[(<exitCodeRange1>)]<message1>[|[(<exitCodeRange2>)]<message2>[|...]]
+-
+<null>
+
+
+[set:endGameAwards]
+End game awards
+-
+Specifies if award messages based on team statistics must be printed after each game
+-
+0: award messages disabled
+1: award messages enabled
+-
+1
+
+[set:speedControl]
+Auto adjust game speed
+-
+Specifies how the game speed must be auto-adjusted according to current players CPU usages.
+-
+1: use average CPU usage to auto-adjust game speed (this setting will drop players having slow CPUs if they are slowing the game)
+2: use maximum CPU usage to auto-adjust game speed (this setting will slow the game to allow players having slow CPUs to catch up)
+-
+2
+
+[set:maxBots]
+Maximum number of AI bots
+-
+When this number of AI bots are in the battle lobby, SPADS will auto-kick any additional AI bot added.
+A value of 0 will prevent anyone from adding an AI bot.
+-
+Integer
+-
+8
+
+[set:maxRemoteBots]
+Maximum number of remote AI bots
+-
+When this number of remote AI bots (bots hosted by players) are in the battle lobby, SPADS will auto-kick any additional remote AI bot added.
+A value of 0 will prevent anyone from adding a remote AI bot.
+-
+Integer
+-
+8
+
+[set:maxLocalBots]
+Maximum number of local AI bots
+-
+When this number of local AI bots (bots hosted at server side) are in the battle lobby, SPADS will auto-kick any additional local AI bot added.
+A value of 0 will prevent anyone from adding a local AI bot.
+-
+Integer
+-
+8
+
+[set:autoAddBotNb]
+Auto-add bot number
+-
+This number is used by SPADS to determine the number of local bots to add/remove automatically, according to following rules:
+- If "humans vs bots" mode is selected (i.e., [set:nbTeams] is set to 1), then "autoAddBotNb" is the total number of bots which must be in the bot team.
+- Else if FFA mode is selected (i.e., [set:teamSize] is set to 1), then "autoAddBotNb" is the minimum number of players or bots to maintain in the battle room
+- Else if Team FFA mode is selected (i.e., [set:minTeamSize] is different than 1), then "autoAddBotNb" is the minimum number of teams to fill with [set:minTeamSize] (or [set:teamSize] if [set:minTeamSize] is 0) players and bots
+- Else, "autoAddBotNb" is the minimum number of players or bots to maintain in each team
+Auto added bots are taken from [set:localBots] and always obey the [set:maxLocalBots] and [set:maxBots] limits.
+(local bots require Spring headless, see [global:springServerType])
+-
+Integer
+-
+0
+
+[set:localBots]
+Local bots
+-
+This is the list of predefined local bots. Automatically added bots are taken from this list (see [set:autoAddBotNb]).
+-
+[<name> <side> <ai>[;<name2> <side2> <ai2>[...]]]
+  where <name> is the name of the bot (string, example: "joe")
+        <side> is the faction of the bot (can be the faction number or the faction name)
+        <ai> is the exact name of the AI used by the bot (string, example: "E323AI")
+-
+joe 0 E323AI;jim core KAIK
+
+[set:allowedLocalAIs]
+Allowed local AIs
+-
+This is the list of allowed AIs for local bots. Only these AIs are allowed for !addbot command.
+(local bots require Spring headless, see [global:springServerType])
+-
+[<ai>[;<ai2>...]]
+  where <ai> is the exact name of the AI (example: "Chicken: Normal")
+-
+E323AI;HughAI;KAIK;RAI
+
+[set:maxSpecs]
+Maximum number of spectators
+-
+When this number of spectators are in the battle lobby, SPADS will auto-kick any additional player who joins as spectator.
+A value of 0 will prevent anyone from spectating.
+-
+Integer
+-
+0
+
+[set:autoSetVoteMode]
+Default value of "Auto-set vote mode" preference
+-
+This is the default value for the preference with same name (this value is used when a user hasn't set his preference).
+Refer to [pSet:autoSetVoteMode] for more information.
+-
+0: disabled
+1: enabled
+-
+1
+
+[set:voteMode]
+Default value of "Vote mode" preference
+-
+This is the default value for the preference with same name (this value is used when a user hasn't set his preference).
+Refer to [pSet:voteMode] for more information.
+-
+normal: normal vote mode
+away: away vote mode
+-
+normal
+
+[set:votePvMsgDelay]
+Default value of "Vote auto-private message delay" preference
+-
+This is the default value for the preference with same name (this value is used when a user hasn't set his preference).
+Refer to [pSet:votePvMsgDelay] for more information.
+-
+Integer
+-
+0
+
+[set:voteRingDelay]
+Default value of "Vote auto-ring delay" preference
+-
+This is the default value for the preference with same name (this value is used when a user hasn't set his preference).
+Refer to [pSet:voteRingDelay] for more information.
+-
+Integer
+-
+0
+
+[set:minRingDelay]
+Default value of "Minimum ring delay" preference
+-
+This is the default value for the preference with same name (this value is used when a user hasn't set his preference).
+Refer to [pSet:minRingDelay] for more information.
+-
+Integer
+-
+20
+
+[set:handleSuggestions]
+Default value of "Handle suggestions" preference
+-
+This is the default value for the preference with same name (this value is used when a user hasn't set his preference).
+Refer to [pSet:handleSuggestions] for more information.
+-
+0: disabled
+1: enabled
+-
+0
+
+[set:ircColors]
+Default value of "Use IRC colors" preference
+-
+This is the default value for the preference with same name (this value is used when a user hasn't set his preference).
+Refer to [pSet:ircColors] for more information.
+-
+0: disabled
+1: enabled
+-
+0
+
+[set:spoofProtection]
+Default value of "Spoof protection" preference
+-
+This is the default value for the preference with same name (this value is used when a user hasn't set his preference).
+Refer to [pSet:spoofProtection] for more information.
+-
+on
+off
+warn
+-
+warn
+
+[set:rankMode]
+Default value of "Rank mode" preference
+-
+This is the default value for the preference with same name (this value is used when the user's rankMode hasn't been set with !chrank command).
+Refer to [pSet:rankMode] for more information.
+-
+account
+ip
+0
+1
+2
+3
+4
+5
+6
+-
+account
+
+[set:skillMode]
+Default value of "Skill mode" preference
+-
+This is the default value for the preference with same name (this value is used when the user's skillMode hasn't been set with !chskill command).
+Refer to [pSet:skillMode] for more information.
+-
+rank
+TrueSkill
+-
+rank
+
+[set:shareId]
+Default value of "Share ID (coop group)" preference
+-
+This is the default value for the preference with same name (this value is used when a user hasn't set his preference).
+Refer to [pSet:shareId] for more information.
+-
+<null>
+Any string
+-
+<null>
+
+[set:minRankForPasswd]
+Minimum rank for password
+-
+When the battle lobby is passworded, players can obtain the password by using the !pass command if they meet all the requirements.
+The "minRankForPasswd" preset setting specifies the rank requirement.
+-
+0: Newbie (no rank requirement)
+1: Beginner
+2: Average
+3: Above average
+4: Experienced
+5: Highly experienced
+6: Veteran
+-
+0
+
+[set:minLevelForPasswd]
+Minimum access level for password
+-
+When the battle lobby is passworded, players can obtain the password by using the !pass command if they meet all the requirements.
+The "minLevelForPasswd" preset setting specifies the AutoHost access level (as defined in the levels.conf file) requirement.
+-
+Integer
+-
+0
+
+[set:banList]
+Ban list
+-
+Current active ban list name, as defined in the banLists.conf file.
+-
+Any string
+-
+empty
+
+[set:commandsFile]
+Commands file
+-
+Name of the commands rights configuration file.
+This is a special preset setting: it cannot be changed by using !set command.
+-
+Any readable file in [global:etcDir]
+-
+commands.conf
+
+[set:freeSettings]
+Free settings
+-
+Contains the list of preset settings (and optionnaly their values) that can be changed directly by players without having to call a vote, provided the players have sufficient rights to call a vote for the !set command. In other words, if a player has sufficient rights to call a vote to change the setting, then he can change it directly.
+-
+List of preset settings, separated by ";"
+Optional value restrictions can be added for each setting, inside parentheses and separated by "," (ranges can be used for numbers)
+-
+autoLock;teamSize(1-6);balanceMode
+
+[set:allowModOptionsValues]
+Allow mod options values
+-
+When a mod option isn't defined in current battle preset, it takes the default value provided by the mod. The other allowed values for such a mod option depend on the "allowModOptionsValues" preset setting:
+If disabled, the mod options that aren't defined in current battle preset cannot be modified.
+If enabled, the mod options that aren't defined in current battle preset can take the allowed values provided by the mod.
+-
+0: disabled
+1: enabled
+-
+1
+
+[set:allowMapOptionsValues]
+Allow map options values
+-
+When a map option isn't defined in current battle preset, it takes the default value provided by the map. The other allowed values for such a map option depend on the "allowMapOptionsValues" preset setting:
+If disabled, the map options that aren't defined in current battle preset cannot be modified.
+If enabled, the map options that aren't defined in current battle preset can take the allowed values provided by the map.
+-
+0: disabled
+1: enabled
+-
+1
+
+[set:unlockSpecDelay]
+Unlock-for-spectator delay
+-
+The !unlockSpec command allows players to unlock temporarily a battle so that they can join as spectator: the battle is unlocked and re-locked automatically as soon as they join it.
+The "unlockSpecDelay" preset setting specifies both the maximum delay during which battle is unlocked to allow the spectator to join (if he didn't join during this time, the battle is re-locked anyway to prevent other players to join and think they can play), and the minimum delay before the same user can execute the !unlockSpec command another time.
+-
+<unlockTime>:<delayForRetry>
+  where <unlockTime> is the maximum delay in seconds during which battle is unlocked to allow the spectator to join
+        <delayForRetry> is the minimum delay in seconds before the same user can execute the !unlockSpec command another time
+-
+2;30
+
+[set:midGameSpecLevel]
+Minimum access level for midgame join as spectator
+-
+When a user has an AutoHost access level superior or equal to this value, he is allowed to join a game in progress as spectator directly (without using !joinAs command) even if he wasn't in the battleroom when the game started.
+-
+Integer
+-
+0
+
+[set:forwardLobbyToGame]
+Forward lobby chat to game
+-
+If enabled, chat messages in battle lobby are automatically forwarded to game.
+If disabled, players have to use the !say command to forward messages to game.
+Note: In-game messages are always forwarded to battle lobby (except team messages, spectator messages and whispered messages)
+-
+0: disabled
+1: enabled
+-
+1
+
+[set:noSpecChat]
+No spectator chat
+-
+If enabled, spectators can only chat with other spectators in game
+-
+0: disabled
+1: enabled
+-
+0
+
+[set:noSpecDraw]
+No spectator draw
+-
+If enabled, drawing ability is disabled for spectators
+-
+0: disabled
+1: enabled
+-
+0
+
+[set:welcomeMsg]
+Welcome message
+-
+Message sent to battle lobby when a player joins the battle (lines are separated by character '|').
+Lines prefixed with '!' are only sent to the user joining the battle (only supported by uberserver).
+%u is replaced by the user joining the battle
+%l is replaced by the user access level
+%d is replaced by the description of the user access level
+%m is replaced by the map name (with spaces replaced by "%20" so that it can be used in url)
+%n is replaced by the lobby name of the AutoHost
+%v is replaced by SPADS main version number
+%h is replaced by the unsigned map hash
+%a is replaced by the map link as specified by [set:mapLink] or [set:ghostMapLink]
+%t is replaced by the time elapsed since last game start
+This is a special preset setting: it cannot be changed by using !set command.
+-
+<null> (no welcome message)
+Any string
+-
+Hi %u (%d), welcome to %n (SPADS %v, automated host).|!For help, say "!help". Map link: %a
+
+[set:welcomeMsgInGame]
+Welcome message when game is running
+-
+Message sent to battle lobby when a player joins the battle while game is running (lines are separated by character '|').
+Lines prefixed with '!' are only sent to the user joining the battle (only supported by uberserver).
+%u is replaced by the user joining the battle
+%l is replaced by the user access level
+%d is replaced by the description of the user access level
+%m is replaced by the map name (with spaces replaced by "%20" so that it can be used in url)
+%n is replaced by the lobby name of the AutoHost
+%v is replaced by SPADS main version number
+%h is replaced by the unsigned map hash
+%a is replaced by the map link as specified by [set:mapLink] or [set:ghostMapLink]
+%t is replaced by the duration of current game in progress
+This is a special preset setting: it cannot be changed by using !set command.
+-
+<null> (no welcome message)
+Any string
+-
+Hi %u (%d), welcome to %n (SPADS %v, automated host).|!A game is in progress since %t.|!Say "!status" for more information, and "!notify" to be notified when this game ends.
+
+[set:mapLink]
+Map link
+-
+Defines the map link which is used to build welcome messages (refer to [set:welcomeMsg] and [set:welcomeMsgInGame]) and !mapLink command answer, when current map is a local map (refer to [set:ghostMapLink] for ghost map case).
+%m is replaced by the map name (with spaces replaced by "%20" so that it can be used in url)
+%M is replaced by the map archive (with spaces replaced by "%20" so that it can be used in url)
+%h is replaced by the unsigned map hash
+This is a special preset setting: it cannot be changed by using !set command.
+-
+<null> (no map link, !mapLink command disabled)
+Any string
+-
+http://spring.jobjol.nl/search_result.php?search=%m&select=select_all
+
+[set:ghostMapLink]
+Ghost map link
+-
+Defines the map link which is used to build welcome messages (refer to [set:welcomeMsg] and [set:welcomeMsgInGame]) and !mapLink command answer, when current map is a ghost map (refer to [set:mapLink] for local map case).
+%m is replaced by the map name (with spaces replaced by "%20" so that it can be used in url)
+%h is replaced by the unsigned map hash
+This is a special preset setting: it cannot be changed by using !set command.
+-
+<null> (no map link, !mapLink command disabled)
+Any string
+-
+http://spring.jobjol.nl/search_result.php?search=%m&select=select_all
+
+[set:advertDelay]
+Advert delay
+-
+Delay in minutes between automatic advert messages (refer to [set:advertMsg]).
+A value of 0 disables advert system.
+-
+Integer
+-
+15
+
+[set:advertMsg]
+Advert message
+-
+Message sent to battle lobby every [set:advertDelay] minutes (lines are separated by character '|').
+Advert messages aren't sent when a game is in progress or when noone is in battle lobby.
+This is a special preset setting: it cannot be changed using !set command, you have to use the !advert command instead.
+-
+<null> (functionality disabled)
+Any string
+-
+<null>
+
+###############################################################################
+#            Hosting settings (defined in hostingPresets.conf file)           #
+###############################################################################
+
+[hSet:description]
+Hosting preset description
+-
+Hosting preset description that appears in "!list hPresets" output.
+This is a special hosting preset setting: it cannot be changed by using !hSet command.
+-
+Any String
+-
+Default hosting settings
+
+[hSet:battleName]
+Battle name
+-
+Name of the auto-hosted battle, as shown in the battle list at client side.
+-
+Any string
+-
+SPADS (default settings)
+
+[hSet:modName]
+Mod name
+-
+Name of the hosted mod (as returned by the GetPrimaryModName UnitSync function).
+The corresponding mod must be available locally in the "games" or "packages" subdirectories of [set:springDataDir].
+It is also possible to use a regular expression instead of the exact mod name, by prefixing the value with "~". SPADS will then choose the latest mod in lexicographic order whose name match the regular expression, so it should automatically select the latest version of a given mod.
+-
+<modName> (<modName> must be the exact mod name, as returned by the GetPrimaryModName UnitSync function)
+~<regularExpression> (at least one mod name must match the <regularExpression> regular expression)
+-
+%modName% (set during installation, example: "~Balanced Annihilation V\d+\.\d+")
+
+[hSet:maxPlayers]
+Maximum number of players
+-
+Maximum number of players that can be in the battle lobby at the same time. Any additional player joining the battle will be automatically forced to spectate by the lobby server.
+-
+Any integer between 2 and 251 included
+-
+16
+
+[hSet:minRank]
+Minimum rank
+-
+Rank requirement for battle, as shown in the battle list at client side. The only purpose of this hosting setting is to select the rank requirement seen by players, it doesn't actually apply any real rank limit. If you want to apply effective rank limits, you have to use ban lists (refer to [set:banList]), with ban filters based on rank.
+-
+0: Newbie (no rank requirement)
+1: Beginner
+2: Average
+3: Above average
+4: Experienced
+5: Highly experienced
+6: Veteran
+-
+0
+
+[hSet:natType]
+NAT type
+-
+NAT traversal method used by the host.
+-
+0: No NAT traversal technique is applied
+1: The "hole punching" NAT traversal method is used
+2: The "fixed source ports" NAT traversal method is used
+-
+0
+
+[hSet:password]
+Battle password
+-
+This hosting setting specifies if the AutoHost must open a public battle, or a private passworded battle.
+When using passworded battles, SPADS can generate a random password itself (this can be useful in combination with !pass command, [set:minRankForPasswd], and [set:minLevelForPasswd]).
+-
+*: No password (public battle)
+_RANDOM_: Random password (private battle)
+Any other string: String used as password (private battle)
+-
+*
+
+[hSet:port]
+Spring server port
+-
+UDP port on which Spring server will listen for Spring client connections
+-
+Any valid port number
+-
+8452
+
+###############################################################################
+#             Battle settings (defined in battlePresets.conf file)            #
+###############################################################################
+
+[bSet:description]
+Battle preset description
+-
+Battle preset description that appears in "!list bPresets" output.
+This is a special battle preset setting: it cannot be changed by using !bSet command.
+-
+Any String
+-
+Default battle settings
+
+[bSet:resetoptions]
+Reset mod/map options
+-
+If enabled, all mod options and map options are reset to their default values for current mod and map before loading the battle preset.
+This is a special battle preset setting: it is only used when the battle preset is loaded and it cannot be changed by using !bSet command.
+-
+0: disabled
+1: enabled
+-
+1
+
+[bSet:disabledunits]
+Disabled units
+-
+This battle setting contains the list of changes to operate on current disabled units list when the battle preset is loaded.
+This is a special battle preset setting: it is only used when the battle preset is loaded and it cannot be changed by using !bSet command.
+-
+<null>: no change is made to current disabled units
+<disabledUnitData1>[;<diabledUnitData2>[;...]]: each <disabledUnitData> is processed in order. <disabledUnitData> can take following values:
+  -*: remove all disabled units
+  -<internalUnitIdentifier>: remove unit identified by <internalUnitIdentifier> from the list of disabled units
+  <internalUnitIdentifier>: add unit identified by <internalUnitIdentifier> to the list of disabled units
+-
+-*
+
+[bSet:startpostype]
+Start position type
+-
+Determines how start positions are affected to players
+-
+0: Fixed (Fixed start positions of the map are used in ascending order)
+1: Random (Fixed start positions of the map are used in random order)
+2: Choose in game (Start positions are choosen by players in game)
+-
+2
+
+###############################################################################
+#                              User preferences                               #
+###############################################################################
+
+
+[pSet:autoSetVoteMode]
+Auto-set vote mode
+-
+If enabled, SPADS will automatically set your "voteMode" preference (refer to [pSet:voteMode]) according to following rules:
+If a vote has been called and you didn't vote before it expired, then your "voteMode" preference is set to "away".
+If you vote while your "voteMode" preference is set to "away", then your "voteMode" preference is set back to "normal".
+-
+0: disabled
+1: enabled
+-
+1
+
+[pSet:voteMode]
+Vote mode
+-
+When a vote is called and your vote mode is set to "away", SPADS will only wait for your vote for 20 seconds. When this delay has expired, SPADS will automatically vote blank for you. But you can still cancel this blank vote by voting before the called vote expires (refer to [global:voteTime]).
+When your vote mode is set to "normal", SPADS will wait for your vote until the called vote passes, fails, or expires.
+-
+normal: normal vote mode
+away: away vote mode
+-
+normal
+
+[pSet:votePvMsgDelay]
+Vote auto-private message delay
+-
+Delay in seconds before which SPADS will automatically send you a private message if a vote has been called and you didn't vote yet.
+A value of 0 disables this functionality.
+-
+Integer
+-
+0
+
+[pSet:voteRingDelay]
+Vote auto-ring delay
+-
+Delay in seconds before which SPADS will automatically ring you if a vote has been called and you didn't vote yet.
+A value of 0 disables this functionality.
+-
+Integer
+-
+0
+
+[pSet:minRingDelay]
+Minimum ring delay
+-
+This preference sets your ring flood protection: it is the minimum delay in seconds SPADS must wait before ringing you another time.
+-
+Integer
+-
+20
+
+[pSet:handleSuggestions]
+Handle suggestions
+-
+If enabled, SPADS will process your suggestions (performed through TASClient or SpringLobby GUI), else it will ignore them.
+-
+0: disabled
+1: enabled
+-
+0
+
+[pset:ircColors]
+Use IRC colors
+-
+If enabled, SPADS will use IRC style colors to improve output format of some commands (not supported by TASClient).
+-
+0: disabled
+1: enabled
+-
+0
+
+[pSet:spoofProtection]
+Spoof protection
+-
+When spoof protection preference is enabled, SPADS checks that the in-game IP address of the user matches his IP address in lobby. If they don't match, SPADS can auto-kick the player from game, or print a warning message. Spoof protection may produce false positives (if a proxy is used to connect to lobby server for instance).
+-
+on: spoof protection is fully enabled, player is auto-kicked from game if IP addresses don't match
+off: spoof protection is disabled
+warn: spoof protection is partially enabled, a warning is printed if IP addresses don't match
+-
+warn
+
+[pSet:password]
+Account password
+-
+When Spring lobby server is running in LAN mode, lobby accounts aren't authenticated. In this case, SPADS doesn't trust players identity and requires them to authentify by using the "!auth" command to gain their privileged access.
+The password provided as "!auth" command parameter must be the "password" preference value.
+-
+<null>
+Any string: String used as password
+-
+<null>
+
+[pSet:rankMode]
+Rank mode
+-
+Specifies which rank must be used for the user when auto-balancing teams (if [pSet:skillMode] is set to "rank").
+This is a special preference, it cannot be set by the user himself with "!pSet" command, it must be set by an AutoHost privileged user with "!chrank" command.
+When set to "account" the user's rank in Spring lobby is used.
+When set to "ip", the best known rank for any account seen using current user's IP is used (AutoHost user data retention must be enabled, lobby rank is used as fallback if user's IP is unknown)
+When set to an integer, the corresponding rank is used for auto-balancing, overriding user's lobby rank.
+-
+account: lobby rank is used
+ip: best rank seen for this IP is used
+0: "Newbie" rank is used, overriding user's rank in lobby
+1: "Beginner" rank is used, overriding user's rank in lobby
+2: "Average" rank is used, overriding user's rank in lobby
+3: "Above" average rank is used, overriding user's rank in lobby
+4: "Experienced" rank is used, overriding user's rank in lobby
+5: "Highly" experienced rank is used, overriding user's rank in lobby
+6: "Veteran" rank is used, overriding user's rank in lobby
+-
+account
+
+[pSet:skillMode]
+Skill mode
+-
+Specifies how the player's skill is estimated when auto-balancing teams.
+This is a special preference, it cannot be set by the user himself with "!pSet" command, it must be set by an AutoHost privileged user with "!chskill" command.
+-
+rank: player's skill is estimated from his rank (cf [pSet:rankMode]).
+TrueSkill: player's skill is estimated from his TrueSkill(tm) ranking corresponding to current game type (Duel, FFA, Team or TeamFFA)
+-
+rank
+
+[pSet:shareId]
+Share ID (coop group)
+-
+When a manual ID share mode is selected ([set:idShareMode] set to "manual" or "clan"), "shareId" preferences are used by SPADS to know which players must share ID.
+If your "shareId" preference is null, you won't share units with anyone.
+Else, you will share units with all players of the same team having the same "shareId" preference as yours.
+The "!coop <coopIdent>" command can be used as an alias of "!pSet shareId <coopIdent>"
+-
+<null>: ID share disabled
+Any string: ID share enabled with other players having same "shareId" preference value
+-
+<null>
+
+[pSet:clan]
+Clan
+-
+Depending on the [set:clanMode] value, SPADS can recognize clans by tags in player names and/or "clan" preference value.
+-
+<null>: no clan selected
+Any string: clan to be considered when balancing if "pref" mode is selected (refer to [set:clanMode])
+-
+<null>

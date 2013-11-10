@@ -1,0 +1,5 @@
+By default the plugin considers a new game is preparing when at least 5 players
+are synced and ready, and at least 75% of the players in the battle are synced
+and ready. Then it warns unsynced players and unready players after 1 minute,
+and auto-specs them after 1 more minute. You can change this default behaviour
+by editing the AutoSpec.conf file.

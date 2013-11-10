@@ -1,0 +1,77 @@
+- Operating guide, structure:
+
+1) Configuration files
+  can be reloaded with !reloadConf [keepSettings] except most global settings which require restart (cf 1.3.1.1)
+  1.1) Types of configuration files
+    1.1.1) Settings
+    1.1.2) Tables
+    1.1.3) Simple tables
+  1.2) Advanced syntax
+    1.2.1) Includes
+    1.2.2) Macros
+  1.3) Files description
+    1.3.1) Settings files
+      1.3.1.1) Main SPADS settings (spads.conf)
+        1.3.1.1.1) Global settings
+          defined in first part of spads.conf
+          need restart to be applied (except log levels)
+        1.3.1.1.2) Preset settings
+          defined in preset definitions part of spads.conf
+          managed through global presets (!list presets / !preset ...), default global preset defined by global setting, other allowed presets defined in the preset
+          but can be changed individually (!list settings / !set ...), default and allowed values depend on current global preset
+      1.3.1.2) Hosting settings (hostingPresets.conf)
+        Spring lobby settings, visible from outside the battle, need rehosting to be changed once battle has been opened
+        managed through hosting presets (!list hPresets / !hPreset ...), default and allowed hosting presets are defined in current global preset
+        can be changed individually (!list hSettings / !hSet ...), default and allowed values are defined in current hosting preset
+      1.3.1.3) Battle settings (battlePresets.conf)
+        Spring game settings (visible only from inside the battle room, can be changed on the fly without rehosting)
+        managed through battle presets (!list bPresets / !bPreset ...), default and allowed battle presets are defined in current global preset
+        but can be changed individually (!list bSettings / !bSet ...), default and allowed values are defined in current battle preset
+      1.3.1.4) Plugin settings (<pluginName>.conf)
+        same syntax as main SPADS settings (spads.conf)
+    1.3.2) Table files
+      1.3.2.1) Access levels definitions (levels.conf)
+      1.3.2.2) Users definitions (users.conf)
+      1.3.2.3) Commands rights requirements (commands.conf)
+      1.3.2.4) Ban lists definitions (banLists.conf)
+      1.3.2.5) Map lists definitions (mapLists.conf)
+      1.3.2.6) Map boxes definitions (mapBoxes.conf)
+2) Detailed commands and settings description
+  2.1) From lobby (only way to get modoptions/mapoptions help)
+  2.2) HTML
+    2.2.1) Online (for unstable release)
+    2.2.2) Generated locally (for installed release)
+3) Log files
+  3.1) Main SPADS log (spads.log)
+  3.2) chat files (chat directory)
+4) Data files
+  4.1) Static data files
+    4.1.1) Commands help (help.dat)
+    4.1.2) Settings help (helpSettings.dat)
+  4.2) Dynamic data files
+    4.2.1) Dynamic bans (bans.dat)
+    4.2.2) Map information cache (mapInfoCache.dat)
+    4.2.3) User preferences (preferences.dat)
+    4.2.4) Map hashes (mapHashes.dat)
+    4.2.5) User data (userData.dat)
+    4.2.6) Map boxes (savedBoxes.dat)
+  4.2) Spring start script (startscript.txt)
+5) Plugins
+  5.1) Official plugins
+  5.2) Installation
+  5.3) Development
+6) Updates
+  6.1) SPADS updates
+    6.1.1) Minor updates
+    6.1.2) Major updates
+  6.2) Spring updates
+    6.2.1) Linux
+    6.2.2) Windows
+  6.3) Plugin updates
+7) Advanced autohosting
+  7.1) TrueSkill ranking system
+  7.2) Automatic replay uploading
+  7.3) Multihosting
+  7.4) Map presets
+  7.5) Running simulation on server
+    hosting AI bots...

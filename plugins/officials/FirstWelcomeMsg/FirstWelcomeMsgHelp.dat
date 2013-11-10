@@ -1,0 +1,5 @@
+[firstWelcomeMsg]
+!firstWelcomeMsg - shows current "first welcome message" (sent the first time a player joins the autohost battle)
+
+[resendFirstWelcomeMsg]
+!resendFirstWelcomeMsg - resets memory of already sent "first welcome message" (all players will receive the "first welcome message" another time)

@@ -1,0 +1,385 @@
+[addBot]
+!addBot [<name> [<side> <ai>]] - adds a local AI bot (missing parameters are taken from "localBots" preset setting if possible)
+"!addBot joe 0 E323AI" adds a local AI bot named "joe", using first side declared in current mod, and using AI "E323AI"
+"!addBot Joechicken 0 Chicken: Normal" adds a chicken bot with normal difficulty level
+"!addBot Bot1" adds a bot named "Bot1" declared in "localBots" preset setting
+
+[addBox]
+!addBox <left> <top> <right> <bottom> [<teamNumber>] - adds a new start box (0,0 is top left corner, 200,200 is bottom right corner)
+"!addBox 150 150 200 200 4" places a box on the bottom right corner of the map for team 4
+
+[advert]
+!advert [<newAdvertMessage>] - updates the advert message or disables advert system if no message is provided (lines are separated by '|' character)
+"!advert Don't miss next tourney sunday 9pm GMT!" sets the advert message to "Don't miss next tourney sunday 9pm GMT!"
+
+[auth]
+!auth [<password>] - (un)authenticates yourself to the AutoHost (LAN mode only)
+"!auth foo" authenticates myself to the AutoHost with password "foo"
+"!auth" unauthenticates myself to the AutoHost
+
+[b]
+!b - alias for "!vote b"
+
+[balance]
+!balance - balances teams according to current balanceMode, nbTeams, teamSize and nbPlayerById parameters
+
+[ban]
+!ban <usernameOrFilters> [<banType> [<duration> [<reason>]]] - ban a user from AutoHost channel and/or battle and/or game (use ; to separate filters, and ~ at start for regexp)
+"!ban badBoy 0" bans badBoy for ever from AutoHost channel and battle (same as "!ban badBoy")
+"!ban badBoy 1 10" bans badBoy for 10 minutes from AutoHost battle
+"!ban badBoy 2 1h dguned an ally" forces badBoy to spec for 1 hour with reason "dguned an ally"
+"!ban ~.*aaa.*" bans anyone who has the string "aaa" in his name
+"!ban name=~.*bad.*;cpu=0-2000 1" bans anyone whose CPU speed is < 2001 and who has "bad" in his name from AutoHost battle
+"!ban ip=192.168.0.1 1 2d" bans IP 192.168.0.1 for 2 days from AutoHost battle
+"!ban accountId=1234 1 3w" bans account number "1234" for 3 weeks from AutoHost channel and battle
+"!ban #1234 1 3w" same as above
+
+[banIp]
+!banIp <username>|#<accountId> [<banType> [<duration> [<reason>]]] - ban a user from battle lobby, based on his latest IP (same as doing "!ban ip=<userIp>")
+"!banIp badBoy 1" bans badBoy's latest IP for ever from AutoHost (same as "!banIp badBoy")
+"!banIp badBoy 1 10" bans badBoy's latest IP for 10 minutes from AutoHost
+"!banIp badBoy 2 1m dguned an ally" applies a force-spec ban for 1 month based on badBoy's latest IP with reason "dguned an ally"
+"!banIp #1234 1 1w" bans latest IP bound to account ID 1234 for 1 week from AutoHost
+
+[banIps]
+!banIps <username>|#<accountId> [<banType> [<duration> [<reason>]]] - ban a user from battle lobby, based on all his known IPs (same as doing "!ban ip=<userIp>" for all IPs)
+"!banIps badBoy 1" bans badBoy's known IPs for ever from AutoHost (same as "!banIps badBoy")
+"!banIps badBoy 1 10" bans badBoy's known IPs for 10 minutes from AutoHost
+"!banIps badBoy 2 1y dguned an ally" applies a force-spec ban for 1 year based on badBoy's known IPs with reason "dguned an ally"
+"!banIps #1234 1 1w" bans all known IPs bound to account ID 1234 for 1 week from AutoHost
+
+[bKick]
+!bKick <username> - kicks <username> from battle lobby
+"!bKick badBoy" kicks badBoy from battle lobby
+
+[boss]
+!boss [<username>] - enables boss mode for <username> (reduces rights of other non-privilegied users), or disable boss mode if <username> isn't specified
+"!boss goodGuy" sets goodGuy as a boss
+"!boss" disables boss mode
+
+[bPreset]
+!bPreset <battlePreset> - changes current battle preset (use "!list bPresets" to list available battle presets)
+"!bPreset no_vlrpc" applies the no_vlrpc battle preset
+
+[bSet]
+!bSet <battleSetting> <newValue> - changes a battle setting manually (use "!list bSettings" to list available settings)
+"!bSet maxUnits 1000" sets maxUnits setting to 1000
+
+[callVote]
+!callVote <command> - calls a vote to execute command <command> (alias: !cv)
+"!callVote split v 25" calls a vote to split map vertically
+
+[cancelQuit]
+!cancelQuit - cancels a quit or restart command
+
+[cheat]
+!cheat [0|1|<cheatCommand>] - Enable/disable cheat mode, or execute a cheat command
+"!cheat" toggles cheat mode
+"!cheat 0" disables cheat mode
+"!cheat 1" enables cheat mode
+"!cheat give 2 armck 1 @20,20,20" enables cheat mode, gives 2 arm construction kbot to team 1, then disables cheat mode
+
+[chpasswd]
+!chpasswd <user> [<password>] - (un)sets an AutoHost user password (used when Lobby server is running in LAN mode only)
+"!chpasswd bibim 12345" sets bibim's password to "12345"
+"!chpasswd bibim" removes bibim's password
+
+[chrank]
+!chrank <user> [<rankMode>] - (un)sets an AutoHost user rank mode (used for auto-balancing if skillMode is set to "rank")
+"!chrank bibim 0" sets bibim's rank to Newbie regarding AutoHost auto-balancing
+"!chrank bibim account" uses bibim's lobby rank for auto-balancing
+"!chrank bibim ip" uses best known rank for current bibim's IP for auto-balancing (anti-smurf system, requires enabling AutoHost user data retention)
+"!chrank bibim" sets back bibim's rankMode to default value
+
+[chskill]
+!chskill <user> [<skillMode>] - (un)sets an AutoHost user skill mode (used for auto-balancing)
+"!chskill bibim rank" sets bibim's skill mode to rank
+"!chskill bibim TrueSkill" sets bibim's skill mode to TrueSkill
+"!chskill bibim" sets back bibim's skill mode to default value
+
+[cKick]
+!cKick <username> - kicks <username> from channel
+"!cKick badBoy" kicks badBoy from channel
+
+[clearBox]
+!clearBox [<teamNumber>|extra] - removes the box for team <teamNumber> or all extra teams (removes all boxes if <teamNumber> and "extra" not specified)
+"!clearBox 2" removes box for team 2
+"!clearbox extra" removes all extra boxes (i.e., all boxes whose number is greater than current number of teams)
+
+[closeBattle]
+!closeBattle - closes current battle (use "openBattle" command to reopen it)
+
+[coop]
+!coop <coopIdent> - alias for "!pSet shareId <coopIdent>" (chooses the name of your coop team: only users with same <coopIdent> will share units with you)
+!coop l33t
+
+[cv]
+!cv <command> - alias for "!callVote <command>"
+
+[endVote]
+!endVote - cancels current vote
+
+[fixColors]
+!fixColors - tries to fix colors automatically
+
+[force]
+!force <username> id|team|spec [number] - forces a player to spec, or sets his id to <number> or ally team to <number> (for local AI bots, <username> can be prefixed with '%')
+"!force foo id 2" forces player foo to take id 2
+"!force foo spec" forces foo to spec (alias: !spec)
+
+[forcePreset]
+!forcePreset <preset> - changes current global SPADS preset, bypassing the allowed presets list (use "!list presets" to list available presets)
+"!forcePreset private" changes global SPADS preset to "private"
+
+[forceStart]
+!forceStart - launches the game even if teams are uneven (but everyone still has to be ready), or forces game start if it is already launched
+
+[gKick]
+!gKick <username> - kicks <username> from game
+"!gKick badBoy" kicks badBoy from game
+
+[help]
+!help [<command>|[global|set|hSet|bSet|pSet] <settingName>] - lists allowed commands, or prints detailed help for a specific command or setting
+"!help" lists allowed commands
+"!help help" prints detailed help for command "help"
+"!help bSet startpostype" prints help for "startpostype" battle setting
+"!help set balanceMode" prints help for "balanceMode" preset setting
+
+[helpall]
+!helpall - lists all commands
+
+[hostStats]
+!hostStats - prints global hosting statistics
+
+[hPreset]
+!hPreset <hostingPreset> - changes current hosting preset (use "!list hPresets" to list available hosting presets)
+"!hPreset passworded" applies the passworded hosting preset
+
+[hSet]
+!hSet <hostingSetting> <newValue> - changes a hosting setting manually (use "list hSettings" to list available hosting settings)
+"!hSet maxPlayers 10" sets maxPlayers setting to 10
+
+[joinAs]
+!joinAs spec|<inGamePlayer>|#<inGameId> [<joiningPlayer>] - allows a user to join the game in progress as spectator or player
+"!joinAs spec" allows the player issuing the command to join the game in progress as spectator (this is done automatically when you try to join a game in progress without using !joinAs)
+"!joinAs foo bibim" allows bibim to join the game in progress as a player controling the same units as the in-game player containing "foo" in his name
+"!joinAs #3" allows the player issuing the command to join the game in progress as a player controling the units belonging to in-game ID 3
+
+[kick]
+!kick <username> - kicks <username> from channel, battle or game, depending on the way the command is sent to AutoHost
+"!kick badBoy" kicks badBoy from battle if command has been entered in battle lobby
+"!kick badBoy" kicks badBoy from game if command has been entered in game
+
+[kickBan]
+!kickBan <username> - kicks and bans <username> temporarily from channel, battle and game
+"!kickBan badBoy" kicks and bans badBoy temporarily from channel, battle and game
+
+[learnMaps]
+!learnMaps [<mapFilter> [<hostFilter>]] - learns map hashes from other battles (only learns maps matching <mapFilter> and <hostFilters> if specified)
+"!learnMaps" learns all maps hosted currently that aren't locally available
+"!learnMaps delta" learns all the maps hosted currently that contain "delta" in their name
+"!learnMaps . spads" learns all the maps hosted currently by players containing "spads" in their name
+
+[list]
+!list users|presets|bPresets|hPresets|settings|bSettings|hSettings|bans|maps|rotationMaps|pref|plugins|pSettings [all|<mapFilter>] - lists various settings
+"!list users" lists AutoHost users and rights
+"!list presets" lists all global SPADS presets
+"!list bPresets" lists allowed battle presets for current global SPADS preset
+"!list settings" lists current modifiable global SPADS settings and their allowed values for current global SPADS preset"
+"!list settings all" lists all current global SPADS settings and their allowed values for current global SPADS preset"
+"!list hSettings" lists current hosting settings and allowed values for current hosting preset"
+"!list maps" lists all available maps for current map list
+"!list maps delta" lists available maps containg "delta" in their name for current map list
+"!list rotationMaps" lists available maps for current map rotation list
+"!list pref" lists your AutoHost preferences
+"!list plugins" lists currently loaded plugins
+"!list pSettings" lists plugins settings
+
+[loadBoxes]
+!loadBoxes [<mapName> [<nbTeams> [<nbExtraBox>]]] - loads start boxes for given map, number of teams and number of extra boxes (use current values if not provided)
+"!loadBoxes" loads boxes for current map, current number of teams, and current number of extra boxes
+"!loadBoxes DeltaSiegeDryRevX_v3 4 1" loads boxes for DeltaSiegeDry map with 4 teams and 1 extra box
+
+[lock]
+!lock - locks battle lobby
+
+[map]
+!map <mapNameOrNumber> - same as "!set map <mapNameOrNumber>" (use "!list maps" to list available maps)
+"!map Comet Catcher Redux" sets map to "Comet Catcher Redux"
+"!map 5" sets map to the 5th map returned by "!list maps" command
+
+[mapLink]
+!mapLink - gives a link to download the current map
+
+[n]
+!n - alias for "!vote n"
+
+[nextMap]
+!nextMap - changes map according to rotation mode specified by "rotationManual" setting
+
+[nextPreset]
+!nextPreset - changes preset according to rotation mode specified by "rotationManual" setting
+
+[notify]
+!notify - sets/unsets an end-game notification: the AutoHost will notify you when the current game ends
+
+[openBattle]
+!openBattle - reopens the battle (battle is open by default)
+
+[pass]
+!pass - requests password
+
+[plugin]
+!plugin <pluginName> load|unload|reload|reloadConf [keepSettings]|set <param> [<value>] - performs various operations on a plugin
+"!plugin AdvancedNotify load" loads plugin "AdvancedNotify"
+"!plugin MailAlerts set email my.email@somewhere.com" updates the configuration of the "MailAlert" plugin by setting parameter email
+
+[preset]
+!preset <globalPreset> - changes current global SPADS preset (use "!list presets" to list available presets)
+"!preset private" changes global SPADS preset to "private"
+
+[promote]
+!promote - promotes current battle on channel(s) (not in #main since it's forbidden)
+
+[pSet]
+!pSet <preferenceSetting> [<newValue>] - updates a preference (use "!list pref" to list your current preferences)
+"!pSet voteRingDelay 0" tells AutoHost to never auto-ring you when a vote is called
+"!pSet minRingDelay 40" tells AutoHost to not ring you more than 1 time every 40 seconds
+"!pSet votePvMsgDelay" resets your votePvMsgDelay preference to default value
+
+[quit]
+!quit [empty|spec] - forces AutoHost to quit (wait end of game, + empty battle if "empty" is specified, or only spec if "spec" is specified)
+"!quit" exits as soon as no game is running
+"!quit empty" exits as soon as no game is running and battle lobby is empty
+"!quit spec" exits as soon as no game is running and battle lobby is empty or only contains spectators
+
+[rebalance]
+!rebalance - rebalances teams (try to change them if they were already balanced)
+
+[reloadArchives]
+!reloadArchives - reloads Spring archive files (Mods and maps)
+
+[reloadConf]
+!reloadConf [keepSettings] [keepMacros] [<macro>=<value> [..]] - reloads all configuration files
+"!reloadConf" reloads all configuration files and applies default preset
+"!reloadConf keepSettings" reloads all configuration files, but keeps current settings
+"!reloadConf keepSettings clanTag1=abc clanTag2=def" do the same, except it (re)defines some configuration macros before reloading
+"!reloadConf keepMacros desc="new description"" (re)defines a configuration macro before reloading, and remember it for next reloads/restarts
+
+[rehost]
+!rehost - rehosts battle (needed for hosting settings changes to be applied)
+
+[removeBot]
+!removeBot <botName> - removes a local AI bot
+"!removeBot joe" removes the local AI bot named "joe"
+
+[restart]
+!restart [empty|spec] [<macro>=<value> [..]] - restarts SPADS (wait game end, and empty battle lobby if "empty" is specified)
+"!restart" restarts SPADS now if no game is running, or else wait the end of the game
+"!restart empty" waits until the battle lobby is empty and no game is running for restarting
+"!restart empty clanTag1=abc clanTag2=def" do the same, except it (re)defines some configuration macros before restarting
+"!restart spec" waits until the battle lobby is empty or only contains spectators and no game is running for restarting
+
+[ring]
+!ring [<username>] - rings all unready players, or ring <username> if <username> is specified
+"!ring" rings all unready players
+"!ring foo" rings foo only
+
+[saveBoxes]
+!saveBoxes - saves map boxes for current map
+
+[say]
+!say <message> - sends chat message <message> from lobby to game
+"!say I crashed :(" sends "I crashed :(" to game
+
+[searchUser]
+!searchUser <userFilter>|@<ipFilter> - shows main information concerning all known accounts matching <userFilter> or <ipFilter>
+"!searchUser abc" gives information about known accounts containing "abc" in their name
+"!searchUser @192.168.*" gives information about known accounts whose IPs match the "192.168.*" mask
+
+[send]
+!send <command> - sends command <command> to server on AutoHost interface
+"!send /cheat" sends "/cheat" on AutoHost interface
+
+[sendLobby]
+!sendLobby <command> - sends command <command> to lobby server
+"!sendLobby SAYBATTLE Hi there!" sends "SAYBATTLE Hi there!" to lobby server
+
+[set]
+!set <spadsSetting> <newValue> - changes a SPADS setting manually (use "!list settings" to list available settings)
+"!set map Comet Catcher Redux" sets map to "Comet Catcher Redux"
+"!set map 5" sets map to the 5th map returned by "!list maps" command
+
+[smurfs]
+!smurfs [<username>|#<accountId> [all]] - finds smurf accounts of players in battle, or those of <name> if specified (requires user data retention)
+"!smurfs" lists smurf names of players currently in AutoHost battle
+"!smurfs FakeNoob" lists FakeNoob's smurf accounts
+"!smurfs FakeNoob all" lists all accounts identified as possibly FakeNoob's smurf
+"!smurfs #1234" lists smurf accounts of account ID "1234"
+
+[spec]
+!spec <username> - alias for "!force <username> spec"
+"!spec foo" forces foo to spec
+
+[specAfk]
+!specAfk - Force all unready and AFK/idle players to spec
+
+[split]
+!split h|v|c1|c2|c|s <percent> - splits map for starting positions
+"!split h 25" splits map horizontally
+"!split v 25" splits map vertically
+"!split c1 25" splits map on top left and bottom right corners
+"!split c2 25" splits map on top right and bottom left corners
+"!split c 25" splits map on 4 corners
+"!split s 25" splits map on 4 sides
+
+[start]
+!start - launches the game if everyone is ready and teams are even
+
+[stats]
+!stats - prints statistics for the last game played on the autohost
+
+[status]
+!status [battle|game] - prints battle or game status (players teams, IDs, status...)
+"!status battle" prints battle status
+"!status game" prints game status (only works when a game is running)
+"!status" prints game status if game is running, battle status otherwise
+
+[stop]
+!stop - forces current running game to stop
+
+[unban]
+!unban <usernameOrFilters> - removes <usernameOrFilters> from banlist (refer to ban command for filters syntax)
+
+[unbanIp]
+!unbanIp <username>|#<accountId> - removes bans matching current account IP from banlist (same as doing "!unban ip=<userIp>")
+
+[unbanIps]
+!unbanIps <username>|#<accountId> - removes bans matching all known account IPs from banlist (same as doing "!unban ip=<userIp>" for all IPs)
+
+[unlock]
+!unlock - unlocks current battle (only if it has been locked manually with lock command)
+
+[unlockSpec]
+!unlockSpec - unlocks temporarily an autolocked battle to allow you to join as spectator
+
+[update]
+!update [<release>] - updates SPADS according to the autoUpdateRelease setting or the release specified as parameter if present
+"!update testing" updates SPADS for release "testing", even if autoUpdateRelease is empty
+
+[version]
+!version - requests versions of all SPADS components
+
+[vote]
+!vote yes|y|no|n|blanc|b - votes
+"!vote y" votes yes for the current called vote
+"!vote b" votes blanc for the current called vote
+
+[whois]
+!whois <username>|#<accountId>|@<ipAddress> - prints detailed account information
+"!whois thatGuy" prints information concerning latest account bound to username "thatGuy"
+"!whois #1234" prints information concerning account ID "1234"
+"!whois @192.168.0.1" prints information concerning latest account bound to IP address "192.168.0.1"
+
+[y]
+!y - alias for "!vote y"
