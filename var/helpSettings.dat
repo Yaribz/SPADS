@@ -1687,7 +1687,7 @@ This is a special preset setting: it cannot be changed by using !set command.
 <null> (no map link, !mapLink command disabled)
 Any string
 -
-http://spring.jobjol.nl/search_result.php?search=%m&select=select_all
+http://springfiles.com/search_result.php?search=%m&select=select_all
 
 [set:ghostMapLink]
 Ghost map link
@@ -1700,7 +1700,7 @@ This is a special preset setting: it cannot be changed by using !set command.
 <null> (no map link, !mapLink command disabled)
 Any string
 -
-http://spring.jobjol.nl/search_result.php?search=%m&select=select_all
+http://springfiles.com/search_result.php?search=%m&select=select_all
 
 [set:advertDelay]
 Advert delay
