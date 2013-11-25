@@ -21,7 +21,7 @@ all SPADS packages by entering the following command from SPADS installation
 directory (replace <release> by your actual SPADS release: "stable", "testing"
 or "unstable"):
   on Linux: ./update.pl <release> -f -a
-  on Windows: perl update.pl <release> -f -A
+  on Windows: perl update.pl <release> -f -a
 
 Finally you can take a look at what changed during this update by checking the
 changelog available here:

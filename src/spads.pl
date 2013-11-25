@@ -54,7 +54,7 @@ $SIG{TERM} = \&sigTermHandler;
 my $MAX_SIGNEDINTEGER=2147483647;
 my $MAX_UNSIGNEDINTEGER=4294967296;
 
-our $spadsVer='0.11.12c';
+our $spadsVer='0.11.13';
 
 my %optionTypes = (
   0 => "error",
@@ -65,7 +65,6 @@ my %optionTypes = (
   5 => "section"
 );
 
-my $ircBridgeIp='82.236.136.190';
 my %ircColors;
 my %noColor;
 for my $i (0..15) {
@@ -405,7 +404,6 @@ if($useOldModules) {
 
 my @packages=@packagesSpads;
 push(@packages,@packagesWinUnitSync) if($conf{autoUpdateBinaries} eq "yes" || $conf{autoUpdateBinaries} eq "unitsync");
-push(@packages,@packagesWinServer) if($conf{autoUpdateBinaries} eq "yes" || $conf{autoUpdateBinaries} eq "server");
 
 my $updater = SpadsUpdater->new(sLog => $updaterSimpleLog,
                                 localDir => $conf{binDir},
@@ -5110,7 +5108,7 @@ sub getBSettingAllowedValues {
 
 sub seenUserIp {
   my ($user,$ip)=@_;
-  if($conf{userDataRetention} !~ /^0;/ && ! $lanMode && $ip ne $ircBridgeIp) {
+  if($conf{userDataRetention} !~ /^0;/ && ! $lanMode) {
     my $userIpRetention=-1;
     $userIpRetention=$1 if($conf{userDataRetention} =~ /;(\d+);/);
     if($userIpRetention != 0) {
@@ -10500,7 +10498,8 @@ sub hUpdate {
                                localDir => $conf{binDir},
                                repository => "http://planetspads.free.fr/spads/repository",
                                release => $release,
-                               packages => \@updatePackages);
+                               packages => \@updatePackages,
+                               syncedSpringVersion => $syncedSpringVersion);
   my $childPid = fork();
   if(! defined $childPid) {
     answer("Unable to update: cannot fork to launch SPADS updater");
@@ -10564,8 +10563,7 @@ sub hVersion {
 
   sayPrivate($user,"$C{12}$conf{lobbyLogin}$C{1} is running ${B}$C{5}SPADS $C{10}v$spadsVer$B$C{1} ($autoUpdateString), with following components:");
   sayPrivate($user,"- $C{5}Perl$C{10} $^V");
-  my $springVer=PerlUnitSync::GetSpringVersion();
-  sayPrivate($user,"- $C{5}Spring$C{10} v$springVer");
+  sayPrivate($user,"- $C{5}Spring$C{10} v$syncedSpringVersion");
   my %components = (SpringLobbyInterface => $lobby,
                     SpringAutoHostInterface => $autohost,
                     SpadsConf => $spads,
@@ -10869,7 +10867,6 @@ sub cbLobbyConnect {
   my $lobbySyncedSpringVersion=$_[2];
   $lobbySyncedSpringVersion=$1 if($lobbySyncedSpringVersion =~ /^([^\.]+)\./);
   $lanMode=$_[4];
-  $syncedSpringVersion=PerlUnitSync::GetSpringVersion();
 
   if($lanMode) {
     slog("Lobby server is running in LAN mode (lobby passwords aren't checked)",3);
@@ -12160,8 +12157,6 @@ sub cbAhServerQuit {
     }
   }
 
-  my $engineVersion=PerlUnitSync::GetSpringVersion();
-
   my @gdrPlayers;
   foreach my $player (keys %{$p_runningBattle->{users}}) {
     my %gdrPlayer=(accountId => $p_runningBattle->{users}->{$player}->{accountId},
@@ -12201,7 +12196,7 @@ sub cbAhServerQuit {
   }
   %gdr = (startTs => $timestamps{lastGameStart},
           duration => 0,
-          engine => $engineVersion,
+          engine => $syncedSpringVersion,
           type => $gameType,
           structure => $gameStructure,
           players => \@gdrPlayers,
@@ -12219,7 +12214,7 @@ sub cbAhServerQuit {
                  startPlayingTimestamp => $timestamps{lastGameStartPlaying},
                  endPlayingTimestamp => $timestamps{gameOver},
                  gameDuration => 0,
-                 engineVersion => $engineVersion,
+                 engineVersion => $syncedSpringVersion,
                  mod => $p_runningBattle->{mod},
                  map => $p_runningBattle->{map},
                  type => $gameType,
@@ -12489,6 +12484,14 @@ if($running) {
     exit 1;
   }
   chdir($cwd) if($win);
+  $syncedSpringVersion=PerlUnitSync::GetSpringVersion();
+  push(@packages,@packagesWinServer) if($conf{autoUpdateBinaries} eq 'yes' || $conf{autoUpdateBinaries} eq 'server');
+  $updater = SpadsUpdater->new(sLog => $updaterSimpleLog,
+                               localDir => $conf{binDir},
+                               repository => "http://planetspads.free.fr/spads/repository",
+                               release => $conf{autoUpdateRelease},
+                               packages => \@packages,
+                               syncedSpringVersion => $syncedSpringVersion);
   if(! loadArchives()) {
     slog("Unable to load Spring archives at startup",0);
     exit 1;
@@ -12502,14 +12505,27 @@ if($running) {
                      generateColorPanel(0.25,1),
                      {red => 200, green => 200, blue => 200},
                      generateColorPanel(1,0.25));
-  
-  if($conf{autoLoadPlugins} ne '') {
-    my @pluginNames=split(/;/,$conf{autoLoadPlugins});
-    foreach my $pluginName (@pluginNames) {
-      loadPluginModule($pluginName);
+
+  if($conf{autoUpdateBinaries} eq 'yes' || $conf{autoUpdateBinaries} eq 'server') {
+    if(-f "$conf{binDir}/updateFlag") {
+      slog("Skipping Spring server binaries auto-update at start, another updater instance seems to be running (the \"$conf{binDir}/updateFlag\" file already exists)",2);
+    }else{
+      my $updateRc=$updater->update();
+      if($updateRc < 0) {
+        slog("Unable to check or apply Spring server binaries update",2);
+      }elsif($updateRc > 0) {
+        sleep(2); # Avoid CPU eating loop in case auto-update is broken (fork bomb protection)
+        restartAfterGame("auto-update");
+        $running=0;
+      }
     }
   }
-
+}
+if($running && $conf{autoLoadPlugins} ne '') {
+  my @pluginNames=split(/;/,$conf{autoLoadPlugins});
+  foreach my $pluginName (@pluginNames) {
+    loadPluginModule($pluginName);
+  }
 }
 
 # Documentation ########################

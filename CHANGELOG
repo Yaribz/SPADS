@@ -119,6 +119,7 @@ helpSettings.dat:
 0.5.2: updated "onBadSpringVersion" description for multi-engine lobby protocol extension
 0.5.2a: minor fix in "autoUpdateBinaries" description
 0.5.2b: updated "modName" hosting setting description: the mod can no longer be located in "mods" subdirectory of Spring data directory
+0.5.2c: update map links default values (thanks abma)
 
 spads.pl:
 ========
@@ -583,6 +584,9 @@ spads.pl:
 0.11.12b: workaround for bugged unitsync interface on 32-bit Linux systems
 0.11.12c: the "mods" folder is no longer monitored for Spring archives auto-reload
           make Spring 95 behave like previous versions concerning writable data directory location
+0.11.13: remove old IRC bridge handling
+         cache Spring version returned by Unitsync
+         use Spring version dependent packages auto-update (Windows)
 
 SpadsConf.pm:
 ============
@@ -714,6 +718,7 @@ spadsInstaller.pl:
 0.12: PerlLobbyInterface and PerlAutoHostInterface renamed respectively to SpringLobbyInterface and SpringAutoHostInterface
 0.12a: "mods" folder is no longer listed as subdirectory of spring data directory
        make Spring 95 behave like previous versions concerning writable data directory location
+0.13: delay Spring server packages downloads and use unitsync to find which versions to download (Windows)
 
 SpadsPluginApi.pm:
 =================
@@ -753,6 +758,8 @@ SpadsUpdater.pm:
 0.6b: enable binary mode when extracting zip files (Windows only)
 0.6c: use timeouts for wget commands
 0.6d: add +x flag for python scripts too
+0.7: add optional "syncedSpringVersion" parameter to constructor, for Spring version dependent packages (Windows)
+     minor changes in log messages (Windows)
 
 update.pl:
 =========
@@ -767,3 +774,5 @@ update.pl:
 0.6: add SpadsPluginHelper module
 0.6a: renamed SpadsPluginHelper to SpadsPluginApi
 0.7: PerlLobbyInterface and PerlAutoHostInterface renamed respectively to SpringLobbyInterface and SpringAutoHostInterface
+0.8: add replay upload scripts
+     add "springVersion" parameter for Spring server binaries updates (Windows)

@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.7 (2013/10/16)
+# Version 0.8 (2013/11/22)
 
 use strict;
 
@@ -41,11 +41,16 @@ sub invalidUsage {
   print "  $perlExecPrefix$0 <release> [-v] [-f] -a\n";
   if($win) {
     print "  $perlExecPrefix$0 <release> [-v] [-f] -u\n";
-    print "  $perlExecPrefix$0 <release> [-v] [-f] -s\n";
-    print "  $perlExecPrefix$0 <release> [-v] [-f] -A\n";
+    print "  $perlExecPrefix$0 <release> <springVersion> [-v] -s\n";
+    print "  $perlExecPrefix$0 <release> <springVersion> [-v] [-f] -A\n";
   }
-  print "  $perlExecPrefix$0 <release> [-v] [-f] <packageName> [<packageName2> [<packageName3> ...]]\n";
+  if($win) {
+    print "  $perlExecPrefix$0 <release> [<springVersion>] [-v] [-f] <packageName> [<packageName2> [<packageName3> ...]]\n";
+  }else{
+    print "  $perlExecPrefix$0 <release> [-v] [-f] <packageName> [<packageName2> [<packageName3> ...]]\n";
+  }
   print "      <release>: release to update (\"stable\", \"testing\", \"unstable\" or \"contrib\")\n";
+  print "      <springVersion>: Major Spring version (integer, example: \"95\")\n" if($win);
   print "      -v: verbose mode\n";
   print "      -f: force package update (even if it requires manual updates of configuration files)\n";
   print "      -a: updates all SPADS packages\n";
@@ -62,60 +67,66 @@ invalidUsage() if($#ARGV < 1 || ! grep {/^$ARGV[0]$/} qw/stable testing unstable
 my $release=$ARGV[0];
 
 my %packages;
-my ($verbose,$force)=(0,0);
+my ($verbose,$force,$syncedSpringVersion)=(0,0,'UNKNOWN');
 for my $argNb (1..$#ARGV) {
   if($ARGV[$argNb] eq "-v") {
     $verbose=1;
   }elsif($ARGV[$argNb] eq "-f") {
     $force=1;
   }elsif($ARGV[$argNb] eq "-a") {
-    %packages=("getDefaultModOptions.pl" => 1,
-               "help.dat" => 1,
-               "helpSettings.dat" => 1,
-               "SpringAutoHostInterface.pm" => 1,
-               "SpringLobbyInterface.pm" => 1,
-               "SimpleLog.pm" => 1,
-               "spads.pl" => 1,
-               "SpadsConf.pm" => 1,
-               "spadsInstaller.pl" => 1,
+    %packages=('getDefaultModOptions.pl' => 1,
+               'help.dat' => 1,
+               'helpSettings.dat' => 1,
+               'SpringAutoHostInterface.pm' => 1,
+               'SpringLobbyInterface.pm' => 1,
+               'SimpleLog.pm' => 1,
+               'spads.pl' => 1,
+               'SpadsConf.pm' => 1,
+               'spadsInstaller.pl' => 1,
                'SpadsPluginApi.pm' => 1,
-               "SpadsUpdater.pm" => 1,
-               "update.pl" => 1);
+               'SpadsUpdater.pm' => 1,
+               'update.pl' => 1,
+               'argparse.py' => 1,
+               'replay_upload.py' => 1);
   }elsif($ARGV[$argNb] eq "-u") {
     if(! $win) {
       $sLog->log("The \"-u\" option is only available on Windows",1);
       invalidUsage();
     }
-    %packages=("PerlUnitSync.pm" => 1,
-               "PerlUnitSync.dll" => 1);
+    %packages=('PerlUnitSync.pm' => 1,
+               'PerlUnitSync.dll' => 1);
   }elsif($ARGV[$argNb] eq "-s") {
     if(! $win) {
       $sLog->log("The \"-s\" option is only available on Windows",1);
       invalidUsage();
     }
-    %packages=("spring-dedicated.exe" => 1,
-               "spring-headless.exe" => 1);
+    %packages=('spring-dedicated.exe' => 1,
+               'spring-headless.exe' => 1);
   }elsif($ARGV[$argNb] eq "-A") {
     if(! $win) {
       $sLog->log("The \"-A\" option is only available on Windows",1);
       invalidUsage();
     }
-    %packages=("getDefaultModOptions.pl" => 1,
-               "help.dat" => 1,
-               "helpSettings.dat" => 1,
-               "SpringAutoHostInterface.pm" => 1,
-               "SpringLobbyInterface.pm" => 1,
-               "SimpleLog.pm" => 1,
-               "spads.pl" => 1,
-               "SpadsConf.pm" => 1,
-               "spadsInstaller.pl" => 1,
+    %packages=('getDefaultModOptions.pl' => 1,
+               'help.dat' => 1,
+               'helpSettings.dat' => 1,
+               'SpringAutoHostInterface.pm' => 1,
+               'SpringLobbyInterface.pm' => 1,
+               'SimpleLog.pm' => 1,
+               'spads.pl' => 1,
+               'SpadsConf.pm' => 1,
+               'spadsInstaller.pl' => 1,
                'SpadsPluginApi.pm' => 1,
-               "SpadsUpdater.pm" => 1,
-               "update.pl" => 1,
-               "PerlUnitSync.pm" => 1,
-               "PerlUnitSync.dll" => 1,
-               "spring-dedicated.exe" => 1,
-               "spring-headless.exe" => 1);
+               'SpadsUpdater.pm' => 1,
+               'update.pl' => 1,
+               'argparse.py' => 1,
+               'replay_upload.py' => 1,
+               'PerlUnitSync.pm' => 1,
+               'PerlUnitSync.dll' => 1,
+               'spring-dedicated.exe' => 1,
+               'spring-headless.exe' => 1);
+  }elsif($ARGV[$argNb] =~ /^\d+$/) {
+    $syncedSpringVersion=$ARGV[$argNb];
   }else{
     $packages{$ARGV[$argNb]}=1;
   }
@@ -123,6 +134,7 @@ for my $argNb (1..$#ARGV) {
 
 my @packs=keys %packages;
 invalidUsage() unless(@packs);
+invalidUsage() if((exists $packages{'spring-dedicated.exe'} || exists $packages{'spring-headless.exe'}) && $syncedSpringVersion eq 'UNKNOWN');
 
 my $updaterLog=SimpleLog->new(logFiles => [""],
                               logLevels => [4],
@@ -134,7 +146,8 @@ my $updater=SpadsUpdater->new(sLog => $updaterLog,
                               localDir => ".",
                               repository => "http://planetspads.free.fr/spads/repository",
                               release => $release,
-                              packages => \@packs);
+                              packages => \@packs,
+                              syncedSpringVersion => $syncedSpringVersion);
 
 my $updaterRc=$updater->update($verbose,$force);
 if($updaterRc < 0) {

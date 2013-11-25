@@ -32,9 +32,10 @@ if($win) {
   $IO::Uncompress::Unzip::UnzipError='';
 }
 
-my $moduleVersion="0.6d";
+my $moduleVersion='0.7';
 
 my @constructorParams = qw/sLog localDir repository release packages/;
+my @optionalConstructorParams = 'syncedSpringVersion';
 
 sub getVersion {
   return $moduleVersion;
@@ -58,7 +59,7 @@ sub new {
   }
   
   foreach my $param (keys %params) {
-    if(grep(/^$param$/,@constructorParams)) {
+    if(grep {$_ eq $param} (@constructorParams,@optionalConstructorParams)) {
       $self->{$param}=$params{$param};
     }else{
       $self->{sLog}->log("Ignoring invalid constructor parameter \"$param\"",2)
@@ -66,6 +67,7 @@ sub new {
   }
 
   $self->{repository}=~s/\/$//;
+  $self->{syncedSpringVersion}='UNKNOWN' unless(exists $self->{syncedSpringVersion});
   return $self;
 }
 
@@ -150,8 +152,9 @@ sub update {
   my @updatedPackages;
   foreach my $packageName (@{$self->{packages}}) {
     $availablePackages{$packageName}=$availablePackages{"$packageName;$perlMajorVer"} if(exists $availablePackages{"$packageName;$perlMajorVer"});
+    $availablePackages{$packageName}=$availablePackages{"$packageName;$self->{syncedSpringVersion}"} if(exists $availablePackages{"$packageName;$self->{syncedSpringVersion}"});
     if(! exists $availablePackages{$packageName}) {
-      $sl->log("No \"$packageName\" package available for download",2);
+      $sl->log("No \"$packageName\" package available in $self->{release} SPADS release for Spring $self->{syncedSpringVersion} and Perl $perlMajorVer",2);
       next;
     }
     my $currentVersion="_UNKNOWN_";
@@ -167,9 +170,7 @@ sub update {
             if($currentMajor ne $availableMajor) {
               $sl->log("Major version number of package $packageName has changed ($currentVersion -> $availableVersion), which means that it requires manual operations before update.",2);
               $sl->log("Please check the section concerning this update in the manual update help: http://planetspads.free.fr/spads/repository/UPDATE",2);
-              my $allOption="a";
-              $allOption="A" if($win);
-              $sl->log("Then force package update with \"${perlExecPrefix}update.pl $self->{release} -f $packageName\" (or \"${perlExecPrefix}update.pl $self->{release} -f -$allOption\" to force update of all packages).",2);
+              $sl->log("Then force package update with \"${perlExecPrefix}update.pl $self->{release} -f $packageName\" (or \"${perlExecPrefix}update.pl $self->{release} -f -a\" to force update of all SPADS packages).",2);
               unlink("$self->{localDir}/updateFlag");
               return -7;
             }

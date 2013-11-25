@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.12a (2013/11/10)
+# Version 0.13 (2013/11/22)
 
 use strict;
 
@@ -32,7 +32,8 @@ use SpadsUpdater;
 my $currentStep=1;
 my $nbSteps=13;
 my @packages=qw/getDefaultModOptions.pl help.dat helpSettings.dat SpringAutoHostInterface.pm SpringLobbyInterface.pm SimpleLog.pm spads.pl SpadsConf.pm spadsInstaller.pl SpadsUpdater.pm SpadsPluginApi.pm update.pl argparse.py replay_upload.py/;
-my @packagesWin=qw/PerlUnitSync.pm PerlUnitSync.dll spring-dedicated.exe spring-headless.exe/;
+my @packagesWinUnitsync=qw/PerlUnitSync.pm PerlUnitSync.dll/;
+my @packagesWinServer=qw/spring-dedicated.exe spring-headless.exe/;
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 
 my @pathes;
@@ -55,7 +56,7 @@ if($win) {
   $exeExtension=".exe";
   $dllExtension=".dll";
   push(@pathes,cwd());
-  push(@packages,@packagesWin);
+  push(@packages,@packagesWinUnitsync);
 }
 
 my %conf;
@@ -363,6 +364,7 @@ sub generatePerlUnitSync {
 
 my $nbMods=0;
 my @availableMods=();
+my $springVersion;
 sub checkUnitsync {
   my $defaultSpringDataDir="";
   $defaultSpringDataDir="/share/games/spring" if(! $win && -d "/share/games/spring");
@@ -399,6 +401,7 @@ sub checkUnitsync {
   for my $modNb (0..($nbMods-1)) {
     push(@availableMods,PerlUnitSync::GetPrimaryModName($modNb));
   }
+  $springVersion=PerlUnitSync::GetSpringVersion();
   PerlUnitSync::UnInit();
   chdir($conf{installDir});
 }
@@ -484,6 +487,21 @@ if($win) {
 }
 
 checkUnitsync();
+
+if($win) {
+  $updater=SpadsUpdater->new(sLog => $updaterLog,
+                             localDir => cwd(),
+                             repository => "http://planetspads.free.fr/spads/repository",
+                             release => $conf{release},
+                             packages => \@packagesWinServer,
+                             syncedSpringVersion => $springVersion);
+  $updaterRc=$updater->update();
+  if($updaterRc < 0) {
+    $sLog->log("Unable to retrieve Spring server binaries",1);
+    exit 1;
+  }
+  $sLog->log("Spring server binaries updated for Spring $springVersion",3) if($updaterRc > 0);
+}
 
 @availableMods=sort(@availableMods);
 $conf{modName}="_NO_MOD_FOUND_";
