@@ -54,7 +54,7 @@ $SIG{TERM} = \&sigTermHandler;
 my $MAX_SIGNEDINTEGER=2147483647;
 my $MAX_UNSIGNEDINTEGER=4294967296;
 
-our $spadsVer='0.11.13';
+our $spadsVer='0.11.13a';
 
 my %optionTypes = (
   0 => "error",
@@ -377,7 +377,7 @@ my $autohostSimpleLog=SimpleLog->new(logFiles => [$conf{logDir}."/spads.log"],
 
 my $updaterSimpleLog=SimpleLog->new(logFiles => [$conf{logDir}."/spads.log",""],
                                     logLevels => [$conf{updaterLogLevel},3],
-                                    useANSICodes => [0,1-$win],
+                                    useANSICodes => [0,1],
                                     useTimestamps => [1,0],
                                     prefix => "[SpadsUpdater] ");
 

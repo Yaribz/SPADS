@@ -587,6 +587,7 @@ spads.pl:
 0.11.13: remove old IRC bridge handling
          cache Spring version returned by Unitsync
          use Spring version dependent packages auto-update (Windows)
+0.11.13a: use ANSI colors on Windows too
 
 SpadsConf.pm:
 ============
@@ -687,6 +688,7 @@ SpadsConf.pm:
 0.11.2: plugin help files must now be located in the plugins directory (instead of the var directory)
 0.11.2a: updated "speedControl" allowed values (new range: 1-2)
 0.11.3: dump dynamic data in network byte order to make binary files easily importable on different architectures
+0.11.3a: use ANSI colors on Windows too
 
 spadsInstaller.pl:
 =================
@@ -719,6 +721,7 @@ spadsInstaller.pl:
 0.12a: "mods" folder is no longer listed as subdirectory of spring data directory
        make Spring 95 behave like previous versions concerning writable data directory location
 0.13: delay Spring server packages downloads and use unitsync to find which versions to download (Windows)
+0.13a: use ANSI colors on Windows too
 
 SpadsPluginApi.pm:
 =================
@@ -776,3 +779,4 @@ update.pl:
 0.7: PerlLobbyInterface and PerlAutoHostInterface renamed respectively to SpringLobbyInterface and SpringAutoHostInterface
 0.8: add replay upload scripts
      add "springVersion" parameter for Spring server binaries updates (Windows)
+0.8a: use ANSI colors on Windows too

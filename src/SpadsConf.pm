@@ -29,7 +29,7 @@ use SimpleLog;
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.11.3';
+my $moduleVersion='0.11.3a';
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 
 my %globalParameters = (lobbyLogin => ["login"],
@@ -284,7 +284,7 @@ sub new {
 
   $sLog=SimpleLog->new(logFiles => [$p_conf->{""}->{logDir}."/spads.log",""],
                        logLevels => [$p_conf->{""}->{spadsLogLevel},3],
-                       useANSICodes => [0,1-$win],
+                       useANSICodes => [0,1],
                        useTimestamps => [1,0],
                        prefix => "[SPADS] ");
 

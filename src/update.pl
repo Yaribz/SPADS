@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.8 (2013/11/22)
+# Version 0.8a (2013/11/28)
 
 use strict;
 
@@ -31,7 +31,7 @@ $perlExecPrefix="perl " if($win);
 
 my $sLog=SimpleLog->new(logFiles => [""],
                         logLevels => [4],
-                        useANSICodes => [1 - $win],
+                        useANSICodes => [1],
                         useTimestamps => [0],
                         prefix => "[Update] ");
 
@@ -138,7 +138,7 @@ invalidUsage() if((exists $packages{'spring-dedicated.exe'} || exists $packages{
 
 my $updaterLog=SimpleLog->new(logFiles => [""],
                               logLevels => [4],
-                              useANSICodes => [1 - $win],
+                              useANSICodes => [1],
                               useTimestamps => [0],
                               prefix => "[SpadsUpdater] ");
 
