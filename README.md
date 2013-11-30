@@ -3,9 +3,10 @@ SPADS
 SPADS (Spring Perl Autohost for Dedicated Server) is a Perl autohost program
 for [SpringRTS](http://springrts.com/), released under GPL v3 license. It has
 been designed from start for headless servers without any graphic interface,
-and is heavily customizable through various configuration levels. For more
-details please refer to [SPADS thread](http://springrts.com/phpbb/viewtopic.php?f=1&t=17130)
-on Spring forums.
+and is heavily customizable through various configuration levels and a plugin
+system. For more details please refer to
+[SPADS thread](http://springrts.com/phpbb/viewtopic.php?f=1&t=17130) on Spring
+forums.
 
 Components
 ----------
