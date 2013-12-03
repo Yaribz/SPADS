@@ -590,6 +590,7 @@ spads.pl:
 0.11.13a: use ANSI colors on Windows too
 0.11.14: new plugin customization callbacks "addStartScriptTags,changeUserAccessLevel,forceCpuSpeedValue"
 0.11.14a: fix cpu not shown in !hostStats output
+0.11.14b: handle "!map" (with no parameter) as "!nextMap"
 
 SpadsConf.pm:
 ============

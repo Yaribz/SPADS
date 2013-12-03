@@ -54,7 +54,7 @@ $SIG{TERM} = \&sigTermHandler;
 my $MAX_SIGNEDINTEGER=2147483647;
 my $MAX_UNSIGNEDINTEGER=4294967296;
 
-our $spadsVer='0.11.14a';
+our $spadsVer='0.11.14b';
 
 my %optionTypes = (
   0 => "error",
@@ -9326,6 +9326,11 @@ sub hSet {
   $setting=lc($setting);
 
   if($setting eq "map") {
+    if($val eq '' && $lobbyState > 5) {
+      return 'nextMap' if($checkOnly);
+      rotateMap($conf{rotationManual},1);
+      return 'nextMap';
+    }
     my $realVal=searchMap($val);
     if(! $realVal) {
       answer("Could not find matching map for \"$val\" in current map list");
