@@ -588,6 +588,8 @@ spads.pl:
          cache Spring version returned by Unitsync
          use Spring version dependent packages auto-update (Windows)
 0.11.13a: use ANSI colors on Windows too
+0.11.14: new plugin customization callbacks "addStartScriptTags,changeUserAccessLevel,forceCpuSpeedValue"
+0.11.14a: fix cpu not shown in !hostStats output
 
 SpadsConf.pm:
 ============
@@ -741,6 +743,7 @@ SpadsPluginApi.pm:
 0.7: new plugin event callbacks "onVoteRequest,postSpadsCommand,preSpadsCommand"
      new plugin customization callback "filterRotationMaps"
 0.8: renamed PerlAutoHostInterface to SpringAutoHostInterface
+0.9: new plugin customization callbacks "addStartScriptTags,changeUserAccessLevel,forceCpuSpeedValue"
 
 SpadsUpdater.pm:
 ===============

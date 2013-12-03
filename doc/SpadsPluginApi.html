@@ -254,6 +254,15 @@
 
 <dl>
 
+<dt id="addStartScriptTags-additionalData-"><code>addStartScriptTags(\%additionalData)</code></dt>
+<dd>
+
+<p>This callback is called when a Spring start script is generated, just before launching the game. It allows plugins to declare additional scrip tags which will be written in the start script.</p>
+
+<p><code>\%additionalData</code> is a reference to a hash which must be updated by adding the desired keys/values. For example a plugin can add a modoption named &quot;hiddenoption&quot; with value &quot;test&quot; like this: <code><span class="variable">$additionalData</span><span class="operator">{</span><span class="string">"game/modoptions/hiddenoption"</span><span class="operator">}</span><span class="operator">=</span><span class="string">"test"</span>
+</code>. For tags to be added in player sections, the special key &quot;playerData&quot; must be used. This special key must point to a hash associating each account ID to a hash containing the tags to add in the corresponding player section.</p>
+
+</dd>
 <dt id="balanceBattle-players-bots-clanMode-nbTeams-teamSize-"><code>balanceBattle(\%players,\%bots,$clanMode,$nbTeams,$teamSize)</code></dt>
 <dd>
 
@@ -272,13 +281,25 @@
 </code>, and assigned player ids must be written in <code><span class="variable">$players</span><span class="operator">-&gt;</span><span class="operator">{</span><span class="operator">&lt;</span><span class="variable">playerName</span><span class="operator">&gt;</span><span class="operator">}</span><span class="operator">-&gt;</span><span class="operator">{</span><span class="string">battleStatus</span><span class="operator">}</span><span class="operator">-&gt;</span><span class="operator">{</span><span class="string">id</span><span class="operator">}</span>
 </code>. <code>\%bots</code> works the same way. The return value is the unbalance indicator, defined as follows: <code>standardDeviationOfTeamSkills * 100 / averageTeamSkill</code>.</p>
 
-<p>If the plugin is unable to balance the battle, it must not update <code>\%players</code> and <code>\%bots</code>. It must return a negative value so that SPADS knows it has to use another plugin or internal balance algorithm instead.</p>
+<p>If the plugin is unable to balance the battle, it must not update <code>\%players</code> and <code>\%bots</code>. The callback must return undef or a negative value so that SPADS knows it has to use another plugin or internal balance algorithm instead.</p>
 
 </dd>
 <dt id="canBalanceNow-"><code>canBalanceNow()</code></dt>
 <dd>
 
 <p>This callback allows plugins to delay the battle balance operation. It is called each time a battle balance operation is required (either automatic if autoBalance is enabled, either manual if <code>!balance</code> command is called). If the plugin is ready for balance, it must return <code>1</code>. Else, it can delay the operation by returning <code>0</code> (the balance algorithm won&#39;t be launched as long as the plugin didn&#39;t return <code>1</code>).</p>
+
+</dd>
+<dt id="changeUserAccessLevel-userName-userData-isAuthenticated-currentAccessLevel-"><code>changeUserAccessLevel($userName,\%userData,$isAuthenticated,$currentAccessLevel)</code></dt>
+<dd>
+
+<p>This callback is called by SPADS each time it needs to get the access level of a user. It allows plugins to overwrite this level. Don&#39;t call the <code>getUserAccessLevel($user)</code> function from this callback, or the program will be locked in recusrive loop! (and it would give you the same value as <code>$currentAccessLevel</code> anyway).</p>
+
+<p><code>\%userData</code> is a reference to a hash containing the lobby data of the user</p>
+
+<p><code>$isAuthenticated</code> indicates if the user has been authenticated (0: lobby server in LAN mode and not authenticated at autohost level, 1: authenticated by lobby server only, 2: authenticated by autohost)</p>
+
+<p>The callback must return the new access level value if changed, or undef if not changed.</p>
 
 </dd>
 <dt id="filterRotationMaps-rotationMaps-"><code>filterRotationMaps(\@rotationMaps)</code></dt>
@@ -289,6 +310,12 @@
 <p><code>\@rotationMaps</code> is a reference to an array containing the names of the maps currently allowed for rotation.</p>
 
 <p>The callback must return a reference to a new array containing the filtered map names.</p>
+
+</dd>
+<dt id="forceCpuSpeedValue-"><code>forceCpuSpeedValue()</code></dt>
+<dd>
+
+<p>This callback allows plugins to force the CPU speed value declared by SPADS in lobby. The callback must return the CPU speed value.</p>
 
 </dd>
 <dt id="updateCmdAliases-aliases-"><code>updateCmdAliases(\%aliases)</code></dt>

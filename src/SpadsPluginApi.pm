@@ -21,9 +21,7 @@ package SpadsPluginApi;
 use Exporter 'import';
 @EXPORT=qw/$spadsVersion $spadsDir getLobbyState getSpringPid getTimestamps getRunningBattle getCurrentVote getPlugin addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives/;
 
-use Storable qw/dclone/;
-
-my $apiVersion='0.8';
+my $apiVersion='0.9';
 
 our $spadsVersion=$::spadsVer;
 our $spadsDir=$::cwd;
@@ -484,6 +482,19 @@ plugins to customize features (more callbacks can be added on request):
 
 =over 2
 
+=item C<addStartScriptTags(\%additionalData)>
+
+This callback is called when a Spring start script is generated, just before
+launching the game. It allows plugins to declare additional scrip tags which
+will be written in the start script.
+
+C<\%additionalData> is a reference to a hash which must be updated by adding the
+desired keys/values. For example a plugin can add a modoption named
+"hiddenoption" with value "test" like this: C<$additionalData{"game/modoptions/hiddenoption"}="test">.
+For tags to be added in player sections, the special key "playerData" must be
+used. This special key must point to a hash associating each account ID to a
+hash containing the tags to add in the corresponding player section.
+
 =item C<balanceBattle(\%players,\%bots,$clanMode,$nbTeams,$teamSize)>
 
 This callback is called each time SPADS needs to balance a battle and evaluate
@@ -518,8 +529,8 @@ C<\%bots> works the same way. The return value is the unbalance indicator,
 defined as follows: C<standardDeviationOfTeamSkills * 100 / averageTeamSkill>.
 
 If the plugin is unable to balance the battle, it must not update C<\%players>
-and C<\%bots>. It must return a negative value so that SPADS knows it has to use
-another plugin or internal balance algorithm instead.
+and C<\%bots>. The callback must return undef or a negative value so that SPADS
+knows it has to use another plugin or internal balance algorithm instead.
 
 =item C<canBalanceNow()>
 
@@ -529,6 +540,23 @@ autoBalance is enabled, either manual if C<!balance> command is called). If the
 plugin is ready for balance, it must return C<1>. Else, it can delay the
 operation by returning C<0> (the balance algorithm won't be launched as long as
 the plugin didn't return C<1>).
+
+=item C<changeUserAccessLevel($userName,\%userData,$isAuthenticated,$currentAccessLevel)>
+
+This callback is called by SPADS each time it needs to get the access level of a
+user. It allows plugins to overwrite this level. Don't call the
+C<getUserAccessLevel($user)> function from this callback, or the program will be
+locked in recusrive loop! (and it would give you the same value as
+C<$currentAccessLevel> anyway).
+
+C<\%userData> is a reference to a hash containing the lobby data of the user
+
+C<$isAuthenticated> indicates if the user has been authenticated (0: lobby
+server in LAN mode and not authenticated at autohost level, 1: authenticated by
+lobby server only, 2: authenticated by autohost)
+
+The callback must return the new access level value if changed, or undef if not
+changed.
 
 =item C<filterRotationMaps(\@rotationMaps)>
 
@@ -541,6 +569,11 @@ currently allowed for rotation.
 
 The callback must return a reference to a new array containing the filtered map
 names.
+
+=item C<forceCpuSpeedValue()>
+
+This callback allows plugins to force the CPU speed value declared by SPADS in
+lobby. The callback must return the CPU speed value.
 
 =item C<updateCmdAliases(\%aliases)>
 

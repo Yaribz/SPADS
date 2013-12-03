@@ -54,7 +54,7 @@ $SIG{TERM} = \&sigTermHandler;
 my $MAX_SIGNEDINTEGER=2147483647;
 my $MAX_UNSIGNEDINTEGER=4294967296;
 
-our $spadsVer='0.11.13a';
+our $spadsVer='0.11.14a';
 
 my %optionTypes = (
   0 => "error",
@@ -1235,6 +1235,14 @@ sub getSysInfo {
 }
 
 sub getCpuSpeed {
+  my $realCpuSpeed=getRealCpuSpeed();
+  foreach my $pluginName (@pluginsOrder) {
+    return $plugins{$pluginName}->forceCpuSpeedValue() if($plugins{$pluginName}->can('forceCpuSpeedValue'));
+  }
+  return $realCpuSpeed;
+}
+
+sub getRealCpuSpeed {
   if($win) {
     my $cpuInfo;
     $cpuInfo=$regLMachine->Open("Hardware/Description/System/CentralProcessor/0", { Access => KEY_READ() }) if(defined $regLMachine);
@@ -2038,7 +2046,13 @@ sub getUserAccessLevel {
   }else{
     $p_userData=$lobby->{users}->{$user};
   }
-  return $spads->getUserAccessLevel($user,$p_userData,isUserAuthenticated($user));
+  my $isAuthenticated=isUserAuthenticated($user);
+  my $coreUserAccessLevel=$spads->getUserAccessLevel($user,$p_userData,$isAuthenticated);
+  foreach my $pluginName (@pluginsOrder) {
+    my $newUserAccessLevel=$plugins{$pluginName}->changeUserAccessLevel($user,$p_userData,$isAuthenticated,$coreUserAccessLevel) if($plugins{$pluginName}->can('changeUserAccessLevel'));
+    return $newUserAccessLevel if(defined $newUserAccessLevel);
+  }
+  return $coreUserAccessLevel;
 }
 
 sub deprecatedMsg {
@@ -3467,7 +3481,7 @@ sub balanceBattle {
   foreach my $pluginName (@pluginsOrder) {
     if($plugins{$pluginName}->can('balanceBattle')) {
       $unbalanceIndicator=$plugins{$pluginName}->balanceBattle($p_players,$p_bots,$clanMode,$nbTeams,$teamSize);
-      next if($unbalanceIndicator < 0);
+      next unless(defined $unbalanceIndicator && $unbalanceIndicator >= 0);
       srand($restoreRandSeed);
       return ($nbSmurfs,$unbalanceIndicator);
     }
@@ -4045,6 +4059,9 @@ sub launchGame {
     }
   }
 
+  foreach my $pluginName (@pluginsOrder) {
+    $plugins{$pluginName}->addStartScriptTags(\%additionalData) if($plugins{$pluginName}->can('addStartScriptTags'));
+  }
   my ($p_startData,$p_teamsMap,$p_allyTeamsMap)=$lobby->generateStartData(\%additionalData,$p_modSides,undef,$springServerType eq 'dedicated' ? 1 : 2,$conf{idShareMode} eq 'off');
   if(! $p_startData) {
     slog("Unable to start game: start script generation failed",1);
@@ -11407,7 +11424,7 @@ sub cbJoinedBattle {
 
   logMsg("battle","=== $user joined ===") if($conf{logBattleJoinLeave});
 
-  my $level=$spads->getUserAccessLevel($user,$p_userData,isUserAuthenticated($user));
+  my $level=getUserAccessLevel($user);
   my $levelDescription=$spads->getLevelDescription($level);
   my ($mapHash,$mapArchive)=getMapHashAndArchive($conf{map});
   $mapHash+=$MAX_UNSIGNEDINTEGER if($mapHash < 0);
