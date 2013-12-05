@@ -20,6 +20,7 @@
     <ul>
       <li><a href="#Mandatory-callbacks">Mandatory callbacks</a></li>
       <li><a href="#Configuration-callback">Configuration callback</a></li>
+      <li><a href="#Dependencies-callback">Dependencies callback</a></li>
       <li><a href="#Event-based-callbacks">Event-based callbacks</a></li>
       <li><a href="#Customization-callbacks">Customization callbacks</a></li>
       <li><a href="#Event-loop-callback">Event loop callback</a></li>
@@ -131,6 +132,25 @@
                              <span class="string">MyPresetSetting2</span> <span class="operator">=&gt;</span> <span class="operator">[</span><span class="string">'bool'</span><span class="operator">]</span> <span class="operator">);</span>
   
   <span class="keyword">sub</span><span class="variable"> getParams </span><span class="operator">{</span> <span class="keyword">return</span> <span class="operator">[</span><span class="operator">\</span><span class="variable">%globalPluginParams</span><span class="operator">,\</span><span class="variable">%presetPluginParams</span><span class="operator">]</span><span class="operator">;</span> <span class="operator">}</span>
+</code></pre>
+
+</dd>
+</dl>
+
+<h2 id="Dependencies-callback">Dependencies callback</h2>
+
+<p>SPADS plugins can use data and functions from other plugins (dependencies). But this can only work if the plugin dependencies are loaded before the plugin itself. That&#39;s why following callback should be used by such dependent plugins to declare their dependencies, which will allow SPADS to perform the check for them. Also, SPADS will automatically unload dependent plugins when one of their dependencies is unloaded.</p>
+
+<dl>
+
+<dt id="getDependencies-"><code>getDependencies()</code></dt>
+<dd>
+
+<p>returns the dependencies plugins names list</p>
+
+<p>Example of implementation:</p>
+
+<pre><code>  <span class="keyword">sub</span><span class="variable"> getDependencies </span><span class="operator">{</span> <span class="keyword">return</span> <span class="operator">(</span><span class="string">'SpringForumInterface'</span><span class="operator">,</span><span class="string">'MailAlerts'</span><span class="operator">);</span> <span class="operator">}</span>
 </code></pre>
 
 </dd>
@@ -315,7 +335,7 @@
 <dt id="forceCpuSpeedValue-"><code>forceCpuSpeedValue()</code></dt>
 <dd>
 
-<p>This callback allows plugins to force the CPU speed value declared by SPADS in lobby. The callback must return the CPU speed value.</p>
+<p>This callback allows plugins to force the CPU speed value declared by SPADS in lobby. The callback must return the CPU speed value or undef if not forced.</p>
 
 </dd>
 <dt id="updateCmdAliases-aliases-"><code>updateCmdAliases(\%aliases)</code></dt>
@@ -417,6 +437,10 @@
 
 </dd>
 <dt id="getSpringPid-"><code>getSpringPid()</code></dt>
+<dd>
+
+</dd>
+<dt id="getSpringServerType-"><code>getSpringServerType()</code></dt>
 <dd>
 
 </dd>
@@ -730,6 +754,10 @@
 
 </dd>
 <dt id="springPid"><code>$::springPid</code></dt>
+<dd>
+
+</dd>
+<dt id="springServerType"><code>$::springServerType</code></dt>
 <dd>
 
 </dd>

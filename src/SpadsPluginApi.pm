@@ -19,9 +19,9 @@
 package SpadsPluginApi;
 
 use Exporter 'import';
-@EXPORT=qw/$spadsVersion $spadsDir getLobbyState getSpringPid getTimestamps getRunningBattle getCurrentVote getPlugin addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives/;
+@EXPORT=qw/$spadsVersion $spadsDir getLobbyState getSpringPid getSpringServerType getTimestamps getRunningBattle getCurrentVote getPlugin addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives/;
 
-my $apiVersion='0.9';
+my $apiVersion='0.10';
 
 our $spadsVersion=$::spadsVer;
 our $spadsDir=$::cwd;
@@ -66,6 +66,10 @@ sub getSpringPid {
   return $::springPid;
 }
 
+sub getSpringServerType {
+  return $::springServerType;
+}
+
 sub getTimestamps {
   return \%::timestamps;
 }
@@ -75,7 +79,8 @@ sub getTimestamps {
 ################################
 
 sub getPlugin {
-  my $pluginName=caller();
+  my $pluginName=shift;
+  $pluginName=caller() unless(defined $pluginName);
   return $::plugins{$pluginName} if(exists $::plugins{$pluginName});
 }
 
@@ -389,6 +394,28 @@ Example of implementation:
 
 =back
 
+=head2 Dependencies callback
+
+SPADS plugins can use data and functions from other plugins (dependencies). But
+this can only work if the plugin dependencies are loaded before the plugin
+itself. That's why following callback should be used by such dependent plugins
+to declare their dependencies, which will allow SPADS to perform the check for
+them.
+Also, SPADS will automatically unload dependent plugins when one of their
+dependencies is unloaded.
+
+=over 2
+
+=item C<getDependencies()>
+
+returns the dependencies plugins names list
+
+Example of implementation:
+
+  sub getDependencies { return ('SpringForumInterface','MailAlerts'); }
+
+=back
+
 =head2 Event-based callbacks
 
 Following callbacks are triggered by events from various sources (SPADS, Spring
@@ -573,7 +600,7 @@ names.
 =item C<forceCpuSpeedValue()>
 
 This callback allows plugins to force the CPU speed value declared by SPADS in
-lobby. The callback must return the CPU speed value.
+lobby. The callback must return the CPU speed value or undef if not forced.
 
 =item C<updateCmdAliases(\%aliases)>
 
@@ -680,6 +707,8 @@ plugins.
 =item C<getSpringInterface()>
 
 =item C<getSpringPid()>
+
+=item C<getSpringServerType()>
 
 =item C<getTimestamps()>
 
@@ -957,6 +986,8 @@ strongly recommended to use the accessors from the API instead:
 =item C<%::spadsHandlers>
 
 =item C<$::springPid>
+
+=item C<$::springServerType>
 
 =item C<%::timestamps>
 

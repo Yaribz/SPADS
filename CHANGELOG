@@ -591,6 +591,12 @@ spads.pl:
 0.11.14: new plugin customization callbacks "addStartScriptTags,changeUserAccessLevel,forceCpuSpeedValue"
 0.11.14a: fix cpu not shown in !hostStats output
 0.11.14b: handle "!map" (with no parameter) as "!nextMap"
+0.11.15: new plugin dependencies system
+         battle context and players defeat times are now stored in end game data and available for plugins
+         springServerType is now shared with plugins
+         do not count UPDATEBOT lobby commands in lobby status flood checks
+         minor fix in plugin customization callback "forceCpuSpeedValue"
+         fix typo in plugin skill management (plugin skills were appearing as unknown skill type)
 
 SpadsConf.pm:
 ============
@@ -692,6 +698,7 @@ SpadsConf.pm:
 0.11.2a: updated "speedControl" allowed values (new range: 1-2)
 0.11.3: dump dynamic data in network byte order to make binary files easily importable on different architectures
 0.11.3a: use ANSI colors on Windows too
+0.11.4: plugins configuration files can now contain a preset named "_DEFAULT_" which will be used if default global preset isn't found
 
 spadsInstaller.pl:
 =================
@@ -745,6 +752,10 @@ SpadsPluginApi.pm:
      new plugin customization callback "filterRotationMaps"
 0.8: renamed PerlAutoHostInterface to SpringAutoHostInterface
 0.9: new plugin customization callbacks "addStartScriptTags,changeUserAccessLevel,forceCpuSpeedValue"
+0.10: new plugin dependencies system, with new callback: "getDependencies"
+      new plugin API accessor "getSpringServerType"
+      fix "getPlugin" API plugin management function (was always returning current plugin)
+      minor fix in "forceCpuSpeedValue" customization callback
 
 SpadsUpdater.pm:
 ===============

@@ -54,7 +54,7 @@ $SIG{TERM} = \&sigTermHandler;
 my $MAX_SIGNEDINTEGER=2147483647;
 my $MAX_UNSIGNEDINTEGER=4294967296;
 
-our $spadsVer='0.11.14b';
+our $spadsVer='0.11.15';
 
 my %optionTypes = (
   0 => "error",
@@ -304,6 +304,7 @@ my %inGameAddedPlayers;
 my %runningBattleMapping;
 my %runningBattleReversedMapping;
 my $p_gameOverResults={};
+my %defeatTimes;
 my $p_answerFunction;
 our %currentVote=();
 our $springPid=0;
@@ -356,6 +357,7 @@ my $balRandSeed=intRand();
 my %authenticatedUsers;
 my $lanMode=0;
 my @pluginsOrder;
+my %pluginsReverseDeps;
 our %plugins;
 my %battleSkills;
 our %battleSkillsCache;
@@ -412,7 +414,7 @@ my $updater = SpadsUpdater->new(sLog => $updaterSimpleLog,
                                 packages => \@packages);
 
 
-my $springServerType=$conf{springServerType};
+our $springServerType=$conf{springServerType};
 if($springServerType eq '') {
   if($conf{springServer} =~ /spring-dedicated(?:\.exe)?$/i) {
     $springServerType='dedicated';
@@ -1237,7 +1239,10 @@ sub getSysInfo {
 sub getCpuSpeed {
   my $realCpuSpeed=getRealCpuSpeed();
   foreach my $pluginName (@pluginsOrder) {
-    return $plugins{$pluginName}->forceCpuSpeedValue() if($plugins{$pluginName}->can('forceCpuSpeedValue'));
+    if($plugins{$pluginName}->can('forceCpuSpeedValue')) {
+      my $cpuPlugin=$plugins{$pluginName}->forceCpuSpeedValue();
+      return $cpuPlugin if(defined $cpuPlugin);
+    }
   }
   return $realCpuSpeed;
 }
@@ -3091,6 +3096,7 @@ sub setAsOutOfGame {
   %runningBattleMapping=();
   %runningBattleReversedMapping=();
   $p_gameOverResults={};
+  %defeatTimes=();
   %inGameAddedUsers=();
   %inGameAddedPlayers=();
   $springPid=0;
@@ -4153,6 +4159,7 @@ sub launchGame {
   %runningBattleReversedMapping=(teams => \%reversedTeamsMap,
                                  allyTeams => \%reversedAllyTeamsMap);
   $p_gameOverResults={};
+  %defeatTimes=();
   %inGameAddedUsers=();
   %inGameAddedPlayers=();
   my %clientStatus = %{$lobby->{users}->{$conf{lobbyLogin}}->{status}};
@@ -8339,19 +8346,25 @@ sub hPlugin {
   }
   if($action eq 'unload') {
     return 1 if($checkOnly);
-    unloadPlugin($pluginName);
-    answer("Unloaded plugin $pluginName.");
+    my $p_unloadedPlugins=unloadPlugin($pluginName);
+    answer('Unloaded plugin'.($#{$p_unloadedPlugins} > 0 ? 's ' : ' ').(join(',',@{$p_unloadedPlugins})).'.');
     return 1;
   }
   if($action eq 'reload') {
     return 1 if($checkOnly);
-    my $reloadRes=reloadPlugin($pluginName);
-    if($reloadRes) {
-      answer("Reloaded plugin $pluginName.");
-      return 1;
+    my ($p_reloadedPlugins,$failedPlugin,$p_notReloadedPlugins)=reloadPlugin($pluginName);
+    if(defined $failedPlugin) {
+      if($failedPlugin eq $pluginName) {
+        answer("Failed to reload plugin $pluginName.");
+      }else{
+        answer("Error while reloading plugin $pluginName: failed to reload dependent plugin $failedPlugin.");
+      }
+      answer('Following plugin'.($#{$p_reloadedPlugins} > 0 ? 's have' : ' has').' been reloaded: '.(join(',',@{$p_reloadedPlugins}))) if(@{$p_reloadedPlugins});
+      answer('Following dependent plugin'.($#{$p_notReloadedPlugins} > 0 ? 's have' : ' has').' been unloaded: '.(join(',',@{$p_notReloadedPlugins}))) if(@{$p_notReloadedPlugins});
+      return 0;
     }
-    answer("Failed to load plugin $pluginName.");
-    return 0;
+    answer('Reloaded plugin'.($#{$p_reloadedPlugins} > 0 ? 's ' : ' ').(join(',',@{$p_reloadedPlugins})).'.');
+    return 1;
   }
   if($action eq 'reloadConf') {
     if(defined $param && lc($param) ne 'keepsettings') {
@@ -8362,14 +8375,14 @@ sub hPlugin {
     my $p_previousConf;
     $p_previousConf=$spads->{pluginsConf}->{$pluginName}->{conf} if(exists $spads->{pluginsConf}->{$pluginName} && defined $param);
     if(! $spads->loadPluginConf($pluginName)) {
-      answer("Failed to reload $pluginName plugin configuration");
+      answer("Failed to reload $pluginName plugin configuration.");
       return 0;
     }
     $spads->applyPluginPreset($pluginName,$conf{defaultPreset});
     $spads->applyPluginPreset($pluginName,$conf{preset}) unless($conf{preset} eq $conf{defaultPreset});
     $spads->{pluginsConf}->{$pluginName}->{conf}=$p_previousConf if(exists $spads->{pluginsConf}->{$pluginName} && defined $p_previousConf);
     $plugins{$pluginName}->onReloadConf(defined $param) if($plugins{$pluginName}->can('onReloadConf'));
-    answer("Configuration reloaded for plugin $pluginName");
+    answer("Configuration reloaded for plugin $pluginName.");
 
     return 1;
   }
@@ -8411,7 +8424,7 @@ sub hPlugin {
     }
     if($allowed) {
       if($p_pluginConf->{conf}->{$setting} eq $val) {
-        answer("$pluginName plugin setting \"$setting\" is already set to value \"$val\"");
+        answer("$pluginName plugin setting \"$setting\" is already set to value \"$val\".");
         return 0;
       }
       return 1 if($checkOnly);
@@ -8422,7 +8435,7 @@ sub hPlugin {
       $plugins{$pluginName}->onSettingChange($setting,$oldValue,$val) if($plugins{$pluginName}->can('onSettingChange'));
       return;
     }else{
-      answer("Value \"$val\" for $pluginName plugin setting \"$setting\" is not allowed in current preset");
+      answer("Value \"$val\" for $pluginName plugin setting \"$setting\" is not allowed in current preset.");
       return 0;
     }
   }
@@ -11328,8 +11341,6 @@ sub cbUpdateBot {
   my $p_battle=$lobby->getBattle();
   my $p_bots=$p_battle->{bots};
 
-  return if(checkUserStatusFlood($p_bots->{$bot}->{owner}));
-
   my $p_battleStatus=$p_bots->{$bot}->{battleStatus};
   my $p_color=$p_bots->{$bot}->{color};
 
@@ -11874,7 +11885,10 @@ sub cbAhPlayerReady {
 }
 
 sub cbAhPlayerDefeated {
+  my (undef,$playerNb)=@_;
   checkAutoStop();
+  return unless(exists $autohost->{players}->{$playerNb});
+  $defeatTimes{$autohost->{players}->{$playerNb}->{name}}=time;
 }
 
 sub cbAhPlayerLeft {
@@ -12186,7 +12200,9 @@ sub cbAhServerQuit {
                    ip => '',
                    team => '',
                    allyTeam => '',
-                   win => 0);
+                   win => 0,
+                   loseTime => '');
+    $gdrPlayer{loseTime}=$defeatTimes{$player}-$timestamps{lastGameStart} if(exists $defeatTimes{$player});
     $gdrPlayer{ip}=$gdrIPs{$player} if(exists $gdrIPs{$player});
     if(defined $p_runningBattle->{users}->{$player}->{battleStatus}
        && $p_runningBattle->{users}->{$player}->{battleStatus}->{mode}) {
@@ -12249,7 +12265,8 @@ sub cbAhServerQuit {
                  result => $gameResult,
                  players => dclone(\@gdrPlayers),
                  bots => dclone(\@gdrBots),
-                 teamStats => dclone(\%teamStats));
+                 teamStats => dclone(\%teamStats),
+                 battleContext => dclone($p_runningBattle));
   if($timestamps{lastGameStartPlaying} > 0) {
     if($timestamps{gameOver} > 0) {
       $endGameData{gameDuration}=$timestamps{gameOver} - $timestamps{lastGameStartPlaying};
@@ -12262,6 +12279,7 @@ sub cbAhServerQuit {
   %runningBattleMapping=();
   %runningBattleReversedMapping=();
   $p_gameOverResults={};
+  %defeatTimes=();
   %inGameAddedUsers=();
   %inGameAddedPlayers=();
 
@@ -12384,17 +12402,65 @@ sub removePluginFromList {
 
 sub reloadPlugin {
   my $pluginName=shift;
-  unloadPlugin($pluginName);
-  return loadPlugin($pluginName);
+  my $p_unloadedPlugins=unloadPlugin($pluginName);
+  my (@reloadedPlugins,$failedPlugin,@notReloadedPlugins);
+  while(@{$p_unloadedPlugins}) {
+    my $pluginToLoad=pop(@{$p_unloadedPlugins});
+    if(loadPlugin($pluginToLoad)) {
+      push(@reloadedPlugins,$pluginToLoad);
+    }else{
+      $failedPlugin=$pluginToLoad;
+      @notReloadedPlugins=reverse(@{$p_unloadedPlugins});
+      last;
+    }
+  }
+  return (\@reloadedPlugins,$failedPlugin,\@notReloadedPlugins);
 }
 
 sub unloadPlugin {
   my $pluginName=shift;
+  if(! exists $plugins{$pluginName}) {
+    slog("Ignoring unloadPlugin call for plugin $pluginName (plugin is not loaded!)",2);
+    return [];
+  }
+
+  my @unloadedPlugins;
+  if(exists $pluginsReverseDeps{$pluginName}) {
+    my @dependentPlugins=keys %{$pluginsReverseDeps{$pluginName}};
+    foreach my $dependentPlugin (@dependentPlugins) {
+      if(! exists $pluginsReverseDeps{$pluginName}->{$dependentPlugin}) {
+        slog("Ignoring already unloaded dependent plugin ($dependentPlugin) during $pluginName plugin unload operation",5);
+        next;
+      }
+      my $p_unloadedPlugins=unloadPlugin($dependentPlugin);
+      push(@unloadedPlugins,@{$p_unloadedPlugins});
+    }
+    slog("Plugin dependent tree not cleared during $pluginName plugin unload operation",2) if(%{$pluginsReverseDeps{$pluginName}});
+    delete $pluginsReverseDeps{$pluginName};
+  }
+
+  my @dependencyPlugins;
+  @dependencyPlugins=$plugins{$pluginName}->getDependencies() if($plugins{$pluginName}->can('getDependencies'));
+  foreach my $dependencyPlugin (@dependencyPlugins) {
+    if(! exists $pluginsReverseDeps{$dependencyPlugin}) {
+      slog("Inconsistent plugin dependency state: $dependencyPlugin was not marked as having any dependent plugins whereas $pluginName is a dependent plugin",2);
+      next;
+    }
+    if(! exists $pluginsReverseDeps{$dependencyPlugin}->{$pluginName}) {
+      slog("Inconsistent plugin dependency state: $pluginName was not marked as being a dependent plugin of $dependencyPlugin",2);
+      next;
+    }
+    delete $pluginsReverseDeps{$dependencyPlugin}->{$pluginName};
+  }
+
   $plugins{$pluginName}->onUnload() if($plugins{$pluginName}->can('onUnload'));
   delete $spads->{pluginsConf}->{$pluginName};
   removePluginFromList($pluginName);
   delete($plugins{$pluginName});
   delete $INC{"$pluginName.pm"};
+
+  push(@unloadedPlugins,$pluginName);
+  return \@unloadedPlugins;
 }
 
 sub loadPlugin {
@@ -12411,6 +12477,23 @@ sub loadPlugin {
 
 sub loadPluginModule {
   my $pluginName=shift;
+
+  my $hasDependencies;
+  eval "\$hasDependencies=$pluginName->can('getDependencies')";
+
+  my @pluginDeps;
+  if($hasDependencies) {
+    eval "\@pluginDeps=$pluginName->getDependencies()";
+    my @missingDeps;
+    foreach my $pluginDep (@pluginDeps) {
+      push(@missingDeps,$pluginDep) unless(exists $plugins{$pluginDep});
+    }
+    if(@missingDeps) {
+      slog("Unable to load plugin \"$pluginName\", dependenc".($#missingDeps > 0 ? 'ies' : 'y').' missing: '.join(',',@missingDeps),1);
+      return 0;
+    }
+  }
+
   my $plugin;
   eval "\$plugin=$pluginName->new()";
   if($@) {
@@ -12433,6 +12516,15 @@ sub loadPluginModule {
     slog("Unable to load plugin \"$pluginName\", this plugin requires a SPADS version >= $requiredSpadsVersion, current is $spadsVer",1);
     return 0;
   }
+
+  foreach my $pluginDep (@pluginDeps) {
+    if(! exists $pluginsReverseDeps{$pluginDep}) {
+      $pluginsReverseDeps{$pluginDep}={$pluginName => 1};
+    }else{
+      $pluginsReverseDeps{$pluginDep}->{$pluginName}=1;
+    }
+  }
+
   push(@pluginsOrder,$pluginName);
   $plugins{$pluginName}=$plugin;
   return 1;
@@ -12456,9 +12548,9 @@ sub pluginsUpdateSkill {
       if($pluginResult) {
         if($pluginResult == 2) {
           slog("Using degraded mode for skill retrieving by plugin $pluginName ($accountId, $lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod}, $currentGameType)",2);
-          $p_userSkill->{skillOrigin}='pluginDegraded';
+          $p_userSkill->{skillOrigin}='PluginDegraded';
         }else{
-          $p_userSkill->{skillOrigin}='plugin';
+          $p_userSkill->{skillOrigin}='Plugin';
         }
         last;
       }
@@ -13014,7 +13106,8 @@ while($running) {
 }
 
 # Exit handling ########################
-foreach my $pluginName (@pluginsOrder) {
+while(@pluginsOrder) {
+  my $pluginName=pop(@pluginsOrder);
   unloadPlugin($pluginName);
 }
 if($lobbyState) {

@@ -6,7 +6,7 @@ use SpadsPluginApi;
 
 no warnings 'redefine';
 
-my $pluginVersion='0.3';
+my $pluginVersion='0.4';
 my $requiredSpadsVersion='0.11.5b';
 
 my %presetPluginParams = ( trueSkillType => ['notNull'],
@@ -26,12 +26,14 @@ sub new {
     return undef;
   }
   bless($self,$class);
-  addLobbyCommandHandler({CLIENTBATTLESTATUS => \&hLobbyClientBattleStatus,
-                          LEFTBATTLE => \&hLobbyLeftBattle});
-  my $lobby=getLobbyInterface();
-  if(getLobbyState() > 5 && %{$lobby->{battle}}) {
-    foreach my $user (keys %{$lobby->{battle}->{users}}) {
-      checkTrueSkillLimit($user,$self);
+  if(getLobbyState() > 3) {
+    addLobbyCommandHandler({CLIENTBATTLESTATUS => \&hLobbyClientBattleStatus,
+                            LEFTBATTLE => \&hLobbyLeftBattle});
+    my $lobby=getLobbyInterface();
+    if(getLobbyState() > 5 && %{$lobby->{battle}}) {
+      foreach my $user (keys %{$lobby->{battle}->{users}}) {
+        checkTrueSkillLimit($user,$self);
+      }
     }
   }
   slog("Plugin loaded (version $pluginVersion)",3);

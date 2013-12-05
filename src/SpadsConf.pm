@@ -29,7 +29,7 @@ use SimpleLog;
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.11.3a';
+my $moduleVersion='0.11.4';
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 
 my %globalParameters = (lobbyLogin => ["login"],
@@ -940,6 +940,9 @@ sub loadPluginConf {
   $p_presetParams={} unless(defined $p_presetParams);
   return 1 unless(%{$p_globalParams} || %{$p_presetParams});
   my $p_pluginPresets = loadSettingsFile($self->{log},"$self->{conf}->{etcDir}/$pluginName.conf",$p_globalParams,$p_presetParams,$self->{macros});
+  if(%{$p_presetParams} && ! exists $p_pluginPresets->{$self->{conf}->{defaultPreset}} && exists $p_pluginPresets->{'_DEFAULT_'}) {
+    $p_pluginPresets->{$self->{conf}->{defaultPreset}}=$p_pluginPresets->{'_DEFAULT_'};
+  }
   return 0 unless($self->checkPluginConfig($pluginName,$p_pluginPresets,$p_globalParams,$p_presetParams));
   my ($p_commands,$p_help)=({},{});
   if(exists $p_pluginPresets->{''}->{commandsFile}) {
