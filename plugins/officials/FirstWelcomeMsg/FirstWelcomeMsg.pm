@@ -8,7 +8,7 @@ use SpadsPluginApi;
 
 no warnings 'redefine';
 
-my $pluginVersion='0.2';
+my $pluginVersion='0.3';
 my $requiredSpadsVersion='0.11.2';
 
 my %globalPluginParams = ( commandsFile => ['notNull'],
@@ -38,7 +38,7 @@ sub new {
   $self->{alreadySentTs}=time;
   addSpadsCommandHandler({firstWelcomeMsg => \&hSpadsFirstWelcomeMsg,
                           resendFirstWelcomeMsg => \&hSpadsResendFirstWelcomeMsg});
-  addLobbyCommandHandler({JOINEDBATTLE => \&hLobbyJoinedBattle});
+  addLobbyCommandHandler({JOINEDBATTLE => \&hLobbyJoinedBattle}) if(getLobbyState() > 3);
   slog("Plugin loaded (version $pluginVersion)",3);
   return $self;
 }
