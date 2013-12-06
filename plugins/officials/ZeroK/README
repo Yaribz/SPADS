@@ -1,0 +1,22 @@
+This plugin makes SPADS compatible with the Springie/Zero-K infrastructure,
+providing most of the corresponding functionalities (clan management, Elo
+ranking, recommended maps for rotation, custom commanders, awards...). All the
+functionalities are enabled in the configuration file except the Elo-based
+balancing (SPADS has its own TrueSkill ranking system for that), and battle
+result submission to Zero-K site (this requires sending unencrypted password,
+see config file).
+
+This plugin depends on the SpringieExtension plugin, which must be loaded in
+SPADS beforehand.
+
+Due to the way the Zero-K lobby works, when hosting Zero-K games it is
+recommended to change SPADS default configuration regarding !start command as
+follows in commands.conf (the first "10" becomes "100" in the first
+configuration line of the "start" section):
+
+    [start]
+    battle,pv:player:stopped|100:10
+    ::stopped|100:
+
+This will force Zero-K players to call a vote to start a game, as they are used
+to.

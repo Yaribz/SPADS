@@ -1,0 +1,14 @@
+The SpringieExtension plugin implements the lobby protocol extension used by
+Springie autohost and Zero-K lobby. This plugin by itself doesn't do much, it
+just allows SPADS admins to give specific rights to users depending on their
+Springie/Zero-K access levels, through the SpringieExtension.users.conf
+configuration file (same syntax as main SPADS users.conf file). But this plugin
+also makes all Springie/Zero-K data easily accessible for other SPADS plugins,
+which is its main purpose.
+
+This plugin depends on the SOAP::Lite Perl module which must be installed
+using the corresponding package manager on your system, for example:
+  on Windows:
+      ppm install SOAP-Lite
+  on Debian/Ubuntu:
+      apt-get install libsoap-lite-perl
