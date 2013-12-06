@@ -29,7 +29,7 @@ use SimpleLog;
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.11.4';
+my $moduleVersion='0.11.5';
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 
 my %globalParameters = (lobbyLogin => ["login"],
@@ -1764,6 +1764,23 @@ sub dumpDynamicData {
 }
 
 # Business functions - Dynamic data - Map info cache ##########################
+
+sub fixStartPosUncachedMaps {
+  my ($self,$p_localMaps)=@_;
+  my %partiallyCachedMaps;
+  my $nbDeletedMapData=0;
+  foreach my $mapInCache (keys %{$self->{mapInfo}}) {
+    next if(exists $self->{mapInfo}->{$mapInCache}->{nbStartPos});
+    if(exists $p_localMaps->{$mapInCache}) {
+      $partiallyCachedMaps{$mapInCache}=$self->{mapInfo}->{$mapInCache};
+    }else{
+      delete($self->{mapInfo}->{$mapInCache});
+      ++$nbDeletedMapData;
+    }
+  }
+  $self->{log}->log("Deleted partially cached data for $nbDeletedMapData map".($nbDeletedMapData>1?'s':'').' (not available locally anymore)',2) if($nbDeletedMapData);
+  return \%partiallyCachedMaps;
+}
 
 sub getUncachedMaps {
   my ($self,$p_maps)=@_;

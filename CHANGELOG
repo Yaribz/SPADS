@@ -597,6 +597,8 @@ spads.pl:
          do not count UPDATEBOT lobby commands in lobby status flood checks
          minor fix in plugin customization callback "forceCpuSpeedValue"
          fix typo in plugin skill management (plugin skills were appearing as unknown skill type)
+0.11.16: map start positions are now also stored in map info cache file
+         prevent starting a game using fixed or random start position types if there aren't enough start positions on the map
 
 SpadsConf.pm:
 ============
@@ -699,6 +701,7 @@ SpadsConf.pm:
 0.11.3: dump dynamic data in network byte order to make binary files easily importable on different architectures
 0.11.3a: use ANSI colors on Windows too
 0.11.4: plugins configuration files can now contain a preset named "_DEFAULT_" which will be used if default global preset isn't found
+0.11.5: add migration function for new cached map data containing start positions
 
 spadsInstaller.pl:
 =================

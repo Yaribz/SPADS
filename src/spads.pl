@@ -54,7 +54,7 @@ $SIG{TERM} = \&sigTermHandler;
 my $MAX_SIGNEDINTEGER=2147483647;
 my $MAX_UNSIGNEDINTEGER=4294967296;
 
-our $spadsVer='0.11.15';
+our $spadsVer='0.11.16';
 
 my %optionTypes = (
   0 => "error",
@@ -953,6 +953,30 @@ sub loadArchives {
     }
   }
 
+  my $p_partiallyCachedMaps=$spads->fixStartPosUncachedMaps(\%availableMapsByNames);
+  if(%{$p_partiallyCachedMaps}) {
+    my $nbPartiallyCachedMaps=keys %{$p_partiallyCachedMaps};
+    my $latestProgressReportTs=0;
+    my $partiallyCachedMapNb=0;
+    foreach my $partiallyCachedMapName (keys %{$p_partiallyCachedMaps}) {
+      pingIfNeeded();
+      if(time - $latestProgressReportTs > 60) {
+        $latestProgressReportTs=time;
+        slog("Upgrading Spring map info cache... $partiallyCachedMapNb/$nbPartiallyCachedMaps (".(int(100*$partiallyCachedMapNb/$nbPartiallyCachedMaps)).'%)',3);
+      }
+      my $mapNb=$availableMapsByNames{$partiallyCachedMapName};
+      my $nbStartPos=PerlUnitSync::GetMapPosCount($mapNb);
+      $p_partiallyCachedMaps->{$partiallyCachedMapName}->{nbStartPos}=$nbStartPos;
+      $p_partiallyCachedMaps->{$partiallyCachedMapName}->{startPos}=[];
+      for my $startPosNb (0..($nbStartPos-1)) {
+        push(@{$p_partiallyCachedMaps->{$partiallyCachedMapName}->{startPos}},[PerlUnitSync::GetMapPosX($mapNb,$startPosNb),PerlUnitSync::GetMapPosZ($mapNb,$startPosNb)]);
+      }
+      ++$partiallyCachedMapNb;
+    }
+    $spads->cacheMapsInfo();
+    slog("Upgrading Spring map info cache... $nbPartiallyCachedMaps/$nbPartiallyCachedMaps (100%)",3);
+  }
+
   my @availableMapsNames=sort keys %availableMapsByNames;
   my $p_uncachedMapsNames = $spads->getUncachedMaps(\@availableMapsNames);
   if(@{$p_uncachedMapsNames}) {
@@ -971,6 +995,12 @@ sub loadArchives {
       PerlUnitSync::RemoveAllArchives();
       $newCachedMaps{$mapName}->{width}=PerlUnitSync::GetMapWidth($mapNb);
       $newCachedMaps{$mapName}->{height}=PerlUnitSync::GetMapHeight($mapNb);
+      my $nbStartPos=PerlUnitSync::GetMapPosCount($mapNb);
+      $newCachedMaps{$mapName}->{nbStartPos}=$nbStartPos;
+      $newCachedMaps{$mapName}->{startPos}=[];
+      for my $startPosNb (0..($nbStartPos-1)) {
+        push(@{$newCachedMaps{$mapName}->{startPos}},[PerlUnitSync::GetMapPosX($mapNb,$startPosNb),PerlUnitSync::GetMapPosZ($mapNb,$startPosNb)]);
+      }
       $newCachedMaps{$mapName}->{options}={};
       PerlUnitSync::AddAllArchives($availableMaps[$mapNb]->{archive});
       my $nbMapOptions = PerlUnitSync::GetMapOptionCount($mapName);
@@ -3889,6 +3919,8 @@ sub getBattleState {
   my @unreadyPlayers;
   my %teams; # used only when idShareMode is set to auto
   my %teamCount;
+  my %ids; # used only when idShareMode is not set to off
+  my $nbIds; #  to determine the number of required start pos on map when startPosType != 2
   my $p_bUsers=$lobby->{battle}->{users};
   my @bUsers=keys %{$p_bUsers};
   return { battleState => -4 } if($#bUsers > 250);
@@ -3904,6 +3936,7 @@ sub getBattleState {
       }else{
         $nbPlayers++;
         push(@unreadyPlayers,$bUser) unless($p_bUsers->{$bUser}->{battleStatus}->{ready});
+        $ids{$p_bUsers->{$bUser}->{battleStatus}->{id}}=1;
         if($conf{idShareMode} eq "auto") {
           $teams{$p_bUsers->{$bUser}->{battleStatus}->{id}}=$p_bUsers->{$bUser}->{battleStatus}->{team};
         }else{
@@ -3921,6 +3954,7 @@ sub getBattleState {
   my $p_bBots=$lobby->{battle}->{bots};
   foreach my $bBot (keys %{$p_bBots}) {
     $nbPlayers++;
+    $ids{$p_bBots->{$bBot}->{battleStatus}->{id}}=1;
     if($conf{idShareMode} eq "auto") {
       $teams{$p_bBots->{$bBot}->{battleStatus}->{id}}=$p_bBots->{$bBot}->{battleStatus}->{team};
     }else{
@@ -3934,6 +3968,12 @@ sub getBattleState {
       $teamCount{$teams{$id}}=0 unless(exists $teamCount{$teams{$id}});
       $teamCount{$teams{$id}}++;
     }
+  }
+
+  if($conf{idShareMode} eq 'off') {
+    $nbIds=$nbPlayers;
+  }else{
+    $nbIds=keys %ids;
   }
 
   my @warnings;
@@ -3956,9 +3996,11 @@ sub getBattleState {
   }
 
   return { battleState => 0,
+           nbIds => $nbIds,
            warning => join(" and ",@warnings) } if(@warnings);
 
-  return { battleState => 1 };
+  return { battleState => 1,
+           nbIds => $nbIds };
 }
 
 sub launchGame {
@@ -4025,9 +4067,16 @@ sub launchGame {
     }
   }
 
-  if($spads->{bSettings}->{startpostype} != 2 && ! $mapAvailableLocally) {
-    answer("Unable to start game, start position type must be set to \"Choose in game\" when using a map unavailable on server (\"!bSet startPosType 2\")") unless($automatic);
-    return 0;
+  if($spads->{bSettings}->{startpostype} != 2) {
+    if(! $mapAvailableLocally) {
+      answer("Unable to start game, start position type must be set to \"Choose in game\" when using a map unavailable on server (\"!bSet startPosType 2\")") unless($automatic);
+      return 0;
+    }
+    if($p_battleState->{nbIds} > $spads->getCachedMapInfo($currentMap)->{nbStartPos}) {
+      my $currentStartPosType=$spads->{bSettings}->{startpostype} ? 'random' : 'fixed';
+      answer("Unable to start game, not enough start positions on map for $currentStartPosType start position type") unless($automatic);
+      return 0;
+    }
   }
 
   if((! $force) && $conf{autoBalance} ne 'off' && ! $balanceState) {
