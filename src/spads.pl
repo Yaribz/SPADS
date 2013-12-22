@@ -54,7 +54,7 @@ $SIG{TERM} = \&sigTermHandler;
 my $MAX_SIGNEDINTEGER=2147483647;
 my $MAX_UNSIGNEDINTEGER=4294967296;
 
-our $spadsVer='0.11.16';
+our $spadsVer='0.11.17';
 
 my %optionTypes = (
   0 => "error",
@@ -1584,7 +1584,7 @@ sub openBattle {
                        OPENBATTLEFAILED => \&cbOpenBattleFailed},
                       \&cbOpenBattleTimeout);
   }else{
-    queueLobbyCommand(['OPENBATTLEEX',
+    queueLobbyCommand(['OPENBATTLE',
                        0,
                        $hSettings{natType},
                        $password,
@@ -7588,7 +7588,8 @@ sub hLearnMaps {
        && ($quotedHostFilter eq '' || $founder =~ /$quotedHostFilter/i)
        && $founder ne $conf{lobbyLogin} && $lobby->{battles}->{$bId}->{mapHash} != 0) {
       my ($engineName,$engineVersion)=($lobby->{battles}->{$bId}->{engineName},$lobby->{battles}->{$bId}->{engineVersion});
-      if($engineName !~ /^spring$/i || $engineVersion !~ /^$syncedSpringVersion(\..*)?$/) {
+      my $quotedVer=quotemeta($syncedSpringVersion);
+      if($engineName !~ /^spring$/i || $engineVersion !~ /^$quotedVer(\..*)?$/) {
         slog("Ignoring battle $bId for learnMaps (different game engine: \"$engineName $engineVersion\")",5);
         next;
       }
@@ -10988,7 +10989,7 @@ sub cbLobbyConnect {
       my $springVersionPatchset=PerlUnitSync::GetSpringVersionPatchset();
       $fullSpringVersion.='.'.$springVersionPatchset;
     }
-    $multiEngineFlag=' eb';
+    $multiEngineFlag=' cl';
     if($lobbySyncedSpringVersion eq '*') {
       slog("Lobby server has no default engine set, UnitSync is using Spring $syncedSpringVersion",3);
     }else{
@@ -11029,8 +11030,7 @@ sub cbLobbyConnect {
                         JOINED => \&cbJoined,
                         LEFT => \&cbLeft,
                         UPDATEBATTLEINFO => \&cbUpdateBattleInfo,
-                        BATTLEOPENED => \&cbBattleOpened,
-                        BATTLEOPENEDEX => \&cbBattleOpened});
+                        BATTLEOPENED => \&cbBattleOpened});
 
   my $localLanIp=$conf{localLanIp};
   $localLanIp=getLocalLanIp() unless($localLanIp);
@@ -11817,7 +11817,8 @@ sub cbBattleOpened {
   seenUserIp($founder,$ip);
   return if($type || ! $conf{autoLearnMaps} || getMapHash($mapName) || !$mapHash);
   my ($engineName,$engineVersion)=($lobby->{battles}->{$bId}->{engineName},$lobby->{battles}->{$bId}->{engineVersion});
-  if($engineName !~ /^spring$/i || $engineVersion !~ /^$syncedSpringVersion(\..*)?$/) {
+  my $quotedVer=quotemeta($syncedSpringVersion);
+  if($engineName !~ /^spring$/i || $engineVersion !~ /^$quotedVer(\..*)?$/) {
     slog("Ignoring battle $bId for automatic map learning (different game engine: \"$engineName $engineVersion\")",5);
     return;
   }
@@ -11829,7 +11830,8 @@ sub cbUpdateBattleInfo {
   my ($battleId,$mapHash,$mapName)=($_[1],$_[4],$_[5]);
   return if(! $conf{autoLearnMaps} || ! defined $mapName || getMapHash($mapName) || !$mapHash);
   my ($engineName,$engineVersion)=($lobby->{battles}->{$battleId}->{engineName},$lobby->{battles}->{$battleId}->{engineVersion});
-  if($engineName !~ /^spring$/i || $engineVersion !~ /^$syncedSpringVersion(\..*)?$/) {
+  my $quotedVer=quotemeta($syncedSpringVersion);
+  if($engineName !~ /^spring$/i || $engineVersion !~ /^$quotedVer(\..*)?$/) {
     slog("Ignoring battle $battleId for automatic map learning (different game engine: \"$engineName $engineVersion\")",5);
     return;
   }

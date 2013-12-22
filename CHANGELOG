@@ -599,6 +599,8 @@ spads.pl:
          fix typo in plugin skill management (plugin skills were appearing as unknown skill type)
 0.11.16: map start positions are now also stored in map info cache file
          prevent starting a game using fixed or random start position types if there aren't enough start positions on the map
+0.11.17: use new "cl" compatibility flag for multi-engine support (instead of the obsolete "eb" flag)
+         allow Spring version string to contain special characters
 
 SpadsConf.pm:
 ============
