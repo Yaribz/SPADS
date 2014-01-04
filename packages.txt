@@ -10,19 +10,21 @@ PerlUnitSync.dll;5.16:PerlUnitSync-91.0-5.16.dll
 PerlUnitSync.pm:PerlUnitSync-91.0.pm
 replay_upload.py:replay_upload_0.4.py
 SimpleLog.pm:SimpleLog_0.5.pm
-spads.pl:spads_0.11.16.pl
+spads.pl:spads_0.11.17.pl
 SpadsConf.pm:SpadsConf_0.11.5.pm
 spadsInstaller.pl:spadsInstaller_0.13a.pl
 SpadsPluginApi.pm:SpadsPluginApi_0.10.pm
 SpadsUpdater.pm:SpadsUpdater_0.7.pm
 SpringAutoHostInterface.pm:SpringAutoHostInterface_0.9.pm
-SpringLobbyInterface.pm:SpringLobbyInterface_0.20.pm
+SpringLobbyInterface.pm:SpringLobbyInterface_0.21.pm
 spring-dedicated.exe;91:spring-dedicated-91.0.exe
 spring-dedicated.exe;94:spring-dedicated-94.0.exe
 spring-dedicated.exe;95:spring-dedicated-95.0.exe
+spring-dedicated.exe;96:spring-dedicated-96.0.exe
 spring-headless.exe;91:spring-headless-91.0.exe.zip
 spring-headless.exe;94:spring-headless-94.0.exe.zip
 spring-headless.exe;95:spring-headless-95.0.exe.zip
+spring-headless.exe;96:spring-headless-96.0.exe.zip
 update.pl:update_0.8a.pl
 
 [testing]
@@ -47,9 +49,11 @@ SpringLobbyInterface.pm:SpringLobbyInterface_0.21.pm
 spring-dedicated.exe;91:spring-dedicated-91.0.exe
 spring-dedicated.exe;94:spring-dedicated-94.0.exe
 spring-dedicated.exe;95:spring-dedicated-95.0.exe
+spring-dedicated.exe;96:spring-dedicated-96.0.exe
 spring-headless.exe;91:spring-headless-91.0.exe.zip
 spring-headless.exe;94:spring-headless-94.0.exe.zip
 spring-headless.exe;95:spring-headless-95.0.exe.zip
+spring-headless.exe;96:spring-headless-96.0.exe.zip
 update.pl:update_0.8a.pl
 
 [unstable]
@@ -74,9 +78,11 @@ SpringLobbyInterface.pm:SpringLobbyInterface_0.21.pm
 spring-dedicated.exe;91:spring-dedicated-91.0.exe
 spring-dedicated.exe;94:spring-dedicated-94.0.exe
 spring-dedicated.exe;95:spring-dedicated-95.0.exe
+spring-dedicated.exe;96:spring-dedicated-96.0.exe
 spring-headless.exe;91:spring-headless-91.0.exe.zip
 spring-headless.exe;94:spring-headless-94.0.exe.zip
 spring-headless.exe;95:spring-headless-95.0.exe.zip
+spring-headless.exe;96:spring-headless-96.0.exe.zip
 update.pl:update_0.8a.pl
 
 [contrib]
@@ -101,7 +107,9 @@ SpringLobbyInterface.pm:SpringLobbyInterface_0.21.pm
 spring-dedicated.exe;91:spring-dedicated-91.0.exe
 spring-dedicated.exe;94:spring-dedicated-94.0.exe
 spring-dedicated.exe;95:spring-dedicated-95.0.exe
+spring-dedicated.exe;96:spring-dedicated-96.0.exe
 spring-headless.exe;91:spring-headless-91.0.exe.zip
 spring-headless.exe;94:spring-headless-94.0.exe.zip
 spring-headless.exe;95:spring-headless-95.0.exe.zip
+spring-headless.exe;96:spring-headless-96.0.exe.zip
 update.pl:update_0.8a.pl
