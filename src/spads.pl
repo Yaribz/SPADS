@@ -35,26 +35,15 @@ use Storable qw/nfreeze dclone/;
 use SimpleLog;
 use SpadsConf;
 use SpadsUpdater;
-
-my $useOldModules=0;
-eval "use SpringLobbyInterface";
-if($@) {
-  $useOldModules=1;
-  eval "use PerlLobbyInterface";
-  die $@ if($@);
-  eval "use PerlAutoHostInterface";
-  die $@ if($@);
-}else{
-  eval "use SpringAutoHostInterface";
-  die $@ if($@);
-}
+use SpringAutoHostInterface;
+use SpringLobbyInterface;
 
 $SIG{TERM} = \&sigTermHandler;
 
 my $MAX_SIGNEDINTEGER=2147483647;
 my $MAX_UNSIGNEDINTEGER=4294967296;
 
-our $spadsVer='0.11.17';
+our $spadsVer='0.11.18';
 
 my %optionTypes = (
   0 => "error",
@@ -383,26 +372,14 @@ my $updaterSimpleLog=SimpleLog->new(logFiles => [$conf{logDir}."/spads.log",""],
                                     useTimestamps => [1,0],
                                     prefix => "[SpadsUpdater] ");
 
-our $lobby;
-our $autohost;
-if($useOldModules) {
-  $lobby = PerlLobbyInterface->new(serverHost => $conf{lobbyHost},
-                                   serverPort => $conf{lobbyPort},
-                                   simpleLog => $lobbySimpleLog,
-                                   warnForUnhandledMessages => 0);
-  $autohost = PerlAutoHostInterface->new(autoHostPort => $conf{autoHostPort},
-                                         simpleLog => $autohostSimpleLog,
-                                         warnForUnhandledMessages => 0);
-}else{
-  $lobby = SpringLobbyInterface->new(serverHost => $conf{lobbyHost},
-                                     serverPort => $conf{lobbyPort},
-                                     simpleLog => $lobbySimpleLog,
-                                     warnForUnhandledMessages => 0);
-  $autohost = SpringAutoHostInterface->new(autoHostPort => $conf{autoHostPort},
-                                           simpleLog => $autohostSimpleLog,
-                                           warnForUnhandledMessages => 0);
-}
+our $lobby = SpringLobbyInterface->new(serverHost => $conf{lobbyHost},
+                                       serverPort => $conf{lobbyPort},
+                                       simpleLog => $lobbySimpleLog,
+                                       warnForUnhandledMessages => 0);
 
+our $autohost = SpringAutoHostInterface->new(autoHostPort => $conf{autoHostPort},
+                                             simpleLog => $autohostSimpleLog,
+                                             warnForUnhandledMessages => 0);
 
 my @packages=@packagesSpads;
 push(@packages,@packagesWinUnitSync) if($conf{autoUpdateBinaries} eq "yes" || $conf{autoUpdateBinaries} eq "unitsync");
@@ -2595,7 +2572,7 @@ sub handleVote {
         foreach my $pluginName (@pluginsOrder) {
           $plugins{$pluginName}->onVoteStop(-1) if($plugins{$pluginName}->can('onVoteStop'));
         }
-        delete @currentVote{qw/awayVoteTime source command remainingVoters yesCount noCount blankCount awayVoters/};
+        delete @currentVote{qw/awayVoteTime source command remainingVoters yesCount noCount blankCount awayVoters manualVoters/};
         $currentVote{expireTime}=time;
       }elsif(time >= $currentVote{expireTime}) {
         my @awayVoters;
@@ -2628,7 +2605,7 @@ sub handleVote {
           foreach my $pluginName (@pluginsOrder) {
             $plugins{$pluginName}->onVoteStop(-1) if($plugins{$pluginName}->can('onVoteStop'));
           }
-          delete @currentVote{qw/awayVoteTime source command remainingVoters yesCount noCount blankCount awayVoters/};
+          delete @currentVote{qw/awayVoteTime source command remainingVoters yesCount noCount blankCount awayVoters manualVoters/};
         }
       }else{
         foreach my $remainingVoter (keys %{$currentVote{remainingVoters}}) {
@@ -4054,10 +4031,14 @@ sub launchGame {
     return 0;
   }
 
-  my %additionalData=("game/AutohostPort" => $conf{autoHostPort});
-  my $p_modSides=getModSides($lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod});
-  
+  my %additionalData=('game/AutohostPort' => $conf{autoHostPort},
+                      'playerData' => {});
   $additionalData{'game/HostIP'}=$conf{forceHostIp} if($conf{forceHostIp} ne '');
+  foreach my $bUser (keys %{$lobby->{battle}->{users}}) {
+    next unless(exists $battleSkills{$bUser} && exists $battleSkills{$bUser}->{class}
+                && exists $lobby->{users}->{$bUser} && exists $lobby->{users}->{$bUser}->{accountId} && $lobby->{users}->{$bUser}->{accountId});
+    $additionalData{playerData}->{$lobby->{users}->{$bUser}->{accountId}}={skillclass => $battleSkills{$bUser}->{class}};
+  }
 
   my $mapAvailableLocally=0;
   for my $mapNb (0..$#availableMaps) {
@@ -4067,7 +4048,12 @@ sub launchGame {
     }
   }
 
-  if($spads->{bSettings}->{startpostype} != 2) {
+  if($spads->{bSettings}->{startpostype} == 2) {
+    if(! $force && ! %{$lobby->{battle}->{startRects}}) {
+      answer("Unable to start game, start position type is set to \"Choose in game\" but no start box is set - use !forceStart to bypass") unless($automatic);
+      return 0;
+    }
+  }else{
     if(! $mapAvailableLocally) {
       answer("Unable to start game, start position type must be set to \"Choose in game\" when using a map unavailable on server (\"!bSet startPosType 2\")") unless($automatic);
       return 0;
@@ -4117,6 +4103,7 @@ sub launchGame {
   foreach my $pluginName (@pluginsOrder) {
     $plugins{$pluginName}->addStartScriptTags(\%additionalData) if($plugins{$pluginName}->can('addStartScriptTags'));
   }
+  my $p_modSides=getModSides($lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod});
   my ($p_startData,$p_teamsMap,$p_allyTeamsMap)=$lobby->generateStartData(\%additionalData,$p_modSides,undef,$springServerType eq 'dedicated' ? 1 : 2,$conf{idShareMode} eq 'off');
   if(! $p_startData) {
     slog("Unable to start game: start script generation failed",1);
@@ -4575,6 +4562,7 @@ sub updateCurrentGameType {
       }else{
         $battleSkills{$user}->{skill}=$battleSkillsCache{$user}->{$currentGameType}->{skill};
         $battleSkills{$user}->{sigma}=$battleSkillsCache{$user}->{$currentGameType}->{sigma};
+        $battleSkills{$user}->{class}=$battleSkillsCache{$user}->{$currentGameType}->{class};
         $battleSkills{$user}->{skillOrigin}='TrueSkill';
       }
     }
@@ -4634,6 +4622,7 @@ sub updateBattleSkill {
     if(exists $battleSkillsCache{$user}) {
       $battleSkills{$user}->{skill}=$battleSkillsCache{$user}->{$currentGameType}->{skill};
       $battleSkills{$user}->{sigma}=$battleSkillsCache{$user}->{$currentGameType}->{sigma};
+      $battleSkills{$user}->{class}=$battleSkillsCache{$user}->{$currentGameType}->{class};
       $battleSkills{$user}->{skillOrigin}='TrueSkill';
       pluginsUpdateSkill($battleSkills{$user},$accountId);
       sendPlayerSkill($user);
@@ -4641,7 +4630,7 @@ sub updateBattleSkill {
       if(exists $lobby->{users}->{$sldbLobbyBot} && $accountId) {
         my $getSkillParam=$accountId;
         $getSkillParam.="|$userIp" if($userIp);
-        sayPrivate($sldbLobbyBot,"!#getSkill $getSkillParam");
+        sayPrivate($sldbLobbyBot,"!#getSkill 3 $getSkillParam");
         $pendingGetSkills{$accountId}=time;
       }else{
         pluginsUpdateSkill($battleSkills{$user},$accountId);
@@ -4746,7 +4735,7 @@ sub getBattleSkill {
   if($userSkillPref eq 'TrueSkill' && exists $lobby->{users}->{$sldbLobbyBot} && $accountId) {
     my $getSkillParam=$accountId;
     $getSkillParam.="|$userIp" if($userIp);
-    sayPrivate($sldbLobbyBot,"!#getSkill $getSkillParam");
+    sayPrivate($sldbLobbyBot,"!#getSkill 3 $getSkillParam");
     $pendingGetSkills{$accountId}=time;
     $battleSkills{$user}=\%userSkill;
   }else{
@@ -4781,7 +4770,11 @@ sub applySettingChange {
   enforceMaxSpecs() if('maxspecs' =~ /^$settingRegExp$/);
   specExtraPlayers() if($conf{autoSpecExtraPlayers} && ("nbteams" =~ /^$settingRegExp$/ || "nbplayerbyid" =~ /^$settingRegExp$/));
   if($autohost->getState()) {
-    $autohost->sendChatMessage('/nospecdraw '.(1-$conf{noSpecDraw})) if('nospecdraw' =~ /^$settingRegExp$/);
+    if('nospecdraw' =~ /^$settingRegExp$/) {
+      my $noSpecDraw=$conf{noSpecDraw};
+      $noSpecDraw=1-$noSpecDraw if($syncedSpringVersion =~ /^(\d+)/ && $1 < 96);
+      $autohost->sendChatMessage("/nospecdraw $noSpecDraw");
+    }
     $autohost->sendChatMessage("/nospectatorchat $conf{noSpecChat}") if('nospecchat' =~ /^$settingRegExp$/);
     if('speedcontrol' =~ /^$settingRegExp$/) {
       my $speedControl=$conf{speedControl};
@@ -6462,6 +6455,19 @@ sub hCallVote {
 
   if(%currentVote) {
     if(exists $currentVote{command}) {
+      if((exists $currentVote{remainingVoters}->{$user} || exists $currentVote{awayVoters}->{$user}) && $#{$currentVote{command}} == $#{$p_params}) {
+        my $isSameCmd=1;
+        for my $i (0..$#{$p_params}) {
+          if(lc($p_params->[$i]) ne lc($currentVote{command}->[$i])) {
+            $isSameCmd=0;
+            last;
+          }
+        }
+        if($isSameCmd) {
+          executeCommand($source,$user,['vote','y']);
+          return;
+        }
+      }
       answer("$user, there is already a vote in progress, please wait for it to finish before calling another one.");
       return;
     }elsif($user eq $currentVote{user}) {
@@ -6524,7 +6530,8 @@ sub hCallVote {
                     yesCount => 1,
                     noCount => 0,
                     blankCount => 0,
-                    awayVoters => {});
+                    awayVoters => {},
+                    manualVoters => { $user => 'yes' });
     my @playersAllowed=keys %remainingVoters;
     my $playersAllowedString=join(",",@playersAllowed);
     if(length($playersAllowedString) > 50) {
@@ -6786,7 +6793,7 @@ sub hEndVote {
     foreach my $pluginName (@pluginsOrder) {
       $plugins{$pluginName}->onVoteStop(0) if($plugins{$pluginName}->can('onVoteStop'));
     }
-    delete @currentVote{qw/awayVoteTime source command remainingVoters yesCount noCount blankCount awayVoters/};
+    delete @currentVote{qw/awayVoteTime source command remainingVoters yesCount noCount blankCount awayVoters manualVoters/};
     $currentVote{expireTime}=time;
   }else{
     answer("Unable to cancel vote (no vote in progress)");
@@ -7010,8 +7017,8 @@ sub hGKick {
 
   return "gKick $kickedUser" if($checkOnly);
 
-  $autohost->sendChatMessage("/kick $kickedUser");
-  logMsg("game","> /kick $kickedUser") if($conf{logGameChat});
+  $autohost->sendChatMessage("/kickbynum $p_ahPlayers->{$kickedUser}->{playerNb}");
+  logMsg("game","> /kickbynum $p_ahPlayers->{$kickedUser}->{playerNb}") if($conf{logGameChat});
 
   return "gKick $kickedUser";
   
@@ -7537,7 +7544,7 @@ sub hKickBan {
   if($autohost->getState()) {
     my $p_ahPlayers=$autohost->getPlayersByNames();
     if(exists $p_ahPlayers->{$bannedUser} && %{$p_ahPlayers->{$bannedUser}} && $p_ahPlayers->{$bannedUser}->{disconnectCause} == -1) {
-      $autohost->sendChatMessage("/kick $bannedUser");
+      $autohost->sendChatMessage("/kickbynum $p_ahPlayers->{$bannedUser}->{playerNb}");
     }
   }
 
@@ -10667,51 +10674,59 @@ sub hVersion {
 
 sub hVote {
   my ($source,$user,$p_params,$checkOnly)=@_;
-  my ($vote)=@{$p_params};
-  
+
   return 0 if($checkOnly);
+
+  if($#{$p_params} != 0) {
+    invalidSyntax($user,'vote');
+    return;
+  }
+
+  my $vote=lc($p_params->[0]);
+  $vote='y' if($vote eq '1');
+  $vote='n' if($vote eq '2');
+  my $isInvalid=1;
+  foreach my $choice (qw/yes no blank/) {
+    if(index($choice,$vote) == 0) {
+      $vote=$choice;
+      $isInvalid=0;
+      last;
+    }
+  }
+  if($isInvalid) {
+    invalidSyntax($user,'vote');
+    return;
+  }
 
   if(! exists $currentVote{command}) {
     answer("$user, you cannot vote currently, there is no vote in progress.");
     return;
   }
- 
-  if(! (exists $currentVote{remainingVoters}->{$user} || exists $currentVote{awayVoters}->{$user})) {
-    answer("$user, you are not allowed to vote for current vote, or you have already voted.");
+
+  if(! (exists $currentVote{remainingVoters}->{$user} || exists $currentVote{awayVoters}->{$user} || exists $currentVote{manualVoters}->{$user})) {
+    answer("$user, you are not allowed to vote for current vote.");
     return;
   }
 
-  if($#{$p_params} != 0 || $vote !~ /^\w+$/) {
-    invalidSyntax($user,"vote");
-    return;
-  }
-
-  my $choice=lc($vote);
-  $choice=quotemeta($choice);
-  $choice="yes" if($choice eq "1");
-  $choice="no" if($choice eq "2");
-  if("yes" =~ /^$choice/) {
-    $currentVote{yesCount}++;
-  }elsif("no" =~ /^$choice/) {
-    $currentVote{noCount}++;
-  }elsif("blank" =~ /^$choice/) {
-    $currentVote{blankCount}++;
-  }else{
-    invalidSyntax($user,"vote");
-    return;
-  }
-  
   if(exists $currentVote{remainingVoters}->{$user}) {
     delete $currentVote{remainingVoters}->{$user};
-  }else{
+  }elsif(exists $currentVote{awayVoters}->{$user}) {
     delete $currentVote{awayVoters}->{$user};
-    $currentVote{blankCount}--;
+    --$currentVote{blankCount};
+  }elsif(exists $currentVote{manualVoters}->{$user}) {
+    if($currentVote{manualVoters}->{$user} eq $vote) {
+      answer("$user, you have already voted for current vote.");
+      return;
+    }
+    --$currentVote{$currentVote{manualVoters}->{$user}.'Count'};
   }
-  
-  setUserPref($user,"voteMode","normal") if(getUserPref($user,"autoSetVoteMode"));
+
+  $currentVote{manualVoters}->{$user}=$vote;
+  ++$currentVote{$vote.'Count'};
+
+  setUserPref($user,'voteMode','normal') if(getUserPref($user,'autoSetVoteMode'));
 
   printVoteState();
-  
 }
 
 sub hWhois {
@@ -10909,14 +10924,15 @@ sub hSkill {
       }
       my $previousPlayerSkill=$battleSkills{$player}->{skill};
       if($status == 0) {
-        if($skills =~ /^\|(\d)\|(-?\d+(?:\.\d*)?),(\d+(?:\.\d*)?)\|(-?\d+(?:\.\d*)?),(\d+(?:\.\d*)?)\|(-?\d+(?:\.\d*)?),(\d+(?:\.\d*)?)\|(-?\d+(?:\.\d*)?),(\d+(?:\.\d*)?)$/) {
-          my ($privacyMode,$duelSkill,$duelSigma,$ffaSkill,$ffaSigma,$teamSkill,$teamSigma,$teamFfaSkill,$teamFfaSigma)=($1,$2,$3,$4,$5,$6,$7,$8,$9);
-          $battleSkillsCache{$player}={Duel => {skill => $duelSkill, sigma => $duelSigma},
-                                       FFA => {skill => $ffaSkill, sigma => $ffaSigma},
-                                       Team => {skill => $teamSkill, sigma => $teamSigma},
-                                       TeamFFA => {skill => $teamFfaSkill, sigma => $teamFfaSigma}};
+        if($skills =~ /^\|(\d)\|(-?\d+(?:\.\d*)?),(\d+(?:\.\d*)?),(\d)\|(-?\d+(?:\.\d*)?),(\d+(?:\.\d*)?),(\d)\|(-?\d+(?:\.\d*)?),(\d+(?:\.\d*)?),(\d)\|(-?\d+(?:\.\d*)?),(\d+(?:\.\d*)?),(\d)$/) {
+          my ($privacyMode,$duelSkill,$duelSigma,$duelClass,$ffaSkill,$ffaSigma,$ffaClass,$teamSkill,$teamSigma,$teamClass,$teamFfaSkill,$teamFfaSigma,$teamFfaClass)=($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13);
+          $battleSkillsCache{$player}={Duel => {skill => $duelSkill, sigma => $duelSigma, class => $duelClass},
+                                       FFA => {skill => $ffaSkill, sigma => $ffaSigma, class => $ffaClass},
+                                       Team => {skill => $teamSkill, sigma => $teamSigma, class => $teamClass},
+                                       TeamFFA => {skill => $teamFfaSkill, sigma => $teamFfaSigma, class => $teamFfaClass}};
           $battleSkills{$player}->{skill}=$battleSkillsCache{$player}->{$currentGameType}->{skill};
           $battleSkills{$player}->{sigma}=$battleSkillsCache{$player}->{$currentGameType}->{sigma};
+          $battleSkills{$player}->{class}=$battleSkillsCache{$player}->{$currentGameType}->{class};
           $battleSkills{$player}->{skillOrigin}='TrueSkill';
           $battleSkills{$player}->{skillPrivacy}=$privacyMode;
         }else{
@@ -11058,17 +11074,10 @@ sub cbRedirect {
     }
     $lobby->disconnect();
     $conf{lobbyHost}=$ip;
-    if($useOldModules) {
-      $lobby = PerlLobbyInterface->new(serverHost => $conf{lobbyHost},
+    $lobby = SpringLobbyInterface->new(serverHost => $conf{lobbyHost},
                                        serverPort => $conf{lobbyPort},
                                        simpleLog => $lobbySimpleLog,
                                        warnForUnhandledMessages => 0);
-    }else{
-      $lobby = SpringLobbyInterface->new(serverHost => $conf{lobbyHost},
-                                         serverPort => $conf{lobbyPort},
-                                         simpleLog => $lobbySimpleLog,
-                                         warnForUnhandledMessages => 0);
-    }
     $timestamps{connectAttempt}=0;
   }else{
     slog("Ignoring redirection request to address $ip",2);
@@ -11974,7 +11983,13 @@ sub cbAhPlayerChat {
 
 sub cbAhServerStarted {
   slog("Spring server started",4);
-  $autohost->sendChatMessage('/nospecdraw 0') if($conf{noSpecDraw});
+  if($conf{noSpecDraw}) {
+    if($syncedSpringVersion =~ /^(\d+)/ && $1 < 96) {
+      $autohost->sendChatMessage('/nospecdraw 0') ;
+    }else{
+      $autohost->sendChatMessage('/nospecdraw 1') ;
+    }
+  }
   my $speedControl=$conf{speedControl};
   $speedControl=2 if($speedControl == 0);
   $autohost->sendChatMessage("/speedcontrol $speedControl");
@@ -12410,8 +12425,8 @@ sub cbAhServerMessage {
             sayBattleAndGame("Warning: in-game IP address does not match lobby IP address for user $name (spoof protection)");
           }else{
             sayBattleAndGame("Kicking $name from game, in-game IP address does not match lobby IP address (spoof protection)");
-            $autohost->sendChatMessage("/kick $name");
-            logMsg("game","> /kick $name") if($conf{logGameChat});
+            $autohost->sendChatMessage("/kickbynum $playerNb");
+            logMsg("game","> /kickbynum $playerNb") if($conf{logGameChat});
             return;
           }
         }
@@ -12425,14 +12440,14 @@ sub cbAhServerMessage {
       my $p_ban=$spads->getUserBan($name,$p_lobbyUserData,isUserAuthenticated($name),$gameIp);
       if($p_ban->{banType} < 2) {
         sayBattleAndGame("Kicking $name from game (in-game IP address is banned)");
-        $autohost->sendChatMessage("/kick $name");
-        logMsg("game","> /kick $name") if($conf{logGameChat});
+        $autohost->sendChatMessage("/kickbynum $playerNb");
+        logMsg("game","> /kickbynum $playerNb") if($conf{logGameChat});
       }elsif($p_ban->{banType} == 2 && exists $p_runningBattle->{users}->{$name}
              && defined($p_runningBattle->{users}->{$name}->{battleStatus})
              && $p_runningBattle->{users}->{$name}->{battleStatus}->{mode}) {
         sayBattleAndGame("Kicking $name from game (force-spec ban on in-game IP address)");
-        $autohost->sendChatMessage("/kick $name");
-        logMsg("game","> /kick $name") if($conf{logGameChat});
+        $autohost->sendChatMessage("/kickbynum $playerNb");
+        logMsg("game","> /kickbynum $playerNb") if($conf{logGameChat});
       }
     }else{
       slog("Unable to perform in-game IP ban check for user $name, unknown user",2);

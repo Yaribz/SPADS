@@ -601,6 +601,12 @@ spads.pl:
          prevent starting a game using fixed or random start position types if there aren't enough start positions on the map
 0.11.17: use new "cl" compatibility flag for multi-engine support (instead of the obsolete "eb" flag)
          allow Spring version string to contain special characters
+0.11.18: improve vote system: players can now change their votes, and trying to call same vote as current vote is now handled as voting yes
+         players skill classes are now written in start scripts ( [GAME] -> [PLAYER<N>] ->  skillclass ) and thus accessible from LUA scripts
+         prevent starting a game using "Choose in game" start position type if no start box is set (!forceStart is now required in this case)
+         use /kickbynum instead of /kick when kicking players from game (/kick is dangerous due to substring matching)
+         disable workaround for bugged noSpecDraw behavior if Spring version is > 95 (behavior was reversed previously)
+         remove old workaround used for backward compatibility with obsolete modules PerlLobbyInterface and PerlAutoHostInterface
 
 SpadsConf.pm:
 ============
