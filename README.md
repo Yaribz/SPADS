@@ -32,7 +32,7 @@ Components
   help.
 * [SPADS reference guide](doc/spadsDoc.html): HTML documentation of all SPADS
   commands and settings (generated from help data files).
-* [SPADS plugin API](doc/SpadsPluginApi.html): HTML documentation of the SPADS
+* [SPADS plugin API](doc/spadsPluginApiDoc.html): HTML documentation of the SPADS
   plugin API (generated from SPADS plugin API module)
 * [Official SPADS plugins](plugins/officials): Official SPADS plugins sources.
 * [SPADS plugins templates](plugins/templates): Templates for SPADS plugins
@@ -90,9 +90,9 @@ Documentation
   be generated from any SPADS installation directory by using following
   command (the pod2html.css file can be found [here](doc/pod2html.css)):
   
-        pod2html -css=pod2html.css --infile=SpadsPluginApi.pm --outfile=SpadsPluginApi.html
+        pod2html -css=pod2html.css --infile=SpadsPluginApi.pm --outfile=spadsPluginApiDoc.html
     
-* Additional documentation can be found on [SPADS wiki](http://springrts.com/wiki/Hosting_Spring#SPADS).
+* Additional documentation can be found on [SPADS wiki](http://springrts.com/wiki/SPADS).
 
 Licensing
 ---------

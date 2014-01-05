@@ -1,0 +1,5 @@
+[resign]
+!resign [<playerName> [TEAM]] - resigns a player or an entire ally team if "TEAM" is provided
+"!resign joe" resigns the player named joe
+"!resign joe TEAM" resigns joe's ally team
+"!resign" resigns your entire ally team (same as "!resign <yourName> TEAM")
