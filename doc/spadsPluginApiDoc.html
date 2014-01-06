@@ -338,6 +338,18 @@
 <p>This callback allows plugins to force the CPU speed value declared by SPADS in lobby. The callback must return the CPU speed value or undef if not forced.</p>
 
 </dd>
+<dt id="setMapStartBoxes-boxes-mapName-nbTeams-nbExtraBox-"><code>setMapStartBoxes(\@boxes,$mapName,$nbTeams,$nbExtraBox)</code></dt>
+<dd>
+
+<p>This callback allows plugins to set map start boxes (for &quot;Choose in game&quot; start position type).</p>
+
+<p><code>\@boxes</code> is a reference to an array containing the start boxes definitions. A start box definition is a string containing the box coordinates separated by spaces, in following order: left, top, right, bottom (0,0 is top left corner and 200,200 is bottom right corner). If the array already contains box definitions, it means SPADS already knows boxes for this map. In this case the plugin can choose to override them by replacing the array content, or simply leave it unmodified.</p>
+
+<p><code>$nbExtraBox</code> is the number of extra box required. Usually this is 0, unless a special game mode is enabled such as King Of The Hill.</p>
+
+<p>The callback must return <code>1</code> to prevent start boxes from being replaced by other plugins, <code>0</code> else.</p>
+
+</dd>
 <dt id="updateCmdAliases-aliases-"><code>updateCmdAliases(\%aliases)</code></dt>
 <dd>
 

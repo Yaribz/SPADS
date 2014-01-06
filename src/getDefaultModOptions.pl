@@ -19,7 +19,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.4c (2013/11/10)
+# Version 0.4d (2014/01/05)
 
 use strict;
 
@@ -165,7 +165,7 @@ sub printModOptions {
       $comment.=" ($p_option->{numberMin}..$p_option->{numberMax})";
       printRes("\n#$comment\n") if($generateComments);
       printRes("$p_option->{key}:$p_option->{default}");
-      printRes("|$p_option->{numberMin}-$p_option->{numberMax}") if($p_option->{numberMin} =~ /^\d+$/ && $p_option->{numberMax} =~ /^\d+$/);
+      printRes("|$p_option->{numberMin}-$p_option->{numberMax}") if($p_option->{numberMin} =~ /^-?\d+(?:\.\d)?$/ && $p_option->{numberMax} =~ /^-?\d+(?:\.\d)?$/);
       printRes("\n");
     }elsif($p_option->{type} eq "string") {
       $comment.=" (max length: $p_option->{stringMaxLen})";
@@ -184,7 +184,7 @@ sub printModOptions {
 
 sub formatNumber {
   my $n=shift;
-  $n=sprintf("%.1f",$n) if($n=~/^\d+\.\d+$/);
+  $n=sprintf("%.1f",$n) if($n=~/^-?\d+\.\d+$/);
   return $n;
 }
 

@@ -15,6 +15,7 @@ getDefaultModOptions.pl:
 0.4b: fixed section separator line appearing even when comments are disabled
 0.4c: "mods" folder is no longer listed as subdirectory of spring data directory
       make Spring 95 behave like previous versions concerning writable data directory location
+0.4d: fix setting ranges and negative values handling
 
 help.dat:
 ========
@@ -607,6 +608,9 @@ spads.pl:
          use /kickbynum instead of /kick when kicking players from game (/kick is dangerous due to substring matching)
          disable workaround for bugged noSpecDraw behavior if Spring version is > 95 (behavior was reversed previously)
          remove old workaround used for backward compatibility with obsolete modules PerlLobbyInterface and PerlAutoHostInterface
+0.11.19: new plugin customization callback "setMapStartBoxes"
+         fix setting ranges and negative values handling
+         print message in battle and game when a plugin setting is changed
 
 SpadsConf.pm:
 ============
@@ -767,6 +771,7 @@ SpadsPluginApi.pm:
       new plugin API accessor "getSpringServerType"
       fix "getPlugin" API plugin management function (was always returning current plugin)
       minor fix in "forceCpuSpeedValue" customization callback
+0.11: new plugin customization callback "setMapStartBoxes"
 
 SpadsUpdater.pm:
 ===============

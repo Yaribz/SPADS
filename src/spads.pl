@@ -43,7 +43,7 @@ $SIG{TERM} = \&sigTermHandler;
 my $MAX_SIGNEDINTEGER=2147483647;
 my $MAX_UNSIGNEDINTEGER=4294967296;
 
-our $spadsVer='0.11.18';
+our $spadsVer='0.11.19';
 
 my %optionTypes = (
   0 => "error",
@@ -789,7 +789,7 @@ sub getMaxLength {
 
 sub formatNumber {
   my $n=shift;
-  $n=sprintf("%.1f",$n) if($n=~/^\d+\.\d+$/);
+  $n=sprintf("%.1f",$n) if($n=~/^-?\d+\.\d+$/);
   return $n;
 }
 
@@ -803,6 +803,22 @@ sub formatInteger {
     $n.='K.';
   }
   return $n;
+}
+
+sub isRange { return $_[0] =~ /^-?\d+(?:\.\d+)?--?\d+(?:\.\d+)?$/; }
+
+sub matchRange {
+  my ($range,$val)=@_;
+  return 0 unless($val =~ /^-?\d+(?:\.\d)?$/);
+  $range=~/^(-?\d+(?:\.\d+)?)-(-?\d+(?:\.\d+)?)$/;
+  my ($minValue,$maxValue)=($1,$2);
+  if(index($val,'.') > 0) {
+    return 0 if(index($minValue,'.') < 0 && index($maxValue,'.') < 0);
+  }else{
+    return 0 if($val ne $val+0);
+  }
+  return 1 if($minValue <= $val && $val <= $maxValue);
+  return 0;
 }
 
 sub limitLineSize {
@@ -1614,6 +1630,10 @@ sub applyMapBoxes {
   my $smfMapName=$conf{map};
   $smfMapName.='.smf' unless($smfMapName =~ /\.smf$/);
   my $p_boxes=$spads->getMapBoxes($smfMapName,$conf{nbTeams},$conf{extraBox});
+  foreach my $pluginName (@pluginsOrder) {
+    my $overwritten=$plugins{$pluginName}->setMapStartBoxes($p_boxes,$conf{map},$conf{nbTeams},$conf{extraBox}) if($plugins{$pluginName}->can('setMapStartBoxes'));
+    last if(defined $overwritten && $overwritten);
+  }
   return unless(@{$p_boxes});
   my $boxId=0;
   foreach my $boxString (@{$p_boxes}) {
@@ -2354,24 +2374,20 @@ sub handleRequest {
 
       my $lcSetting=lc($cmd[1]);
       if(exists $freeSettings{$lcSetting}) {
-        my $allowed=0;
+        my $allowed=1;
         if(defined $freeSettings{$lcSetting}) {
+          $allowed=0;
           my $value='';
           $value=$cmd[2] if($#cmd > 1);
           my @directRanges=split(',',$freeSettings{$lcSetting},-1);
           foreach my $range (@directRanges) {
-            if($value =~ /^\d+(?:\.\d*)?$/ && $range =~ /^(\d+(?:\.\d*)?)\-(\d+(?:\.\d*)?)$/) {
-              if($1 <= $value && $value <= $2) {
-                $allowed=1;
-                last;
-              }
+            if(isRange($range)) {
+              $allowed=1 if(matchRange($range,$value));
             }elsif($value eq $range) {
               $allowed=1;
-              last;
             }
+            last if($allowed);
           }
-        }else{
-          $allowed=1;
         }
         $p_levels->{directLevel}=$p_levels->{voteLevel} if($allowed);
       }
@@ -6328,11 +6344,8 @@ sub hBSet {
 
   my $allowed=0;
   foreach my $allowedValue (@allowedValues) {
-    if($val =~ /^\d+?$/ && $allowedValue =~ /^(\d+(?:\.\d)?)\-(\d+(?:\.\d)?)$/) {
-      $allowed=1 if($1 <= $val && $val <= $2);
-    }elsif($val =~ /^\d+\.\d$/ && $allowedValue =~ /^(\d+(?:\.\d)?)\-(\d+(?:\.\d)?)$/) {
-      my ($minValue,$maxValue)=($1,$2);
-      $allowed=1 if($minValue <= $val && $val <= $maxValue && ($minValue =~ /\./ || $maxValue =~ /\./));
+    if(isRange($allowedValue)) {
+      $allowed=1 if(matchRange($allowedValue,$val));
     }elsif($val eq $allowedValue) {
       $allowed=1;
     }
@@ -7333,8 +7346,8 @@ sub hHSet {
     if($hSetting eq lc($hParam)) {
       my $allowed=0;
       foreach my $allowedValue (@{$spads->{hValues}->{$hParam}}) {
-        if($val =~ /^\d+$/ && $allowedValue =~ /^(\d+)\-(\d+)$/) {
-          $allowed=1 if($1 <= $val && $val <= $2);
+        if(isRange($allowedValue)) {
+          $allowed=1 if(matchRange($allowedValue,$val));
         }elsif($val eq $allowedValue) {
           $allowed=1;
         }
@@ -7850,7 +7863,7 @@ sub hList {
         $allowExternalValues=$conf{allowMapOptionsValues};
       }
       my @allowedValues=getBSettingAllowedValues($setting,$p_options,$allowExternalValues);
-      next if(! @filters && (! @allowedValues || ($#allowedValues == 0 && $allowedValues[0] !~ /^\d+(?:\.\d)?\-\d+(?:\.\d)?$/)));
+      next if(! @filters && (! @allowedValues || ($#allowedValues == 0 && ! isRange($allowedValues[0]))));
       my $currentValue;
       if(exists $spads->{bSettings}->{$setting}) {
         $currentValue=$spads->{bSettings}->{$setting};
@@ -7858,7 +7871,7 @@ sub hList {
         $currentValue=$p_options->{$setting}->{default};
       }
       my ($coloredName,$coloredValue)=($setting,$currentValue);
-      if(! @allowedValues || ($#allowedValues == 0 && $allowedValues[0] !~ /^\d+(?:\.\d)?\-\d+(?:\.\d)?$/)) {
+      if(! @allowedValues || ($#allowedValues == 0 && ! isRange($allowedValues[0]))) {
         $coloredName=$C{14}.$setting;
       }else{
         $coloredValue=$C{12}.$coloredValue.$C{1};
@@ -8472,8 +8485,8 @@ sub hPlugin {
 
     my $allowed=0;
     foreach my $allowedValue (@{$p_pluginConf->{values}->{$setting}}) {
-      if($val =~ /^\d+$/ && $allowedValue =~ /^(\d+)\-(\d+)$/) {
-        $allowed=1 if($1 <= $val && $val <= $2);
+      if(isRange($allowedValue)) {
+        $allowed=1 if(matchRange($allowedValue,$val));
       }elsif($val eq $allowedValue) {
         $allowed=1;
       }
@@ -8488,6 +8501,7 @@ sub hPlugin {
       my $oldValue=$p_pluginConf->{conf}->{$setting};
       $p_pluginConf->{conf}->{$setting}=$val;
       $timestamps{autoRestore}=time;
+      sayBattleAndGame("$pluginName plugin setting changed by $user ($param=$val)");
       answer("$pluginName plugin setting changed ($setting=$val)") if($source eq "pv");
       $plugins{$pluginName}->onSettingChange($setting,$oldValue,$val) if($plugins{$pluginName}->can('onSettingChange'));
       return;
@@ -9437,8 +9451,8 @@ sub hSet {
     if($setting eq lc($param)) {
       my $allowed=0;
       foreach my $allowedValue (@{$spads->{values}->{$param}}) {
-        if($val =~ /^\d+$/ && $allowedValue =~ /^(\d+)\-(\d+)$/) {
-          $allowed=1 if($1 <= $val && $val <= $2);
+        if(isRange($allowedValue)) {
+          $allowed=1 if(matchRange($allowedValue,$val));
         }elsif($val eq $allowedValue) {
           $allowed=1;
         }

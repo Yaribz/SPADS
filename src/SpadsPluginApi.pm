@@ -21,7 +21,7 @@ package SpadsPluginApi;
 use Exporter 'import';
 @EXPORT=qw/$spadsVersion $spadsDir getLobbyState getSpringPid getSpringServerType getTimestamps getRunningBattle getCurrentVote getPlugin addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives/;
 
-my $apiVersion='0.10';
+my $apiVersion='0.11';
 
 our $spadsVersion=$::spadsVer;
 our $spadsDir=$::cwd;
@@ -601,6 +601,25 @@ names.
 
 This callback allows plugins to force the CPU speed value declared by SPADS in
 lobby. The callback must return the CPU speed value or undef if not forced.
+
+=item C<setMapStartBoxes(\@boxes,$mapName,$nbTeams,$nbExtraBox)>
+
+This callback allows plugins to set map start boxes (for "Choose in game" start
+position type).
+
+C<\@boxes> is a reference to an array containing the start boxes definitions.
+A start box definition is a string containing the box coordinates separated by
+spaces, in following order: left, top, right, bottom (0,0 is top left corner
+and 200,200 is bottom right corner). If the array already contains box
+definitions, it means SPADS already knows boxes for this map. In this case the
+plugin can choose to override them by replacing the array content, or simply
+leave it unmodified.
+
+C<$nbExtraBox> is the number of extra box required. Usually this is 0, unless a
+special game mode is enabled such as King Of The Hill.
+
+The callback must return C<1> to prevent start boxes from being replaced by
+other plugins, C<0> else.
 
 =item C<updateCmdAliases(\%aliases)>
 
