@@ -12,10 +12,12 @@ use SpadsPluginApi;
 
 no warnings 'redefine';
 
-my $pluginVersion='0.1';
-my $requiredSpadsVersion='0.11.15';
+my $pluginVersion='0.2';
+my $requiredSpadsVersion='0.11.19';
 
-my %globalPluginParams = ( lobbyExtensionChan => ['login'],
+my %globalPluginParams = ( commandsFile => ['notNull'],
+                           helpFile => ['notNull'],
+                           lobbyExtensionChan => ['login'],
                            lobbyExtensionBot => ['login'],
                            springieServiceProxy => ['notNull'],
                            springieServiceTimeout => ['integer'],
@@ -54,6 +56,8 @@ sub new {
   my $p_conf=getPluginConf();
   $soap->proxy($p_conf->{springieServiceProxy}, timeout => $p_conf->{springieServiceTimeout})->default_ns($p_conf->{springieServiceNamespace});
   $self->{soap}=$soap;
+
+  addSpadsCommandHandler({setOptions => \&hSpadsSetOptions});
 
   if(getLobbyState() > 3) {
     $self->replaceLobbyHandlers();
@@ -95,6 +99,112 @@ sub hLobbySaid {
   &{getPlugin()->{hLobbyDefault}->{said}}(@_);
 }
 
+sub hSpadsSetOptions {
+  my ($source,$user,$p_params,$checkOnly)=@_;
+
+  if($#{$p_params} != 0) {
+    invalidSyntax($user,'setoptions');
+    return 0;
+  }
+
+  if(getLobbyState() < 6) {
+    answer("Unable to set battle settings, battle is closed!");
+    return 0;
+  }
+
+  my $lobby=getLobbyInterface();
+  my $p_spadsConf=getSpadsConf();
+  my $spads=getSpadsConfFull();
+
+  my %newSettings;
+  my @alreadySet;
+  my @bSettingDefs=split(/,/,$p_params->[0]);
+  foreach my $bSettingDef (@bSettingDefs) {
+    my ($bSetting,$val);
+    if($bSettingDef =~ /^([^=]+)=(.*)$/) {
+      ($bSetting,$val)=($1,$2);
+    }else{
+      invalidSyntax($user,'setoptions');
+      return 0;
+    }
+    $bSetting=lc($bSetting);
+
+    my $p_modOptions=::getModOptions($lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod});
+    my $p_mapOptions=::getMapOptions($p_spadsConf->{map});
+    
+    if($bSetting ne 'startpostype' && ! exists $p_modOptions->{$bSetting} && ! exists $p_mapOptions->{$bSetting}) {
+      answer("\"$bSetting\" is not a valid battle setting for current mod and map (use \"!list bSettings\" to list available battle settings)");
+      return 0;
+    }
+
+    my $optionScope='engine';
+    my $p_options={};
+    my $allowExternalValues=0;
+    if(exists $p_modOptions->{$bSetting}) {
+      $optionScope='mod';
+      $p_options=$p_modOptions;
+      $allowExternalValues=$p_spadsConf->{allowModOptionsValues};
+    }elsif(exists $p_mapOptions->{$bSetting}) {
+      $optionScope='map';
+      $p_options=$p_mapOptions;
+      $allowExternalValues=$p_spadsConf->{allowMapOptionsValues};
+    }
+    my @allowedValues=::getBSettingAllowedValues($bSetting,$p_options,$allowExternalValues);
+    if(! @allowedValues && $allowExternalValues) {
+      answer("\"$bSetting\" is a $optionScope option of type \"$p_options->{$bSetting}->{type}\", it must be defined in current battle preset to be modifiable");
+      return 0;
+    }
+    
+    my $allowed=0;
+    foreach my $allowedValue (@allowedValues) {
+      if(::isRange($allowedValue)) {
+        $allowed=1 if(::matchRange($allowedValue,$val));
+      }elsif($val eq $allowedValue) {
+        $allowed=1;
+      }
+      last if($allowed);
+    }
+    if(! $allowed) {
+      answer("Value \"$val\" for battle setting \"$bSetting\" is not allowed with current $optionScope or battle preset"); 
+      return 0;
+    }
+    if(exists $spads->{bSettings}->{$bSetting}) {
+      if($spads->{bSettings}->{$bSetting} eq $val) {
+        push(@alreadySet,$bSetting);
+      }else{
+        $newSettings{$bSetting}=$val;
+      }
+    }elsif($val eq $p_options->{$bSetting}->{default}) {
+      push(@alreadySet,$bSetting);
+    }else{
+      $newSettings{$bSetting}=$val;
+    }
+  }
+
+  if(@alreadySet) {
+    my $alreadySetString=join(',',@alreadySet);
+    answer('Battle setting'.($#alreadySet>0?'s':'')." $alreadySetString ".($#alreadySet>0?'were':'was').' already set to specified value'.($#alreadySet>0?'s':''));
+  }
+  return 0 unless(%newSettings);
+
+  my @newDefs;
+  foreach my $bSetting (sort keys %newSettings) {
+    push(@newDefs,"$bSetting=$newSettings{$bSetting}");
+    if(! $checkOnly) {
+      $spads->{bSettings}->{$bSetting}=$newSettings{$bSetting};
+      ::sendBattleSetting($bSetting);
+    }
+  }
+  my $newDefsString=join(',',@newDefs);
+  return "setOptions $newDefsString" if($checkOnly);
+
+  $::timestamps{autoRestore}=time;
+  sayBattleAndGame('Battle setting'.($#newDefs>0?'s':'')." changed by $user ($newDefsString)");
+  answer('Battle setting'.($#newDefs>0?'s':'')." changed ($newDefsString)") if($source eq 'pv');
+  ::applyMapBoxes() if(exists $newSettings{startpostype});
+  return;
+}
+
 sub onPrivateMsg {
   my (undef,$user,$msg)=@_;
   return 0 unless($user eq getPluginConf()->{lobbyExtensionBot});
@@ -111,7 +221,14 @@ sub onUnload {
                             LEFT => $self->{hLobbyDefault}->{left},
                             SAID => $self->{hLobbyDefault}->{said} },
                           'main' );
+  removeSpadsCommandHandler(['setOptions']);
   slog("Plugin unloaded",3);
+}
+
+sub updateCmdAliases {
+  my ($self,$p_spadsAliases)=@_;
+  $p_spadsAliases->{voteresign}=['callVote','resign'];
+  $p_spadsAliases->{votesetoptions}=['callVote','setOptions'];
 }
 
 sub changeUserAccessLevel {
@@ -298,6 +415,23 @@ sub GetRecommendedMap {
   my $p_soapRes=$soapCallResult->result();
   return $p_soapRes->{MapName} if(exists $p_soapRes->{MapName});
   return undef;
+}
+
+sub GetMapCommands {
+  my ($self,$map)=@_;
+  my $soapCallResult;
+  eval {
+    $soapCallResult=$self->{soap}->call('GetMapCommands',SOAP::Data->name(mapName => $map));
+  };
+  if($@) {
+    slog("Error when calling SpringieService/GetMapCommands web service: $@",1);
+    return undef;
+  }
+  if($soapCallResult->fault()) {
+    slog('SOAP fault when calling SpringieService/GetMapCommands web service: '.$soapCallResult->fault()->{faultstring},1);
+    return undef;
+  }
+  return $soapCallResult->result();
 }
 
 sub SubmitSpringBattleResultFromEndGameData {

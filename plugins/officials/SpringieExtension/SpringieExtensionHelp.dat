@@ -1,0 +1,3 @@
+[setOptions]
+!setOptions <name>=<value>[,<name>=<value>[,...]] - applies mod/map options
+"!setOptions metalmult=100,energymult=100" sets metalmult and energymult mod options to 100
