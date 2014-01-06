@@ -7,7 +7,7 @@ use SpadsPluginApi;
 no warnings 'redefine';
 
 my $pluginVersion='0.5';
-my $requiredSpadsVersion='0.11.5b';
+my $requiredSpadsVersion='0.11.15';
 
 my %presetPluginParams = ( trueSkillType => ['notNull'],
                            minTrueSkill => ['integer','integerRange','null'],
