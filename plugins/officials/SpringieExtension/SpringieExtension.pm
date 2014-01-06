@@ -12,7 +12,7 @@ use SpadsPluginApi;
 
 no warnings 'redefine';
 
-my $pluginVersion='0.2';
+my $pluginVersion='0.3';
 my $requiredSpadsVersion='0.11.19';
 
 my %globalPluginParams = ( commandsFile => ['notNull'],
@@ -229,6 +229,10 @@ sub updateCmdAliases {
   my ($self,$p_spadsAliases)=@_;
   $p_spadsAliases->{voteresign}=['callVote','resign'];
   $p_spadsAliases->{votesetoptions}=['callVote','setOptions'];
+  $p_spadsAliases->{transmit}=['say'];
+  $p_spadsAliases->{cheats}=['cheat'];
+  $p_spadsAliases->{hostsay}=['send'];
+  $p_spadsAliases->{corners}=['split','c','%2%'];
 }
 
 sub changeUserAccessLevel {

@@ -2,11 +2,11 @@ The SpringieExtension plugin implements the lobby protocol extension used by
 Springie autohost and Zero-K lobby. The main purpose of this plugin is to make
 all Springie/Zero-K data and services easily accessible from other SPADS
 plugins, and to increase SPADS compatibility with Springie by emulating the
-!setoptions, !votesetoptions and !voteresign commands (!voteresign requires the
-Resign plugin). This plugin also allows SPADS admins to give specific rights to
-users depending on their Springie/Zero-K access levels, through the
-SpringieExtension.users.conf configuration file (same syntax as main SPADS
-users.conf file).
+!transmit, !cheats, !hostsay, !corners, !setoptions, !votesetoptions and
+!voteresign commands (!voteresign requires the Resign plugin). This plugin also
+allows SPADS admins to give specific rights to users depending on their
+Springie/Zero-K access levels, through the SpringieExtension.users.conf
+configuration file (same syntax as main SPADS users.conf file).
 
 This plugin depends on the SOAP::Lite Perl module which must be installed
 using the corresponding package manager on your system, for example:
