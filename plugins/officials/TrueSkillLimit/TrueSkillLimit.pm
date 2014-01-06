@@ -6,7 +6,7 @@ use SpadsPluginApi;
 
 no warnings 'redefine';
 
-my $pluginVersion='0.4';
+my $pluginVersion='0.5';
 my $requiredSpadsVersion='0.11.5b';
 
 my %presetPluginParams = ( trueSkillType => ['notNull'],
@@ -56,7 +56,7 @@ sub hLobbyClientBattleStatus {
 }
 
 sub updatePlayerSkill {
-  my $accountId=$_[1];
+  my $accountId=$_[2];
   if(getLobbyState() > 5) {
     my $lobby=getLobbyInterface();
     checkTrueSkillLimit($lobby->{accounts}->{$accountId}) if(exists $lobby->{accounts}->{$accountId});
