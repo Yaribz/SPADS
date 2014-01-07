@@ -6,9 +6,9 @@ use SpadsPluginApi;
 
 no warnings 'redefine';
 
-my $pluginVersion='0.2';
-my $requiredSpadsVersion='0.11.19';
-my %presetPluginParams = ( useZkLobbyCpuValue => ['bool'],
+my $pluginVersion='0.3';
+my $requiredSpadsVersion='0.11.20';
+my %presetPluginParams = ( useZkLobbyCpuValue => ['bool2'],
                            handleClans => ['bool'],
                            showClanInStatus => ['bool'],
                            showLevelInStatus => ['bool'],
@@ -73,11 +73,16 @@ sub hLobbyLeftBattle {
 }
 
 sub forceCpuSpeedValue {
-  return undef unless(getPluginConf()->{useZkLobbyCpuValue});
-  if($^O eq 'MSWin32') {
-    return 6667;
+  my $useZkLobbyCpuValue=getPluginConf()->{useZkLobbyCpuValue};
+  return undef unless($useZkLobbyCpuValue);
+  if($useZkLobbyCpuValue == 1) {
+    if($^O eq 'MSWin32') {
+      return 6667;
+    }else{
+      return 6668;
+    }
   }else{
-    return 6668;
+    return 6666;
   }
 }
 
@@ -304,6 +309,34 @@ sub setMapStartBoxes {
     }
   }
   return 0;
+}
+
+sub setInGameVoteMsg {
+  my ($reqYesVotes,$reqNoVotes)=($_[2],$_[4]);
+  return undef unless(getSpringInterface()->getState());
+  return undef unless(isZkMod(getRunningBattle()->{mod}));
+  my $p_currentVote=getCurrentVote();
+  my $remainingTime=$p_currentVote->{expireTime} - time;
+  my $votedCommand=join(' ',@{$p_currentVote->{command}});
+  return "Poll: \"$votedCommand\" ? [!y=$p_currentVote->{yesCount}/$reqYesVotes, !n=$p_currentVote->{noCount}/$reqNoVotes] (${remainingTime}s remaining)";
+}
+
+sub onVoteStart {
+  return unless(getSpringInterface()->getState());
+  return unless(isZkMod(getRunningBattle()->{mod}));
+  my (undef,$inGameVoteMsg)=::getVoteStateMsg();
+  sayGame($inGameVoteMsg) if(defined $inGameVoteMsg);
+}
+
+sub onVoteStop {
+  my (undef,$voteResult)=@_;
+  return unless(getSpringInterface()->getState());
+  return unless(isZkMod(getRunningBattle()->{mod}));
+  if($voteResult > 0) {
+    sayGame('Poll [END:SUCCESS]');
+  }else{
+    sayGame('Poll [END:FAILED]');
+  }
 }
 
 sub onBattleClosed {
