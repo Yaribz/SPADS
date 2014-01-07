@@ -6,7 +6,7 @@ use SpadsPluginApi;
 
 no warnings 'redefine';
 
-my $pluginVersion='0.3';
+my $pluginVersion='0.4';
 my $requiredSpadsVersion='0.11.20';
 my %presetPluginParams = ( useZkLobbyCpuValue => ['bool2'],
                            handleClans => ['bool'],
@@ -193,7 +193,7 @@ sub filterRotationMaps {
 }
 
 sub updatePlayerSkill {
-  my (undef,$p_playerSkill,$accountId,$modName,$gameType)=@_;
+  my (undef,$p_playerSkill,$accountId,$modName)=@_;
   my $lobby=getLobbyInterface();
   checkSkillLimit($lobby->{accounts}->{$accountId}) if(getLobbyState() > 5 && exists $lobby->{accounts}->{$accountId});
 
@@ -201,7 +201,7 @@ sub updatePlayerSkill {
 
   return 0 unless(exists $lobby->{accounts}->{$accountId});
 
-  return 0 if(getLobbyState() > 5 && ! isZkMod($lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod}));
+  return 0 if(getLobbyState() > 5 && ! isZkMod($modName));
 
   my $user=$lobby->{accounts}->{$accountId};
   my $springieExt=getPlugin('SpringieExtension');
@@ -270,7 +270,8 @@ sub onGameEnd {
                  && isZkMod($p_endGameData->{mod})
                  && ! $self->{isCheating}
                  && $p_endGameData->{startPlayingTimestamp}
-                 && $p_endGameData->{result} ne 'undecided' );
+                 && $p_endGameData->{result} ne 'undecided'
+                 && $p_endGameData->{type} ne 'Solo' );
 
   my $description;
   $description=$p_conf->{battleDescription} unless($p_conf->{battleDescription} eq '');
