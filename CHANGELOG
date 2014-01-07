@@ -611,6 +611,7 @@ spads.pl:
 0.11.19: new plugin customization callback "setMapStartBoxes"
          fix setting ranges and negative values handling
          print message in battle and game when a plugin setting is changed
+0.11.20: new plugin customization callback "setInGameVoteMsg"
 
 SpadsConf.pm:
 ============
@@ -772,6 +773,7 @@ SpadsPluginApi.pm:
       fix "getPlugin" API plugin management function (was always returning current plugin)
       minor fix in "forceCpuSpeedValue" customization callback
 0.11: new plugin customization callback "setMapStartBoxes"
+0.12: new plugin customization callback "setInGameVoteMsg"
 
 SpadsUpdater.pm:
 ===============

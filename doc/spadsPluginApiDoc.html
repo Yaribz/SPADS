@@ -338,6 +338,22 @@
 <p>This callback allows plugins to force the CPU speed value declared by SPADS in lobby. The callback must return the CPU speed value or undef if not forced.</p>
 
 </dd>
+<dt id="setInGameVoteMsg-reqYesVotes-maxReqYesVotes-reqNoVotes-maxReqNoVotes-"><code>setInGameVoteMsg($reqYesVotes,$maxReqYesVotes,$reqNoVotes,$maxReqNoVotes)</code></dt>
+<dd>
+
+<p>This callback allows plugins to customize the vote status message sent in game.</p>
+
+<p><code>$reqYesVotes</code> is the total number of &quot;yes&quot; votes required for vote to pass (if away-voters don&#39;t vote).</p>
+
+<p><code>$reqNoVotes</code> is the total number of &quot;no&quot; votes required for vote to fail (if away-voters don&#39;t vote).</p>
+
+<p><code>$maxReqYesVotes</code> is the maximum total number of &quot;yes&quot; votes required for vote to pass (if all away-voters come back and vote).</p>
+
+<p><code>$maxReqNoVotes</code> is the maximum total number of &quot;no&quot; votes required for vote to fail (if all away-voters come back and vote).</p>
+
+<p>The callback must return the in-game message, or undef to keep default message.</p>
+
+</dd>
 <dt id="setMapStartBoxes-boxes-mapName-nbTeams-nbExtraBox-"><code>setMapStartBoxes(\@boxes,$mapName,$nbTeams,$nbExtraBox)</code></dt>
 <dd>
 

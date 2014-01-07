@@ -43,7 +43,7 @@ $SIG{TERM} = \&sigTermHandler;
 my $MAX_SIGNEDINTEGER=2147483647;
 my $MAX_UNSIGNEDINTEGER=4294967296;
 
-our $spadsVer='0.11.19';
+our $spadsVer='0.11.20';
 
 my %optionTypes = (
   0 => "error",
@@ -2855,9 +2855,9 @@ sub autoRestartForUpdate {
   }
 }
 
-sub getVoteState {
-  return ('','') unless(%currentVote && exists $currentVote{command});
-  my ($line1,$line2)=('','');
+sub getVoteStateMsg {
+  return (undef,undef,undef) unless(%currentVote && exists $currentVote{command});
+  my ($lobbyMsg,$gameMsg,$additionalMsg);
   my @remainingVoters=keys %{$currentVote{remainingVoters}};
   my @awayVoters=keys %{$currentVote{awayVoters}};
   my $nbRemainingVotes=$#remainingVoters+1;
@@ -2884,25 +2884,34 @@ sub getVoteState {
     my $nbManualVotes=$currentVote{yesCount}+$currentVote{noCount}+$currentVote{blankCount}-$nbAwayVoters;
     my $requiredVotesString='';
     $requiredVotesString=", votes:$nbManualVotes/$nbRequiredManualVotes" if($nbVotesForVotePart < $nbRequiredManualVotes && $nbRequiredManualVotes-$nbManualVotes > $reqYesVotes-$currentVote{yesCount});
-    $line1="Vote in progress: \"".join(" ",@{$currentVote{command}})."\" [y:$currentVote{yesCount}/$reqYesVotes$maxYesVotesString, n:$currentVote{noCount}/$reqNoVotes$maxNoVotesString$requiredVotesString] (${remainingTime}s remaining)";
+    $lobbyMsg="Vote in progress: \"".join(" ",@{$currentVote{command}})."\" [y:$currentVote{yesCount}/$reqYesVotes$maxYesVotesString, n:$currentVote{noCount}/$reqNoVotes$maxNoVotesString$requiredVotesString] (${remainingTime}s remaining)";
+    my $pluginMsg;
+    foreach my $pluginName (@pluginsOrder) {
+      $pluginMsg=$plugins{$pluginName}->setInGameVoteMsg($reqYesVotes,$maxReqYesVotes,$reqNoVotes,$maxReqNoVotes) if($plugins{$pluginName}->can('setInGameVoteMsg'));
+      last if(defined $pluginMsg);
+    }
+    if(defined $pluginMsg) {
+      $gameMsg=$pluginMsg;
+    }else{
+      $gameMsg=$lobbyMsg;
+    }
     if(@remainingVoters) {
       my $remainingVotersString=join(",",@remainingVoters);
       if(length($remainingVotersString) < 50) {
         $remainingVotersString="Awaiting following vote(s): $remainingVotersString";
         $remainingVotersString.=" (and $nbAwayVoters away-mode vote(s))" if($nbAwayVoters);
-        $line2=$remainingVotersString;
+        $additionalMsg=$remainingVotersString;
       }
     }
   }
-  return ($line1,$line2);
+  return ($lobbyMsg,$gameMsg,$additionalMsg);
 }
 
 sub printVoteState {
-  my ($line1,$line2)=getVoteState();
-  if($line1 ne "") {
-    sayBattleAndGame($line1);
-    sayBattleAndGame($line2) if($line2 ne ''),
-  }
+  my ($lobbyMsg,$gameMsg,$additionalMsg)=getVoteStateMsg();
+  sayBattle($lobbyMsg) if(defined $lobbyMsg);
+  sayGame($gameMsg) if(defined $gameMsg);
+  sayBattleAndGame($additionalMsg) if(defined $additionalMsg);
 }
 
 sub rotatePreset {
@@ -10232,8 +10241,8 @@ sub hStatus {
     my $bossList=join(",",keys %bosses);
     sayPrivate($user,"$B$C{10}Boss mode activated for$B$C{1}: $bossList");
   }
-  my ($voteString)=getVoteState();
-  sayPrivate($user,$voteString) if($voteString ne "");
+  my ($voteString)=getVoteStateMsg();
+  sayPrivate($user,$voteString) if(defined $voteString);
   sayPrivate($user,"Some pending settings need rehosting to be applied") if(needRehost());
   if($quitAfterGame) {
     if($quitAfterGame == 1) {
