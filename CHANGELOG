@@ -612,6 +612,7 @@ spads.pl:
          fix setting ranges and negative values handling
          print message in battle and game when a plugin setting is changed
 0.11.20: new plugin customization callback "setInGameVoteMsg"
+0.11.20a: minor fix for !autolock
 
 SpadsConf.pm:
 ============

@@ -43,7 +43,7 @@ $SIG{TERM} = \&sigTermHandler;
 my $MAX_SIGNEDINTEGER=2147483647;
 my $MAX_UNSIGNEDINTEGER=4294967296;
 
-our $spadsVer='0.11.20';
+our $spadsVer='0.11.20a';
 
 my %optionTypes = (
   0 => "error",
@@ -2116,7 +2116,7 @@ sub processAliases {
         return (["set","autoLock","off"],0);
       }
       if($cmd[1] =~ /^\d+$/) {
-        if($conf{autoLock} eq "on") {
+        if($conf{autoLock} eq "on" || $conf{autoSpecExtraPlayers}) {
           my $newTeamSize=ceil($cmd[1]/($conf{nbTeams}*$conf{nbPlayerById}));
           deprecatedMsg($user,$lcCmd,"use the unified command \"$C{3}!set teamSize $newTeamSize$C{1}\" instead to set the wanted team size");
           return (["set","teamSize",$newTeamSize],0);
