@@ -43,7 +43,7 @@ $SIG{TERM} = \&sigTermHandler;
 my $MAX_SIGNEDINTEGER=2147483647;
 my $MAX_UNSIGNEDINTEGER=4294967296;
 
-our $spadsVer='0.11.20a';
+our $spadsVer='0.11.20b';
 
 my %optionTypes = (
   0 => "error",
@@ -11982,7 +11982,12 @@ sub cbAhPlayerLeft {
   }else{
     logMsg("game","=== \#$playerNb (unknown) left ===")  if($conf{logGameJoinLeave});
   }
-  checkAutoStop();
+  if($springServerType eq 'dedicated' && $autohost->{state} == 3 && $timestamps{gameOver} == 0) {
+    $timestamps{gameOver}=time;
+    $timestamps{autoStop}=time if($timestamps{autoStop} == 0 && $conf{autoStop} ne 'off');
+  }else{
+    checkAutoStop();
+  }
 }
 
 sub cbAhPlayerChat {

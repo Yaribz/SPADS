@@ -613,6 +613,7 @@ spads.pl:
          print message in battle and game when a plugin setting is changed
 0.11.20: new plugin customization callback "setInGameVoteMsg"
 0.11.20a: minor fix for !autolock
+0.11.20b: minor improvement in gameover detection
 
 SpadsConf.pm:
 ============
