@@ -6,7 +6,7 @@ use SpadsPluginApi;
 
 no warnings 'redefine';
 
-my $pluginVersion='0.1';
+my $pluginVersion='0.2';
 my $requiredSpadsVersion='0.11.18';
 
 my %globalPluginParams = ( commandsFile => ['notNull'],
@@ -108,7 +108,7 @@ sub hSpadsResign {
       }elsif($notAllowed == 4) {
         answer("Only connected players are allowed to vote for resign!");
       }elsif($notAllowed == 5) {
-        answer("Only the players who didn't loose yet are allowed to vote for resign!");
+        answer("Only the players who havn't lost yet are allowed to vote for resign!");
       }
       return 0;
     }
@@ -139,10 +139,19 @@ sub hSpadsResign {
     @playersToResign=($resignedPlayer);
   }
 
+  if($p_runningBattle->{engineVersion} =~ /^(\d+)/ && $1 < 92 && ! isZkMod($p_runningBattle->{mod})) {
+    answer('The resign command requires Spring engine version 92 or later!');
+    return 0;
+  }
+
   return "resign $resignedPlayer".($isTeamResign?' TEAM':'') if($checkOnly);
 
   foreach my $playerToResign (@playersToResign) {
-    $autohost->sendChatMessage('/specbynum '.($autohost->getPlayer($playerToResign)->{playerNb}));
+    if($p_runningBattle->{engineVersion} =~ /^(\d+)/ && $1 < 92) {
+      $autohost->sendChatMessage("/luarules resignteam $playerToResign");
+    }else{
+      $autohost->sendChatMessage('/specbynum '.($autohost->getPlayer($playerToResign)->{playerNb}));
+    }
   }
 
   if($#playersToResign > 0) {
@@ -160,5 +169,7 @@ sub onVoteRequest {
   }
   return 1;
 }
+
+sub isZkMod { return index($_[0],'Zero-K') != -1; }
 
 1;
