@@ -6,7 +6,7 @@ use SpadsPluginApi;
 
 no warnings 'redefine';
 
-my $pluginVersion='0.4';
+my $pluginVersion='0.5';
 my $requiredSpadsVersion='0.11.20';
 my %presetPluginParams = ( useZkLobbyCpuValue => ['bool2'],
                            handleClans => ['bool'],
@@ -259,7 +259,10 @@ sub hSpringPlayerChat {
   }else{
     $self->{extraDataReceived}->{$springieMsg}=1;
   }
-  push(@{$self->{extraDataAccepted}},$springieMsg) if($self->{extraDataReceived}->{$springieMsg} == 2);
+  if($self->{extraDataReceived}->{$springieMsg} == 2) {
+    push(@{$self->{extraDataAccepted}},$springieMsg);
+    getSpringInterface()->sendChatMessage("/forcestart") if($springieMsg eq 'FORCE');
+  }
 }
 
 sub onGameEnd {
