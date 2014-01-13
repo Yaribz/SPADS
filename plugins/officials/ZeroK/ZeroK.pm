@@ -2,12 +2,17 @@ package ZeroK;
 
 use strict;
 
+use List::Util 'sum';
+
 use SpadsPluginApi;
 
 no warnings 'redefine';
 
-my $pluginVersion='0.5';
+my $pluginVersion='0.6';
 my $requiredSpadsVersion='0.11.20';
+
+my %globalPluginParams = ( commandsFile => ['notNull'],
+                           helpFile => ['notNull'] );
 my %presetPluginParams = ( useZkLobbyCpuValue => ['bool2'],
                            handleClans => ['bool'],
                            showClanInStatus => ['bool'],
@@ -22,11 +27,11 @@ my %presetPluginParams = ( useZkLobbyCpuValue => ['bool2'],
                            minElo => ['integer','integerRange','null'],
                            maxElo => ['integer','integerRange','null'],
                            minLevel => ['integer','integerRange','null'],
-                           maxLevel => ['integer','integerRange','null']);
+                           maxLevel => ['integer','integerRange','null'] );
 
 sub getVersion { return $pluginVersion; }
 sub getRequiredSpadsVersion { return $requiredSpadsVersion; }
-sub getParams { return [{},\%presetPluginParams]; }
+sub getParams { return [\%globalPluginParams,\%presetPluginParams]; }
 sub getDependencies { return ('SpringieExtension'); }
 
 sub new {
@@ -36,6 +41,8 @@ sub new {
                extraDataReceived => {},
                forceSpecTimestamps => {} };
   bless($self,$class);
+
+  addSpadsCommandHandler({predict => \&hSpadsPredict});
 
   if(getLobbyState() > 3) {
     addLobbyCommandHandler({CLIENTBATTLESTATUS => \&hLobbyClientBattleStatus,
@@ -55,7 +62,82 @@ sub onLobbyConnected {
 sub onUnload {
   removeLobbyCommandHandler(['CLIENTBATTLESTATUS','LEFTBATTLE']);
   removeSpringCommandHandler(['PLAYER_CHAT']);
+  removeSpadsCommandHandler(['predict']);
   slog("Plugin unloaded",3);
+}
+
+sub hSpadsPredict {
+  my ($source,$user,$p_params,$checkOnly)=@_;
+
+  if(@{$p_params}) {
+    invalidSyntax($user,'predict');
+    return 0;
+  }
+
+  if(! getPluginConf()->{eloBalanceMode}) {
+    answer('The !predict command is only available when Elo balance mode is enabled');
+    return 0;
+  }
+
+  if(getLobbyState() < 6) {
+    answer('Unable to predict chances of victory, battle is closed!');
+    return 0;
+  }
+
+  my $lobby=getLobbyInterface();
+  if(! isZkMod($lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod})) {
+    answer('The !predict command is only available for Zero-K!');
+    return 0;
+  }
+
+  if(%{$lobby->{battle}->{bots}}) {
+    answer('Unable to predict chances of victory when AI bots are in battle!');
+    return 0;
+  }
+
+  my $springieExt=getPlugin('SpringieExtension');
+
+  my %teamsElos;
+  my $p_bUsers=$lobby->{battle}->{users};
+  foreach my $bUser (keys %{$p_bUsers}) {
+    next unless(defined $p_bUsers->{$bUser}->{battleStatus} && $p_bUsers->{$bUser}->{battleStatus}->{mode});
+    if(exists $springieExt->{userExt}->{$bUser} && exists $springieExt->{userExt}->{$bUser}->{EffectiveElo}) {
+      my $team=$p_bUsers->{$bUser}->{battleStatus}->{team};
+      $teamsElos{$team}=[] unless(exists $teamsElos{$team});
+      push(@{$teamsElos{$team}},$springieExt->{userExt}->{$bUser}->{EffectiveElo});
+    }else{
+      answer("Unable to predict chances of victory, Elo data missing for player $bUser!");
+      return 0;
+    }
+  }
+  if(keys %teamsElos < 2) {
+    answer('Unable to predict chances of victory, not enough teams in battle!');
+    return 0;
+  }
+
+  return 1 if($checkOnly);
+
+  my $maxTeamSize=0;
+  foreach my $team (keys %teamsElos) {
+    $maxTeamSize = $#{$teamsElos{$team}}+1 if($#{$teamsElos{$team}}+1 > $maxTeamSize);
+  }
+
+  my %teamsAvgElo;
+  foreach my $team (keys %teamsElos) {
+    $teamsAvgElo{$team}=sum(@{$teamsElos{$team}})/$maxTeamSize;
+  }
+
+  my @sortedTeams=sort {$teamsAvgElo{$b} <=> $teamsAvgElo{$a}} (keys %teamsAvgElo);
+  my $bestTeam=shift(@sortedTeams);
+
+  my $predictMsg='Team '.($bestTeam+1).' has ';
+  my @predictStrings;
+  foreach my $team (@sortedTeams) {
+    my $chancesToWin=int(100/(1+10**(($teamsAvgElo{$team}-$teamsAvgElo{$bestTeam})/400))+0.5);
+    push(@predictStrings,"$chancesToWin% chance to win over team ".($team+1));
+  }
+  $predictMsg.=join(', ',@predictStrings);
+  answer($predictMsg);
 }
 
 sub hLobbyClientBattleStatus {
@@ -300,16 +382,27 @@ sub setMapStartBoxes {
   my $firstBox=1;
   foreach my $mapCommand (@mapCommands) {
     if($mapCommand =~ /^\!addbox (\d+) (\d+) (\d+) (\d+)/) {
-      my ($left,$top,$width,$height)=($1,$2,$3,$4);
-      $left*=2;
-      $top*=2;
-      my $right=$left+2*$width;
-      my $bottom=$top+2*$height;
+      my %springieCoor=(left => $1,
+                        top => $2,
+                        width => $3,
+                        height => $4);
+      my %coor=(left => 2*$springieCoor{left},
+                top => 2*$springieCoor{top});
+      $coor{right}=$coor{left}+2*$springieCoor{width};
+      $coor{bottom}=$coor{top}+2*$springieCoor{height};
+      foreach my $c (keys %coor) {
+        if($coor{$c} > 200) {
+          slog("Invalid $c coordinate received from SpringieService/GetMapCommands web service for map $mapName",2);
+          $coor{$c}=200;
+        }
+      }
       if($firstBox) {
         $firstBox=0;
         $#{$p_boxes}=-1;
       }
-      push(@{$p_boxes},"$left $top $right $bottom");
+      push(@{$p_boxes},"$coor{left} $coor{top} $coor{right} $coor{bottom}");
+    }elsif($mapCommand =~ /^\!split ([hv] \d+)$/) {
+      push(@{$p_boxes},$1);
     }
   }
   return 0;
