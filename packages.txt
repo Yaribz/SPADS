@@ -1,6 +1,6 @@
 [stable]
 argparse.py:argparse-1.2.1.py
-getDefaultModOptions.pl:getDefaultModOptions_0.4c.pl
+getDefaultModOptions.pl:getDefaultModOptions_0.4d.pl
 help.dat:help_0.12.0b.dat
 helpSettings.dat:helpSettings_0.5.2c.dat
 PerlUnitSync.dll;5.10:PerlUnitSync-91.0-5.10.dll
@@ -10,12 +10,12 @@ PerlUnitSync.dll;5.16:PerlUnitSync-91.0-5.16.dll
 PerlUnitSync.pm:PerlUnitSync-91.0.pm
 replay_upload.py:replay_upload_0.4.py
 SimpleLog.pm:SimpleLog_0.5.pm
-spads.pl:spads_0.11.17.pl
+spads.pl:spads_0.11.20b.pl
 SpadsConf.pm:SpadsConf_0.11.5.pm
 spadsInstaller.pl:spadsInstaller_0.13a.pl
-SpadsPluginApi.pm:SpadsPluginApi_0.10.pm
+SpadsPluginApi.pm:SpadsPluginApi_0.12.pm
 SpadsUpdater.pm:SpadsUpdater_0.7.pm
-SpringAutoHostInterface.pm:SpringAutoHostInterface_0.9.pm
+SpringAutoHostInterface.pm:SpringAutoHostInterface_0.10.pm
 SpringLobbyInterface.pm:SpringLobbyInterface_0.21.pm
 spring-dedicated.exe;91:spring-dedicated-91.0.exe
 spring-dedicated.exe;94:spring-dedicated-94.0.exe
