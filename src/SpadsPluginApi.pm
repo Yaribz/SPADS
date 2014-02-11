@@ -21,7 +21,7 @@ package SpadsPluginApi;
 use Exporter 'import';
 @EXPORT=qw/$spadsVersion $spadsDir getLobbyState getSpringPid getSpringServerType getTimestamps getRunningBattle getCurrentVote getPlugin addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives/;
 
-my $apiVersion='0.12';
+my $apiVersion='0.13';
 
 our $spadsVersion=$::spadsVer;
 our $spadsDir=$::cwd;
@@ -602,24 +602,6 @@ names.
 This callback allows plugins to force the CPU speed value declared by SPADS in
 lobby. The callback must return the CPU speed value or undef if not forced.
 
-=item C<setInGameVoteMsg($reqYesVotes,$maxReqYesVotes,$reqNoVotes,$maxReqNoVotes)>
-
-This callback allows plugins to customize the vote status message sent in game.
-
-C<$reqYesVotes> is the total number of "yes" votes required for vote to pass (if
-away-voters don't vote).
-
-C<$reqNoVotes> is the total number of "no" votes required for vote to fail (if
-away-voters don't vote).
-
-C<$maxReqYesVotes> is the maximum total number of "yes" votes required for vote
-to pass (if all away-voters come back and vote).
-
-C<$maxReqNoVotes>  is the maximum total number of "no" votes required for vote
-to fail (if all away-voters come back and vote).
-
-The callback must return the in-game message, or undef to keep default message.
-
 =item C<setMapStartBoxes(\@boxes,$mapName,$nbTeams,$nbExtraBox)>
 
 This callback allows plugins to set map start boxes (for "Choose in game" start
@@ -638,6 +620,29 @@ special game mode is enabled such as King Of The Hill.
 
 The callback must return C<1> to prevent start boxes from being replaced by
 other plugins, C<0> else.
+
+=item C<setVoteMsg($reqYesVotes,$maxReqYesVotes,$reqNoVotes,$maxReqNoVotes,$nbRequiredManualVotes)>
+
+This callback allows plugins to customize the vote status messages.
+
+C<$reqYesVotes> is the total number of "yes" votes required for vote to pass (if
+away-voters don't vote).
+
+C<$reqNoVotes> is the total number of "no" votes required for vote to fail (if
+away-voters don't vote).
+
+C<$maxReqYesVotes> is the maximum total number of "yes" votes required for vote
+to pass (if all away-voters come back and vote).
+
+C<$maxReqNoVotes>  is the maximum total number of "no" votes required for vote
+to fail (if all away-voters come back and vote).
+
+C<$nbRequiredManualVotes> is the minimum number of manual votes required for
+vote to be taken into account.
+
+The callback must return a list containing following 2 elements: the lobby vote
+message, and the in-game vote message (undef values can be used to keep default
+messages).
 
 =item C<updateCmdAliases(\%aliases)>
 

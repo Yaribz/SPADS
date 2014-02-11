@@ -8,8 +8,8 @@ use SpadsPluginApi;
 
 no warnings 'redefine';
 
-my $pluginVersion='0.6';
-my $requiredSpadsVersion='0.11.20';
+my $pluginVersion='0.7';
+my $requiredSpadsVersion='0.11.20c';
 
 my %globalPluginParams = ( commandsFile => ['notNull'],
                            helpFile => ['notNull'] );
@@ -408,14 +408,14 @@ sub setMapStartBoxes {
   return 0;
 }
 
-sub setInGameVoteMsg {
+sub setVoteMsg {
   my ($reqYesVotes,$reqNoVotes)=($_[2],$_[4]);
-  return undef unless(getSpringInterface()->getState());
-  return undef unless(isZkMod(getRunningBattle()->{mod}));
+  return (undef,undef) unless(getSpringInterface()->getState());
+  return (undef,undef) unless(isZkMod(getRunningBattle()->{mod}));
   my $p_currentVote=getCurrentVote();
   my $remainingTime=$p_currentVote->{expireTime} - time;
   my $votedCommand=join(' ',@{$p_currentVote->{command}});
-  return "Poll: \"$votedCommand\" ? [!y=$p_currentVote->{yesCount}/$reqYesVotes, !n=$p_currentVote->{noCount}/$reqNoVotes] (${remainingTime}s remaining)";
+  return (undef,"Poll: \"$votedCommand\" ? [!y=$p_currentVote->{yesCount}/$reqYesVotes, !n=$p_currentVote->{noCount}/$reqNoVotes] (${remainingTime}s remaining)");
 }
 
 sub onVoteStart {

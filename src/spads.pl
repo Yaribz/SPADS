@@ -43,7 +43,7 @@ $SIG{TERM} = \&sigTermHandler;
 my $MAX_SIGNEDINTEGER=2147483647;
 my $MAX_UNSIGNEDINTEGER=4294967296;
 
-our $spadsVer='0.11.20b';
+our $spadsVer='0.11.20c';
 
 my %optionTypes = (
   0 => "error",
@@ -2885,16 +2885,17 @@ sub getVoteStateMsg {
     my $requiredVotesString='';
     $requiredVotesString=", votes:$nbManualVotes/$nbRequiredManualVotes" if($nbVotesForVotePart < $nbRequiredManualVotes && $nbRequiredManualVotes-$nbManualVotes > $reqYesVotes-$currentVote{yesCount});
     $lobbyMsg="Vote in progress: \"".join(" ",@{$currentVote{command}})."\" [y:$currentVote{yesCount}/$reqYesVotes$maxYesVotesString, n:$currentVote{noCount}/$reqNoVotes$maxNoVotesString$requiredVotesString] (${remainingTime}s remaining)";
-    my $pluginMsg;
+    my ($pluginLobbyMsg,$pluginGameMsg);
     foreach my $pluginName (@pluginsOrder) {
-      $pluginMsg=$plugins{$pluginName}->setInGameVoteMsg($reqYesVotes,$maxReqYesVotes,$reqNoVotes,$maxReqNoVotes) if($plugins{$pluginName}->can('setInGameVoteMsg'));
-      last if(defined $pluginMsg);
+      ($pluginLobbyMsg,$pluginGameMsg)=$plugins{$pluginName}->setVoteMsg($reqYesVotes,$maxReqYesVotes,$reqNoVotes,$maxReqNoVotes,$nbRequiredManualVotes) if($plugins{$pluginName}->can('setVoteMsg'));
+      last if(defined $pluginLobbyMsg && defined $pluginGameMsg);
     }
-    if(defined $pluginMsg) {
-      $gameMsg=$pluginMsg;
+    if(defined $pluginGameMsg) {
+      $gameMsg=$pluginGameMsg;
     }else{
       $gameMsg=$lobbyMsg;
     }
+    $lobbyMsg=$pluginLobbyMsg if(defined $pluginLobbyMsg);
     if(@remainingVoters) {
       my $remainingVotersString=join(",",@remainingVoters);
       if(length($remainingVotersString) < 50) {
