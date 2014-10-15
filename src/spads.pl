@@ -26,6 +26,7 @@ use POSIX (":sys_wait_h","ceil","uname");
 use Cwd;
 use Digest::MD5 "md5_base64";
 use File::Copy;
+use File::Spec::Functions qw/catfile file_name_is_absolute/;
 use IO::Select;
 use IO::Socket::INET;
 use List::Util "shuffle";
@@ -43,7 +44,7 @@ $SIG{TERM} = \&sigTermHandler;
 my $MAX_SIGNEDINTEGER=2147483647;
 my $MAX_UNSIGNEDINTEGER=4294967296;
 
-our $spadsVer='0.11.20c';
+our $spadsVer='0.11.21';
 
 my %optionTypes = (
   0 => "error",
@@ -5566,7 +5567,7 @@ sub endGameProcessing {
   }
 
   if(defined $demoFile) {
-    $demoFile="$conf{springDataDir}\/$demoFile";
+    $demoFile=catfile($conf{springDataDir},$demoFile) unless(file_name_is_absolute($demoFile));
   }else{
     $demoFile='UNKNOWN';
   }
