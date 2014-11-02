@@ -1,0 +1,13 @@
+[mute]
+!mute <playerName> [<duration>] [<type>] - mutes a player in game, until the end of the game or for <duration> minutes if specified
+"!mute joe" mutes joe in game until the end of the game
+"!mute joe 60" mutes joe in game for 1 hour
+"!mute joe draw" mutes joe regarding draw actions only, until the end of the game
+"!mute joe 30 chat" mutes joe regarding chat messages only, for 30 minutes
+
+[mutes]
+!mutes - lists current in-game mutes
+
+[unmute]
+!unmute <playerName> - unmutes a player in game
+"!unmute joe" unmutes joe in game
