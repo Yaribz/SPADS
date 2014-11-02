@@ -6,12 +6,13 @@ use SpadsPluginApi;
 
 no warnings 'redefine';
 
-my $pluginVersion='0.5';
+my $pluginVersion='0.6';
 my $requiredSpadsVersion='0.11.15';
 
 my %presetPluginParams = ( trueSkillType => ['notNull'],
                            minTrueSkill => ['integer','integerRange','null'],
-                           maxTrueSkill => ['integer','integerRange','null'] );
+                           maxTrueSkill => ['integer','integerRange','null'],
+                           maxUncertainty => ['float','null'] );
 
 sub getVersion { return $pluginVersion; }
 sub getRequiredSpadsVersion { return $requiredSpadsVersion; }
@@ -72,17 +73,20 @@ sub checkTrueSkillLimit {
   my $p_battleStatus=$lobby->{battle}->{users}->{$user}->{battleStatus};
   return unless(defined $p_battleStatus && $p_battleStatus->{mode});
   my $p_conf=getPluginConf();
-  my $matchedLimit;
-  if($p_conf->{minTrueSkill} ne '' && $::battleSkillsCache{$user}->{$p_conf->{trueSkillType}}->{skill} < $p_conf->{minTrueSkill}) {
-    $matchedLimit='minimum';
-  }elsif($p_conf->{maxTrueSkill} ne '' && $::battleSkillsCache{$user}->{$p_conf->{trueSkillType}}->{skill} > $p_conf->{maxTrueSkill}) {
-    $matchedLimit='maximum';
+  my ($userSkill,$userSigma)=($::battleSkillsCache{$user}->{$p_conf->{trueSkillType}}->{skill},$::battleSkillsCache{$user}->{$p_conf->{trueSkillType}}->{sigma});
+  my $reason;
+  if($p_conf->{minTrueSkill} ne '' && $userSkill < $p_conf->{minTrueSkill}) {
+    $reason="$p_conf->{trueSkillType} TrueSkill rank too low";
+  }elsif($p_conf->{maxTrueSkill} ne '' && $userSkill > $p_conf->{maxTrueSkill}) {
+    $reason="$p_conf->{trueSkillType} TrueSkill rank too high";
+  }elsif($p_conf->{maxUncertainty} ne '' && $userSigma > $p_conf->{maxUncertainty}) {
+    $reason="$p_conf->{trueSkillType} TrueSkill uncertainty too high";
   }
-  if(defined $matchedLimit) {
+  if(defined $reason) {
     queueLobbyCommand(["FORCESPECTATORMODE",$user]);
     if(! exists $self->{forceSpecTimestamps}->{$user} || time - $self->{forceSpecTimestamps}->{$user} > 60) {
       $self->{forceSpecTimestamps}->{$user}=time;
-      sayBattle("Forcing spectator mode for $user [auto-spec mode] (reason: $matchedLimit $p_conf->{trueSkillType} TrueSkill limit)");
+      sayBattle("Forcing spectator mode for $user [auto-spec mode] (reason: $reason)");
     }
   }
 }
