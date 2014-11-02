@@ -44,7 +44,7 @@ $SIG{TERM} = \&sigTermHandler;
 my $MAX_SIGNEDINTEGER=2147483647;
 my $MAX_UNSIGNEDINTEGER=4294967296;
 
-our $spadsVer='0.11.21';
+our $spadsVer='0.11.21a';
 
 my %optionTypes = (
   0 => "error",
@@ -2347,7 +2347,8 @@ sub handleRequest {
     
     if($lcCmd eq "endvote") {
       if(%currentVote && exists $currentVote{command}) {
-        if($currentVote{user} eq $user) {
+        my $p_voteCmd=$currentVote{command};
+        if($currentVote{user} eq $user || ($#{$p_voteCmd} > 0 && $p_voteCmd->[0] eq 'joinAs' && $p_voteCmd->[1] eq $user)) {
           executeCommand($source,$user,\@cmd);
           slog("End of \"$lcCmd\" command processing",5);
           return;
