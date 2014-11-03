@@ -30,6 +30,7 @@ use File::Spec::Functions qw/catfile file_name_is_absolute/;
 use IO::Select;
 use IO::Socket::INET;
 use List::Util "shuffle";
+use MIME::Base64;
 use Text::ParseWords;
 use Storable qw/nfreeze dclone/;
 
@@ -44,7 +45,7 @@ $SIG{TERM} = \&sigTermHandler;
 my $MAX_SIGNEDINTEGER=2147483647;
 my $MAX_UNSIGNEDINTEGER=4294967296;
 
-our $spadsVer='0.11.21a';
+our $spadsVer='0.11.22';
 
 my %optionTypes = (
   0 => "error",
@@ -5522,10 +5523,7 @@ sub queueGDR {
       }
       $gameId=generateGameId() unless(defined $gameId);
       $gdr{gameId}=$gameId;
-      my $sGdr=nfreeze(\%gdr);
-      $sGdr=~s/\cJ/<LF>/g;
-      $sGdr=~s/\cM/<CR>/g;
-      $sGdr=~s/\!/<EX>/g;
+      my $sGdr=encode_base64(nfreeze(\%gdr),'');
       push(@gdrQueue,$sGdr);
     }
   }
