@@ -45,7 +45,7 @@ $SIG{TERM} = \&sigTermHandler;
 my $MAX_SIGNEDINTEGER=2147483647;
 my $MAX_UNSIGNEDINTEGER=4294967296;
 
-our $spadsVer='0.11.22a';
+our $spadsVer='0.11.23';
 
 my %optionTypes = (
   0 => "error",
@@ -294,6 +294,7 @@ my %inGameAddedUsers;
 my %inGameAddedPlayers;
 my %runningBattleMapping;
 my %runningBattleReversedMapping;
+my $cheating=0;
 my $p_gameOverResults={};
 my %defeatTimes;
 my $p_answerFunction;
@@ -4153,6 +4154,7 @@ sub launchGame {
   $timestamps{gameOver}=0;
   $timestamps{autoStop}=0;
   %endGameData=();
+  $cheating=0;
   if(%gdr) {
     slog("Starting a new game but previous game data report has not been sent!",2);
     %gdr=();
@@ -4169,7 +4171,7 @@ sub launchGame {
   if($conf{springConfig} ne '') {
     $configString="--config \"$conf{springConfig}\"";
   }
-    
+
   if($conf{useWin32Process}) {
     my $rc=Win32::Process::Create($springWin32Process,
                                   $conf{springServer},
@@ -6411,6 +6413,8 @@ sub hCheat {
   }
 
   return 1 if($checkOnly);
+
+  $cheating=1;
 
   if($#{$p_params} == -1) {
     $autohost->sendChatMessage("/cheat");
@@ -12334,7 +12338,8 @@ sub cbAhServerQuit {
           structure => $gameStructure,
           players => \@gdrPlayers,
           bots => \@gdrBots,
-          result => $gameResult);
+          result => $gameResult,
+          cheating => $cheating);
   if($timestamps{lastGameStartPlaying} > 0) {
     if($timestamps{gameOver} > 0) {
       $gdr{duration}=$timestamps{gameOver} - $timestamps{lastGameStartPlaying};
@@ -12358,6 +12363,7 @@ sub cbAhServerQuit {
                  ahPassword => $conf{lobbyPassword},
                  ahPassHash => $lobby->marshallPasswd($conf{lobbyPassword}),
                  result => $gameResult,
+                 cheating => $cheating,
                  players => dclone(\@gdrPlayers),
                  bots => dclone(\@gdrBots),
                  teamStats => dclone(\%teamStats),

@@ -121,6 +121,7 @@ helpSettings.dat:
 0.5.2a: minor fix in "autoUpdateBinaries" description
 0.5.2b: updated "modName" hosting setting description: the mod can no longer be located in "mods" subdirectory of Spring data directory
 0.5.2c: update map links default values (thanks abma)
+0.5.3: add "cheating" placeholder for endGameCommand and endGameCommandEnv settings
 
 spads.pl:
 ========
@@ -619,6 +620,7 @@ spads.pl:
 0.11.21a: allow the player concerned by a !joinAs vote to end the vote with the !endVote command
 0.11.22: use base64 encoding for GDRs
 0.11.22a: always write hostIP in startscript (workaround for spring-dedicated hosting on localhost only by default since Spring 97)
+0.11.23: GDRs and endGameData now contain a "cheating" entry which indicates if cheats have been enabled in the game
 
 SpadsConf.pm:
 ============
