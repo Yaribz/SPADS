@@ -724,7 +724,7 @@ SpadsConf.pm:
 0.11.3a: use ANSI colors on Windows too
 0.11.4: plugins configuration files can now contain a preset named "_DEFAULT_" which will be used if default global preset isn't found
 0.11.5: add migration function for new cached map data containing start positions
-0.11.6: colon and pipe characters are now escaped in fastTable (should fix the "Invalid value found while dumping data" warnings")
+0.11.6: colon and pipe characters are now escaped in fastTable (should fix the "Invalid value found while dumping data" warnings)
         add floatRange type
 
 spadsInstaller.pl:
