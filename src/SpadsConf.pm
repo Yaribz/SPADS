@@ -29,7 +29,7 @@ use SimpleLog;
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.11.5';
+my $moduleVersion='0.11.6';
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 
 my %globalParameters = (lobbyLogin => ["login"],
@@ -228,6 +228,7 @@ my %paramTypes = (login => '[\w\[\]]{2,20}',
                   integerRange => '\d+\-\d+',
                   nonNullIntegerRange => '[1-9]\d*\-\d+',
                   float => '\d+(\.\d*)?',
+                  floatRange => '\d+\.\d+\-\d+\.\d+',
                   balanceModeType => "(clan|clan;skill|skill|random)",
                   clanModeType => '(tag(\(\d*\))?(;pref(\(\d*\))?)?|pref(\(\d*\))?(;tag(\(\d*\))?)?)',
                   idShareModeType => "(all|auto|manual|clan|off)",
@@ -860,6 +861,8 @@ sub loadFastTableFile {
       }
       if($index == 0) {
         foreach my $keyVal (@fields) {
+          $keyVal =~ s/\t<COLON>/:/g;
+          $keyVal =~ s/\t<PIPE>/\|/g;
           $p_nextKeyData->{$keyVal}={} unless(exists $p_nextKeyData->{$keyVal});
           $p_nextKeyData=$p_nextKeyData->{$keyVal};
         }
@@ -1180,10 +1183,8 @@ sub printFastTable {
       my $p_subResults=$self->printFastTable($p_data->{$k},[\@indexFields,\@dataFields]);
       my $sep=":";
       $sep="" if($isFirst);
-      if($k =~ /[\:\|]/) {
-        $self->{log}->log("Invalid value found while dumping data \"$k\"",2);
-        $k =~ s/[\:\|]/_/g;
-      }
+      $k =~ s/:/\t<COLON>/g;
+      $k =~ s/\|/\t<PIPE>/g;
       my @keyResults=map {"$sep$k".$_} @{$p_subResults};
       push(@result,@keyResults);
     }

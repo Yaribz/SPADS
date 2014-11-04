@@ -45,7 +45,7 @@ $SIG{TERM} = \&sigTermHandler;
 my $MAX_SIGNEDINTEGER=2147483647;
 my $MAX_UNSIGNEDINTEGER=4294967296;
 
-our $spadsVer='0.11.22';
+our $spadsVer='0.11.22a';
 
 my %optionTypes = (
   0 => "error",
@@ -4062,7 +4062,7 @@ sub launchGame {
 
   my %additionalData=('game/AutohostPort' => $conf{autoHostPort},
                       'playerData' => {});
-  $additionalData{'game/HostIP'}=$conf{forceHostIp} if($conf{forceHostIp} ne '');
+  $additionalData{'game/HostIP'}=$conf{forceHostIp};
   foreach my $bUser (keys %{$lobby->{battle}->{users}}) {
     next unless(exists $battleSkills{$bUser} && exists $battleSkills{$bUser}->{class}
                 && exists $lobby->{users}->{$bUser} && exists $lobby->{users}->{$bUser}->{accountId} && $lobby->{users}->{$bUser}->{accountId});

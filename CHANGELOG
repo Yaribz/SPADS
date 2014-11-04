@@ -618,6 +618,7 @@ spads.pl:
 0.11.21: handle absolute file names sent by Spring 98 in SERVER_STARTPLAYING messages (should fix replay uploading)
 0.11.21a: allow the player concerned by a !joinAs vote to end the vote with the !endVote command
 0.11.22: use base64 encoding for GDRs
+0.11.22a: always write hostIP in startscript (workaround for spring-dedicated hosting on localhost only by default since Spring 97)
 
 SpadsConf.pm:
 ============
@@ -721,6 +722,8 @@ SpadsConf.pm:
 0.11.3a: use ANSI colors on Windows too
 0.11.4: plugins configuration files can now contain a preset named "_DEFAULT_" which will be used if default global preset isn't found
 0.11.5: add migration function for new cached map data containing start positions
+0.11.6: colon and pipe characters are now escaped in fastTable (should fix the "Invalid value found while dumping data" warnings")
+        add floatRange type
 
 spadsInstaller.pl:
 =================
