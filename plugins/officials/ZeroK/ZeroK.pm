@@ -8,8 +8,8 @@ use SpadsPluginApi;
 
 no warnings 'redefine';
 
-my $pluginVersion='0.7';
-my $requiredSpadsVersion='0.11.20c';
+my $pluginVersion='0.8';
+my $requiredSpadsVersion='0.11.23';
 
 my %globalPluginParams = ( commandsFile => ['notNull'],
                            helpFile => ['notNull'] );
@@ -36,8 +36,7 @@ sub getDependencies { return ('SpringieExtension'); }
 
 sub new {
   my $class=shift;
-  my $self = { isCheating => 0,
-               extraDataAccepted => [],
+  my $self = { extraDataAccepted => [],
                extraDataReceived => {},
                forceSpecTimestamps => {} };
   bless($self,$class);
@@ -316,14 +315,8 @@ sub balanceBattle {
 
 sub onSpringStart {
   my $self=shift;
-  $self->{isCheating}=0;
   $self->{extraDataAccepted}=[];
   $self->{extraDataReceived}={};
-}
-
-sub postSpadsCommand {
-  my ($self,$command,undef,undef,undef,$commandResult)=@_;
-  $self->{isCheating}=1 if($command eq 'cheat' && (! defined $commandResult || $commandResult ne '0'));
 }
 
 sub hSpringPlayerChat {
@@ -353,7 +346,7 @@ sub onGameEnd {
   my $p_conf=getPluginConf();
   return unless( $p_conf->{submitBattleResults} == 1
                  && isZkMod($p_endGameData->{mod})
-                 && ! $self->{isCheating}
+                 && ! $p_endGameData->{cheating}
                  && $p_endGameData->{startPlayingTimestamp}
                  && $p_endGameData->{result} ne 'undecided'
                  && $p_endGameData->{type} ne 'Solo' );
