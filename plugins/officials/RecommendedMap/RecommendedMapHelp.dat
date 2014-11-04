@@ -1,0 +1,8 @@
+[adaptMap]
+!adaptMap [gameType] [nbPlayers] - tries to change map based on current context (number of players, nbTeams and teamSize), or gameType and nbPlayers if provided
+"!adaptMap" changes map for a game type deduced from nbTeams and teamSize settings, with current number of players
+"!adaptMap Team" changes map for a team game with current number of players
+"!adaptMap Duel" changes map for a duel game
+"!adaptMap FFA 5" changes map for a FFA game with 5 players
+"!adaptMap Chicken 8" changes map for a chicken game with 8 players
+"!adaptMap 12" changes map  for a game type deduced from nbTeams and teamSize settings, with 12 players

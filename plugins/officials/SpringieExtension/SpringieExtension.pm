@@ -12,7 +12,7 @@ use SpadsPluginApi;
 
 no warnings 'redefine';
 
-my $pluginVersion='0.3';
+my $pluginVersion='0.4';
 my $requiredSpadsVersion='0.11.19';
 
 my %globalPluginParams = ( commandsFile => ['notNull'],
@@ -396,16 +396,46 @@ sub GetSpringBattleStartSetup {
   return \%res;
 }
 
+sub getNameOfSimilarSpringieAutohost {
+  my ($self,$gameType)=@_;
+
+  if(! defined $gameType) {
+    my $p_spadsConf=getSpadsConf();
+    my $nbTeams=$p_spadsConf->{nbTeams};
+    if($nbTeams == 1) {
+      $gameType='Chicken';
+    }elsif($nbTeams == 2 && $p_spadsConf->{teamSize} == 1) {
+      $gameType='Duel';
+    }elsif($nbTeams > 2) {
+      $gameType='FFA';
+    }else{
+      $gameType='Team';
+    }
+  }
+
+  my %springieAutohosts=(Duel => 'Elerium',
+                         FFA => 'Neon',
+                         Chicken => 'Iodine');
+
+  return $springieAutohosts{$gameType} if(exists $springieAutohosts{$gameType});
+  return undef;
+}
+
 sub GetRecommendedMap {
-  my ($self,$nbPlayers)=@_;
+  my ($self,$nbPlayers,$autohostName)=@_;
+  slog('GetRecommendedMap called with nbPlayers='.(defined $nbPlayers ? $nbPlayers : 'undef').' and autohostName='.(defined $autohostName ? $autohostName : 'undef'),5);
   my @playerTeams=({IsSpectator => 'false'});
   for my $i (2..$nbPlayers) {
     push(@playerTeams,{IsSpectator => 'false'});
   }
+
+  my %battleContext=(Players => {PlayerTeam => SOAP::Data->value(@playerTeams)});
+  $battleContext{AutohostName}=$autohostName if(defined $autohostName);
+
   my $soapCallResult;
   eval {
     $soapCallResult=$self->{soap}->call('GetRecommendedMap',
-                                        SOAP::Data->name(context => {Players => {PlayerTeam => SOAP::Data->value(@playerTeams)}}),
+                                        SOAP::Data->name(context => \%battleContext),
                                         SOAP::Data->name(pickNew => 'true'));
   };
   if($@) {

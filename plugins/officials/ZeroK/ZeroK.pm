@@ -8,7 +8,7 @@ use SpadsPluginApi;
 
 no warnings 'redefine';
 
-my $pluginVersion='0.8';
+my $pluginVersion='0.9';
 my $requiredSpadsVersion='0.11.23';
 
 my %globalPluginParams = ( commandsFile => ['notNull'],
@@ -243,7 +243,10 @@ sub filterRotationMaps {
   }
   my @bots=keys %{$lobby->{battle}->{bots}};
   $nbEntities+=$#bots+1;
-  my $recommendedMap=getPlugin('SpringieExtension')->GetRecommendedMap($nbEntities);
+  my $springieExt=getPlugin('SpringieExtension');
+  my $autohostName=$springieExt->getNameOfSimilarSpringieAutohost();
+
+  my $recommendedMap=$springieExt->GetRecommendedMap($nbEntities,$autohostName);
   if(! defined $recommendedMap) {
     slog("Unable to find a recommended map through SpringieService/GetRecommendedMap web service",2);
     return $p_rotationMaps;

@@ -1,0 +1,7 @@
+By default this plugin makes SPADS use Springie recommended maps service for
+map rotation, and use Springie map boxes service only if no start box has been
+saved for this map yet. You can change this behaviour by editing the
+RecommendedMap.conf file.
+
+This plugin depends on the SpringieExtension plugin, which must be loaded in
+SPADS beforehand.
