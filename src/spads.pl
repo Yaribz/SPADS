@@ -45,7 +45,7 @@ $SIG{TERM} = \&sigTermHandler;
 my $MAX_SIGNEDINTEGER=2147483647;
 my $MAX_UNSIGNEDINTEGER=4294967296;
 
-our $spadsVer='0.11.23';
+our $spadsVer='0.11.24';
 
 my %optionTypes = (
   0 => "error",
@@ -283,6 +283,7 @@ our %timestamps=(connectAttempt => 0,
 my $syncedSpringVersion='';
 my $fullSpringVersion='';
 our $lobbyState=0; # (0:not_connected, 1:connecting, 2: connected, 3:logged_in, 4:start_data_received, 5:opening_battle, 6:battle_opened)
+my %pendingRedirect;
 my $lobbyBrokenConnection=0;
 my @availableMaps;
 my @availableMods;
@@ -11092,21 +11093,20 @@ sub cbBroadcast {
 }
 
 sub cbRedirect {
-  my (undef,$ip)=@_;
+  my (undef,$ip,$port)=@_;
+  $ip='' unless(defined $ip);
   if($conf{lobbyFollowRedirect}) {
-    slog("Following redirection to address $ip",3);
-    logMsg("battle","=== $conf{lobbyLogin} left ===") if($lobbyState > 5 && $conf{logBattleJoinLeave});
-    $lobbyState=0;
-    foreach my $joinedChan (keys %{$lobby->{channels}}) {
-      logMsg("channel_$joinedChan","=== $conf{lobbyLogin} left ===") if($conf{logChanJoinLeave});
+    if($ip =~ /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/ && $1<256 && $2<256 && $3<256 && $4<256) {
+      $port=$conf{lobbyPort} unless(defined $port);
+      if($port !~ /^\d+$/) {
+        slog("Invalid port \"$port\" received in REDIRECT command, ignoring redirection",1);
+        return;
+      }
+    }else{
+      slog("Invalid IP address \"$ip\" received in REDIRECT command, ignoring redirection",1);
+      return;
     }
-    $lobby->disconnect();
-    $conf{lobbyHost}=$ip;
-    $lobby = SpringLobbyInterface->new(serverHost => $conf{lobbyHost},
-                                       serverPort => $conf{lobbyPort},
-                                       simpleLog => $lobbySimpleLog,
-                                       warnForUnhandledMessages => 0);
-    $timestamps{connectAttempt}=0;
+    %pendingRedirect=(ip => $ip, port => $port);
   }else{
     slog("Ignoring redirection request to address $ip",2);
   }
@@ -13131,6 +13131,25 @@ while($running) {
   }
 
   pingIfNeeded(28);
+
+  if(%pendingRedirect) {
+    my ($ip,$port)=($pendingRedirect{ip},$pendingRedirect{port});
+    %pendingRedirect=();
+    slog("Following redirection to $ip:$port",3);
+    logMsg("battle","=== $conf{lobbyLogin} left ===") if($lobbyState > 5 && $conf{logBattleJoinLeave});
+    $lobbyState=0;
+    foreach my $joinedChan (keys %{$lobby->{channels}}) {
+      logMsg("channel_$joinedChan","=== $conf{lobbyLogin} left ===") if($conf{logChanJoinLeave});
+    }
+    $lobby->disconnect();
+    $conf{lobbyHost}=$ip;
+    $conf{lobbyPort}=$port;
+    $lobby = SpringLobbyInterface->new(serverHost => $conf{lobbyHost},
+                                       serverPort => $conf{lobbyPort},
+                                       simpleLog => $lobbySimpleLog,
+                                       warnForUnhandledMessages => 0);
+    $timestamps{connectAttempt}=0;
+  }
 
   openBattle() if($lobbyState == 4 && ! $closeBattleAfterGame);
 

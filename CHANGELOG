@@ -621,6 +621,8 @@ spads.pl:
 0.11.22: use base64 encoding for GDRs
 0.11.22a: always write hostIP in startscript (workaround for spring-dedicated hosting on localhost only by default since Spring 97)
 0.11.23: GDRs and endGameData now contain a "cheating" entry which indicates if cheats have been enabled in the game
+0.11.24: fix lobby server redirection
+         add support for new port parameter in REDIRECT command
 
 SpadsConf.pm:
 ============
