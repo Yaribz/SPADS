@@ -90,7 +90,7 @@ Documentation
   be generated from any SPADS installation directory by using following
   command (the pod2html.css file can be found [here](doc/pod2html.css)):
   
-        pod2html -css=pod2html.css --infile=SpadsPluginApi.pm --outfile=spadsPluginApiDoc.html
+        pod2html -css=pod2html.css --infile=SpadsPluginApi.pm --outfile=spadsPluginApiDoc.html --title="SPADS Plugin API Doc"
     
 * Additional documentation can be found on [SPADS wiki](http://springrts.com/wiki/SPADS).
 
