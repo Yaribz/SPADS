@@ -227,7 +227,7 @@
 <dt id="onUnload-"><code><code>onUnload()</code></code></dt>
 <dd>
 
-<p>This callback is called when the plugin is unloaded. If the plugin added handlers for SPADS command, lobby commands, or Spring commands, then they must be removed here. If the plugin handles persistent data, then tese data must be serialized here.</p>
+<p>This callback is called when the plugin is unloaded. If the plugin added handlers for SPADS command, lobby commands, or Spring commands, then they must be removed here. If the plugin handles persistent data, then these data must be serialized here.</p>
 
 </dd>
 <dt id="onVoteRequest-source-user-command-remainingVoters-"><code><code>onVoteRequest($source,$user,\@command,\%remainingVoters)</code></code></dt>
@@ -448,6 +448,8 @@
 </dd>
 <dt id="getLobbyState-"><code><code>getLobbyState()</code></code></dt>
 <dd>
+
+<p>This accessor returns an integer describing current lobby state (<code><code>0</code></code>: not connected, <code><code>1</code></code>: connecting, <code><code>2</code></code>: connected, <code><code>3</code></code>: just logged in, <code><code>4</code></code>: lobby data received, <code><code>5</code></code>: opening battle, <code><code>6</code></code>: battle opened)</p>
 
 </dd>
 <dt id="getRunningBattle-"><code><code>getRunningBattle()</code></code></dt>
@@ -715,6 +717,12 @@
 
 <dt id="forkProcess-processFunction-endProcessCallback-"><code><code>forkProcess(\&amp;processFunction,\&amp;endProcessCallback)</code></code></dt>
 <dd>
+
+<p>This function allows plugins to fork a process from main SPADS process, for parallel processing. It returns the PID of the forked process on success, or 0 if the child process couldn&#39;t be forked.</p>
+
+<p><code><code>\&amp;processFunction</code></code> is a reference to a function containing the code to be executed in the forked process (no parameter is passed to this function). This function can call <code><code>exit</code></code> to end the forked process with a specific exit code. If it returns without calling exit, then the exit code <code><code>0</code></code> will be used.</p>
+
+<p><code><code>\&amp;endProcessCallback</code></code> is a reference to a function containing the code to be executed in SPADS main process, once the forked process exited. Following parameters are passed to this function: <code><code>$exitCode</code></code> (exit code of the forked process), <code><code>$signalNb</code></code> (signal number responsible for forked process termination if any), <code><code>$hasCoreDump</code></code> (boolean flag indicating if a core dump occured in the forked process)</p>
 
 </dd>
 </dl>

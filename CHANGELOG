@@ -57,6 +57,7 @@ help.dat:
         new !list parameters: "plugins","pSettings"
 0.12.0a: fix !balance description (commShare has been renamed to nbPlayerById years ago)
 0.12.0b: fix typo in !chskill description
+0.12.0c: add optional parameter for "!list bSettings" to filter map/mod/engine settings
 
 helpSettings.dat:
 ================
@@ -623,6 +624,8 @@ spads.pl:
 0.11.23: GDRs and endGameData now contain a "cheating" entry which indicates if cheats have been enabled in the game
 0.11.24: fix lobby server redirection
          add support for new port parameter in REDIRECT command
+0.11.24a: add optional parameter for "!list bSettings" to filter map/mod/engine settings
+          add parameter to "launchGame" function for configurable pre-launch check bypass
 
 SpadsConf.pm:
 ============
@@ -788,6 +791,7 @@ SpadsPluginApi.pm:
 0.11: new plugin customization callback "setMapStartBoxes"
 0.12: new plugin customization callback "setInGameVoteMsg"
 0.13: "setInGameVoteMsg" customization callback replaced by "setVoteMsg" (plugins can now customize lobby vote messages too)
+0.14: add doc for getLobbyState and forkProcess
 
 SpadsUpdater.pm:
 ===============

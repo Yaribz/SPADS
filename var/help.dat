@@ -181,13 +181,14 @@
 "!learnMaps . spads" learns all the maps hosted currently by players containing "spads" in their name
 
 [list]
-!list users|presets|bPresets|hPresets|settings|bSettings|hSettings|bans|maps|rotationMaps|pref|plugins|pSettings [all|<mapFilter>] - lists various settings
+!list users|presets|bPresets|hPresets|settings|bSettings|hSettings|bans|maps|rotationMaps|pref|plugins|pSettings [all|<mapFilter>|map|mod|engine] - lists various settings
 "!list users" lists AutoHost users and rights
 "!list presets" lists all global SPADS presets
 "!list bPresets" lists allowed battle presets for current global SPADS preset
-"!list settings" lists current modifiable global SPADS settings and their allowed values for current global SPADS preset"
-"!list settings all" lists all current global SPADS settings and their allowed values for current global SPADS preset"
-"!list hSettings" lists current hosting settings and allowed values for current hosting preset"
+"!list settings" lists current modifiable global SPADS settings and their allowed values for current global SPADS preset
+"!list settings all" lists all current global SPADS settings and their allowed values for current global SPADS preset
+"!list hSettings" lists current hosting settings and allowed values for current hosting preset
+"!list bSettings map" lists all current map battle settings and their allowed values for current battle preset
 "!list maps" lists all available maps for current map list
 "!list maps delta" lists available maps containg "delta" in their name for current map list
 "!list rotationMaps" lists available maps for current map rotation list

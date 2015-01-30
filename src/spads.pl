@@ -45,7 +45,7 @@ $SIG{TERM} = \&sigTermHandler;
 my $MAX_SIGNEDINTEGER=2147483647;
 my $MAX_UNSIGNEDINTEGER=4294967296;
 
-our $spadsVer='0.11.24';
+our $spadsVer='0.11.24a';
 
 my %optionTypes = (
   0 => "error",
@@ -4012,49 +4012,52 @@ sub getBattleState {
 }
 
 sub launchGame {
-  my ($force,$checkOnly,$automatic)=@_;
+  my ($force,$checkOnly,$automatic,$checkBypassLevel)=@_;
+  $checkBypassLevel=0 unless(defined $checkBypassLevel);
 
   my $p_battleState = getBattleState();
 
-  if($p_battleState->{battleState} == -4) {
-    answer("Unable to start game, Spring engine does not support more than 251 clients") unless($automatic);
-    return 0;
-  }
-
-  if($p_battleState->{battleState} == -3) {
-    if(! $automatic) {
-      my $p_unsyncedPlayers=$p_battleState->{unsyncedPlayers};
-      if($#{$p_unsyncedPlayers}) {
-        answer("Unable to start game, following players are unsynced: ".join(",",@{$p_unsyncedPlayers}));
-      }else{
-        answer("Unable to start game, $p_unsyncedPlayers->[0] is unsynced");
-      }
+  if($p_battleState->{battleState} < -$checkBypassLevel) {
+    if($p_battleState->{battleState} == -4) {
+      answer("Unable to start game, Spring engine does not support more than 251 clients") unless($automatic);
+      return 0;
     }
-    return 0;
-  }
-
-  if($p_battleState->{battleState} == -2) {
-    if(! $automatic) {
-      my $p_inGamePlayers=$p_battleState->{inGamePlayers};
-      if($#{$p_inGamePlayers}) {
-        answer("Unable to start game, following players are already in game: ".join(",",@{$p_inGamePlayers}));
-      }else{
-        answer("Unable to start game, $p_inGamePlayers->[0] is already in game");
+    
+    if($p_battleState->{battleState} == -3) {
+      if(! $automatic) {
+        my $p_unsyncedPlayers=$p_battleState->{unsyncedPlayers};
+        if($#{$p_unsyncedPlayers}) {
+          answer("Unable to start game, following players are unsynced: ".join(",",@{$p_unsyncedPlayers}));
+        }else{
+          answer("Unable to start game, $p_unsyncedPlayers->[0] is unsynced");
+        }
       }
+      return 0;
     }
-    return 0;
-  }
-
-  if($p_battleState->{battleState} == -1) {
-    if(! $automatic) {
-      my $p_unreadyPlayers=$p_battleState->{unreadyPlayers};
-      if($#{$p_unreadyPlayers}) {
-        answer("Unable to start game, following players are not ready: ".join(",",@{$p_unreadyPlayers}));
-      }else{
-        answer("Unable to start game, $p_unreadyPlayers->[0] is not ready");
+    
+    if($p_battleState->{battleState} == -2) {
+      if(! $automatic) {
+        my $p_inGamePlayers=$p_battleState->{inGamePlayers};
+        if($#{$p_inGamePlayers}) {
+          answer("Unable to start game, following players are already in game: ".join(",",@{$p_inGamePlayers}));
+        }else{
+          answer("Unable to start game, $p_inGamePlayers->[0] is already in game");
+        }
       }
+      return 0;
     }
-    return 0;
+    
+    if($p_battleState->{battleState} == -1) {
+      if(! $automatic) {
+        my $p_unreadyPlayers=$p_battleState->{unreadyPlayers};
+        if($#{$p_unreadyPlayers}) {
+          answer("Unable to start game, following players are not ready: ".join(",",@{$p_unreadyPlayers}));
+        }else{
+          answer("Unable to start game, $p_unreadyPlayers->[0] is not ready");
+        }
+      }
+      return 0;
+    }
   }
 
   if((! $force) && $p_battleState->{battleState} == 0) {
@@ -7853,8 +7856,8 @@ sub hList {
     sayPrivate($user,"  --> Use \"$C{3}!set <settingName> <value>$C{1}\" to change the value of a setting.");
     sayPrivate($user,"  --> Use \"$C{3}!list settings all$C{1}\" to list all global settings.") unless(@filters);
   }elsif($lcData eq "bsettings") {
-    if($#filters > 0 || (@filters && $filters[0] ne "all")) {
-      invalidSyntax($user,"list");
+    if($#filters > 0 || (@filters && (! grep {$filters[0] eq $_} (qw/all map mod engine/)))) {
+      invalidSyntax($user,'list');
       return 0;
     }
     return 1 if($checkOnly);
@@ -7862,7 +7865,10 @@ sub hList {
     $modName=$lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod} if($lobbyState >= 6);
     my $p_modOptions=getModOptions($modName);
     my $p_mapOptions=getMapOptions($currentMap);
-    my @bSettings=('startpostype',keys %{$p_modOptions},keys %{$p_mapOptions});
+    my @bSettings;
+    push(@bSettings,'startpostype') unless(@filters && ($filters[0] eq 'map' || $filters[0] eq 'mod'));
+    push(@bSettings,keys %{$p_modOptions}) unless(@filters && ($filters[0] eq 'map' || $filters[0] eq 'engine'));
+    push(@bSettings,keys %{$p_mapOptions}) unless(@filters && ($filters[0] eq 'engine' || $filters[0] eq 'mod'));
     my @settingsData;
     foreach my $setting (sort @bSettings) {
       my $p_options={};

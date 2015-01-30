@@ -21,7 +21,7 @@ package SpadsPluginApi;
 use Exporter 'import';
 @EXPORT=qw/$spadsVersion $spadsDir getLobbyState getSpringPid getSpringServerType getTimestamps getRunningBattle getCurrentVote getPlugin addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives/;
 
-my $apiVersion='0.13';
+my $apiVersion='0.14';
 
 our $spadsVersion=$::spadsVer;
 our $spadsDir=$::cwd;
@@ -466,7 +466,7 @@ prevents logging)
 
 This callback is called when the plugin is unloaded. If the plugin added
 handlers for SPADS command, lobby commands, or Spring commands, then they must
-be removed here. If the plugin handles persistent data, then tese data must be
+be removed here. If the plugin handles persistent data, then these data must be
 serialized here.
 
 =item C<onVoteRequest($source,$user,\@command,\%remainingVoters)>
@@ -740,6 +740,10 @@ plugins.
 
 =item C<getLobbyState()>
 
+This accessor returns an integer describing current lobby state (C<0>: not
+connected, C<1>: connecting, C<2>: connected, C<3>: just logged in, C<4>: lobby
+data received, C<5>: opening battle, C<6>: battle opened)
+
 =item C<getRunningBattle()>
 
 =item C<getSpadsConf()>
@@ -983,6 +987,22 @@ C<$level> is the log level of the message: C<0> (critical), C<1> (error), C<2>
 =over 2
 
 =item C<forkProcess(\&processFunction,\&endProcessCallback)>
+
+This function allows plugins to fork a process from main SPADS process, for
+parallel processing. It returns the PID of the forked process on success, or 0
+if the child process couldn't be forked.
+
+C<\&processFunction> is a reference to a function containing the code to be
+executed in the forked process (no parameter is passed to this function). This
+function can call C<exit> to end the forked process with a specific exit code.
+If it returns without calling exit, then the exit code C<0> will be used.
+
+C<\&endProcessCallback> is a reference to a function containing the code to be
+executed in SPADS main process, once the forked process exited. Following
+parameters are passed to this function: C<$exitCode> (exit code of the forked
+process), C<$signalNb> (signal number responsible for forked process termination
+if any), C<$hasCoreDump> (boolean flag indicating if a core dump occured in the
+forked process)
 
 =back
 
