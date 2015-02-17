@@ -32,7 +32,7 @@ update.pl:update_0.8a.pl
 [testing]
 argparse.py:argparse-1.2.1.py
 getDefaultModOptions.pl:getDefaultModOptions_0.4d.pl
-help.dat:help_0.12.0b.dat
+help.dat:help_0.12.0c.dat
 helpSettings.dat:helpSettings_0.5.3.dat
 PerlUnitSync.dll;5.10:PerlUnitSync-91.0-5.10.dll
 PerlUnitSync.dll;5.12:PerlUnitSync-91.0-5.12.dll
@@ -41,10 +41,10 @@ PerlUnitSync.dll;5.16:PerlUnitSync-91.0-5.16.dll
 PerlUnitSync.pm:PerlUnitSync-91.0.pm
 replay_upload.py:replay_upload_0.4.py
 SimpleLog.pm:SimpleLog_0.5.pm
-spads.pl:spads_0.11.24.pl
+spads.pl:spads_0.11.24a.pl
 SpadsConf.pm:SpadsConf_0.11.6.pm
 spadsInstaller.pl:spadsInstaller_0.13a.pl
-SpadsPluginApi.pm:SpadsPluginApi_0.13.pm
+SpadsPluginApi.pm:SpadsPluginApi_0.14.pm
 SpadsUpdater.pm:SpadsUpdater_0.7.pm
 SpringAutoHostInterface.pm:SpringAutoHostInterface_0.10.pm
 SpringLobbyInterface.pm:SpringLobbyInterface_0.21.pm
