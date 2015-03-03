@@ -626,6 +626,7 @@ spads.pl:
          add support for new port parameter in REDIRECT command
 0.11.24a: add optional parameter for "!list bSettings" to filter map/mod/engine settings
           add parameter to "launchGame" function for configurable pre-launch check bypass
+0.11.24b: fix "Use of uninitialized value" warnings on invalid !callVote usage
 
 SpadsConf.pm:
 ============

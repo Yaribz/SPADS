@@ -45,7 +45,7 @@ $SIG{TERM} = \&sigTermHandler;
 my $MAX_SIGNEDINTEGER=2147483647;
 my $MAX_UNSIGNEDINTEGER=4294967296;
 
-our $spadsVer='0.11.24a';
+our $spadsVer='0.11.24b';
 
 my %optionTypes = (
   0 => "error",
@@ -6454,13 +6454,12 @@ sub hCheat {
 sub hCallVote {
   my ($source,$user,$p_params,$checkOnly)=@_;
 
-  return 0 if($checkOnly);
-
-  my $p_bossLevels=$spads->getCommandLevels("boss","battle","player","stopped");
-
-  if(@{$p_params}) {
-    $p_params->[0]=$1 if($p_params->[0] =~ /^!(.+)$/);
+  if($checkOnly || ! @{$p_params}) {
+    invalidSyntax($user,'callvote');
+    return 0;
   }
+
+  $p_params->[0]=$1 if($p_params->[0] =~ /^!(.+)$/);
 
   my ($p_cmd,$warnMes)=processAliases($user,$p_params);
   $p_params=$p_cmd if($p_cmd);
@@ -6475,6 +6474,7 @@ sub hCallVote {
     $p_params=\@rewrittenCommand;
   }
 
+  my $p_bossLevels=$spads->getCommandLevels("boss","battle","player","stopped");
   my $p_levelsForVote=getCommandLevels($source,$user,lc($p_params->[0]));
   my $voterLevel=getUserAccessLevel($user);
   $voterLevel=0 if(%bosses && ! exists $bosses{$user} && exists $p_bossLevels->{directLevel} && $voterLevel < $p_bossLevels->{directLevel});
