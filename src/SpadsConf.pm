@@ -29,7 +29,7 @@ use SimpleLog;
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.11.6';
+my $moduleVersion='0.11.6a';
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 
 my %globalParameters = (lobbyLogin => ["login"],
@@ -735,6 +735,10 @@ sub loadTableFile {
         $newConf{$section}=[];
       }
       next;
+    }
+    if(! @pattern) {
+      $sLog->log("No pattern defined for data \"$line\" in configuration file \"$cFile\"",1);
+      return {};
     }
     my $p_data=parseTableLine($sLog,\@pattern,$line);
     if(@{$p_data}) {
