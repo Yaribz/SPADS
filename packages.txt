@@ -7,6 +7,8 @@ PerlUnitSync.dll;5.10:PerlUnitSync-91.0-5.10.dll
 PerlUnitSync.dll;5.12:PerlUnitSync-91.0-5.12.dll
 PerlUnitSync.dll;5.14:PerlUnitSync-91.0-5.14.dll
 PerlUnitSync.dll;5.16:PerlUnitSync-91.0-5.16.dll
+PerlUnitSync.dll;5.18:PerlUnitSync-95.0-5.18.dll
+PerlUnitSync.dll;5.20:PerlUnitSync-95.0-5.20.dll
 PerlUnitSync.pm:PerlUnitSync-91.0.pm
 replay_upload.py:replay_upload_0.4.py
 SimpleLog.pm:SimpleLog_0.5.pm
@@ -38,6 +40,8 @@ PerlUnitSync.dll;5.10:PerlUnitSync-91.0-5.10.dll
 PerlUnitSync.dll;5.12:PerlUnitSync-91.0-5.12.dll
 PerlUnitSync.dll;5.14:PerlUnitSync-91.0-5.14.dll
 PerlUnitSync.dll;5.16:PerlUnitSync-91.0-5.16.dll
+PerlUnitSync.dll;5.18:PerlUnitSync-95.0-5.18.dll
+PerlUnitSync.dll;5.20:PerlUnitSync-95.0-5.20.dll
 PerlUnitSync.pm:PerlUnitSync-91.0.pm
 replay_upload.py:replay_upload_0.4.py
 SimpleLog.pm:SimpleLog_0.5.pm
@@ -69,6 +73,8 @@ PerlUnitSync.dll;5.10:PerlUnitSync-91.0-5.10.dll
 PerlUnitSync.dll;5.12:PerlUnitSync-91.0-5.12.dll
 PerlUnitSync.dll;5.14:PerlUnitSync-91.0-5.14.dll
 PerlUnitSync.dll;5.16:PerlUnitSync-91.0-5.16.dll
+PerlUnitSync.dll;5.18:PerlUnitSync-95.0-5.18.dll
+PerlUnitSync.dll;5.20:PerlUnitSync-95.0-5.20.dll
 PerlUnitSync.pm:PerlUnitSync-91.0.pm
 replay_upload.py:replay_upload_0.4.py
 SimpleLog.pm:SimpleLog_0.5.pm
@@ -100,6 +106,8 @@ PerlUnitSync.dll;5.10:PerlUnitSync-91.0-5.10.dll
 PerlUnitSync.dll;5.12:PerlUnitSync-91.0-5.12.dll
 PerlUnitSync.dll;5.14:PerlUnitSync-91.0-5.14.dll
 PerlUnitSync.dll;5.16:PerlUnitSync-91.0-5.16.dll
+PerlUnitSync.dll;5.18:PerlUnitSync-95.0-5.18.dll
+PerlUnitSync.dll;5.20:PerlUnitSync-95.0-5.20.dll
 PerlUnitSync.pm:PerlUnitSync-91.0.pm
 replay_upload.py:replay_upload_0.4.py
 SimpleLog.pm:SimpleLog_0.5.pm
