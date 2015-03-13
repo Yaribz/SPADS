@@ -29,6 +29,7 @@ use File::Copy;
 use File::Spec::Functions qw/catfile file_name_is_absolute/;
 use IO::Select;
 use IO::Socket::INET;
+use IPC::Cmd 'can_run';
 use List::Util "shuffle";
 use MIME::Base64;
 use Text::ParseWords;
@@ -45,7 +46,7 @@ $SIG{TERM} = \&sigTermHandler;
 my $MAX_SIGNEDINTEGER=2147483647;
 my $MAX_UNSIGNEDINTEGER=4294967296;
 
-our $spadsVer='0.11.24b';
+our $spadsVer='0.11.24c';
 
 my %optionTypes = (
   0 => "error",
@@ -1340,15 +1341,25 @@ sub getLocalLanIp {
     my $ifconfigBin;
     if(-x '/sbin/ifconfig') {
       $ifconfigBin='/sbin/ifconfig';
-    }elsif(-x '/bin/ifconfig') {
-      $ifconfigBin='/bin/ifconfig';
+    }elsif(-x '/usr/sbin/ifconfig') {
+      $ifconfigBin='/usr/sbin/ifconfig';
     }else{
-      $ifconfigBin='ifconfig';
+      $ifconfigBin=can_run('ifconfig');
     }
-    my @ifConfOut=`$ifconfigBin`;
-    foreach my $line (@ifConfOut) {
-      next unless($line =~ /inet addr:\s*(\d+\.\d+\.\d+\.\d+)\s/);
-      push(@ips,$1);
+    my @ipConfOut;
+    if(defined $ifconfigBin) {
+      @ipConfOut=`$ifconfigBin`;
+    }elsif(can_run('ip')) {
+      @ipConfOut=`ip addr`;
+    }else{
+      slog('Unable to find "ifconfig" or "ip" utilities to retrieve LAN IP addresses',2);
+    }
+    foreach my $line (@ipConfOut) {
+      if(defined $ifconfigBin) {
+        push(@ips,$1) if($line =~ /inet addr:\s*(\d+\.\d+\.\d+\.\d+)\s/);
+      }else{
+        push(@ips,$1) if($line =~ /inet\s+(\d+\.\d+\.\d+\.\d+)/);
+      }
     }
   }
   foreach my $ip (@ips) {

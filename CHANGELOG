@@ -627,6 +627,7 @@ spads.pl:
 0.11.24a: add optional parameter for "!list bSettings" to filter map/mod/engine settings
           add parameter to "launchGame" function for configurable pre-launch check bypass
 0.11.24b: fix "Use of uninitialized value" warnings on invalid !callVote usage
+0.11.24c: use "ip" utility to retrieve LAN IPs if "ifconfig" isn't available (thanks gajop)
 
 SpadsConf.pm:
 ============
@@ -794,6 +795,7 @@ SpadsPluginApi.pm:
 0.12: new plugin customization callback "setInGameVoteMsg"
 0.13: "setInGameVoteMsg" customization callback replaced by "setVoteMsg" (plugins can now customize lobby vote messages too)
 0.14: add doc for getLobbyState and forkProcess
+0.15: fix links to Spring autohost interface code (thanks gajop)
 
 SpadsUpdater.pm:
 ===============

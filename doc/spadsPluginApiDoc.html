@@ -542,7 +542,7 @@
 <p>This function allows plugins to set up their own handlers for Spring AutoHost commands received by SPADS from Spring server.</p>
 
 <p><code><code>\%handlers</code></code> is a reference to a hash which contains the handlers to be added: each entry associates a Spring AutoHost command to a handler function implemented by the plugin. The Spring AutoHost command names must match the values of <code><code>%commandCodes</code></code> defined in SpringAutoHostInterface.pm. For example, with <code><code><span class="operator">{</span> <span class="string">SERVER_STARTED</span> <span class="operator">=&gt;</span> <span class="operator">\&amp;</span><span class="variable">hSpringServerStarted</span> <span class="operator">}</span>
-</code></code>, the plugin has to implement the function <code><code>hSpringServerStarted</code></code>. The parameters passed to the handlers are the command tokens: the command name followed by command parameters. Refer to <a href="https://raw.github.com/spring/spring/master/rts/System/AutohostInterface.cpp">Spring autohost protocol specifications (from source comments)</a> for more information.</p>
+</code></code>, the plugin has to implement the function <code><code>hSpringServerStarted</code></code>. The parameters passed to the handlers are the command tokens: the command name followed by command parameters. Refer to <a href="https://raw.github.com/spring/spring/master/rts/Net/AutohostInterface.cpp">Spring autohost protocol specifications (from source comments)</a> for more information.</p>
 
 <p><code><code>$priority</code></code> is the priority of the handlers. Lowest priority number actually means higher priority. If not provided, the plugin name is used as priority, which means it is executed after handlers having priority &lt; 1000, and before handlers having priority &gt; 1000. Usually you don&#39;t need to provide priority, unless you use data managed by other handlers.</p>
 
@@ -815,7 +815,7 @@
 
 <p><a href="http://springrts.com/dl/LobbyProtocol/ProtocolDescription.html">Spring lobby protocol specifications</a></p>
 
-<p><a href="https://raw.github.com/spring/spring/master/rts/System/AutohostInterface.cpp">Spring autohost protocol specifications (from source comments)</a></p>
+<p><a href="https://raw.github.com/spring/spring/master/rts/Net/AutohostInterface.cpp">Spring autohost protocol specifications (from source comments)</a></p>
 
 <p><a href="http://perldoc.perl.org/perlintro.html">Introduction to Perl</a></p>
 
