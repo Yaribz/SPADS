@@ -21,7 +21,7 @@ package SpadsPluginApi;
 use Exporter 'import';
 @EXPORT=qw/$spadsVersion $spadsDir getLobbyState getSpringPid getSpringServerType getTimestamps getRunningBattle getCurrentVote getPlugin addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives/;
 
-my $apiVersion='0.14';
+my $apiVersion='0.15';
 
 our $spadsVersion=$::spadsVer;
 our $spadsDir=$::cwd;
@@ -848,7 +848,7 @@ values of C<%commandCodes> defined in SpringAutoHostInterface.pm. For example,
 with C<< { SERVER_STARTED => \&hSpringServerStarted } >>, the plugin has to
 implement the function C<hSpringServerStarted>. The parameters passed to the
 handlers are the command tokens: the command name followed by command
-parameters. Refer to L<Spring autohost protocol specifications (from source comments)|https://raw.github.com/spring/spring/master/rts/System/AutohostInterface.cpp> for more information.
+parameters. Refer to L<Spring autohost protocol specifications (from source comments)|https://raw.github.com/spring/spring/master/rts/Net/AutohostInterface.cpp> for more information.
 
 C<$priority> is the priority of the handlers. Lowest priority number actually
 means higher priority. If not provided, the plugin name is used as priority,
@@ -1065,7 +1065,7 @@ L<SPADS documentation|http://planetspads.free.fr/spads/doc/spadsDoc.html>, espec
 
 L<Spring lobby protocol specifications|http://springrts.com/dl/LobbyProtocol/ProtocolDescription.html>
 
-L<Spring autohost protocol specifications (from source comments)|https://raw.github.com/spring/spring/master/rts/System/AutohostInterface.cpp>
+L<Spring autohost protocol specifications (from source comments)|https://raw.github.com/spring/spring/master/rts/Net/AutohostInterface.cpp>
 
 L<Introduction to Perl|http://perldoc.perl.org/perlintro.html>
 
