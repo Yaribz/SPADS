@@ -1338,16 +1338,29 @@ sub getLocalLanIp {
   }else{
     $ENV{LANG}="C";
     my $ifconfigBin;
+    my $usingIfconfig=1; #so no booleans? nice
     if(-x '/sbin/ifconfig') {
       $ifconfigBin='/sbin/ifconfig';
     }elsif(-x '/bin/ifconfig') {
       $ifconfigBin='/bin/ifconfig';
+    }elsif(-x '/sbin/ip') {
+      $ifconfigBin='/sbin/ip addr';
+      $usingIfconfig=0;
+    }elsif(-x '/bin/ip') {
+      $ifconfigBin='/bin/ip addr';
+      $usingIfconfig=0;
     }else{
       $ifconfigBin='ifconfig';
     }
     my @ifConfOut=`$ifconfigBin`;
     foreach my $line (@ifConfOut) {
-      next unless($line =~ /inet addr:\s*(\d+\.\d+\.\d+\.\d+)\s/);
+      my $cmpStr;
+      if($usingIfconfig) {
+        $cmpStr='inet addr:\s*(\d+\.\d+\.\d+\.\d+)\s';
+      }else{
+        $cmpStr='inet (\d+\.\d+\.\d+\.\d+)\/';
+      }
+      next unless($line =~ $cmpStr);
       push(@ips,$1);
     }
   }
