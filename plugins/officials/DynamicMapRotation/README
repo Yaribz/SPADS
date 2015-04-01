@@ -1,0 +1,18 @@
+This plugin implements dynamic rotation map lists: the rotation map list is
+changed automatically depending on current battle context (number of players,
+number of teams, start position type...).
+The rules used to indicate which rotation map lists must be applied are defined
+in the configuration file named DynamicMapRotation.conf. The first rule
+matching current battle context is used to choose which map list to apply as
+current rotation list.
+A rather concrete example of configuration using a lot of different map lists
+is provided with this plugin. You can use it as a base to build your own rules,
+but you will need to define the corresponding map lists in your mapLists.conf
+file.
+As for all table-type SPADS configuration files, the first line is the full
+template declaration, which indicates all fields which can be used in your
+rules (these fields are explained in detail in the file header).
+Lines starting with "#?" are template definitions: they define which fields
+(and in which order) are used in the following rules declarations.
+When a rule contains an undefined field, it means it matches any value for this
+field.
