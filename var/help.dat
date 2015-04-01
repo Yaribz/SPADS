@@ -372,9 +372,9 @@
 !version - requests versions of all SPADS components
 
 [vote]
-!vote yes|y|no|n|blanc|b - votes
+!vote yes|y|no|n|blank|b - votes
 "!vote y" votes yes for the current called vote
-"!vote b" votes blanc for the current called vote
+"!vote b" votes blank for the current called vote
 
 [whois]
 !whois <username>|#<accountId>|@<ipAddress> - prints detailed account information

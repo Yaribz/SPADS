@@ -46,7 +46,7 @@ $SIG{TERM} = \&sigTermHandler;
 my $MAX_SIGNEDINTEGER=2147483647;
 my $MAX_UNSIGNEDINTEGER=4294967296;
 
-our $spadsVer='0.11.24c';
+our $spadsVer='0.11.24d';
 
 my %optionTypes = (
   0 => "error",
@@ -8483,7 +8483,13 @@ sub hPlugin {
     $spads->applyPluginPreset($pluginName,$conf{defaultPreset});
     $spads->applyPluginPreset($pluginName,$conf{preset}) unless($conf{preset} eq $conf{defaultPreset});
     $spads->{pluginsConf}->{$pluginName}->{conf}=$p_previousConf if(exists $spads->{pluginsConf}->{$pluginName} && defined $p_previousConf);
-    $plugins{$pluginName}->onReloadConf(defined $param) if($plugins{$pluginName}->can('onReloadConf'));
+    if($plugins{$pluginName}->can('onReloadConf')) {
+      my $reloadConfRes=$plugins{$pluginName}->onReloadConf(defined $param);
+      if(defined $reloadConfRes && ! $reloadConfRes) {
+        answer("Failed to reload $pluginName plugin configuration.");
+        return 0;
+      }
+    }
     answer("Configuration reloaded for plugin $pluginName.");
 
     return 1;
@@ -8921,7 +8927,10 @@ sub hReloadConf {
   }
 
   foreach my $pluginName (@pluginsOrder) {
-    $plugins{$pluginName}->onReloadConf($keepSettings) if($plugins{$pluginName}->can('onReloadConf'));
+    if($plugins{$pluginName}->can('onReloadConf')) {
+      my $reloadConfRes=$plugins{$pluginName}->onReloadConf($keepSettings);
+      answer("Unable to reload $pluginName plugin configuration.") if(defined $reloadConfRes && ! $reloadConfRes);
+    }
   }
 
   my $msg="Spads configuration reloaded";

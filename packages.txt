@@ -43,7 +43,7 @@ PerlUnitSync.dll;5.16:PerlUnitSync-91.0-5.16.dll
 PerlUnitSync.dll;5.18:PerlUnitSync-95.0-5.18.dll
 PerlUnitSync.dll;5.20:PerlUnitSync-95.0-5.20.dll
 PerlUnitSync.pm:PerlUnitSync-91.0.pm
-replay_upload.py:replay_upload_0.4.py
+replay_upload.py:replay_upload_0.5.py
 SimpleLog.pm:SimpleLog_0.5.pm
 spads.pl:spads_0.11.24c.pl
 SpadsConf.pm:SpadsConf_0.11.6a.pm
@@ -67,7 +67,7 @@ update.pl:update_0.8a.pl
 [unstable]
 argparse.py:argparse-1.2.1.py
 getDefaultModOptions.pl:getDefaultModOptions_0.4d.pl
-help.dat:help_0.12.0c.dat
+help.dat:help_0.12.0d.dat
 helpSettings.dat:helpSettings_0.5.3.dat
 PerlUnitSync.dll;5.10:PerlUnitSync-91.0-5.10.dll
 PerlUnitSync.dll;5.12:PerlUnitSync-91.0-5.12.dll
@@ -78,10 +78,10 @@ PerlUnitSync.dll;5.20:PerlUnitSync-95.0-5.20.dll
 PerlUnitSync.pm:PerlUnitSync-91.0.pm
 replay_upload.py:replay_upload_0.5.py
 SimpleLog.pm:SimpleLog_0.5.pm
-spads.pl:spads_0.11.24c.pl
+spads.pl:spads_0.11.24d.pl
 SpadsConf.pm:SpadsConf_0.11.6a.pm
 spadsInstaller.pl:spadsInstaller_0.13a.pl
-SpadsPluginApi.pm:SpadsPluginApi_0.15.pm
+SpadsPluginApi.pm:SpadsPluginApi_0.16.pm
 SpadsUpdater.pm:SpadsUpdater_0.7.pm
 SpringAutoHostInterface.pm:SpringAutoHostInterface_0.10.pm
 SpringLobbyInterface.pm:SpringLobbyInterface_0.21.pm
@@ -100,7 +100,7 @@ update.pl:update_0.8a.pl
 [contrib]
 argparse.py:argparse-1.2.1.py
 getDefaultModOptions.pl:getDefaultModOptions_0.4d.pl
-help.dat:help_0.12.0c.dat
+help.dat:help_0.12.0d.dat
 helpSettings.dat:helpSettings_0.5.3.dat
 PerlUnitSync.dll;5.10:PerlUnitSync-91.0-5.10.dll
 PerlUnitSync.dll;5.12:PerlUnitSync-91.0-5.12.dll
@@ -111,10 +111,10 @@ PerlUnitSync.dll;5.20:PerlUnitSync-95.0-5.20.dll
 PerlUnitSync.pm:PerlUnitSync-91.0.pm
 replay_upload.py:replay_upload_0.5.py
 SimpleLog.pm:SimpleLog_0.5.pm
-spads.pl:spads_0.11.24c.pl
+spads.pl:spads_0.11.24d.pl
 SpadsConf.pm:SpadsConf_0.11.6a.pm
 spadsInstaller.pl:spadsInstaller_0.13a.pl
-SpadsPluginApi.pm:SpadsPluginApi_0.15.pm
+SpadsPluginApi.pm:SpadsPluginApi_0.16.pm
 SpadsUpdater.pm:SpadsUpdater_0.7.pm
 SpringAutoHostInterface.pm:SpringAutoHostInterface_0.10.pm
 SpringLobbyInterface.pm:SpringLobbyInterface_0.21.pm

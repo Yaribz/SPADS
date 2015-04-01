@@ -21,7 +21,7 @@ package SpadsPluginApi;
 use Exporter 'import';
 @EXPORT=qw/$spadsVersion $spadsDir getLobbyState getSpringPid getSpringServerType getTimestamps getRunningBattle getCurrentVote getPlugin addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives/;
 
-my $apiVersion='0.15';
+my $apiVersion='0.16';
 
 our $spadsVersion=$::spadsVer;
 our $spadsDir=$::cwd;
@@ -455,6 +455,12 @@ C<1> if the message must not be treated by other plugins and SPADS core (this
 prevents logging)
 
 =item C<onReloadConf($keepSettings)>
+
+This callback must return:
+
+C<0> if an error occured while reloading the plugin configuration
+
+C<1> if the plugin configuration has been reloaded correctly
 
 =item C<onSettingChange($settingName,$oldValue,$newValue)>
 
