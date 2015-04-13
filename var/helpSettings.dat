@@ -699,7 +699,7 @@ on: Springie commands are emulated
 off: Springie commands are not emulated
 warn: Springie commands are emulated, but a warning message is sent in private to the player when a deprecated command is used
 -
-on
+warn
 
 [global:dataDumpDelay]
 Data dump delay

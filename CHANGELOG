@@ -124,6 +124,7 @@ helpSettings.dat:
 0.5.2b: updated "modName" hosting setting description: the mod can no longer be located in "mods" subdirectory of Spring data directory
 0.5.2c: update map links default values (thanks abma)
 0.5.3: add "cheating" placeholder for endGameCommand and endGameCommandEnv settings
+0.5.3a: default value for springieEmulation is now "warn"
 
 spads.pl:
 ========
