@@ -36,6 +36,7 @@
       <li><a href="#Time-utils">Time utils</a></li>
       <li><a href="#Data-formatting">Data formatting</a></li>
       <li><a href="#Forking-processes">Forking processes</a></li>
+      <li><a href="#Sockets-management">Sockets management</a></li>
     </ul>
   </li>
   <li><a href="#SHARED-DATA">SHARED DATA</a>
@@ -733,6 +734,30 @@
 </dd>
 </dl>
 
+<h2 id="Sockets-management">Sockets management</h2>
+
+<dl>
+
+<dt id="addSocket-socketObject-readCallback"><code>addSocket(\$socketObject,\&amp;readCallback)</code></dt>
+<dd>
+
+<p>This function allows plugins to add sockets to SPADS asynchronous network system. It returns 1 if the socket has correctly been added, 0 else.</p>
+
+<p><code>\$socketObject</code> is a reference to a socket object created by the plugin</p>
+
+<p><code>\&amp;readCallback</code> is a reference to a plugin function containing the code to read the data received on the socket. This function will be called automatically every time data are received on the socket, with the socket object as unique parameter. It must not block, and only unbuffered Perl functions must be used to read data from the socket (<code>sysread()</code> or <code>recv()</code> for example).</p>
+
+</dd>
+<dt id="removeSocket-socketObject"><code>removeSocket(\$socketObject)</code></dt>
+<dd>
+
+<p>This function allows plugins to remove sockets from SPADS asynchronous network system. It returns 1 if the socket has correctly been removed, 0 else.</p>
+
+<p><code>\$socketObject</code> is a reference to a socket object previously added by the plugin</p>
+
+</dd>
+</dl>
+
 <h1 id="SHARED-DATA">SHARED DATA</h1>
 
 <h2 id="Constants">Constants</h2>
@@ -786,6 +811,10 @@
 
 </dd>
 <dt id="plugins"><code>%::plugins</code></dt>
+<dd>
+
+</dd>
+<dt id="sockets"><code>%::sockets</code></dt>
 <dd>
 
 </dd>

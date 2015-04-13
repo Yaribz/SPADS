@@ -24,16 +24,17 @@ use strict;
 use POSIX (":sys_wait_h","ceil","uname");
 
 use Cwd;
-use Digest::MD5 "md5_base64";
+use Digest::MD5 'md5_base64';
 use File::Copy;
 use File::Spec::Functions qw/catfile file_name_is_absolute/;
 use IO::Select;
 use IO::Socket::INET;
 use IPC::Cmd 'can_run';
-use List::Util "shuffle";
+use List::Util 'shuffle';
 use MIME::Base64;
-use Text::ParseWords;
 use Storable qw/nfreeze dclone/;
+use Text::ParseWords;
+use Tie::RefHash;
 
 use SimpleLog;
 use SpadsConf;
@@ -46,7 +47,7 @@ $SIG{TERM} = \&sigTermHandler;
 my $MAX_SIGNEDINTEGER=2147483647;
 my $MAX_UNSIGNEDINTEGER=4294967296;
 
-our $spadsVer='0.11.24d';
+our $spadsVer='0.11.25';
 
 my %optionTypes = (
   0 => "error",
@@ -254,7 +255,8 @@ unshift(@INC,$cwd);
 
 our %conf=%{$spads->{conf}};
 my ($lSock,$ahSock);
-my @sockets=();
+our %sockets;
+tie %sockets, 'Tie::RefHash';
 my $running=1;
 my ($quitAfterGame,$closeBattleAfterGame)=(0,0);
 our %timestamps=(connectAttempt => 0,
@@ -13079,7 +13081,7 @@ if(! $ahSock) {
   exit 1;
 }
 
-push(@sockets,$ahSock);
+$sockets{$ahSock} = sub { $autohost->receiveCommand() };
 
 if(! $win) {
   $SIG{CHLD} = \&sigChldHandler;
@@ -13097,17 +13099,11 @@ while($running) {
       if(time-$timestamps{connectAttempt} > $conf{lobbyReconnectDelay}) {
         $timestamps{connectAttempt}=time;
         $lobbyState=1;
-        if(defined $lSock) {
-          my @newSockets=();
-          foreach my $sock (@sockets) {
-            push(@newSockets,$sock) unless($sock == $lSock);
-          }
-          @sockets=@newSockets;
-        }
+        delete $sockets{$lSock} if(defined $lSock);
         $lobby->addCallbacks({REDIRECT => \&cbRedirect});
         $lSock = $lobby->connect(\&cbLobbyDisconnect,{TASSERVER => \&cbLobbyConnect},\&cbConnectTimeout);
         if($lSock) {
-          push(@sockets,$lSock);
+          $sockets{$lSock} = sub { $lobby->receiveCommand() };
         }else{
           $lobby->removeCallbacks(['REDIRECT']);
           $lobbyState=0;
@@ -13121,14 +13117,9 @@ while($running) {
 
   checkTimedEvents();
 
-  my @pendingSockets=IO::Select->new(@sockets)->can_read(1);
-
+  my @pendingSockets=IO::Select->new(keys %sockets)->can_read(1);
   foreach my $pendingSock (@pendingSockets) {
-    if($pendingSock == $lSock) {
-      $lobby->receiveCommand();
-    }elsif($pendingSock == $ahSock) {
-      $autohost->receiveCommand();
-    }
+    &{$sockets{$pendingSock}}($pendingSock);
   }
 
   if( $lobbyState > 0 && ( (time - $timestamps{connectAttempt} > 30 && time - $lobby->{lastRcvTs} > 60) || $lobbyBrokenConnection ) ) {

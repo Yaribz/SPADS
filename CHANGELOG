@@ -630,6 +630,7 @@ spads.pl:
 0.11.24b: fix "Use of uninitialized value" warnings on invalid !callVote usage
 0.11.24c: use "ip" utility to retrieve LAN IPs if "ifconfig" isn't available (thanks gajop)
 0.11.24d: onReloadConf plugin callback can now return 0 to indicate configuration reload failed
+0.11.25: non-blocking sockets are now handled more generically in a shared structure, this allows plugins to add their own sockets
 
 SpadsConf.pm:
 ============
@@ -799,6 +800,7 @@ SpadsPluginApi.pm:
 0.14: add doc for getLobbyState and forkProcess
 0.15: fix links to Spring autohost interface code (thanks gajop)
 0.16: onReloadConf plugin callback can now return 0 to indicate configuration reload failed
+0.17: new plugin API functions "addSocket,removeSocket" (sockets management for plugins)
 
 SpadsUpdater.pm:
 ===============

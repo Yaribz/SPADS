@@ -1,6 +1,6 @@
 # SpadsPluginApi: SPADS plugin API
 #
-# Copyright (C) 2013  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2013-2015  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -19,9 +19,9 @@
 package SpadsPluginApi;
 
 use Exporter 'import';
-@EXPORT=qw/$spadsVersion $spadsDir getLobbyState getSpringPid getSpringServerType getTimestamps getRunningBattle getCurrentVote getPlugin addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives/;
+@EXPORT=qw/$spadsVersion $spadsDir getLobbyState getSpringPid getSpringServerType getTimestamps getRunningBattle getCurrentVote getPlugin addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives/;
 
-my $apiVersion='0.16';
+my $apiVersion='0.17';
 
 our $spadsVersion=$::spadsVer;
 our $spadsDir=$::cwd;
@@ -160,6 +160,32 @@ sub forkProcess {
     $::forkedProcesses{$childPid}=$p_endCallback;
     return $childPid;
   }
+}
+
+################################
+# Sockets management
+################################
+
+sub addSocket {
+  my ($socket,$p_readCallback)=@_;
+  my $plugin=caller();
+  if(exists $::sockets{$socket}) {
+    ::slog("Unable to add socket for plugin $plugin: socket has already been added!",2);
+    return 0;
+  }
+  $::sockets{$socket}=$p_readCallback;
+  return 1;
+}
+
+sub removeSocket {
+  my $socket=shift;
+  my $plugin=caller();
+  if(! exists $::sockets{$socket}) {
+    ::slog("Unable to remove socket for plugin $plugin: unknown socket!",2);
+    return 0;
+  }
+  delete $::sockets{$socket};
+  return 1;
 }
 
 ################################
@@ -1012,6 +1038,33 @@ forked process)
 
 =back
 
+=head2 Sockets management
+
+=over 2
+
+=item C<addSocket(\$socketObject,\&readCallback)>
+
+This function allows plugins to add sockets to SPADS asynchronous network
+system. It returns 1 if the socket has correctly been added, 0 else.
+
+C<\$socketObject> is a reference to a socket object created by the plugin
+
+C<\&readCallback> is a reference to a plugin function containing the code to
+read the data received on the socket. This function will be called automatically
+every time data are received on the socket, with the socket object as unique
+parameter. It must not block, and only unbuffered Perl functions must be used to
+read data from the socket (C<sysread()> or C<recv()> for example).
+
+=item C<removeSocket(\$socketObject)>
+
+This function allows plugins to remove sockets from SPADS asynchronous network
+system. It returns 1 if the socket has correctly been removed, 0 else.
+
+C<\$socketObject> is a reference to a socket object previously added by the
+plugin
+
+=back
+
 =head1 SHARED DATA
 
 =head2 Constants
@@ -1048,6 +1101,8 @@ strongly recommended to use the accessors from the API instead:
 =item C<$::p_runningBattle>
 
 =item C<%::plugins>
+
+=item C<%::sockets>
 
 =item C<$::spads>
 
