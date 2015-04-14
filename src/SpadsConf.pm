@@ -1,6 +1,6 @@
 # Object-oriented Perl module handling SPADS configuration files
 #
-# Copyright (C) 2008-2013  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2015  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -29,7 +29,7 @@ use SimpleLog;
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.11.6a';
+my $moduleVersion='0.11.6b';
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 
 my %globalParameters = (lobbyLogin => ["login"],
@@ -1770,23 +1770,6 @@ sub dumpDynamicData {
 
 # Business functions - Dynamic data - Map info cache ##########################
 
-sub fixStartPosUncachedMaps {
-  my ($self,$p_localMaps)=@_;
-  my %partiallyCachedMaps;
-  my $nbDeletedMapData=0;
-  foreach my $mapInCache (keys %{$self->{mapInfo}}) {
-    next if(exists $self->{mapInfo}->{$mapInCache}->{nbStartPos});
-    if(exists $p_localMaps->{$mapInCache}) {
-      $partiallyCachedMaps{$mapInCache}=$self->{mapInfo}->{$mapInCache};
-    }else{
-      delete($self->{mapInfo}->{$mapInCache});
-      ++$nbDeletedMapData;
-    }
-  }
-  $self->{log}->log("Deleted partially cached data for $nbDeletedMapData map".($nbDeletedMapData>1?'s':'').' (not available locally anymore)',2) if($nbDeletedMapData);
-  return \%partiallyCachedMaps;
-}
-
 sub getUncachedMaps {
   my ($self,$p_maps)=@_;
   my $p_uncachedMaps=[];
@@ -1794,11 +1777,6 @@ sub getUncachedMaps {
     push(@{$p_uncachedMaps},$map) unless(exists $self->{mapInfo}->{$map});
   }
   return $p_uncachedMaps;
-}
-
-sub isCachedMapInfo {
-  my ($self,$map)=@_;
-  return exists $self->{mapInfo}->{$map};
 }
 
 sub getCachedMapInfo {

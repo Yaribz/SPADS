@@ -2,7 +2,7 @@
 #
 # SPADS: Spring Perl Autohost for Dedicated Server
 #
-# Copyright (C) 2008-2013  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2015  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -47,7 +47,7 @@ $SIG{TERM} = \&sigTermHandler;
 my $MAX_SIGNEDINTEGER=2147483647;
 my $MAX_UNSIGNEDINTEGER=4294967296;
 
-our $spadsVer='0.11.25';
+our $spadsVer='0.11.26';
 
 my %optionTypes = (
   0 => "error",
@@ -920,7 +920,7 @@ sub loadArchives {
   $verbose=0 unless(defined $verbose);
   pingIfNeeded();
   $ENV{SPRING_DATADIR}=$conf{springDataDir};
-  $ENV{SPRING_WRITEDIR}=$conf{springDataDir};
+  $ENV{SPRING_WRITEDIR}=$conf{varDir};
   chdir($conf{springDataDir});
   if(! PerlUnitSync::Init(0,0)) {
     slog("Unable to initialize UnitSync library",1);
@@ -951,30 +951,6 @@ sub loadArchives {
     }else{
       $availableMapsByNames{$mapName}=$mapNb;
     }
-  }
-
-  my $p_partiallyCachedMaps=$spads->fixStartPosUncachedMaps(\%availableMapsByNames);
-  if(%{$p_partiallyCachedMaps}) {
-    my $nbPartiallyCachedMaps=keys %{$p_partiallyCachedMaps};
-    my $latestProgressReportTs=0;
-    my $partiallyCachedMapNb=0;
-    foreach my $partiallyCachedMapName (keys %{$p_partiallyCachedMaps}) {
-      pingIfNeeded();
-      if(time - $latestProgressReportTs > 60) {
-        $latestProgressReportTs=time;
-        slog("Upgrading Spring map info cache... $partiallyCachedMapNb/$nbPartiallyCachedMaps (".(int(100*$partiallyCachedMapNb/$nbPartiallyCachedMaps)).'%)',3);
-      }
-      my $mapNb=$availableMapsByNames{$partiallyCachedMapName};
-      my $nbStartPos=PerlUnitSync::GetMapPosCount($mapNb);
-      $p_partiallyCachedMaps->{$partiallyCachedMapName}->{nbStartPos}=$nbStartPos;
-      $p_partiallyCachedMaps->{$partiallyCachedMapName}->{startPos}=[];
-      for my $startPosNb (0..($nbStartPos-1)) {
-        push(@{$p_partiallyCachedMaps->{$partiallyCachedMapName}->{startPos}},[PerlUnitSync::GetMapPosX($mapNb,$startPosNb),PerlUnitSync::GetMapPosZ($mapNb,$startPosNb)]);
-      }
-      ++$partiallyCachedMapNb;
-    }
-    $spads->cacheMapsInfo();
-    slog("Upgrading Spring map info cache... $nbPartiallyCachedMaps/$nbPartiallyCachedMaps (100%)",3);
   }
 
   my @availableMapsNames=sort keys %availableMapsByNames;
@@ -4212,7 +4188,7 @@ sub launchGame {
     if($childPid == 0) {
       $SIG{CHLD}="" unless($win);
       $ENV{SPRING_DATADIR}=$conf{springDataDir};
-      $ENV{SPRING_WRITEDIR}=$conf{springDataDir};
+      $ENV{SPRING_WRITEDIR}=$conf{varDir};
       if($win) {
         chdir($conf{springDataDir});
         exec("\"$conf{springServer}\" \"$conf{varDir}/startscript.txt\" $configString>>\"$conf{logDir}/spring-$springServerType.log\" 2>\&1") || forkedError("Unable to launch Spring",1);
@@ -5505,7 +5481,7 @@ sub translateSideIfNeeded {
 
 sub getGameDataFromLog {
   my $logFile="$conf{varDir}/infolog.txt";
-  $logFile="$conf{springDataDir}/infolog.txt" if($win);
+  $logFile="$conf{springDataDir}/infolog.txt" if($win && $syncedSpringVersion =~ /^(\d+)/ && $1 < 95);
   my ($demoFile,$gameId);
   if(open(SPRINGLOG,"<$logFile")) {
     while(<SPRINGLOG>) {
@@ -5585,7 +5561,13 @@ sub endGameProcessing {
   }
 
   if(defined $demoFile) {
-    $demoFile=catfile($conf{springDataDir},$demoFile) unless(file_name_is_absolute($demoFile));
+    if(! file_name_is_absolute($demoFile)) {
+      if($syncedSpringVersion =~ /^(\d+)/ && $1 < 95) {
+        $demoFile=catfile($conf{springDataDir},$demoFile);
+      }else{
+        $demoFile=catfile($conf{varDir},$demoFile);
+      }
+    }
   }else{
     $demoFile='UNKNOWN';
   }

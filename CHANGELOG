@@ -632,6 +632,8 @@ spads.pl:
 0.11.24c: use "ip" utility to retrieve LAN IPs if "ifconfig" isn't available (thanks gajop)
 0.11.24d: onReloadConf plugin callback can now return 0 to indicate configuration reload failed
 0.11.25: non-blocking sockets are now handled more generically in a shared structure, this allows plugins to add their own sockets
+0.11.26: Spring read-write data directory is now set to SPADS var directory (for engine version 95 and newer only)
+         remove obsolete code used for map info cache data migration
 
 SpadsConf.pm:
 ============
@@ -738,6 +740,7 @@ SpadsConf.pm:
 0.11.6: colon and pipe characters are now escaped in fastTable (should fix the "Invalid value found while dumping data" warnings)
         add floatRange type
 0.11.6a: add check for table config files containing data with no pattern defined
+0.11.6b: remove obsolete code used for map info cache data migration
 
 spadsInstaller.pl:
 =================
