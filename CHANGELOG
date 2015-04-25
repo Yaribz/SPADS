@@ -634,6 +634,12 @@ spads.pl:
 0.11.25: non-blocking sockets are now handled more generically in a shared structure, this allows plugins to add their own sockets
 0.11.26: Spring read-write data directory is now set to SPADS var directory (for engine version 95 and newer only)
          remove obsolete code used for map info cache data migration
+0.11.27: a lock file is now used to prevent several SPADS instances from using same varDir
+         a PID file is now written in the varDir
+         SpadsUpdater now uses a lock file to prevent race conditions instead of a basic flag file
+         fixed SPADS not restarting correctly on Linux when launched by calling perl explicitely ("perl spads.pl ...")
+         all messages related to fatal events are now logged at CRITICAL log level (some of them were logged at ERROR log level previously)
+         reordered initialization code and documentation generation code
 
 SpadsConf.pm:
 ============
@@ -827,6 +833,7 @@ SpadsUpdater.pm:
 0.6d: add +x flag for python scripts too
 0.7: add optional "syncedSpringVersion" parameter to constructor, for Spring version dependent packages (Windows)
      minor changes in log messages (Windows)
+0.8: a lock file is now used to prevent race conditions instead of a basic flag file
 
 update.pl:
 =========

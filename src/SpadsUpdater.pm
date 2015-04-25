@@ -1,6 +1,6 @@
 # Perl module used for Spads auto-updating functionnality
 #
-# Copyright (C) 2008-2013  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2015  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -20,7 +20,9 @@ package SpadsUpdater;
 
 use strict;
 
+use Fcntl qw(:DEFAULT :flock);
 use File::Copy;
+use Time::HiRes;
 
 my $nullDevice="/dev/null";
 my $win=$^O eq 'MSWin32' ? 1 : 0;
@@ -32,7 +34,7 @@ if($win) {
   $IO::Uncompress::Unzip::UnzipError='';
 }
 
-my $moduleVersion='0.7';
+my $moduleVersion='0.8';
 
 my @constructorParams = qw/sLog localDir repository release packages/;
 my @optionalConstructorParams = 'syncedSpringVersion';
@@ -80,23 +82,64 @@ sub renameToBeDeleted {
   return move($fileName,"$fileName.$i.toBeDeleted");
 }
 
+sub autoRetry {
+  my ($p_f,$retryNb,$delayMs)=@_;
+  $retryNb//=20;
+  $delayMs//=100;
+  my $delayUs=1000*$delayMs;
+  my $res=&{$p_f}();
+  while(! $res) {
+    return 0 unless($retryNb--);
+    Time::HiRes::usleep($delayUs);
+    $res=&{$p_f}();
+  }
+  return $res;
+}
+
+sub isUpdateInProgress {
+  my $self=shift;
+  my $lockFile="$self->{localDir}/SpadsUpdater.lock";
+  my $res=0;
+  if(open(my $lockFh,'>',$lockFile)) {
+    if(flock($lockFh, LOCK_EX|LOCK_NB)) {
+      flock($lockFh, LOCK_UN);
+    }else{
+      $res=1;
+    }
+    close($lockFh);
+  }else{
+    $self->{sLog}->log("Unable to write SpadsUpdater lock file \"$lockFile\" ($!)",1);
+  }
+  return $res;
+}
+
 sub update {
+  my ($self,$verbose,$force)=@_;
+  my $sl=$self->{sLog};
+  my $lockFile="$self->{localDir}/SpadsUpdater.lock";
+  my $lockFh;
+  if(! open($lockFh,'>',$lockFile)) {
+    $sl->log("Unable to write SpadsUpdater lock file \"$lockFile\" ($!)",1);
+    return -2;
+  }
+  if(! autoRetry(sub {flock($lockFh, LOCK_EX|LOCK_NB)})) {
+    $sl->log('Another instance of SpadsUpdater is already running in same directory',1);
+    close($lockFh);
+    return -1;
+  }
+  my $res=$self->updateUnlocked($verbose,$force);
+  flock($lockFh, LOCK_UN);
+  close($lockFh);
+  return $res;
+}
+
+sub updateUnlocked {
   my ($self,$verbose,$force)=@_;
   $verbose=0 unless(defined $verbose);
   $force=0 unless(defined $force);
   my $redirectString="";
   $redirectString=" >$nullDevice 2>&1" unless($verbose);
   my $sl=$self->{sLog};
-  if(-f "$self->{localDir}/updateFlag") {
-    $sl->log("The \"$self->{localDir}/updateFlag\" file already exists, another instance of SpadsUpdater may be running",1);
-    return -1;
-  }
-  if(open(UPDATE_FLAG,">$self->{localDir}/updateFlag")) {
-    close(UPDATE_FLAG);
-  }else{
-    $sl->log("Unable to create \"$self->{localDir}/updateFlag\" file",1);
-    return -2;
-  }
 
   my %currentPackages;
   if(-f "$self->{localDir}/updateInfo.txt") {
@@ -107,7 +150,6 @@ sub update {
       close(UPDATE_INFO);
     }else{
       $sl->log("Unable to read \"$self->{localDir}/updateInfo.txt\" file",1);
-      unlink("$self->{localDir}/updateFlag");
       return -3;
     }
   }
@@ -117,7 +159,6 @@ sub update {
   if($? || ! -f "packages.txt") {
     $sl->log("Unable to download package list",1);
     unlink("packages.txt");
-    unlink("$self->{localDir}/updateFlag");
     return -4;
   }
   if(open(PACKAGES,"<packages.txt")) {
@@ -135,13 +176,11 @@ sub update {
   }else{
     $sl->log("Unable to read downloaded package list",1);
     unlink("packages.txt");
-    unlink("$self->{localDir}/updateFlag");
     return -5;
   }
 
   if(! exists $allAvailablePackages{$self->{release}}) {
     $sl->log("Unable to find any package for release \"$self->{release}\"",1);
-    unlink("$self->{localDir}/updateFlag");
     return -6;
   }
 
@@ -171,7 +210,6 @@ sub update {
               $sl->log("Major version number of package $packageName has changed ($currentVersion -> $availableVersion), which means that it requires manual operations before update.",2);
               $sl->log("Please check the section concerning this update in the manual update help: http://planetspads.free.fr/spads/repository/UPDATE",2);
               $sl->log("Then force package update with \"${perlExecPrefix}update.pl $self->{release} -f $packageName\" (or \"${perlExecPrefix}update.pl $self->{release} -f -a\" to force update of all SPADS packages).",2);
-              unlink("$self->{localDir}/updateFlag");
               return -7;
             }
           }
@@ -185,13 +223,11 @@ sub update {
         if($? || ! -f "$self->{localDir}/$availableVersion.zip") {
           $sl->log("Unable to download package \"$availableVersion.zip\"",1);
           unlink("$self->{localDir}/$availableVersion.zip");
-          unlink("$self->{localDir}/updateFlag");
           return -8;
         }
         if(! unzip("$self->{localDir}/$availableVersion.zip","$self->{localDir}/$availableVersion",{BinModeOut=>1})) {
           $sl->log("Unable to unzip package \"$availableVersion.zip\" ($IO::Uncompress::Unzip::UnzipError)",1);
           unlink("$self->{localDir}/$availableVersion.zip");
-          unlink("$self->{localDir}/updateFlag");
           return -9;
         }
         unlink("$self->{localDir}/$availableVersion.zip");
@@ -201,13 +237,11 @@ sub update {
         if($? || ! -f "$self->{localDir}/$availableVersion.tmp") {
           $sl->log("Unable to download package \"$availableVersion\"",1);
           unlink("$self->{localDir}/$availableVersion.tmp");
-          unlink("$self->{localDir}/updateFlag");
           return -8;
         }
         if(! move("$self->{localDir}/$availableVersion.tmp","$self->{localDir}/$availableVersion")) {
           $sl->log("Unable to rename package \"$availableVersion\"",1);
           unlink("$self->{localDir}/$availableVersion.tmp");
-          unlink("$self->{localDir}/updateFlag");
           return -9;
         }
       }
@@ -221,13 +255,11 @@ sub update {
       next if(-f "$self->{localDir}/$updatedPackage" && (! renameToBeDeleted("$self->{localDir}/$updatedPackage")) && $updatedPackage =~ /\.(exe|dll)$/);
       if(! copy("$self->{localDir}/$availablePackages{$updatedPackage}","$self->{localDir}/$updatedPackage")) {
         $sl->log("Unable to copy \"$self->{localDir}/$availablePackages{$updatedPackage}\" to \"$self->{localDir}/$updatedPackage\", system consistency must be checked manually !",0);
-        unlink("$self->{localDir}/updateFlag");
         return -10;
       }
     }else{
       if(! symlink("$availablePackages{$updatedPackage}","$self->{localDir}/$updatedPackage")) {
         $sl->log("Unable to create symbolic link from \"$self->{localDir}/$updatedPackage\" to \"$self->{localDir}/$availablePackages{$updatedPackage}\", system consistency must be checked manually !",0);
-        unlink("$self->{localDir}/updateFlag");
         return -10;
       }
     }
@@ -246,13 +278,11 @@ sub update {
       close(UPDATE_INFO);
     }else{
       $sl->log("Unable to write update information to \"$self->{localDir}/updateInfo.txt\" file",1);
-      unlink("$self->{localDir}/updateFlag");
       return -11;
     }
     $sl->log("$nbUpdatedPackage package(s) updated",3);
   }
 
-  unlink("$self->{localDir}/updateFlag");
   return $nbUpdatedPackage;
 }
 

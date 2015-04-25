@@ -78,11 +78,11 @@ PerlUnitSync.dll;5.20:PerlUnitSync-91.0-5.20.dll
 PerlUnitSync.pm:PerlUnitSync-91.0.pm
 replay_upload.py:replay_upload_0.5.py
 SimpleLog.pm:SimpleLog_0.5.pm
-spads.pl:spads_0.11.26.pl
+spads.pl:spads_0.11.27.pl
 SpadsConf.pm:SpadsConf_0.11.6b.pm
 spadsInstaller.pl:spadsInstaller_0.13a.pl
 SpadsPluginApi.pm:SpadsPluginApi_0.17.pm
-SpadsUpdater.pm:SpadsUpdater_0.7.pm
+SpadsUpdater.pm:SpadsUpdater_0.8.pm
 SpringAutoHostInterface.pm:SpringAutoHostInterface_0.10.pm
 SpringLobbyInterface.pm:SpringLobbyInterface_0.21.pm
 spring-dedicated.exe;91:spring-dedicated-91.0.exe
@@ -111,11 +111,11 @@ PerlUnitSync.dll;5.20:PerlUnitSync-91.0-5.20.dll
 PerlUnitSync.pm:PerlUnitSync-91.0.pm
 replay_upload.py:replay_upload_0.5.py
 SimpleLog.pm:SimpleLog_0.5.pm
-spads.pl:spads_0.11.26.pl
+spads.pl:spads_0.11.27.pl
 SpadsConf.pm:SpadsConf_0.11.6b.pm
 spadsInstaller.pl:spadsInstaller_0.13a.pl
 SpadsPluginApi.pm:SpadsPluginApi_0.17.pm
-SpadsUpdater.pm:SpadsUpdater_0.7.pm
+SpadsUpdater.pm:SpadsUpdater_0.8.pm
 SpringAutoHostInterface.pm:SpringAutoHostInterface_0.10.pm
 SpringLobbyInterface.pm:SpringLobbyInterface_0.21.pm
 spring-dedicated.exe;91:spring-dedicated-91.0.exe
