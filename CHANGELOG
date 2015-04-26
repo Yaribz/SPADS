@@ -747,6 +747,8 @@ SpadsConf.pm:
         add floatRange type
 0.11.6a: add check for table config files containing data with no pattern defined
 0.11.6b: remove obsolete code used for map info cache data migration
+0.11.7: range notations for user and ban filters now also match decimal numbers
+        greater/less than (or equal to) notations are now also allowed in user and ban filters: >,<,>=,<=
 
 spadsInstaller.pl:
 =================

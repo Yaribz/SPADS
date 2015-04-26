@@ -29,7 +29,7 @@ use SimpleLog;
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.11.6b';
+my $moduleVersion='0.11.7';
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 
 my %globalParameters = (lobbyLogin => ["login"],
@@ -529,8 +529,13 @@ sub findMatchingData {
             $filterFieldValue=$filterAccountId;
           }
         }
-        if($normalSearch && $fieldData =~ /^\d+$/ && $filterFieldValue =~ /^(\d+)\-(\d+)$/) {
+        if($normalSearch && $fieldData =~ /^-?\d+(?:\.\d+)?$/ && $filterFieldValue =~ /^(-?\d+(?:\.\d+)?)-(-?\d+(?:\.\d+)?)$/) {
           if($1 <= $fieldData && $fieldData <= $2) {
+            $matchedField=1;
+            last;
+          }
+        }elsif($normalSearch && $fieldData =~ /^-?\d+(?:\.\d+)?$/ && $filterFieldValue =~ /^[<>]=?-?\d+(?:\.\d+)?$/) {
+          if(eval "$fieldData$filterFieldValue") {
             $matchedField=1;
             last;
           }
