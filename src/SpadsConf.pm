@@ -24,13 +24,14 @@ use Digest::MD5 'md5_base64';
 use FileHandle;
 use File::Basename;
 use File::Copy;
-use Storable qw/nstore retrieve dclone/;
+use List::Util 'first';
+use Storable qw'nstore retrieve dclone';
 
 use SimpleLog;
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.11.8a';
+my $moduleVersion='0.11.8b';
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 
 my %globalParameters = (lobbyLogin => ["login"],
@@ -473,6 +474,16 @@ sub aindex (\@$;$) {
   return -1;
 }
 
+sub any (&@) {
+  my $code = shift;
+  return defined first {&{$code}} @_;
+}
+
+sub none (&@) {
+  my $code = shift;
+  return ! defined first {&{$code}} @_;
+}
+
 sub checkValue {
   my ($value,$p_types)=@_;
   return 1 unless(@{$p_types});
@@ -724,7 +735,7 @@ sub loadTableFile {
       for my $index (0..$#pattern) {
         my @fields=@{$pattern[$index]};
         foreach my $field (@fields) {
-          if(! grep(/^$field$/,@{$p_fieldsArrays->[$index]})) {
+          if(none {$field eq $_} @{$p_fieldsArrays->[$index]}) {
             $sLog->log("Invalid pattern \"$line\" in configuration file \"$cFile\" (invalid field: \"$field\")",1);
             return {};
           }
@@ -849,7 +860,7 @@ sub loadFastTableFile {
       for my $index (0..$#pattern) {
         my @fields=@{$pattern[$index]};
         foreach my $field (@fields) {
-          if(! grep(/^$field$/,@{$p_fieldsArrays->[$index]})) {
+          if(none {$field eq $_} @{$p_fieldsArrays->[$index]}) {
             $sLog->log("Invalid pattern \"$line\" in configuration file \"$cFile\" (invalid field: \"$field\")",1);
             return {};
           }
@@ -931,8 +942,7 @@ sub loadPluginConf {
   my ($self,$pluginName)=@_;
   if(! exists $self->{pluginsConf}->{$pluginName}) {
     if($self->{conf}->{pluginsDir} ne '') {
-      my $quotedPluginDir=quotemeta($self->{conf}->{pluginsDir});
-      unshift(@INC,$self->{conf}->{pluginsDir}) unless(grep {/^$quotedPluginDir$/} @INC);
+      unshift(@INC,$self->{conf}->{pluginsDir}) unless(any {$self->{conf}->{pluginsDir} eq $_} @INC);
     }
     eval "use $pluginName";
     if($@) {

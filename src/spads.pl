@@ -23,16 +23,16 @@ use strict;
 
 use Cwd;
 use Digest::MD5 'md5_base64';
-use Fcntl qw(:DEFAULT :flock);
+use Fcntl qw':DEFAULT :flock';
 use File::Copy;
-use File::Spec::Functions qw/catfile file_name_is_absolute/;
+use File::Spec::Functions qw'catfile file_name_is_absolute';
 use IO::Select;
 use IO::Socket::INET;
 use IPC::Cmd 'can_run';
-use List::Util qw/shuffle/;
+use List::Util qw'first shuffle';
 use MIME::Base64;
-use POSIX (":sys_wait_h","ceil","uname");
-use Storable qw/nfreeze dclone/;
+use POSIX qw':sys_wait_h ceil uname';
+use Storable qw'nfreeze dclone';
 use Text::ParseWords;
 use Tie::RefHash;
 use Time::HiRes;
@@ -48,7 +48,7 @@ $SIG{TERM} = \&sigTermHandler;
 my $MAX_SIGNEDINTEGER=2147483647;
 my $MAX_UNSIGNEDINTEGER=4294967296;
 
-our $spadsVer='0.11.28a';
+our $spadsVer='0.11.28b';
 
 my %optionTypes = (
   0 => "error",
@@ -67,11 +67,11 @@ for my $i (0..15) {
 }
 my @ircStyle=(\%ircColors,'');
 my @noIrcStyle=(\%noColor,'');
-my @readOnlySettings=qw/description commandsfile battlepreset hostingpreset welcomemsg welcomemsgingame maplink ghostmaplink preset battlename advertmsg endgamecommand endgamecommandenv endgamecommandmsg/;
+my @readOnlySettings=qw'description commandsfile battlepreset hostingpreset welcomemsg welcomemsgingame maplink ghostmaplink preset battlename advertmsg endgamecommand endgamecommandenv endgamecommandmsg';
 
-my @packagesSpads=qw/help.dat helpSettings.dat SpringAutoHostInterface.pm SpringLobbyInterface.pm SimpleLog.pm spads.pl SpadsConf.pm SpadsUpdater.pm SpadsPluginApi.pm argparse.py replay_upload.py/;
-my @packagesWinUnitSync=qw/PerlUnitSync.pm PerlUnitSync.dll/;
-my @packagesWinServer=qw/spring-dedicated.exe spring-headless.exe/;
+my @packagesSpads=qw'help.dat helpSettings.dat SpringAutoHostInterface.pm SpringLobbyInterface.pm SimpleLog.pm spads.pl SpadsConf.pm SpadsUpdater.pm SpadsPluginApi.pm argparse.py replay_upload.py';
+my @packagesWinUnitSync=qw'PerlUnitSync.pm PerlUnitSync.dll';
+my @packagesWinServer=qw'spring-dedicated.exe spring-headless.exe';
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 
 eval "use HTML::Entities";
@@ -85,9 +85,9 @@ my $NORMAL_PRIORITY_CLASS=32;
 if($win) {
   eval "use Win32";
   eval "use Win32::API";
-  eval "use Win32::TieRegistry qw(:KEY_)";
+  eval "use Win32::TieRegistry ':KEY_'";
   eval "use Win32::Process";
-  eval "use Win32::Process qw/STILL_ACTIVE/; \$STILL_ACTIVE=STILL_ACTIVE; \$NORMAL_PRIORITY_CLASS=NORMAL_PRIORITY_CLASS;";
+  eval "use Win32::Process 'STILL_ACTIVE'; \$STILL_ACTIVE=STILL_ACTIVE; \$NORMAL_PRIORITY_CLASS=NORMAL_PRIORITY_CLASS;";
   $regLMachine=new Win32::TieRegistry("LMachine");
   $regLMachine->Delimiter("/") if(defined $regLMachine);
   $perlExecPrefix="perl ";
@@ -605,6 +605,16 @@ sub autoRetry {
   return $res;
 }
 
+sub any (&@) {
+  my $code = shift;
+  return defined first {&{$code}} @_;
+}
+
+sub none (&@) {
+  my $code = shift;
+  return ! defined first {&{$code}} @_;
+}
+
 sub generateGameId {
   my @gameIdChars=split('','1234567890abcdef');
   my $gameId='SPADS-';
@@ -678,7 +688,7 @@ sub convertBanDuration {
 
 sub secToTime {
   my $sec=shift;
-  my @units=qw/year day hour minute second/;
+  my @units=qw'year day hour minute second';
   my @amounts=(gmtime $sec)[5,7,2,1,0];
   $amounts[0]-=70;
   my @strings;
@@ -1669,7 +1679,7 @@ sub applyMapBox {
     queueLobbyCommand(["ADDSTARTRECT",$boxId,$left,$top,$right,$bottom]);
     return 1;
   }else{
-    if($#params != 1 || ! grep {/^$params[0]$/} qw/h v c1 c2 c s/) {
+    if($#params != 1 || none {$params[0] eq $_} qw'h v c1 c2 c s') {
       slog("Skipping map box, invalid syntax",2);
       return 0;
     }
@@ -2241,8 +2251,8 @@ sub processAliases {
     }
   }
 
-  if($conf{allowSettingsShortcut} && ! exists $spads->{commands}->{$lcCmd} && ! grep {/^$lcCmd$/} @readOnlySettings) {
-    if(grep {/^$lcCmd$/} qw/users presets hpresets bpresets settings bsettings hsettings bans maps pref rotationmaps plugins psettings/) {
+  if($conf{allowSettingsShortcut} && ! exists $spads->{commands}->{$lcCmd} && none {$lcCmd eq $_} @readOnlySettings) {
+    if(any {$lcCmd eq $_} qw'users presets hpresets bpresets settings bsettings hsettings bans maps pref rotationmaps plugins psettings') {
       unshift(@cmd,"list");
       return (\@cmd,0);
     }else{
@@ -2250,10 +2260,10 @@ sub processAliases {
       if(! $checkPrefResult[0] && $lcCmd ne 'skillmode' && $lcCmd ne 'rankmode') {
         unshift(@cmd,"pSet");
         return (\@cmd,0);
-      }elsif(grep {/^$lcCmd$/i} (keys %{$spads->{values}})) {
+      }elsif(any {$lcCmd eq lc($_)} (keys %{$spads->{values}})) {
         unshift(@cmd,"set");
         return (\@cmd,0);
-      }elsif(grep {/^$lcCmd$/i} (keys %{$spads->{hValues}})) {
+      }elsif(any {$lcCmd eq lc($_)} (keys %{$spads->{hValues}})) {
         unshift(@cmd,"hSet");
         return (\@cmd,0);
       }else{
@@ -2592,7 +2602,7 @@ sub handleVote {
         foreach my $pluginName (@pluginsOrder) {
           $plugins{$pluginName}->onVoteStop(-1) if($plugins{$pluginName}->can('onVoteStop'));
         }
-        delete @currentVote{qw/awayVoteTime source command remainingVoters yesCount noCount blankCount awayVoters manualVoters/};
+        delete @currentVote{qw'awayVoteTime source command remainingVoters yesCount noCount blankCount awayVoters manualVoters'};
         $currentVote{expireTime}=time;
       }elsif(time >= $currentVote{expireTime}) {
         my @awayVoters;
@@ -2625,7 +2635,7 @@ sub handleVote {
           foreach my $pluginName (@pluginsOrder) {
             $plugins{$pluginName}->onVoteStop(-1) if($plugins{$pluginName}->can('onVoteStop'));
           }
-          delete @currentVote{qw/awayVoteTime source command remainingVoters yesCount noCount blankCount awayVoters manualVoters/};
+          delete @currentVote{qw'awayVoteTime source command remainingVoters yesCount noCount blankCount awayVoters manualVoters'};
         }
       }else{
         foreach my $remainingVoter (keys %{$currentVote{remainingVoters}}) {
@@ -5092,25 +5102,15 @@ sub searchMap {
 
 sub cleverSearch {
   my ($string,$p_values)=@_;
-  my $quotedString=quotemeta($string);
   my @values=@{$p_values};
-  return [$string] if(grep {/^$quotedString$/} @values);
-  my @result;
-  foreach my $realValue (@values) {
-    push(@result,$realValue) if($realValue =~ /^$quotedString/);
-  }
+  return [$string] if(any {$string eq $_} @values);
+  my @result=grep {index($_,$string) == 0} @values;
   return \@result if(@result);
-  foreach my $realValue (@values) {
-    push(@result,$realValue) if($realValue =~ /^$quotedString/i);
-  }
+  @result=grep {index(lc($_),lc($string)) == 0} @values;
   return \@result if(@result);
-  foreach my $realValue (@values) {
-    push(@result,$realValue) if($realValue =~ /$quotedString/);
-  }
+  @result=grep {index($_,$string) > 0} @values;
   return \@result if(@result);
-  foreach my $realValue (@values) {
-    push(@result,$realValue) if($realValue =~ /$quotedString/i);
-  }
+  @result=grep {index(lc($_),lc($string)) > 0} @values;
   return \@result;
 }
 
@@ -5745,7 +5745,7 @@ sub hAddBot {
   }
 
   my @allowedLocalAIs=split(/;/,$conf{allowedLocalAIs});
-  if(! grep(/^$botAi$/,@allowedLocalAIs)) {
+  if(none {$botAi eq $_} @allowedLocalAIs) {
     answer("Unable to add bot: AI \"$botAi\" unauthorized [allowedLocalAIs=$conf{allowedLocalAIs}]");
     return 0;
   }
@@ -5922,7 +5922,7 @@ sub hBan {
   my $id;
   my @banFilters=split(/;/,$bannedUser);
   my $p_user={};
-  my @banListsFields=qw/accountId name country cpu rank access bot level ip/;
+  my @banListsFields=qw'accountId name country cpu rank access bot level ip';
   foreach my $banFilter (@banFilters) {
     my ($filterName,$filterValue)=("name",$banFilter);
     if($banFilter =~ /^\#([1-9]\d*)$/) {
@@ -5939,8 +5939,7 @@ sub hBan {
       my $accountId=getLatestUserAccountId($banFilter);
       ($filterName,$filterValue)=("accountId","$accountId($banFilter)") if($accountId =~ /^\d+$/);
     }
-    my $quotedFilterName=quotemeta($filterName);
-    if(grep(/^$quotedFilterName$/,@banListsFields)) {
+    if(any {$filterName eq $_} @banListsFields) {
       if($filterValue =~ /^~(.+)$/) {
         my $invalidRegexp=isInvalidRegexp($1);
         if($invalidRegexp) {
@@ -6370,7 +6369,7 @@ sub hBPreset {
     return 0;
   }
 
-  if(! grep(/^$bPreset$/,@{$spads->{values}->{battlePreset}})) {
+  if(none {$bPreset eq $_} @{$spads->{values}->{battlePreset}}) {
     answer("Switching to battle preset \"$bPreset\" is not allowed from current global preset");
     return 0;
   }
@@ -6888,7 +6887,7 @@ sub hEndVote {
     foreach my $pluginName (@pluginsOrder) {
       $plugins{$pluginName}->onVoteStop(0) if($plugins{$pluginName}->can('onVoteStop'));
     }
-    delete @currentVote{qw/awayVoteTime source command remainingVoters yesCount noCount blankCount awayVoters manualVoters/};
+    delete @currentVote{qw'awayVoteTime source command remainingVoters yesCount noCount blankCount awayVoters manualVoters'};
     $currentVote{expireTime}=time;
   }else{
     answer("Unable to cancel vote (no vote in progress)");
@@ -7147,7 +7146,7 @@ sub hHelp {
     my $p_modOptions=getModOptions($modName);
     my $p_mapOptions=getMapOptions($currentMap);
 
-    if(! exists $spads->{help}->{$helpCommand} && $conf{allowSettingsShortcut} && ! grep {/^$helpCommand$/} @readOnlySettings) {
+    if(! exists $spads->{help}->{$helpCommand} && $conf{allowSettingsShortcut} && none {$helpCommand eq $_} @readOnlySettings) {
       if(exists $spads->{helpSettings}->{global}->{$helpCommand}) {
         $setting=$helpCommand;
         $helpCommand="global";
@@ -7173,7 +7172,7 @@ sub hHelp {
                         bset => "battle setting",
                         pset => "preference");
       $setting=lc($setting);
-      if($setting !~ /^\w+$/ || !grep(/^$helpCommand$/,qw/global set hset bset pset/)) {
+      if($setting !~ /^\w+$/ || none {$helpCommand eq $_} qw'global set hset bset pset') {
         invalidSyntax($user,"help");
         return 0;
       }
@@ -7395,7 +7394,7 @@ sub hHPreset {
     return 0;
   }
 
-  if(! grep(/^$hPreset$/,@{$spads->{values}->{hostingPreset}})) {
+  if(none {$hPreset eq $_} @{$spads->{values}->{hostingPreset}}) {
     answer("Switching to hosting preset \"$hPreset\" is not allowed from current global preset");
     return 0;
   }
@@ -7424,7 +7423,7 @@ sub hHSet {
   $hSetting=lc($hSetting);
 
   foreach my $hParam (keys %{$spads->{hValues}}) {
-    next if(grep(/^$hParam$/,qw/description battleName/));
+    next if(any {$hParam eq $_} qw'description battleName');
     if($hSetting eq lc($hParam)) {
       my $allowed=0;
       foreach my $allowedValue (@{$spads->{hValues}->{$hParam}}) {
@@ -7793,7 +7792,7 @@ sub hList {
       my $presetString="    $C{14}";
       if($preset eq $conf{preset}) {
         $presetString="[*] $C{12}";
-      }elsif(grep(/^$preset$/,@{$spads->{values}->{preset}})) {
+      }elsif(any {$preset eq $_} @{$spads->{values}->{preset}}) {
         $presetString="[ ] ";
       }
       $presetString.=$B if($preset eq $conf{defaultPreset});
@@ -7811,7 +7810,7 @@ sub hList {
       my $presetString="    $C{14}";
       if($bPreset eq $conf{battlePreset}) {
         $presetString="[*] $C{12}";
-      }elsif(grep(/^$bPreset$/,@{$spads->{values}->{battlePreset}})) {
+      }elsif(any {$bPreset eq $_} @{$spads->{values}->{battlePreset}}) {
         $presetString="[ ] ";
       }
       $presetString.=$bPreset;
@@ -7827,7 +7826,7 @@ sub hList {
       my $presetString="    $C{14}";
       if($hPreset eq $conf{hostingPreset}) {
         $presetString="[*] $C{12}";
-      }elsif(grep(/^$hPreset$/,@{$spads->{values}->{hostingPreset}})) {
+      }elsif(any {$hPreset eq $_} @{$spads->{values}->{hostingPreset}}) {
         $presetString="[ ] ";
       }
       $presetString.=$hPreset;
@@ -7860,7 +7859,7 @@ sub hList {
     foreach my $pluginName (sort keys %{$spads->{pluginsConf}}) {
       my $p_values=$spads->{pluginsConf}->{$pluginName}->{values};
       foreach my $setting (sort keys %{$p_values}) {
-        next if(grep(/^$setting$/,qw/commandsFile helpFile/));
+        next if(any {$setting eq $_} qw'commandsFile helpFile');
         my $allowedValues=join(" | ",@{$p_values->{$setting}});
         my $currentVal=$spads->{pluginsConf}->{$pluginName}->{conf}->{$setting};
         my ($coloredSetting,$coloredValue)=($setting,$currentVal);
@@ -7897,7 +7896,7 @@ sub hList {
     return 1 if($checkOnly);
     my @settingsData;
     foreach my $setting (sort keys %{$spads->{values}}) {
-      next if(grep(/^$setting$/,qw/description commandsFile battlePreset hostingPreset welcomeMsg welcomeMsgInGame preset mapLink ghostMapLink advertMsg endGameCommand endGameCommandEnv endGameCommandMsg/));
+      next if(any {$setting eq $_} qw'description commandsFile battlePreset hostingPreset welcomeMsg welcomeMsgInGame preset mapLink ghostMapLink advertMsg endGameCommand endGameCommandEnv endGameCommandMsg');
       next if(! @filters && $#{$spads->{values}->{$setting}} < 1 && $setting ne "map");
       my $allowedValues=join(" | ",@{$spads->{values}->{$setting}});
       my ($coloredSetting,$coloredValue)=($setting,$conf{$setting});
@@ -7928,7 +7927,7 @@ sub hList {
     sayPrivate($user,"  --> Use \"$C{3}!set <settingName> <value>$C{1}\" to change the value of a setting.");
     sayPrivate($user,"  --> Use \"$C{3}!list settings all$C{1}\" to list all global settings.") unless(@filters);
   }elsif($lcData eq "bsettings") {
-    if($#filters > 0 || (@filters && (! grep {$filters[0] eq $_} (qw/all map mod engine/)))) {
+    if($#filters > 0 || (@filters && (none {$filters[0] eq $_} qw'all map mod engine'))) {
       invalidSyntax($user,'list');
       return 0;
     }
@@ -7993,7 +7992,7 @@ sub hList {
     return 1 if($checkOnly);
     my @settingsData;
     foreach my $setting (sort keys %{$spads->{hValues}}) {
-      next if(grep(/^$setting$/,qw/description battleName/));
+      next if(any {$setting eq $_} qw'description battleName');
       next if(! @filters && $#{$spads->{hValues}->{$setting}} < 1);
       if($setting eq 'password') {
         push(@settingsData,{"$C{5}Name$C{1}" => ($#{$spads->{hValues}->{password}} < 1 ? $C{14} : '').'password',
@@ -8490,7 +8489,7 @@ sub hPlugin {
   }
 
   my $actionIsAllowed=0;
-  foreach my $allowedAction (qw/load unload reload reloadConf set/) {
+  foreach my $allowedAction (qw'load unload reload reloadConf set') {
     if(lc($action) eq lc($allowedAction)) {
       $action=$allowedAction;
       $actionIsAllowed=1;
@@ -8580,7 +8579,7 @@ sub hPlugin {
 
     my $setting;
     foreach my $pluginSetting (keys %{$p_pluginConf->{values}}) {
-      next if(grep(/^$pluginSetting$/,qw/commandsFile helpFile/));
+      next if(any {$pluginSetting eq $_} qw'commandsFile helpFile');
       if(lc($param) eq lc($pluginSetting)) {
         $setting=$pluginSetting;
         last;
@@ -8675,7 +8674,7 @@ sub hPreset {
     return 0;
   }
 
-  if(! grep(/^$preset$/,@{$spads->{values}->{preset}})) {
+  if(none {$preset eq $_} @{$spads->{values}->{preset}}) {
     answer("Switching to preset \"$preset\" is not allowed currently (use \"!forcePreset $preset\" to bypass)");
     return 0;
   }
@@ -9561,7 +9560,7 @@ sub hSet {
   }
 
   foreach my $param (keys %{$spads->{values}}) {
-    next if(grep(/^$param$/,qw/description commandsFile battlePreset hostingPreset welcomeMsg welcomeMsgInGame mapLink ghostMapLink preset advertMsg endGameCommand endGameCommandEnv endGameCommandMsg/));
+    next if(any {$param eq $_} qw'description commandsFile battlePreset hostingPreset welcomeMsg welcomeMsgInGame mapLink ghostMapLink preset advertMsg endGameCommand endGameCommandEnv endGameCommandMsg');
     if($setting eq lc($param)) {
       my $allowed=0;
       foreach my $allowedValue (@{$spads->{values}->{$param}}) {
@@ -9721,7 +9720,7 @@ sub hSplit {
   }
   my $splitType=$p_params->[0];
   my $splitSize=$p_params->[1];
-  if(! grep {/^$splitType$/} qw/h v c1 c2 c s/) {
+  if(none {$splitType eq $_} qw'h v c1 c2 c s') {
     invalidSyntax($user,"split","invalid split type \"$splitType\"");
     return 0;
   }
@@ -10306,7 +10305,7 @@ sub hStatus {
         }
         push(@clientsStatus,\%coloredStatus);
       }
-      my @defaultStatusColumns=(qw/Name Team Id Clan Ready Rank Skill ID/);
+      my @defaultStatusColumns=qw'Name Team Id Clan Ready Rank Skill ID';
       my %defaultStatusColumnsHash;
       @defaultStatusColumnsHash{@defaultStatusColumns}=(1) x @defaultStatusColumns;
       my @newPluginStatusColumns;
@@ -10437,7 +10436,7 @@ sub hUnban {
 
   my @banFilters=split(/;/,$bannedUser);
   my $p_filters={};
-  my @banListsFields=qw/accountId name country cpu rank access bot level ip nameOrAccountId/;
+  my @banListsFields=qw'accountId name country cpu rank access bot level ip nameOrAccountId';
   foreach my $banFilter (@banFilters) {
     my ($filterName,$filterValue)=('nameOrAccountId',$banFilter);
     if($banFilter =~ /^\#([1-9]\d*)$/) {
@@ -10447,8 +10446,7 @@ sub hUnban {
     }elsif($banFilter =~ /^([^=<>]+)([<>]=?.+)$/) {
       ($filterName,$filterValue)=($1,$2);
     }
-    my $quotedFilterName=quotemeta($filterName);
-    if(grep(/^$quotedFilterName$/,@banListsFields)) {
+    if(any {$filterName eq $_} @banListsFields) {
       $p_filters->{$filterName}=$filterValue;
     }else{
       invalidSyntax($user,"unban","invalid ban filter name \"$filterName\"");
@@ -10715,7 +10713,7 @@ sub hUpdate {
     $release=$conf{autoUpdateRelease};
   }elsif($#{$p_params} == 0) {
     $release=$p_params->[0];
-    if(! grep {/^$release$/}  qw/stable testing unstable contrib/) {
+    if(none {$release eq $_} qw'stable testing unstable contrib') {
       invalidSyntax($user,"update","invalid release \"$release\"");
       return 0;
     }
@@ -10833,7 +10831,7 @@ sub hVote {
   $vote='y' if($vote eq '1');
   $vote='n' if($vote eq '2');
   my $isInvalid=1;
-  foreach my $choice (qw/yes no blank/) {
+  foreach my $choice (qw'yes no blank') {
     if(index($choice,$vote) == 0) {
       $vote=$choice;
       $isInvalid=0;
@@ -12723,7 +12721,7 @@ sub loadPluginModule {
     slog("Unable to initialize plugin module \"$pluginName\"",1);
     return 0;
   }
-  my @mandatoryPluginFunctions=qw/getVersion getRequiredSpadsVersion/;
+  my @mandatoryPluginFunctions=qw'getVersion getRequiredSpadsVersion';
   foreach my $mandatoryPluginFunction (@mandatoryPluginFunctions) {
     if(! $plugin->can($mandatoryPluginFunction)) {
       slog("Unable to load plugin \"$pluginName\", mandatory plugin function missing: $mandatoryPluginFunction",1);

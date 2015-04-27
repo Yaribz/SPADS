@@ -657,6 +657,7 @@ spads.pl:
          the !unban command now also accepts ban hashes as parameter to ease specific ban entry removal
 0.11.28a: remove import of "any" function from List::Util (only available in recent Perl versions)
           use "//=" syntax instead of "if(defined ...)"
+0.11.28b: homogenize quotes and use more efficient list searching functions
 
 SpadsConf.pm:
 ============
@@ -770,6 +771,7 @@ SpadsConf.pm:
         the kickBanDuration global setting now also accepts durations expressed in number of games
         dynamic ban entries can now be identified by their hash number in "!list bans" and "!unban" commands
 0.11.8a: use "//=" syntax instead of "if(defined ...)"
+0.11.8b: homogenize quotes and use more efficient list searching functions
 
 spadsInstaller.pl:
 =================
