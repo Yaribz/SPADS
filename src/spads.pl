@@ -29,7 +29,7 @@ use File::Spec::Functions qw/catfile file_name_is_absolute/;
 use IO::Select;
 use IO::Socket::INET;
 use IPC::Cmd 'can_run';
-use List::Util qw/any shuffle/;
+use List::Util qw/shuffle/;
 use MIME::Base64;
 use POSIX (":sys_wait_h","ceil","uname");
 use Storable qw/nfreeze dclone/;
@@ -48,7 +48,7 @@ $SIG{TERM} = \&sigTermHandler;
 my $MAX_SIGNEDINTEGER=2147483647;
 my $MAX_UNSIGNEDINTEGER=4294967296;
 
-our $spadsVer='0.11.28';
+our $spadsVer='0.11.28a';
 
 my %optionTypes = (
   0 => "error",
@@ -483,8 +483,8 @@ sub sigChldHandler {
 
 sub handleSigChld {
   my ($childPid,$exitCode,$signalNb,$hasCoreDump)=@_;
-  $signalNb=0 unless(defined $signalNb);
-  $hasCoreDump=0 unless(defined $hasCoreDump);
+  $signalNb//=0;
+  $hasCoreDump//=0;
   if($childPid == $springPid) {
     if(%{$p_runningBattle}) {
       %springPrematureEndData=(ec => $exitCode, ts => time, signal => $signalNb, core => $hasCoreDump);
@@ -749,8 +749,8 @@ sub rightPadString {
 
 sub formatArray {
   my ($p_fields,$p_entries,$title,$maxLength)=@_;
-  $title='' unless(defined $title);
-  $maxLength=100 unless(defined $maxLength);
+  $title//='';
+  $maxLength//=100;
   my @fields=@{$p_fields};
   my @entries=@{$p_entries};
   my @rows;
@@ -899,7 +899,7 @@ sub generateColorPanel {
 
 sub updateTargetMod {
   my $verbose=shift;
-  $verbose=0 unless(defined $verbose);
+  $verbose//=0;
   if($spads->{hSettings}->{modName} =~ /^~(.+)$/) {
     my $modFilter=$1;
     my $newMod="";
@@ -923,7 +923,7 @@ sub updateTargetMod {
 sub pingIfNeeded {
   return unless($lobbyState > 1);
   my $delay=shift;
-  $delay=5 unless(defined $delay);
+  $delay//=5;
   if( ( time - $timestamps{ping} > 5 && time - $lobby->{lastSndTs} > $delay )
       || ( time - $timestamps{ping} > 28 && time - $lobby->{lastRcvTs} > 28 ) ) {
     sendLobbyCommand([['PING']],5);
@@ -933,7 +933,7 @@ sub pingIfNeeded {
 
 sub loadArchives {
   my $verbose=shift;
-  $verbose=0 unless(defined $verbose);
+  $verbose//=0;
   pingIfNeeded();
   $ENV{SPRING_DATADIR}=$conf{springDataDir};
   $ENV{SPRING_WRITEDIR}=$conf{varDir};
@@ -1373,11 +1373,7 @@ sub getLocalLanIp {
 }
 
 sub getDirModifTime {
-  my $dir=shift;
-  my @dirStats=stat($dir);
-  my $dirModifTs=$dirStats[9];
-  return $dirModifTs if(defined $dirModifTs);
-  return 0;
+  return (stat(shift))[9] // 0;
 }
 
 sub getArchivesChangeTime {
@@ -1462,7 +1458,7 @@ sub closeBattleAfterGame {
 
 sub rehostAfterGame {
   my ($reason,$silent)=@_;
-  $silent=0 unless(defined $silent);
+  $silent//=0;
   $closeBattleAfterGame=2;
   my $msg="Rehost scheduled (reason: $reason)";
   broadcastMsg($msg) unless($silent);
@@ -1522,7 +1518,7 @@ sub queueLobbyCommand {
 
 sub sendLobbyCommand {
   my ($p_params,$size)=@_;
-  $size=computeMessageSize($p_params->[0]) unless(defined $size);
+  $size//=computeMessageSize($p_params->[0]);
   my $timestamp=time;
   $lastSentMessages{$timestamp}=[] unless(exists $lastSentMessages{$timestamp});
   push(@{$lastSentMessages{$timestamp}},$size);
@@ -2280,9 +2276,7 @@ sub processAliases {
     foreach my $token (@{$p_cmdAliases->{$lcCmd}}) {
       if($token =~ /^\%(\d)\%$/) {
         $paramsReordered=1;
-        my $realParam='';
-        $realParam=$cmd[$1] if(defined $cmd[$1]);
-        push(@newCmd,$realParam);
+        push(@newCmd,$cmd[$1] // '');
       }else{
         push(@newCmd,$token);
       }
@@ -2314,7 +2308,7 @@ sub getCmdAliases {
 
 sub handleRequest {
   my ($source,$user,$command,$floodCheck)=@_;
-  $floodCheck=1 unless(defined $floodCheck);
+  $floodCheck//=1;
   
   return if($floodCheck && checkCmdFlood($user));
   
@@ -2459,7 +2453,7 @@ sub handleRequest {
 
 sub executeCommand {
   my ($source,$user,$p_cmd,$checkOnly)=@_;
-  $checkOnly=0 unless(defined $checkOnly);
+  $checkOnly//=0;
 
   my %answerFunctions = ( pv => sub { sayPrivate($user,$_[0]) },
                           battle => \&sayBattle,
@@ -2495,7 +2489,7 @@ sub executeCommand {
 
 sub invalidSyntax {
   my ($user,$cmd,$reason)=@_;
-  $reason="" unless(defined $reason);
+  $reason//='';
   $reason=" (".$reason.")" if($reason);
   if(exists $lobby->{users}->{$user}) {
     if($lobby->{users}->{$user}->{status}->{inGame}) {
@@ -4001,7 +3995,7 @@ sub getBattleState {
   if($conf{nbTeams} != 1) {
     my $teamSize;
     foreach my $team (keys %teamCount) {
-      $teamSize=$teamCount{$team} unless(defined $teamSize);
+      $teamSize//=$teamCount{$team};
       if($teamSize != $teamCount{$team}) {
         push(@warnings,"teams are uneven");
         last;
@@ -4019,7 +4013,7 @@ sub getBattleState {
 
 sub launchGame {
   my ($force,$checkOnly,$automatic,$checkBypassLevel)=@_;
-  $checkBypassLevel=0 unless(defined $checkBypassLevel);
+  $checkBypassLevel//=0;
 
   my $p_battleState = getBattleState();
 
@@ -5013,7 +5007,7 @@ sub autoManageBattle {
 
 sub advancedMapSearch {
   my ($val,$p_values,$atEnd)=@_;
-  $atEnd=0 unless(defined $atEnd);
+  $atEnd//=0;
   my @values=@{$p_values};
   foreach my $value (@values) {
     return $value if(lc($value) eq lc($val) || $value eq $val.'.smf');
@@ -5601,7 +5595,7 @@ sub endGameProcessing {
   }else{
     $demoFile='UNKNOWN';
   }
-  $gameId='UNKNOWN' unless(defined $gameId);
+  $gameId//='UNKNOWN';
 
   $endGameData{demoFile}=$demoFile;
   $endGameData{gameId}=$gameId;
@@ -7691,9 +7685,9 @@ sub hLearnMaps {
   }
 
   my ($mapFilter,$hostFilter)=@{$p_params};
-  $mapFilter="" unless(defined $mapFilter);
+  $mapFilter//='';
   my $quotedMapFilter=quotemeta($mapFilter);
-  $hostFilter="" unless(defined $hostFilter);
+  $hostFilter//='';
   my $quotedHostFilter=quotemeta($hostFilter);
 
   my %seenMaps;
@@ -11218,10 +11212,10 @@ sub cbBroadcast {
 
 sub cbRedirect {
   my (undef,$ip,$port)=@_;
-  $ip='' unless(defined $ip);
+  $ip//='';
   if($conf{lobbyFollowRedirect}) {
     if($ip =~ /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/ && $1<256 && $2<256 && $3<256 && $4<256) {
-      $port=$conf{lobbyPort} unless(defined $port);
+      $port//=$conf{lobbyPort};
       if($port !~ /^\d+$/) {
         slog("Invalid port \"$port\" received in REDIRECT command, ignoring redirection",1);
         return;
@@ -11613,7 +11607,7 @@ sub cbJoinBattleRequest {
     my $pluginReason;
     foreach my $pluginName (@pluginsOrder) {
       $pluginReason=$plugins{$pluginName}->onJoinBattleRequest($user,$ip) if($plugins{$pluginName}->can('onJoinBattleRequest'));
-      $pluginReason=0 unless(defined $pluginReason);
+      $pluginReason//=0;
       last if($pluginReason);
     }
     if($pluginReason) {
@@ -11663,7 +11657,7 @@ sub cbJoinedBattle {
     $mapArchive=~s/ /\%20/g;
     $mapLink=~s/\%M/$mapArchive/g;
   }
-  $mapLink='' if(! defined $mapLink);
+  $mapLink//='';
 
   my $mapName=$conf{map};
   $mapName=$1 if($mapName =~ /^(.*)\.smf$/);
@@ -11852,7 +11846,7 @@ sub cbBattleClosed {
 sub cbAddUser {
   my (undef,$user,$country,$cpu,$id)=@_;
   if($conf{userDataRetention} !~ /^0;/ && ! $lanMode) {
-    $id=0 unless(defined $id);
+    $id//=0;
     $id.="($user)" unless($id);
     if(! defined $country) {
       slog("Received an invalid ADDUSER command from server (country field not provided for user $user)",2);

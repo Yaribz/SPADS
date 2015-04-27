@@ -30,7 +30,7 @@ use SimpleLog;
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.11.8';
+my $moduleVersion='0.11.8a';
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 
 my %globalParameters = (lobbyLogin => ["login"],
@@ -276,7 +276,7 @@ my @userDataFields=(["accountId"],["country","cpu","rank","timestamp","ips",'nam
 
 sub new {
   my ($objectOrClass,$confFile,$sLog,$p_macros,$p_previousInstance) = @_;
-  $p_previousInstance=0 unless(defined $p_previousInstance);
+  $p_previousInstance//=0;
   my $class = ref($objectOrClass) || $objectOrClass;
 
   my $p_conf = loadSettingsFile($sLog,$confFile,\%globalParameters,\%spadsSectionParameters,$p_macros);
@@ -503,7 +503,7 @@ sub ipToInt {
 
 sub findMatchingData {
   my ($p_data,$p_filters,$normalSearch)=@_;
-  $normalSearch=1 unless(defined $normalSearch);
+  $normalSearch//=1;
   my %data=%{$p_data};
   my @filters=@{$p_filters};
   my @matchingData;
@@ -624,7 +624,7 @@ sub preProcessConfFile {
 sub loadSettingsFile {
   my ($sLog,$cFile,$p_globalParams,$p_sectionParams,$p_macros,$caseInsensitiveNoCheck)=@_;
 
-  $caseInsensitiveNoCheck=0 unless(defined $caseInsensitiveNoCheck);
+  $caseInsensitiveNoCheck//=0;
   my $currentSection="";
   my %newConf=("" => {});
 
@@ -650,7 +650,7 @@ sub loadSettingsFile {
           }
         }
         my @values=split(/\|/,$value);
-        $values[0]="" unless(defined $values[0]);
+        $values[0]//='';
         if(exists $p_sectionParams->{$param}) {
           foreach my $v (@values) {
             if(! checkValue($v,$p_sectionParams->{$param})) {
@@ -697,7 +697,7 @@ sub loadSettingsFile {
 
 sub loadTableFile {
   my ($sLog,$cFile,$p_fieldsArrays,$p_macros,$caseInsensitive)=@_;
-  $caseInsensitive=0 unless(defined $caseInsensitive);
+  $caseInsensitive//=0;
 
   my @confData;
   return {} unless(preProcessConfFile($sLog,\@confData,$cFile,$p_macros,{}));
@@ -762,7 +762,7 @@ sub loadTableFile {
 
 sub parseTableLine {
   my ($sLog,$p_pattern,$line,$iter)=@_;
-  $iter=0 unless(defined $iter);
+  $iter//=0;
   my $p_subPattern=$p_pattern->[$iter];
   my $subPatSize=$#{$p_subPattern};
   my %hashData;
@@ -793,7 +793,7 @@ sub parseTableLine {
 
 sub loadSimpleTableFile {
   my ($sLog,$cFile,$p_macros,$caseInsensitive)=@_;
-  $caseInsensitive=0 unless(defined $caseInsensitive);
+  $caseInsensitive//=0;
 
   my @confData;
   return {} unless(preProcessConfFile($sLog,\@confData,$cFile,$p_macros,{}));
@@ -950,8 +950,8 @@ sub loadPluginConf {
     return 0;
   }
   my ($p_globalParams,$p_presetParams)=@{$p_pluginParams};
-  $p_globalParams={} unless(defined $p_globalParams);
-  $p_presetParams={} unless(defined $p_presetParams);
+  $p_globalParams//={};
+  $p_presetParams//={};
   return 1 unless(%{$p_globalParams} || %{$p_presetParams});
   my $p_pluginPresets = loadSettingsFile($self->{log},"$self->{conf}->{etcDir}/$pluginName.conf",$p_globalParams,$p_presetParams,$self->{macros});
   if(%{$p_presetParams} && ! exists $p_pluginPresets->{$self->{conf}->{defaultPreset}} && exists $p_pluginPresets->{'_DEFAULT_'}) {
@@ -1184,7 +1184,7 @@ EOH
 
 sub printFastTable {
   my ($self,$p_data,$p_fields,$isFirst)=@_;
-  $isFirst=0 unless(defined $isFirst);
+  $isFirst//=0;
   my @indexFields=@{$p_fields->[0]};
   my @dataFields=@{$p_fields->[1]};
   if(@indexFields) {
@@ -1203,7 +1203,7 @@ sub printFastTable {
   }else{
     my @dataFieldsValues=map {$p_data->{$_}} @dataFields;
     for my $i (0..$#dataFieldsValues) {
-      $dataFieldsValues[$i]='' unless(defined $dataFieldsValues[$i]);
+      $dataFieldsValues[$i]//='';
     }
     my $result=join(":",@dataFieldsValues);
     return ["|$result"];
@@ -1512,7 +1512,7 @@ sub getMapHashes {
 
 sub applyPreset {
   my ($self,$preset,$commandsAlreadyLoaded)=@_;
-  $commandsAlreadyLoaded=0 unless(defined $commandsAlreadyLoaded);
+  $commandsAlreadyLoaded//=0;
   my %settings=%{$self->{presets}->{$preset}};
   foreach my $param (keys %settings) {
     $self->{conf}->{$param}=$settings{$param}->[0];
@@ -1608,7 +1608,7 @@ sub applyMapList {
         last if($p_availableMaps->[$i]->{name} =~ /^$realMapFilter$/);
       }elsif($p_availableMaps->[$i]->{name} =~ /^$mapFilter$/) {
         $self->{maps}->{$i}=$p_availableMaps->[$i]->{name};
-        $self->{orderedMaps}->[$j]=[] unless(defined $self->{orderedMaps}->[$j]);
+        $self->{orderedMaps}->[$j]//=[];
         push(@{$self->{orderedMaps}->[$j]},$p_availableMaps->[$i]->{name});
         last;
       }
@@ -1624,7 +1624,7 @@ sub applyMapList {
         last if($realMapFilter eq "_GHOSTMAPS_" || $ghostMapName =~ /^$realMapFilter$/);
       }elsif($mapFilter eq "_GHOSTMAPS_" || $ghostMapName =~ /^$mapFilter$/) {
         $self->{ghostMaps}->{$ghostMapName}=$p_availableGhostMaps->{$ghostMapName};
-        $self->{orderedGhostMaps}->[$j]=[] unless(defined $self->{orderedGhostMaps}->[$j]);
+        $self->{orderedGhostMaps}->[$j]//=[];
         push(@{$self->{orderedGhostMaps}->[$j]},$ghostMapName);
         last;
       }
@@ -1634,7 +1634,7 @@ sub applyMapList {
 
 sub applySubMapList {
   my ($self,$mapList)=@_;
-  $mapList="" unless(defined $mapList);
+  $mapList//='';
 
   my $p_orderedMaps;
   if($self->{conf}->{allowGhostMaps}) {
@@ -1653,7 +1653,7 @@ sub applySubMapList {
         my $realMapFilter=$1;
         last if($mapName =~ /^$realMapFilter$/);
       }elsif($mapName =~ /^$mapFilter$/) {
-        $filteredMaps[$i]=[] unless(defined $filteredMaps[$i]);
+        $filteredMaps[$i]//=[];
         push(@{$filteredMaps[$i]},$mapName);
         last;
       }
@@ -1967,7 +1967,7 @@ sub getSimilarAccounts {
 
 sub getAccountIps {
   my ($self,$id,$p_ignoredIps)=@_;
-  $p_ignoredIps={} unless(defined $p_ignoredIps);
+  $p_ignoredIps//={};
   my @ips;
   if(exists $self->{accountData}->{$id}) {
     my %ipHash=%{$self->{accountData}->{$id}->{ips}};
