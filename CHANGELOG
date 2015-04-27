@@ -59,6 +59,11 @@ help.dat:
 0.12.0b: fix typo in !chskill description
 0.12.0c: add optional parameter for "!list bSettings" to filter map/mod/engine settings
 0.12.0d: typo "blanc" -> "blank"
+0.12.1: !ban/!unban commands now also accept greater/less than (or equal to) notations in filters: >,<,>=,<=
+        the user's autohost access level can now also be used as a ban filter in !ban command
+        !ban/!banIp/!banIps commands now take an explicit ban type strings as parameter ("full","battle","spec") instead of ban type codes (numbers 0,1,2)
+        !ban/!banIp/!banIps commands now also accept durations expressed in number of games
+        the !unban command now also accepts ban hashes as parameter to ease specific ban entry removal
 
 helpSettings.dat:
 ================
@@ -125,6 +130,8 @@ helpSettings.dat:
 0.5.2c: update map links default values (thanks abma)
 0.5.3: add "cheating" placeholder for endGameCommand and endGameCommandEnv settings
 0.5.3a: default value for springieEmulation is now "warn"
+0.5.4: the kickBanDuration global setting now also accepts durations expressed in number of games
+       default kickBanDuration is 300 (5 minutes)
 
 spads.pl:
 ========
@@ -640,6 +647,14 @@ spads.pl:
          fixed SPADS not restarting correctly on Linux when launched by calling perl explicitely ("perl spads.pl ...")
          all messages related to fatal events are now logged at CRITICAL log level (some of them were logged at ERROR log level previously)
          reordered initialization code and documentation generation code
+0.11.28: !ban/!unban commands now also accept greater/less than (or equal to) notations in filters: >,<,>=,<=
+         the user's autohost access level can now also be used as a ban filter in !ban command
+         !ban/!banIp/!banIps commands now take an explicit ban type strings as parameter ("full","battle","spec") instead of ban type codes (numbers 0,1,2)
+         !ban/!banIp/!banIps commands now also accept durations expressed in number of games
+         the kickBanDuration global setting now also accepts durations expressed in number of games
+         "!list bans" now shows ban entries identifiers (hashes) which can be used in !unban commands to remove specific bans easily
+         minor improvements in "!list bans" output
+         the !unban command now also accepts ban hashes as parameter to ease specific ban entry removal
 
 SpadsConf.pm:
 ============
@@ -749,6 +764,9 @@ SpadsConf.pm:
 0.11.6b: remove obsolete code used for map info cache data migration
 0.11.7: range notations for user and ban filters now also match decimal numbers
         greater/less than (or equal to) notations are now also allowed in user and ban filters: >,<,>=,<=
+0.11.8: ban durations can now also be expressed in number of games
+        the kickBanDuration global setting now also accepts durations expressed in number of games
+        dynamic ban entries can now be identified by their hash number in "!list bans" and "!unban" commands
 
 spadsInstaller.pl:
 =================

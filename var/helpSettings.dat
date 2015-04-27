@@ -740,11 +740,12 @@ Integer
 [global:kickBanDuration]
 Ban duration for kickBan command
 -
-Duration in seconds of the ban applied when using !kickBan command.
+Duration of the ban applied when using !kickBan command (expressed in seconds, or in number of games if the value is suffixed with 'g')
 -
-Integer
+<nbOfSeconds>: <nbOfSeconds> is the ban duration expressed in seconds
+<nbOfGames>g: <nbOfGames> is the ban duration expressed in number of games
 -
-120
+300
 
 [global:minLevelForIpAddr]
 Minimum access level to see IP addresses

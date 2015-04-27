@@ -29,7 +29,7 @@ use File::Spec::Functions qw/catfile file_name_is_absolute/;
 use IO::Select;
 use IO::Socket::INET;
 use IPC::Cmd 'can_run';
-use List::Util 'shuffle';
+use List::Util qw/any shuffle/;
 use MIME::Base64;
 use POSIX (":sys_wait_h","ceil","uname");
 use Storable qw/nfreeze dclone/;
@@ -48,7 +48,7 @@ $SIG{TERM} = \&sigTermHandler;
 my $MAX_SIGNEDINTEGER=2147483647;
 my $MAX_UNSIGNEDINTEGER=4294967296;
 
-our $spadsVer='0.11.27';
+our $spadsVer='0.11.28';
 
 my %optionTypes = (
   0 => "error",
@@ -3144,6 +3144,7 @@ sub setAsOutOfGame {
   %inGameAddedPlayers=();
   $springPid=0;
   $timestamps{lastGameEnd}=time;
+  $spads->decreaseGameBasedBans() if($timestamps{lastGameStartPlaying} >= $timestamps{lastGameStart});
   if($lobbyState > 5) {
     if($conf{rotationEndGame} ne "off" && $timestamps{lastGameStartPlaying} >= $timestamps{lastGameStart} && time - $timestamps{lastGameStartPlaying} > $conf{rotationDelay}) {
       $timestamps{autoRestore}=time;
@@ -4247,7 +4248,7 @@ sub launchGame {
 }
 
 sub listBans {
-  my ($p_bans,$showIPs,$user)=@_;
+  my ($p_bans,$showIPs,$user,$hashBans)=@_;
 
   my ($p_C,$B)=initUserIrcColors($user);
   my %C=%{$p_C};
@@ -4256,15 +4257,20 @@ sub listBans {
   foreach my $p_ban (@{$p_bans}) {
     my %userFilter=%{$p_ban->[0]};
     my %ban=%{$p_ban->[1]};
-    my $banString="";
+    my $banString = $hashBans ? '('.$spads->getBanHash($p_ban).') ' : '  ';
     my $index=0;
     foreach my $field (sort keys %userFilter) {
       if(defined $userFilter{$field} && $userFilter{$field} ne '') {
-        $banString.="," if($index);
+        $banString.=";" if($index);
         if($field eq "ip" && ! $showIPs) {
           $banString.="$C{5}ip$C{1}=$C{12}<hidden>$C{1}";
         }else{
-          $banString.="$C{5}$field$C{1}=\"$C{12}$userFilter{$field}$C{1}\"";
+          $banString.="$C{5}$field$C{1}".($userFilter{$field} =~ /^[<>]/ ? '' : '=');
+          if($userFilter{$field} =~ /[ ,]/) {
+            $banString.="\"$C{12}$userFilter{$field}$C{1}\"";
+          }else{
+            $banString.="$C{12}$userFilter{$field}$C{1}";
+          }
         }
         $index++;
       }
@@ -4272,9 +4278,17 @@ sub listBans {
     $banString.=" $C{4}$B-->$B$C{1} ";
     $index=0;
     foreach my $field (sort keys %ban) {
-      if($ban{$field}) {
-        $ban{$field}=localtime($ban{$field}) if($field =~ /Date$/);
-        $ban{$field}="\"$ban{$field}\"" unless($ban{$field} =~ /^\d+$/);
+      if(defined $ban{$field} && $ban{$field} ne '') {
+        if($field =~ /Date$/) {
+          my @time = localtime($ban{$field});
+          $time[4]++;
+          @time = map(sprintf('%02d',$_),@time);
+          $ban{$field}=($time[5]+1900)."-$time[4]-$time[3] $time[2]:$time[1]:$time[0]";
+        }elsif($field eq 'banType') {
+          my %banTypes = (0 => 'full', 1 => 'battle', 2 => 'force-spec', 3 => 'unbanned');
+          $ban{$field}=$banTypes{$ban{$field}} if(exists $banTypes{$ban{$field}});
+        }
+        $ban{$field}="\"$ban{$field}\"" if($ban{$field} =~ /[ ,]/);
         $banString.=", " if($index);
         $banString.="$C{10}$field$C{1}=$ban{$field}";
         $index++;
@@ -5914,14 +5928,17 @@ sub hBan {
   my $id;
   my @banFilters=split(/;/,$bannedUser);
   my $p_user={};
-  my @banListsFields=qw/accountId name country cpu rank access bot ip/;
+  my @banListsFields=qw/accountId name country cpu rank access bot level ip/;
   foreach my $banFilter (@banFilters) {
     my ($filterName,$filterValue)=("name",$banFilter);
     if($banFilter =~ /^\#([1-9]\d*)$/) {
       $id=$1;
       ($filterName,$filterValue)=('accountId',$id);
       $banMode='account';
-    }elsif($banFilter =~ /^([^=]+)=(.+)$/) {
+    }elsif($banFilter =~ /^([^=<>]+)=(.+)$/) {
+      ($filterName,$filterValue)=($1,$2);
+      $banMode='filter';
+    }elsif($banFilter =~ /^([^=<>]+)([<>]=?.+)$/) {
       ($filterName,$filterValue)=($1,$2);
       $banMode='filter';
     }else{
@@ -5951,19 +5968,31 @@ sub hBan {
              startDate => time};
 
   if(defined $banType) {
+    my $lcBanType=lc($banType);
+    my %allowedBanTypes = (full => 0, battle => 1, spectator => 2);
+    foreach my $allowedBanType (keys %allowedBanTypes) {
+      if(index($allowedBanType,$lcBanType) == 0) {
+        $banType=$allowedBanTypes{$allowedBanType};
+        last;
+      }
+    }
     if($banType =~ /^[012]$/) {
       $p_ban->{banType}=$banType;
     }else{
-      invalidSyntax($user,"ban","invalid ban type");
+      invalidSyntax($user,'ban',"invalid ban type \"$banType\"");
       return 0;
     }
     if(defined $duration) {
-      $duration=convertBanDuration($duration);
-      if($duration =~ /^\d+$/) {
-        $p_ban->{endDate}=time+($duration * 60) if($duration != 0);
+      if($duration =~ /^([1-9]\d*)g$/) {
+        $p_ban->{remainingGames}=$1;
       }else{
-        invalidSyntax($user,"ban","invalid ban duration");
-        return 0;
+        $duration=convertBanDuration($duration);
+        if($duration =~ /^\d+$/) {
+          $p_ban->{endDate}=time+($duration * 60) if($duration != 0);
+        }else{
+          invalidSyntax($user,"ban","invalid ban duration");
+          return 0;
+        }
       }
       if(@reason) {
         $p_ban->{reason}=join(" ",@reason);
@@ -5981,7 +6010,9 @@ sub hBan {
   $banMsg="Battle " if($p_ban->{banType} == 1);
   $banMsg="Force-spec " if($p_ban->{banType} == 2);
   $banMsg.="ban added for $banMode \"$bannedUser\" (";
-  if(defined $duration && $duration) {
+  if(exists $p_ban->{remainingGames}) {
+    $banMsg.="duration: $p_ban->{remainingGames} game".($p_ban->{remainingGames} > 1 ? 's' : '').')';
+  }elsif(defined $duration && $duration) {
     $duration=secToTime($duration * 60);
     $banMsg.="duration: $duration)";
   }else{
@@ -6020,6 +6051,14 @@ sub hBanIp {
   my $p_ban={banType => 0,
              startDate => time};
   if(defined $banType) {
+    my $lcBanType=lc($banType);
+    my %allowedBanTypes = (full => 0, battle => 1, spectator => 2);
+    foreach my $allowedBanType (keys %allowedBanTypes) {
+      if(index($allowedBanType,$lcBanType) == 0) {
+        $banType=$allowedBanTypes{$allowedBanType};
+        last;
+      }
+    }
     if($banType =~ /^[012]$/) {
       $p_ban->{banType}=$banType;
     }else{
@@ -6027,12 +6066,16 @@ sub hBanIp {
       return 0;
     }
     if(defined $duration) {
-      $duration=convertBanDuration($duration);
-      if($duration =~ /^\d+$/) {
-        $p_ban->{endDate}=time+($duration * 60) if($duration != 0);
+      if($duration =~ /^([1-9]\d*)g$/) {
+        $p_ban->{remainingGames}=$1;
       }else{
-        invalidSyntax($user,"banip","invalid ban duration");
-        return 0;
+        $duration=convertBanDuration($duration);
+        if($duration =~ /^\d+$/) {
+          $p_ban->{endDate}=time+($duration * 60) if($duration != 0);
+        }else{
+          invalidSyntax($user,"banip","invalid ban duration");
+          return 0;
+        }
       }
       if(@reason) {
         $p_ban->{reason}=join(" ",@reason);
@@ -6076,7 +6119,9 @@ sub hBanIp {
   my $banMsg="Battle IP-";
   $banMsg="Force-spec IP-" if($p_ban->{banType} == 2);
   $banMsg.="ban added for $banMode $bannedUser (";
-  if(defined $duration && $duration) {
+  if(exists $p_ban->{remainingGames}) {
+    $banMsg.="duration: $p_ban->{remainingGames} game".($p_ban->{remainingGames} > 1 ? 's' : '').')';
+  }elsif(defined $duration && $duration) {
     $duration=secToTime($duration * 60);
     $banMsg.="duration: $duration)";
   }else{
@@ -6115,6 +6160,14 @@ sub hBanIps {
   my $p_ban={banType => 0,
              startDate => time};
   if(defined $banType) {
+    my $lcBanType=lc($banType);
+    my %allowedBanTypes = (full => 0, battle => 1, spectator => 2);
+    foreach my $allowedBanType (keys %allowedBanTypes) {
+      if(index($allowedBanType,$lcBanType) == 0) {
+        $banType=$allowedBanTypes{$allowedBanType};
+        last;
+      }
+    }
     if($banType =~ /^[012]$/) {
       $p_ban->{banType}=$banType;
     }else{
@@ -6122,12 +6175,16 @@ sub hBanIps {
       return 0;
     }
     if(defined $duration) {
-      $duration=convertBanDuration($duration);
-      if($duration =~ /^\d+$/) {
-        $p_ban->{endDate}=time+($duration * 60) if($duration != 0);
+      if($duration =~ /^([1-9]\d*)g$/) {
+        $p_ban->{remainingGames}=$1;
       }else{
-        invalidSyntax($user,"banips","invalid ban duration");
-        return 0;
+        $duration=convertBanDuration($duration);
+        if($duration =~ /^\d+$/) {
+          $p_ban->{endDate}=time+($duration * 60) if($duration != 0);
+        }else{
+          invalidSyntax($user,"banips","invalid ban duration");
+          return 0;
+        }
       }
       if(@reason) {
         $p_ban->{reason}=join(" ",@reason);
@@ -6177,7 +6234,9 @@ sub hBanIps {
   $banMsg="Force-spec IP-" if($p_ban->{banType} == 2);
   $banMsg.="ban added for $banMode $bannedUser (";
   $banMsg.=($#{$p_userIps}+1)." IPs, " if($#{$p_userIps} > 0);
-  if(defined $duration && $duration) {
+  if(exists $p_ban->{remainingGames}) {
+    $banMsg.="duration: $p_ban->{remainingGames} game".($p_ban->{remainingGames} > 1 ? 's' : '').')';
+  }elsif(defined $duration && $duration) {
     $duration=secToTime($duration * 60);
     $banMsg.="duration: $duration)";
   }else{
@@ -7601,12 +7660,20 @@ sub hKickBan {
   $p_user={accountId => "$accountId($bannedUser)"} if($accountId =~ /^\d+$/);
   my $p_ban={banType => 1,
              startDate => time,
-             endDate => time + $conf{kickBanDuration},
              reason => "temporary kick-ban by $user"};
+  if($conf{kickBanDuration} =~ /^(\d+)g/) {
+    $p_ban->{remainingGames}=$1;
+  }else{
+    $p_ban->{endDate}=time + $conf{kickBanDuration};
+  }
   $spads->banUser($p_user,$p_ban);
-  my $kickBanDuration=secToTime($conf{kickBanDuration});
+  my $kickBanDuration;
+  if(exists $p_ban->{remainingGames}) {
+    $kickBanDuration="$p_ban->{remainingGames} game".($p_ban->{remainingGames} > 1 ? 's' : '');
+  }else{
+    $kickBanDuration=secToTime($conf{kickBanDuration});
+  }
   broadcastMsg("Battle ban added for user \"$bannedUser\" (duration: $kickBanDuration, reason: temporary kick-ban by $user)");
-
   return "kickBan $bannedUser";
 }
 
@@ -7978,8 +8045,8 @@ sub hList {
     if(! @{$p_globalBans} && ! @{$p_specificBans} && ! @{$p_autoHandledBans}) {
       sayPrivate($user,"There is no ban entry currently");
     }else{
-      my $showIPs=0;
-      $showIPs=1 if(getUserAccessLevel($user) >= $conf{minLevelForIpAddr});
+      my $userLevel=getUserAccessLevel($user);
+      my $showIPs = $userLevel >= $conf{minLevelForIpAddr};
       if(@{$p_globalBans}) {
         sayPrivate($user,"$B********** Global bans **********");
         my $p_banEntries=listBans($p_globalBans,$showIPs,$user);
@@ -7988,17 +8055,29 @@ sub hList {
         }
       }
       if(@{$p_specificBans}) {
-        sayPrivate($user,"$B********** Specific loaded banlist **********");
+        sayPrivate($user,"$B********** Current banlist: $conf{banList} **********");
         my $p_banEntries=listBans($p_specificBans,$showIPs,$user);
         foreach my $banEntry (@{$p_banEntries}) {
           sayPrivate($user,$banEntry);
         }
       }
       if(@{$p_autoHandledBans}) {
+        my $userCanUnban=0;
+        my $p_unbanLevels=$spads->getCommandLevels('unban','battle','player','stopped');
+        if(exists $p_unbanLevels->{directLevel} && $userLevel >= $p_unbanLevels->{directLevel}) {
+          $userCanUnban=1;
+        }else{
+          $p_unbanLevels=$spads->getCommandLevels('unban','chan','player','stopped');
+          $userCanUnban=1 if(exists $p_unbanLevels->{directLevel} && $userLevel >= $p_unbanLevels->{directLevel});
+        }
         sayPrivate($user,"$B********** Dynamic bans **********");
-        my $p_banEntries=listBans($p_autoHandledBans,$showIPs,$user);
+        my $p_banEntries=listBans($p_autoHandledBans,$showIPs,$user,$userCanUnban);
         foreach my $banEntry (@{$p_banEntries}) {
           sayPrivate($user,$banEntry);
+        }
+        if($userCanUnban) {
+          sayPrivate($user,"$B**********************************");
+          sayPrivate($user,"  --> Dynamic bans can be removed by hash using \"$C{3}!unban (<hash>)$C{1}\".");
         }
       }
     }
@@ -10345,14 +10424,33 @@ sub hUnban {
 
   my $bannedUser=$p_params->[0];
 
+  if($bannedUser =~ /^\(([a-zA-Z0-9\+\/]{5})\)$/) {
+    my $banHash=$1;
+    my $res=$spads->removeBanByHash($banHash,$checkOnly);
+    if($res) {
+      return 1 if($checkOnly);
+      sayPrivate($user,"Following dynamic ban entry has been removed:");
+      my $p_banEntries=listBans([$res],getUserAccessLevel($user) >= $conf{minLevelForIpAddr},$user);
+      foreach my $banEntry (@{$p_banEntries}) {
+        sayPrivate($user,$banEntry);
+      }
+      return 1;
+    }else{
+      answer("Unable to find any dynamic ban entry with hash \"$banHash\"");
+      return 0;
+    }
+  }
+
   my @banFilters=split(/;/,$bannedUser);
   my $p_filters={};
-  my @banListsFields=qw/accountId name country cpu rank access bot ip nameOrAccountId/;
+  my @banListsFields=qw/accountId name country cpu rank access bot level ip nameOrAccountId/;
   foreach my $banFilter (@banFilters) {
     my ($filterName,$filterValue)=('nameOrAccountId',$banFilter);
     if($banFilter =~ /^\#([1-9]\d*)$/) {
       ($filterName,$filterValue)=('accountId',$1);
-    }elsif($banFilter =~ /^([^=]+)=(.+)$/) {
+    }elsif($banFilter =~ /^([^=<>]+)=(.+)$/) {
+      ($filterName,$filterValue)=($1,$2);
+    }elsif($banFilter =~ /^([^=<>]+)([<>]=?.+)$/) {
       ($filterName,$filterValue)=($1,$2);
     }
     my $quotedFilterName=quotemeta($filterName);
@@ -12500,13 +12598,13 @@ sub cbAhServerMessage {
     if(defined $p_lobbyUserData) {
       my $p_ban=$spads->getUserBan($name,$p_lobbyUserData,isUserAuthenticated($name),$gameIp);
       if($p_ban->{banType} < 2) {
-        sayBattleAndGame("Kicking $name from game (in-game IP address is banned)");
+        sayBattleAndGame("Kicking $name from game (banned)");
         $autohost->sendChatMessage("/kickbynum $playerNb");
         logMsg("game","> /kickbynum $playerNb") if($conf{logGameChat});
       }elsif($p_ban->{banType} == 2 && exists $p_runningBattle->{users}->{$name}
              && defined($p_runningBattle->{users}->{$name}->{battleStatus})
              && $p_runningBattle->{users}->{$name}->{battleStatus}->{mode}) {
-        sayBattleAndGame("Kicking $name from game (force-spec ban on in-game IP address)");
+        sayBattleAndGame("Kicking $name from game (force-spec ban)");
         $autohost->sendChatMessage("/kickbynum $playerNb");
         logMsg("game","> /kickbynum $playerNb") if($conf{logGameChat});
       }

@@ -25,28 +25,30 @@
 
 [ban]
 !ban <usernameOrFilters> [<banType> [<duration> [<reason>]]] - ban a user from AutoHost channel and/or battle and/or game (use ; to separate filters, and ~ at start for regexp)
-"!ban badBoy 0" bans badBoy for ever from AutoHost channel and battle (same as "!ban badBoy")
-"!ban badBoy 1 10" bans badBoy for 10 minutes from AutoHost battle
-"!ban badBoy 2 1h dguned an ally" forces badBoy to spec for 1 hour with reason "dguned an ally"
-"!ban ~.*aaa.*" bans anyone who has the string "aaa" in his name
-"!ban name=~.*bad.*;cpu=0-2000 1" bans anyone whose CPU speed is < 2001 and who has "bad" in his name from AutoHost battle
-"!ban ip=192.168.0.1 1 2d" bans IP 192.168.0.1 for 2 days from AutoHost battle
-"!ban accountId=1234 1 3w" bans account number "1234" for 3 weeks from AutoHost channel and battle
-"!ban #1234 1 3w" same as above
+"!ban badBoy full" bans badBoy for ever from AutoHost channel and battle (same as "!ban badBoy")
+"!ban badBoy battle 10" bans badBoy for 10 minutes from AutoHost battle
+"!ban badBoy spec 1h dguned an ally" forces badBoy to spec for 1 hour with reason "dguned an ally"
+"!ban ~.*aaa.*" bans anyone who has the string "aaa" in his name for ever from AutoHost channel and battle
+"!ban name=~.*bad.*;cpu=0-2000 battle" bans anyone whose CPU speed is < 2001 and also has "bad" in his name for ever from AutoHost battle
+"!ban ip=192.168.0.1 batt 2d" bans IP 192.168.0.1 for 2 days from AutoHost battle
+"!ban accountId=1234 ba 3w" bans account number "1234" for 3 weeks from AutoHost channel and battle
+"!ban #1234 b 3g" same as above except it bans for the 3 next games instead of for 3 weeks
+"!ban level<=100 s" forces anyone with AutoHost access level less than or equal to 100 to spec
+"!ban country=FR;accountId>900000 f 1m" bans anyone having both a french flag and an accountId greater than 900000 for one month from AutoHost channel and battle
 
 [banIp]
 !banIp <username>|#<accountId> [<banType> [<duration> [<reason>]]] - ban a user from battle lobby, based on his latest IP (same as doing "!ban ip=<userIp>")
-"!banIp badBoy 1" bans badBoy's latest IP for ever from AutoHost (same as "!banIp badBoy")
-"!banIp badBoy 1 10" bans badBoy's latest IP for 10 minutes from AutoHost
-"!banIp badBoy 2 1m dguned an ally" applies a force-spec ban for 1 month based on badBoy's latest IP with reason "dguned an ally"
-"!banIp #1234 1 1w" bans latest IP bound to account ID 1234 for 1 week from AutoHost
+"!banIp badBoy battle" bans badBoy's latest IP for ever from AutoHost (same as "!banIp badBoy")
+"!banIp badBoy b 10" bans badBoy's latest IP for 10 minutes from AutoHost
+"!banIp badBoy spec 1m dguned an ally" applies a force-spec ban for 1 month based on badBoy's latest IP with reason "dguned an ally"
+"!banIp #1234 b 1w" bans latest IP bound to account ID 1234 for 1 week from AutoHost
 
 [banIps]
 !banIps <username>|#<accountId> [<banType> [<duration> [<reason>]]] - ban a user from battle lobby, based on all his known IPs (same as doing "!ban ip=<userIp>" for all IPs)
-"!banIps badBoy 1" bans badBoy's known IPs for ever from AutoHost (same as "!banIps badBoy")
-"!banIps badBoy 1 10" bans badBoy's known IPs for 10 minutes from AutoHost
-"!banIps badBoy 2 1y dguned an ally" applies a force-spec ban for 1 year based on badBoy's known IPs with reason "dguned an ally"
-"!banIps #1234 1 1w" bans all known IPs bound to account ID 1234 for 1 week from AutoHost
+"!banIps badBoy battle" bans badBoy's known IPs for ever from AutoHost (same as "!banIps badBoy")
+"!banIps badBoy b 10" bans badBoy's known IPs for 10 minutes from AutoHost
+"!banIps badBoy spec 1y dguned an ally" applies a force-spec ban for 1 year based on badBoy's known IPs with reason "dguned an ally"
+"!banIps #1234 b 1w" bans all known IPs bound to account ID 1234 for 1 week from AutoHost
 
 [bKick]
 !bKick <username> - kicks <username> from battle lobby
@@ -338,7 +340,7 @@
 !start - launches the game if everyone is ready and teams are even
 
 [stats]
-!stats - prints statistics for the last game played on the autohost
+!stats - prints statistics for the last game played on the AutoHost
 
 [status]
 !status [battle|game] - prints battle or game status (players teams, IDs, status...)
@@ -350,7 +352,10 @@
 !stop - forces current running game to stop
 
 [unban]
-!unban <usernameOrFilters> - removes <usernameOrFilters> from banlist (refer to ban command for filters syntax)
+!unban <usernameOrFilters>|(<banEntryHash>) - removes <usernameOrFilters> or <banEntryHash> from banlist (refer to ban command for filters syntax)
+"!unban badBoy" unbans badBoy (removes all ban entries matching user badBoy)
+"!unban name=~.*bad.*;cpu=0-2000" removes all ban entries matching the filter "name=~.*bad.*;cpu=0-2000"
+"!unban (BnV8v)" removes the ban entry whose hash is "BnV8v" (ban entry hashes are shown in "!list bans" output)
 
 [unbanIp]
 !unbanIp <username>|#<accountId> - removes bans matching current account IP from banlist (same as doing "!unban ip=<userIp>")

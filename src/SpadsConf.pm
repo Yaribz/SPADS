@@ -20,6 +20,7 @@ package SpadsConf;
 
 use strict;
 
+use Digest::MD5 'md5_base64';
 use FileHandle;
 use File::Basename;
 use File::Copy;
@@ -29,7 +30,7 @@ use SimpleLog;
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.11.7';
+my $moduleVersion='0.11.8';
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 
 my %globalParameters = (lobbyLogin => ["login"],
@@ -100,7 +101,7 @@ my %globalParameters = (lobbyLogin => ["login"],
                         colorSensitivity => ["integer"],
                         dataDumpDelay => ["integer"],
                         allowSettingsShortcut => ["bool"],
-                        kickBanDuration => ["integer"],
+                        kickBanDuration => ['kickBanDurationType'],
                         minLevelForIpAddr => ["integer"],
                         userDataRetention => ["dataRetention"],
                         useWin32Process => ["useWin32ProcessType"],
@@ -226,6 +227,7 @@ my %paramTypes = (login => '[\w\[\]]{2,20}',
                   manualRotationMode => '(random|order)',
                   maxPlayersType => sub { return (($_[0] =~ /^\d+$/ && $_[0] < 252) || ($_[0] =~ /^(\d+)\-(\d+)$/ && $1 < $2 && $2 < 252)) },
                   integerRange => '\d+\-\d+',
+                  kickBanDurationType => '\d+g?',
                   nonNullIntegerRange => '[1-9]\d*\-\d+',
                   float => '\d+(\.\d*)?',
                   floatRange => '\d+\.\d+\-\d+\.\d+',
@@ -261,7 +263,7 @@ my %paramTypes = (login => '[\w\[\]]{2,20}',
                   botList => '[\w\[\]]{2,20} \w+ [^ \;][^\;]*(;[\w\[\]]{2,20} \w+ [^ \;][^\;]*)*',
                   db => '[^\/]+\/[^\@]+\@(?i:dbi)\:\w+\:\w.*');
 
-my @banListsFields=(["accountId","name","country","cpu","rank","access","bot","level","ip"],["banType","startDate","endDate","reason"]);
+my @banListsFields=(['accountId','name','country','cpu','rank','access','bot','level','ip'],['banType','startDate','endDate','remainingGames','reason']);
 my @preferencesListsFields=(["accountId"],["autoSetVoteMode","voteMode","votePvMsgDelay","voteRingDelay","minRingDelay","handleSuggestions","password","rankMode",'skillMode',"shareId","spoofProtection",'ircColors','clan']);
 my @usersFields=(["accountId","name","country","cpu","rank","access","bot","auth"],["level"]);
 my @levelsFields=(["level"],["description"]);
@@ -1475,6 +1477,27 @@ EOH
   return 1;
 }
 
+sub flattenBan {
+  my $data=shift;
+  return '__UNDEF__' unless(defined $data);
+  return $data if(ref($data) eq '');
+  if(ref($data) eq 'HASH') {
+    my @resArray;
+    foreach my $k (sort keys %{$data}) {
+      push(@resArray,"$k\->".flattenBan($data->{$k})) if(defined $data->{$k} && (ref($data->{$k}) ne '' || $data->{$k} ne ''));
+    }
+    return '{'.join(',',@resArray).'}';
+  }
+  if(ref($data) eq 'ARRAY') {
+    my @resArray;
+    for my $i (0..$#{$data}) {
+      push(@resArray,"$i:".flattenBan($data->[$i]));
+    }
+    return '['.join(',',@resArray).']';
+  }
+  return $data;
+}
+
 # Internal functions - Dynamic data - Map hashes ##############################
 
 sub getMapHashes {
@@ -2157,6 +2180,24 @@ sub getDynamicBans {
   return $self->{bans};
 }
 
+sub getBanHash {
+  my ($self,$p_ban)=@_;
+  return substr(md5_base64(flattenBan($p_ban)),0,5);
+}
+
+sub removeBanByHash {
+  my ($self,$hash,$checkOnly)=@_;
+  foreach my $banIndex (0..$#{$self->{bans}}) {
+    if($self->getBanHash($self->{bans}->[$banIndex]) eq $hash) {
+      return 1 if($checkOnly);
+      my $res=splice(@{$self->{bans}},$banIndex,1);
+      $self->dumpTable($self->{bans},$self->{conf}->{varDir}."/bans.dat",\@banListsFields);
+      return $res;
+    }
+  }
+  return 0;
+}
+
 sub banExists {
   my ($self,$p_filters)=@_;
 
@@ -2225,6 +2266,28 @@ sub unban {
   my ($self,$p_filters)=@_;
   $self->{bans}=removeMatchingData($p_filters,$self->{bans});
   $self->dumpTable($self->{bans},$self->{conf}->{varDir}."/bans.dat",\@banListsFields);
+}
+
+sub decreaseGameBasedBans {
+  my $self=shift;
+  my ($nbRemovedBans,$nbModifiedBans)=(0,0);
+  my @newBans;
+  foreach my $p_ban (@{$self->{bans}}) {
+    if(exists $p_ban->[1]->{remainingGames} && defined $p_ban->[1]->{remainingGames} && $p_ban->[1]->{remainingGames} ne '') {
+      if($p_ban->[1]->{remainingGames} < 2) {
+        $nbRemovedBans++;
+        next;
+      }
+      $nbModifiedBans++;
+      $p_ban->[1]->{remainingGames}--;
+    }
+    push(@newBans,$p_ban);
+  }
+  if($nbRemovedBans || $nbModifiedBans) {
+    $self->{bans}=\@newBans;
+    $self->{log}->log("$nbRemovedBans expired ban(s) removed from file \"bans.dat\"",3) if($nbRemovedBans);
+    $self->dumpTable($self->{bans},$self->{conf}->{varDir}."/bans.dat",\@banListsFields);
+  }
 }
 
 # Business functions - Dynamic data - Preferences #############################
