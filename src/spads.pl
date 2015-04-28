@@ -48,7 +48,7 @@ $SIG{TERM} = \&sigTermHandler;
 my $MAX_SIGNEDINTEGER=2147483647;
 my $MAX_UNSIGNEDINTEGER=4294967296;
 
-our $spadsVer='0.11.28c';
+our $spadsVer='0.11.29';
 
 my %optionTypes = (
   0 => "error",
@@ -2256,7 +2256,7 @@ sub processAliases {
   }
 
   if($conf{allowSettingsShortcut} && ! exists $spads->{commands}->{$lcCmd} && none {$lcCmd eq $_} @readOnlySettings) {
-    if(any {$lcCmd eq $_} qw'users presets hpresets bpresets settings bsettings hsettings bans maps pref rotationmaps plugins psettings') {
+    if(any {$lcCmd eq $_} qw'users presets hpresets bpresets settings bsettings hsettings aliases bans maps pref rotationmaps plugins psettings') {
       unshift(@cmd,"list");
       return (\@cmd,0);
     }else{
@@ -2310,10 +2310,19 @@ sub getCmdAliases {
   my %cmdAliases=(b => ['vote','b'],
                   coop => ['pSet','shareId'],
                   cv => ['callVote'],
+                  ev => ['endVote'],
+                  h => ['help'],
                   map => ['set','map'],
                   n => ['vote','n'],
+                  rc => ['reloadConf'],
+                  rck => ['reloadConf','keepSettings'],
+                  s => ['status'],
+                  sb => ['status','battle'],
                   spec => ['force','%1%','spec'],
-                  'y' => ['vote','y']);
+                  su => ['searchUser'],
+                  us => ['unlockSpec'],
+                  w => ['whois'],
+                  y => ['vote','y']);
   foreach my $pluginName (@pluginsOrder) {
     $plugins{$pluginName}->updateCmdAliases(\%cmdAliases) if($plugins{$pluginName}->can('updateCmdAliases'));
   }
@@ -7176,7 +7185,7 @@ sub hHelp {
                         bset => "battle setting",
                         pset => "preference");
       $setting=lc($setting);
-      if($setting !~ /^\w+$/ || none {$helpCommand eq $_} qw'global set hset bset pset') {
+      if(! exists $settingTypes{$helpCommand}) {
         invalidSyntax($user,"help");
         return 0;
       }
@@ -7283,6 +7292,7 @@ sub hHelp {
         sayPrivate($user,$p_helpForUser->{vote}->[$i]);
       }
     }
+    sayPrivate($user,"  --> Use \"$C{3}!list aliases$C{1}\" to list available command aliases.");
   }
 
 }
@@ -7689,6 +7699,7 @@ sub hLearnMaps {
 
   my ($mapFilter,$hostFilter)=@{$p_params};
   $mapFilter//='';
+  $mapFilter='' if($mapFilter eq '.');
   $hostFilter//='';
 
   my %seenMaps;
@@ -7742,7 +7753,7 @@ sub hList {
   my ($source,$user,$p_params,$checkOnly)=@_;
 
   if($#{$p_params} < 0) {
-    invalidSyntax($user,"list");
+    invalidSyntax($user,'list');
     return 0;
   }
   
@@ -7752,7 +7763,11 @@ sub hList {
   my %C=%{$p_C};
   
   my $lcData=lc($data);
-  if($lcData eq "users") {
+  if($lcData eq 'users') {
+    if(@filters) {
+      invalidSyntax($user,'list');
+      return 0;
+    }
     return 1 if($checkOnly);
     my %filtersNames=(accountId => "AccountId",
                       name => "Name",
@@ -7785,7 +7800,11 @@ sub hList {
     foreach my $resultLine (@{$p_resultLines}) {
       sayPrivate($user,$resultLine);
     }
-  }elsif($lcData eq "presets") {
+  }elsif($lcData eq 'presets') {
+    if(@filters) {
+      invalidSyntax($user,'list');
+      return 0;
+    }
     return 1 if($checkOnly);
     sayPrivate($user,"$B********** AutoHost global presets **********");
     foreach my $preset (sort keys %{$spads->{presets}}) {
@@ -7804,7 +7823,11 @@ sub hList {
       sayPrivate($user,$presetString);
     }
     sayPrivate($user,"  --> Use \"$C{3}!preset <presetName>$C{1}\" to change current global preset.");
-  }elsif($lcData eq "bpresets") {
+  }elsif($lcData eq 'bpresets') {
+    if(@filters) {
+      invalidSyntax($user,'list');
+      return 0;
+    }
     return 1 if($checkOnly);
     sayPrivate($user,"$B********** Available battle presets **********");
     foreach my $bPreset (sort keys %{$spads->{bPresets}}) {
@@ -7820,7 +7843,11 @@ sub hList {
       sayPrivate($user,$presetString);
     }
     sayPrivate($user,"  --> Use \"$C{3}!bPreset <presetName>$C{1}\" to change current battle preset.");
-  }elsif($lcData eq "hpresets") {
+  }elsif($lcData eq 'hpresets') {
+    if(@filters) {
+      invalidSyntax($user,'list');
+      return 0;
+    }
     return 1 if($checkOnly);
     sayPrivate($user,"$B********** Available hosting presets **********");
     foreach my $hPreset (sort keys %{$spads->{hPresets}}) {
@@ -7837,8 +7864,8 @@ sub hList {
     }
     sayPrivate($user,"  --> Use \"$C{3}!hPreset <presetName>$C{1}\" to change current hosting preset.");
   }elsif($lcData eq 'plugins') {
-    if($#filters > 0) {
-      invalidSyntax($user,"list");
+    if(@filters) {
+      invalidSyntax($user,'list');
       return 0;
     }
     return 1 if($checkOnly);
@@ -7852,16 +7879,19 @@ sub hList {
       sayPrivate($user,"  $C{3}$pluginName$C{1} (version $C{10}$pluginVersion$C{1})");
     }
   }elsif($lcData eq 'psettings') {
-    if($#filters > 0) {
-      invalidSyntax($user,"list");
-      return 0;
-    }
     return 1 if($checkOnly);
+    my $filterUnmodifiableSettings=1;
+    if(@filters) {
+      $filterUnmodifiableSettings=0;
+      @filters=() if($#filters == 0 && lc($filters[0]) eq 'all');
+    }
     my @settingsData;
     foreach my $pluginName (sort keys %{$spads->{pluginsConf}}) {
       my $p_values=$spads->{pluginsConf}->{$pluginName}->{values};
       foreach my $setting (sort keys %{$p_values}) {
         next if(any {$setting eq $_} qw'commandsFile helpFile');
+        next if($filterUnmodifiableSettings && $#{$p_values->{$setting}} < 1);
+        next unless(all {index(lc("$pluginName $setting"),lc($_)) > -1} @filters);
         my $allowedValues=join(" | ",@{$p_values->{$setting}});
         my $currentVal=$spads->{pluginsConf}->{$pluginName}->{conf}->{$setting};
         my ($coloredSetting,$coloredValue)=($setting,$currentVal);
@@ -7886,23 +7916,33 @@ sub hList {
       foreach my $resultLine (@{$p_resultLines}) {
         sayPrivate($user,$resultLine);
       }
+      sayPrivate($user,"  --> Use \"$C{3}!plugin <pluginName> set <settingName> <value>$C{1}\" to change the value of a plugin setting.");
+      sayPrivate($user,"  --> Use \"$C{3}!list pSettings all$C{1}\" to list all plugin settings.") if($filterUnmodifiableSettings);
     }else{
-      sayPrivate($user,"No plugin setting found.");
+      if(@filters) {
+        sayPrivate($user,"No plugin setting found matching filter \"$C{12}".(join(' ',@filters))."$C{1}\".");
+      }elsif($filterUnmodifiableSettings) {
+        sayPrivate($user,"No modifiable plugin setting found.");
+        sayPrivate($user,"  --> Use \"$C{3}!list pSettings all$C{1}\" to list all plugin settings.");
+      }else{
+        sayPrivate($user,"No plugin setting found.");
+      }
     }
-    sayPrivate($user,"  --> Use \"$C{3}!plugin <pluginName> set <settingName> <value>$C{1}\" to change the value of a plugin setting.");
-  }elsif($lcData eq "settings") {
-    if($#filters > 0 || (@filters && $filters[0] ne "all")) {
-      invalidSyntax($user,"list");
-      return 0;
-    }
+  }elsif($lcData eq 'settings') {
     return 1 if($checkOnly);
+    my $filterUnmodifiableSettings=1;
+    if(@filters) {
+      $filterUnmodifiableSettings=0;
+      @filters=() if($#filters == 0 && lc($filters[0]) eq 'all');
+    }
     my @settingsData;
     foreach my $setting (sort keys %{$spads->{values}}) {
       next if(any {$setting eq $_} qw'description commandsFile battlePreset hostingPreset welcomeMsg welcomeMsgInGame preset mapLink ghostMapLink advertMsg endGameCommand endGameCommandEnv endGameCommandMsg');
-      next if(! @filters && $#{$spads->{values}->{$setting}} < 1 && $setting ne "map");
+      next if($filterUnmodifiableSettings && $#{$spads->{values}->{$setting}} < 1 && $setting ne 'map');
+      next unless(all {index(lc($setting),lc($_)) > -1} @filters);
       my $allowedValues=join(" | ",@{$spads->{values}->{$setting}});
       my ($coloredSetting,$coloredValue)=($setting,$conf{$setting});
-      if($#{$spads->{values}->{$setting}} < 1 && $setting ne "map") {
+      if($#{$spads->{values}->{$setting}} < 1 && $setting ne 'map') {
         $coloredSetting=$C{14}.$setting;
       }else{
         if($conf{$setting} ne $spads->{values}->{$setting}->[0]) {
@@ -7922,28 +7962,53 @@ sub hList {
       foreach my $resultLine (@{$p_resultLines}) {
         sayPrivate($user,$resultLine);
       }
+      sayPrivate($user,"  --> Use \"$C{3}!help set <settingName>$C{1}\" for help about a setting.");
+      sayPrivate($user,"  --> Use \"$C{3}!set <settingName> <value>$C{1}\" to change the value of a setting.");
+      sayPrivate($user,"  --> Use \"$C{3}!list settings all$C{1}\" to list all global settings.") if($filterUnmodifiableSettings);
     }else{
-      sayPrivate($user,"No modifiable global setting found.");
+      if(@filters) {
+        sayPrivate($user,"No global setting found matching filter \"$C{12}".(join(' ',@filters))."$C{1}\".");
+      }elsif($filterUnmodifiableSettings) {
+        sayPrivate($user,"No modifiable global setting found.");
+        sayPrivate($user,"  --> Use \"$C{3}!list settings all$C{1}\" to list all global settings.");
+      }else{
+        sayPrivate($user,"No global setting found.");
+      }
     }
-    sayPrivate($user,"  --> Use \"$C{3}!help set <settingName>$C{1}\" for help about a setting.");
-    sayPrivate($user,"  --> Use \"$C{3}!set <settingName> <value>$C{1}\" to change the value of a setting.");
-    sayPrivate($user,"  --> Use \"$C{3}!list settings all$C{1}\" to list all global settings.") unless(@filters);
-  }elsif($lcData eq "bsettings") {
-    if($#filters > 0 || (@filters && (none {$filters[0] eq $_} qw'all map mod engine'))) {
-      invalidSyntax($user,'list');
-      return 0;
-    }
+  }elsif($lcData eq 'bsettings') {
     return 1 if($checkOnly);
+    my ($filterUnmodifiableSettings,$filterMapSettings,$filterModSettings,$filterEngineSettings)=(1,0,0,0);
+    my $settingTypeFilterString='';
+    if(@filters) {
+      if(lc($filters[0]) eq 'map') {
+        $settingTypeFilterString=' map';
+        ($filterModSettings,$filterEngineSettings)=(1,1);
+        shift(@filters);
+      }elsif(lc($filters[0]) eq 'mod') {
+        $settingTypeFilterString=' mod';
+        ($filterMapSettings,$filterEngineSettings)=(1,1);
+        shift(@filters);
+      }elsif(lc($filters[0]) eq 'engine') {
+        $settingTypeFilterString=' engine';
+        ($filterModSettings,$filterMapSettings)=(1,1);
+        shift(@filters);
+      }
+    }
+    if(@filters) {
+      $filterUnmodifiableSettings=0;
+      @filters=() if($#filters == 0 && lc($filters[0]) eq 'all');
+    }
     my $modName=$targetMod;
     $modName=$lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod} if($lobbyState >= 6);
     my $p_modOptions=getModOptions($modName);
     my $p_mapOptions=getMapOptions($currentMap);
     my @bSettings;
-    push(@bSettings,'startpostype') unless(@filters && ($filters[0] eq 'map' || $filters[0] eq 'mod'));
-    push(@bSettings,keys %{$p_modOptions}) unless(@filters && ($filters[0] eq 'map' || $filters[0] eq 'engine'));
-    push(@bSettings,keys %{$p_mapOptions}) unless(@filters && ($filters[0] eq 'engine' || $filters[0] eq 'mod'));
+    push(@bSettings,'startpostype') unless($filterEngineSettings);
+    push(@bSettings,keys %{$p_modOptions}) unless($filterModSettings);
+    push(@bSettings,keys %{$p_mapOptions}) unless($filterMapSettings);
     my @settingsData;
     foreach my $setting (sort @bSettings) {
+      next unless(all {index(lc($setting),lc($_)) > -1} @filters);
       my $p_options={};
       my $optionScope="$C{13}engine$C{1}";
       my $allowExternalValues=0;
@@ -7957,7 +8022,7 @@ sub hList {
         $allowExternalValues=$conf{allowMapOptionsValues};
       }
       my @allowedValues=getBSettingAllowedValues($setting,$p_options,$allowExternalValues);
-      next if(! @filters && (! @allowedValues || ($#allowedValues == 0 && ! isRange($allowedValues[0]))));
+      next if($filterUnmodifiableSettings && (! @allowedValues || ($#allowedValues == 0 && ! isRange($allowedValues[0]))));
       my $currentValue;
       if(exists $spads->{bSettings}->{$setting}) {
         $currentValue=$spads->{bSettings}->{$setting};
@@ -7980,22 +8045,31 @@ sub hList {
       foreach my $resultLine (@{$p_resultLines}) {
         sayPrivate($user,$resultLine);
       }
+      sayPrivate($user,"  --> Use \"$C{3}!help bSet <settingName>$C{1}\" for help about a battle setting.");
+      sayPrivate($user,"  --> Use \"$C{3}!bSet <settingName> <value>$C{1}\" to change the value of a battle setting.");
+      sayPrivate($user,"  --> Use \"$C{3}!list bSettings$settingTypeFilterString all$C{1}\" to list all$settingTypeFilterString battle settings.") if($filterUnmodifiableSettings);
     }else{
-      sayPrivate($user,"No modifiable battle setting found.");
+      if(@filters) {
+        sayPrivate($user,"No$settingTypeFilterString battle setting found matching filter \"$C{12}".(join(' ',@filters))."$C{1}\".");
+      }elsif($filterUnmodifiableSettings) {
+        sayPrivate($user,"No modifiable$settingTypeFilterString battle setting found.");
+        sayPrivate($user,"  --> Use \"$C{3}!list bSettings$settingTypeFilterString all$C{1}\" to list all$settingTypeFilterString battle settings.");
+      }else{
+        sayPrivate($user,"No$settingTypeFilterString battle setting found.");
+      }
     }
-    sayPrivate($user,"  --> Use \"$C{3}!help bSet <settingName>$C{1}\" for help about a battle setting.");
-    sayPrivate($user,"  --> Use \"$C{3}!bSet <settingName> <value>$C{1}\" to change the value of a battle setting.");
-    sayPrivate($user,"  --> Use \"$C{3}!list bSettings all$C{1}\" to list all battle settings.") unless(@filters);
-  }elsif($lcData eq "hsettings") {
-    if($#filters > 0 || (@filters && $filters[0] ne "all")) {
-      invalidSyntax($user,"list");
-      return 0;
-    }
+  }elsif($lcData eq 'hsettings') {
     return 1 if($checkOnly);
+    my $filterUnmodifiableSettings=1;
+    if(@filters) {
+      $filterUnmodifiableSettings=0;
+      @filters=() if($#filters == 0 && lc($filters[0]) eq 'all');
+    }
     my @settingsData;
     foreach my $setting (sort keys %{$spads->{hValues}}) {
       next if(any {$setting eq $_} qw'description battleName');
-      next if(! @filters && $#{$spads->{hValues}->{$setting}} < 1);
+      next if($filterUnmodifiableSettings && $#{$spads->{hValues}->{$setting}} < 1);
+      next unless(all {index(lc($setting),lc($_)) > -1} @filters);
       if($setting eq 'password') {
         push(@settingsData,{"$C{5}Name$C{1}" => ($#{$spads->{hValues}->{password}} < 1 ? $C{14} : '').'password',
                             "$C{5}Current value$C{1}" => '<hidden>',
@@ -8025,13 +8099,35 @@ sub hList {
       foreach my $resultLine (@{$p_resultLines}) {
         sayPrivate($user,$resultLine);
       }
+      sayPrivate($user,"  --> Use \"$C{3}!help hSet <settingName>$C{1}\" for help about a hosting setting.");
+      sayPrivate($user,"  --> Use \"$C{3}!hSet <settingName> <value>$C{1}\" to change the value of a hosting setting.");
+      sayPrivate($user,"  --> Use \"$C{3}!list hSettings all$C{1}\" to list all hosting settings.") if($filterUnmodifiableSettings);
     }else{
-      sayPrivate($user,"No modifiable hosting setting found.");
+      if(@filters) {
+        sayPrivate($user,"No hosting setting found matching filter \"$C{12}".(join(' ',@filters))."$C{1}\".");
+      }elsif($filterUnmodifiableSettings) {
+        sayPrivate($user,"No modifiable hosting setting found.");
+        sayPrivate($user,"  --> Use \"$C{3}!list hSettings all$C{1}\" to list all hosting settings.");
+      }else{
+        sayPrivate($user,"No hosting setting found.");
+      }
     }
-    sayPrivate($user,"  --> Use \"$C{3}!help hSet <settingName>$C{1}\" for help about a hosting setting.");
-    sayPrivate($user,"  --> Use \"$C{3}!hSet <settingName> <value>$C{1}\" to change the value of a hosting setting.");
-    sayPrivate($user,"  --> Use \"$C{3}!list hSettings all$C{1}\" to list all hosting settings.") unless(@filters);
-  }elsif($lcData eq "bans") {
+  }elsif($lcData eq 'aliases') {
+    if(@filters) {
+      invalidSyntax($user,'list');
+      return 0;
+    }
+    return 1 if($checkOnly);
+    my $p_cmdAliases=getCmdAliases();
+    sayPrivate($user,"$B********** Available aliases **********");
+    foreach my $alias (sort keys %{$p_cmdAliases}) {
+      sayPrivate($user,"!$C{3}$alias$C{1} - !".(join(' ',@{$p_cmdAliases->{$alias}})));
+    }
+  }elsif($lcData eq 'bans') {
+    if(@filters) {
+      invalidSyntax($user,'list');
+      return 0;
+    }
     return 1 if($checkOnly);
     my $p_globalBans=$spads->{banLists}->{""};
     my $p_specificBans=[];
@@ -8076,7 +8172,7 @@ sub hList {
         }
       }
     }
-  }elsif($lcData eq "rotationmaps") {
+  }elsif($lcData eq 'rotationmaps') {
     my $subMapList;
     if($conf{rotationType} =~ /;(.+)$/) {
       $subMapList=$1;
@@ -8118,7 +8214,7 @@ sub hList {
       sayPrivate($user,$result);
     }
     sayPrivate($user,"$B******************** End of rotation map list ********************");
-  }elsif($lcData eq "maps") {
+  }elsif($lcData eq 'maps') {
     return 1 if($checkOnly);
     my $filterString="";
     if(@filters) {
@@ -8173,7 +8269,11 @@ sub hList {
     sayPrivate($user,"  --> Only \"Choose in game\" start position type is available for ghost maps.") if($outputHasGhostMap);
     sayPrivate($user,"  --> Use \"$C{3}!map <mapName_OR_mapNumber>$C{1}\" to change current map.");
     sayPrivate($user,"  --> Use \"$C{3}!set mapList <mapListName>$C{1}\" to change current map list.");
-  }elsif($lcData eq "pref") {
+  }elsif($lcData eq 'pref') {
+    if(@filters) {
+      invalidSyntax($user,'list');
+      return 0;
+    }
     return 1 if($checkOnly);
     my @prefData;
     my $aId=getLatestUserAccountId($user);
@@ -8213,7 +8313,7 @@ sub hList {
     sayPrivate($user,"  --> Use \"$C{3}!help pSet <preferenceName>$C{1}\" for help about a preference.");
     sayPrivate($user,"  --> Use \"$C{3}!pSet <preferenceName> <value>$C{1}\" to update your preferences.");
   }else{
-    invalidSyntax($user,"list");
+    invalidSyntax($user,'list');
     return 0;
   }
 

@@ -17,9 +17,6 @@
 "!auth foo" authenticates myself to the AutoHost with password "foo"
 "!auth" unauthenticates myself to the AutoHost
 
-[b]
-!b - alias for "!vote b"
-
 [balance]
 !balance - balances teams according to current balanceMode, nbTeams, teamSize and nbPlayerById parameters
 
@@ -115,9 +112,6 @@
 !coop <coopIdent> - alias for "!pSet shareId <coopIdent>" (chooses the name of your coop team: only users with same <coopIdent> will share units with you)
 !coop l33t
 
-[cv]
-!cv <command> - alias for "!callVote <command>"
-
 [endVote]
 !endVote - cancels current vote
 
@@ -183,12 +177,13 @@
 "!learnMaps . spads" learns all the maps hosted currently by players containing "spads" in their name
 
 [list]
-!list users|presets|bPresets|hPresets|settings|bSettings|hSettings|bans|maps|rotationMaps|pref|plugins|pSettings [all|<mapFilter>|map|mod|engine] - lists various settings
+!list users|presets|bPresets|hPresets|settings|bSettings|hSettings|aliases|bans|maps|rotationMaps|pref|plugins|pSettings [all|map|mod|engine|<filters>] - lists various settings
 "!list users" lists AutoHost users and rights
 "!list presets" lists all global SPADS presets
 "!list bPresets" lists allowed battle presets for current global SPADS preset
 "!list settings" lists current modifiable global SPADS settings and their allowed values for current global SPADS preset
 "!list settings all" lists all current global SPADS settings and their allowed values for current global SPADS preset
+"!list settings spec" lists all current global SPADS settings containing "spec" in their name
 "!list hSettings" lists current hosting settings and allowed values for current hosting preset
 "!list bSettings map" lists all current map battle settings and their allowed values for current battle preset
 "!list maps" lists all available maps for current map list
@@ -213,9 +208,6 @@
 
 [mapLink]
 !mapLink - gives a link to download the current map
-
-[n]
-!n - alias for "!vote n"
 
 [nextMap]
 !nextMap - changes map according to rotation mode specified by "rotationManual" setting
@@ -320,10 +312,6 @@
 "!smurfs FakeNoob all" lists all accounts identified as possibly FakeNoob's smurf
 "!smurfs #1234" lists smurf accounts of account ID "1234"
 
-[spec]
-!spec <username> - alias for "!force <username> spec"
-"!spec foo" forces foo to spec
-
 [specAfk]
 !specAfk - Force all unready and AFK/idle players to spec
 
@@ -386,6 +374,3 @@
 "!whois thatGuy" prints information concerning latest account bound to username "thatGuy"
 "!whois #1234" prints information concerning account ID "1234"
 "!whois @192.168.0.1" prints information concerning latest account bound to IP address "192.168.0.1"
-
-[y]
-!y - alias for "!vote y"

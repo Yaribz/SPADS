@@ -64,6 +64,8 @@ help.dat:
         !ban/!banIp/!banIps commands now take an explicit ban type strings as parameter ("full","battle","spec") instead of ban type codes (numbers 0,1,2)
         !ban/!banIp/!banIps commands now also accept durations expressed in number of games
         the !unban command now also accepts ban hashes as parameter to ease specific ban entry removal
+0.12.2: it is now possible to list aliases with "!list aliases" and to filter settings in "!list settings/hSettings/bSettings/pSettings" output
+        remove alias entries (!b,!cv,!n,!spec,!y) as they can be listed with "!list aliases" now
 
 helpSettings.dat:
 ================
@@ -659,6 +661,9 @@ spads.pl:
           use "//=" syntax instead of "if(defined ...)"
 0.11.28b: homogenize quotes and use more efficient list searching functions
 0.11.28c: replace unneeded regular expressions by classic string searches
+0.11.29: new common aliases from CustomAliases plugin have been integrated into core (!ev,!h,!rc,!rck,!s,!sb,!su,!us,!w)
+         it is now possible to list aliases with "!list aliases" and to filter settings in "!list settings/hSettings/bSettings/pSettings" output
+         fix "." not matching all maps when calling !learnMaps with syntax "!learnMaps . <hostFilter>"
 
 SpadsConf.pm:
 ============
