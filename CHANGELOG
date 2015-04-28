@@ -658,6 +658,7 @@ spads.pl:
 0.11.28a: remove import of "any" function from List::Util (only available in recent Perl versions)
           use "//=" syntax instead of "if(defined ...)"
 0.11.28b: homogenize quotes and use more efficient list searching functions
+0.11.28c: replace unneeded regular expressions by classic string searches
 
 SpadsConf.pm:
 ============
@@ -772,6 +773,7 @@ SpadsConf.pm:
         dynamic ban entries can now be identified by their hash number in "!list bans" and "!unban" commands
 0.11.8a: use "//=" syntax instead of "if(defined ...)"
 0.11.8b: homogenize quotes and use more efficient list searching functions
+0.11.8c: replace unneeded regular expressions by classic string searches
 
 spadsInstaller.pl:
 =================

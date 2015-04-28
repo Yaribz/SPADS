@@ -31,7 +31,7 @@ use SimpleLog;
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.11.8b';
+my $moduleVersion='0.11.8c';
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 
 my %globalParameters = (lobbyLogin => ["login"],
@@ -2048,11 +2048,10 @@ sub getIpAccounts {
 
 sub searchUserIds {
   my ($self,$search)=@_;
-  my $filter=quotemeta($search);
   my $nbMatchingId=0;
   my %matchingIds;
   foreach my $name (sort keys %{$self->{nameIds}}) {
-    if($name =~ /$filter/i) {
+    if(index(lc($name),lc($search)) > -1) {
       my %nameIds=%{$self->{nameIds}->{$name}};
       foreach my $id (keys %nameIds) {
         if(exists $matchingIds{$id}) {

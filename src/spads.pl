@@ -48,7 +48,7 @@ $SIG{TERM} = \&sigTermHandler;
 my $MAX_SIGNEDINTEGER=2147483647;
 my $MAX_UNSIGNEDINTEGER=4294967296;
 
-our $spadsVer='0.11.28b';
+our $spadsVer='0.11.28c';
 
 my %optionTypes = (
   0 => "error",
@@ -613,6 +613,11 @@ sub any (&@) {
 sub none (&@) {
   my $code = shift;
   return ! defined first {&{$code}} @_;
+}
+
+sub all (&@) {
+  my $code = shift;
+  return ! defined first {! &{$code}} @_;
 }
 
 sub generateGameId {
@@ -2120,7 +2125,6 @@ sub processAliases {
   my %C=%{$p_C};
   my @cmd=@{$p_cmd};
   my $lcCmd=lc($cmd[0]);
-  $lcCmd=quotemeta($lcCmd);
   if($conf{springieEmulation} ne "off") {
     if($lcCmd eq "admins") {
       return (["list","users"],getDeprecatedMsg($lcCmd,"use the unified command \"$C{3}!list users$C{1}\" instead"));
@@ -5022,22 +5026,23 @@ sub advancedMapSearch {
   foreach my $value (@values) {
     return $value if(lc($value) eq lc($val) || $value eq $val.'.smf');
   }
-  my $quotedVal=quotemeta($val);
   if(! $atEnd) {
-    foreach my $value (@values) {
-      return $value if($value =~ /^$quotedVal/);
-    }
-    foreach my $value (@values) {
-      return $value if($value =~ /^$quotedVal/i);
-    }
+    my $value = first {index($_,$val) == 0} @values;
+    return $value if(defined $value);
+    $value = first {index(lc($_),lc($val)) == 0} @values;
+    return $value if(defined $value);
+    $value = first {index($_,$val) > 0} @values;
+    return $value if(defined $value);
+    $value = first {index(lc($_),lc($val)) > 0} @values;
+    return $value if(defined $value);
   }else{
-    $quotedVal.='$';
-  }
-  foreach my $value (@values) {
-    return $value if($value =~ /$quotedVal/);
-  }
-  foreach my $value (@values) {
-    return $value if($value =~ /$quotedVal/i);
+    my $quotedVal=quotemeta($val);
+    foreach my $value (@values) {
+      return $value if($value =~ /$quotedVal$/);
+    }
+    foreach my $value (@values) {
+      return $value if($value =~ /$quotedVal$/i);
+    }
   }
   if($val =~ / /) {
     my @vals=split(/ /,$val);
@@ -5070,7 +5075,7 @@ sub advancedMapSearch {
       return $value if($match);
     }
   }
-  return "";
+  return '';
 }
 
 sub searchMap {
@@ -5488,10 +5493,9 @@ sub getNextLocalBot {
 sub translateSideIfNeeded {
   my $side=shift;
   if($side !~ /^\d+$/) {
-    my $quotedSide=quotemeta($side);
     my $p_modSides=getModSides($lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod});
     for my $i (0..$#{$p_modSides}) {
-      if($p_modSides->[$i] =~ /^$quotedSide/i) {
+      if(index(lc($p_modSides->[$i]),lc($side)) == 0) {
         $side=$i;
         last;
       }
@@ -7685,16 +7689,14 @@ sub hLearnMaps {
 
   my ($mapFilter,$hostFilter)=@{$p_params};
   $mapFilter//='';
-  my $quotedMapFilter=quotemeta($mapFilter);
   $hostFilter//='';
-  my $quotedHostFilter=quotemeta($hostFilter);
 
   my %seenMaps;
   foreach my $bId (keys %{$lobby->{battles}}) {
     my $founder=$lobby->{battles}->{$bId}->{founder};
     my $map=$lobby->{battles}->{$bId}->{map};
-    if(($quotedMapFilter eq '' || $map =~ /$quotedMapFilter/i)
-       && ($quotedHostFilter eq '' || $founder =~ /$quotedHostFilter/i)
+    if(($mapFilter eq '' || index(lc($map),lc($mapFilter)) > -1)
+       && ($hostFilter eq '' || index(lc($founder),lc($hostFilter)) > -1)
        && $founder ne $conf{lobbyLogin} && $lobby->{battles}->{$bId}->{mapHash} != 0) {
       my ($engineName,$engineVersion)=($lobby->{battles}->{$bId}->{engineName},$lobby->{battles}->{$bId}->{engineVersion});
       my $quotedVer=quotemeta($syncedSpringVersion);
@@ -8084,29 +8086,16 @@ sub hList {
     }
     return 1 if($checkOnly);
     my $filterString="";
-    my @quotedFilters;
     if(@filters) {
       $filterString=join(" ",@filters);
       $filterString=" (filter: \"$C{12}$filterString$C{1}\")";
-      @quotedFilters=map(quotemeta,@filters);
     }
     my $p_maps=$spads->applySubMapList($subMapList);
     my @results;
     push(@results,"$B********** Maps in current rotation map list \"$subMapList\"$filterString **********");
     foreach my $mapName (@{$p_maps}) {
-      if(@quotedFilters) {
-        my $match=1;
-        foreach my $quotedFilter (@quotedFilters) {
-          if($mapName !~ /$quotedFilter/i) {
-            $match=0;
-            last;
-          }
-        }
-        next unless($match);
-      }
-      if($mapName =~ /^(.*)\.smf$/) {
-        $mapName=$1;
-      }
+      next unless(all {index(lc($mapName),lc($_)) > -1} @filters);
+      $mapName=$1 if($mapName =~ /^(.*)\.smf$/);
       push(@results,"$C{10}$mapName");
     }
     if($#results > 200) {
@@ -8132,30 +8121,17 @@ sub hList {
   }elsif($lcData eq "maps") {
     return 1 if($checkOnly);
     my $filterString="";
-    my @quotedFilters;
     if(@filters) {
       $filterString=join(" ",@filters);
       $filterString=" (filter: \"$C{12}$filterString$C{1}\")";
-      @quotedFilters=map(quotemeta,@filters);
     }
     my @results;
     push(@results,"$B********** Available maps for current map list$filterString **********");
     my $outputHasLocalMap=0;
     foreach my $mapNb (sort {$a <=> $b} keys %{$spads->{maps}}) {
       my $mapName=$spads->{maps}->{$mapNb};
-      if(@quotedFilters) {
-        my $match=1;
-        foreach my $quotedFilter (@quotedFilters) {
-          if($mapName !~ /$quotedFilter/i) {
-            $match=0;
-            last;
-          }
-        }
-        next unless($match);
-      }
-      if($mapName =~ /^(.*)\.smf$/) {
-        $mapName=$1;
-      }
+      next unless(all {index(lc($mapName),lc($_)) > -1} @filters);
+      $mapName=$1 if($mapName =~ /^(.*)\.smf$/);
       if(! $outputHasLocalMap) {        
         push(@results,"     $C{5}${B}[ Local maps ]") if($conf{allowGhostMaps} && $springServerType eq 'dedicated');
         $outputHasLocalMap=1;
@@ -8165,19 +8141,8 @@ sub hList {
     my $outputHasGhostMap=0;
     if($conf{allowGhostMaps} && $springServerType eq 'dedicated') {
       foreach my $mapName (sort keys %{$spads->{ghostMaps}}) {
-        if(@quotedFilters) {
-          my $match=1;
-          foreach my $quotedFilter (@quotedFilters) {
-            if($mapName !~ /$quotedFilter/i) {
-              $match=0;
-              last;
-            }
-          }
-          next unless($match);
-        }
-        if($mapName =~ /^(.*)\.smf$/) {
-          $mapName=$1;
-        }
+        next unless(all {index(lc($mapName),lc($_)) > -1} @filters);
+        $mapName=$1 if($mapName =~ /^(.*)\.smf$/);
         if(! $outputHasGhostMap) {
           push(@results,"     $C{5}${B}[ Ghost maps ]");
           $outputHasGhostMap=1;
