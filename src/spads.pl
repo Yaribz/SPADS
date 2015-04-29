@@ -48,7 +48,7 @@ $SIG{TERM} = \&sigTermHandler;
 my $MAX_SIGNEDINTEGER=2147483647;
 my $MAX_UNSIGNEDINTEGER=4294967296;
 
-our $spadsVer='0.11.30';
+our $spadsVer='0.11.30a';
 
 my %optionTypes = (
   0 => "error",
@@ -2615,7 +2615,7 @@ sub handleVote {
         foreach my $pluginName (@pluginsOrder) {
           $plugins{$pluginName}->onVoteStop(-1) if($plugins{$pluginName}->can('onVoteStop'));
         }
-        delete @currentVote{qw'awayVoteTime source command remainingVoters yesCount noCount blankCount awayVoters manualVoters'};
+        delete @currentVote{(qw'awayVoteTime source command remainingVoters yesCount noCount blankCount awayVoters manualVoters')};
         $currentVote{expireTime}=time;
       }elsif(time >= $currentVote{expireTime}) {
         my @awayVoters;
@@ -2648,7 +2648,7 @@ sub handleVote {
           foreach my $pluginName (@pluginsOrder) {
             $plugins{$pluginName}->onVoteStop(-1) if($plugins{$pluginName}->can('onVoteStop'));
           }
-          delete @currentVote{qw'awayVoteTime source command remainingVoters yesCount noCount blankCount awayVoters manualVoters'};
+          delete @currentVote{(qw'awayVoteTime source command remainingVoters yesCount noCount blankCount awayVoters manualVoters')};
         }
       }else{
         foreach my $remainingVoter (keys %{$currentVote{remainingVoters}}) {
@@ -6942,7 +6942,7 @@ sub hEndVote {
     foreach my $pluginName (@pluginsOrder) {
       $plugins{$pluginName}->onVoteStop(0) if($plugins{$pluginName}->can('onVoteStop'));
     }
-    delete @currentVote{qw'awayVoteTime source command remainingVoters yesCount noCount blankCount awayVoters manualVoters'};
+    delete @currentVote{(qw'awayVoteTime source command remainingVoters yesCount noCount blankCount awayVoters manualVoters')};
     $currentVote{expireTime}=time;
   }else{
     answer("Unable to cancel vote (no vote in progress)");
