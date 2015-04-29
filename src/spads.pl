@@ -48,7 +48,7 @@ $SIG{TERM} = \&sigTermHandler;
 my $MAX_SIGNEDINTEGER=2147483647;
 my $MAX_UNSIGNEDINTEGER=4294967296;
 
-our $spadsVer='0.11.29';
+our $spadsVer='0.11.30';
 
 my %optionTypes = (
   0 => "error",
@@ -2846,6 +2846,7 @@ sub checkPendingGetSkills {
       my $previousPlayerSkill=$battleSkills{$player}->{skill};
       pluginsUpdateSkill($battleSkills{$player},$accountId);
       sendPlayerSkill($player);
+      checkBattleBansForPlayer($player);
       $needRebalance=1 if($previousPlayerSkill != $battleSkills{$player}->{skill} && $lobbyState > 5 && %{$lobby->{battle}} && exists $lobby->{battle}->{users}->{$player}
                           && defined $lobby->{battle}->{users}->{$player}->{battleStatus} && $lobby->{battle}->{users}->{$player}->{battleStatus}->{mode});
     }
@@ -3455,6 +3456,38 @@ sub getIpRank {
     }
   }
   return ($rank,$chRanked);
+}
+
+sub getPlayerSkillForBanCheck {
+  my $player=shift;
+  my ($playerSkill,$playerSigma)=('_UNKNOWN_','_UNKNOWN_');
+  return ($playerSkill,$playerSigma) unless(exists $battleSkills{$player});
+  return ($playerSkill,$playerSigma) if(getUserPref($player,'skillMode') eq 'TrueSkill'
+                                        && $battleSkills{$player}->{skillOrigin} ne 'TrueSkill'
+                                        && $battleSkills{$player}->{skillOrigin} ne 'Plugin');
+  $playerSkill=$battleSkills{$player}->{skill};
+  $playerSigma=$battleSkills{$player}->{sigma} if(exists $battleSkills{$player}->{sigma} && defined $battleSkills{$player}->{sigma});
+  if($battleSkills{$player}->{skillOrigin} eq 'TrueSkill') {
+    my $gameType=getGameTypeForBanCheck();
+    ($playerSkill,$playerSigma)=($battleSkillsCache{$player}->{$gameType}->{skill},$battleSkillsCache{$player}->{$gameType}->{sigma});
+  }
+  return ($playerSkill,$playerSigma);
+}
+
+sub getGameTypeForBanCheck {
+  if($conf{teamSize} < 2) {
+    if($conf{nbTeams} < 3) {
+      return 'Duel';
+    }else{
+      return 'FFA';
+    }
+  }else{
+    if($conf{nbTeams} < 3) {
+      return 'Team';
+    }else{
+      return 'TeamFFA';
+    }
+  }
 }
 
 sub getTargetBattleStructure {
@@ -4648,14 +4681,14 @@ sub updateCurrentGameType {
   }
 }
 
-sub updateBattleSkills {
+sub updateBattleSkillsForNewSkillAndRankModes {
   return unless($lobbyState > 5 && %{$lobby->{battle}});
   foreach my $user (keys %{$lobby->{battle}->{users}}) {
-    updateBattleSkill($user);
+    updateBattleSkillForNewSkillAndRankModes($user);
   }
 }
 
-sub updateBattleSkill {
+sub updateBattleSkillForNewSkillAndRankModes {
   my $user=shift;
   return if($user eq $conf{lobbyLogin});
   if(! exists $battleSkills{$user}) {
@@ -4697,6 +4730,7 @@ sub updateBattleSkill {
       $battleSkills{$user}->{skillOrigin}='TrueSkill';
       pluginsUpdateSkill($battleSkills{$user},$accountId);
       sendPlayerSkill($user);
+      checkBattleBansForPlayer($user);
     }elsif(! exists $pendingGetSkills{$accountId}) {
       if(exists $lobby->{users}->{$sldbLobbyBot} && $accountId) {
         my $getSkillParam=$accountId;
@@ -4706,6 +4740,7 @@ sub updateBattleSkill {
       }else{
         pluginsUpdateSkill($battleSkills{$user},$accountId);
         sendPlayerSkill($user);
+        checkBattleBansForPlayer($user);
       }
     }
   }else{
@@ -4713,6 +4748,7 @@ sub updateBattleSkill {
     $battleSkills{$user}->{skill}=$rankSkill{$battleSkills{$user}->{rank}};
     pluginsUpdateSkill($battleSkills{$user},$accountId);
     sendPlayerSkill($user);
+    checkBattleBansForPlayer($user);
   }
 }
 
@@ -4813,6 +4849,7 @@ sub getBattleSkill {
     pluginsUpdateSkill(\%userSkill,$accountId);
     $battleSkills{$user}=\%userSkill;
     sendPlayerSkill($user);
+    checkBattleBansForPlayer($user);
   }
 }
 
@@ -4856,30 +4893,35 @@ sub applySettingChange {
   updateCurrentGameType() if('nbteams' =~ /^$settingRegExp$/ || 'teamsize' =~ /^$settingRegExp$/ || 'nbplayerbyid' =~ /^$settingRegExp$/
                              || 'idsharemode' =~ /^$settingRegExp$/ || 'minteamSize' =~ /^$settingRegExp$/);
   if('rankmode' =~ /^$settingRegExp$/ || 'skillmode' =~ /^$settingRegExp$/) {
-    updateBattleSkills();
+    updateBattleSkillsForNewSkillAndRankModes();
     $colorsState=0;
     %colorsTarget=();
   }
-  enforceBans() if('banlist' =~ /^$settingRegExp$/);
+  applyBattleBans() if('banlist' =~ /^$settingRegExp$/ || 'nbteams' =~ /^$settingRegExp$/ || 'teamsize' =~ /^$settingRegExp$/);
 }
 
-sub enforceBans {
+sub applyBattleBans {
   return unless($lobbyState > 5 && %{$lobby->{battle}});
   foreach my $user (keys %{$lobby->{battle}->{users}}) {
-    my $p_userData=$lobby->{users}->{$user};
-    my $p_ban=$spads->getUserBan($user,$p_userData,isUserAuthenticated($user));
-    if($p_ban->{banType} < 2) {
-      queueLobbyCommand(["KICKFROMBATTLE",$user]);
-    }elsif($p_ban->{banType} == 2) {
-      if(defined $lobby->{battle}->{users}->{$user}->{battleStatus} && $lobby->{battle}->{users}->{$user}->{battleStatus}->{mode}) {
-        queueLobbyCommand(["FORCESPECTATORMODE",$user]);
-        if(! exists $forceSpecTimestamps{$user} || time - $forceSpecTimestamps{$user} > 60) {
-          $forceSpecTimestamps{$user}=time;
-          my $forceMessage="Forcing spectator mode for $user [auto-spec mode]";
-          $forceMessage.=" (reason: $p_ban->{reason})" if(exists $p_ban->{reason} && defined $p_ban->{reason} && $p_ban->{reason} ne '');
-          sayBattle($forceMessage);
-          checkUserMsgFlood($user);
-        }
+    checkBattleBansForPlayer($user);
+  }
+}
+
+sub checkBattleBansForPlayer {
+  my $user=shift;
+  return unless($lobbyState > 5 && %{$lobby->{battle}});
+  my $p_ban=$spads->getUserBan($user,$lobby->{users}->{$user},isUserAuthenticated($user),undef,getPlayerSkillForBanCheck($user));
+  if($p_ban->{banType} < 2) {
+    queueLobbyCommand(["KICKFROMBATTLE",$user]);
+  }elsif($p_ban->{banType} == 2) {
+    if(defined $lobby->{battle}->{users}->{$user}->{battleStatus} && $lobby->{battle}->{users}->{$user}->{battleStatus}->{mode}) {
+      queueLobbyCommand(["FORCESPECTATORMODE",$user]);
+      if(! exists $forceSpecTimestamps{$user} || time - $forceSpecTimestamps{$user} > 60) {
+        $forceSpecTimestamps{$user}=time;
+        my $forceMessage="Forcing spectator mode for $user [auto-spec mode]";
+        $forceMessage.=" (reason: $p_ban->{reason})" if(exists $p_ban->{reason} && defined $p_ban->{reason} && $p_ban->{reason} ne '');
+        sayBattle($forceMessage);
+        checkUserMsgFlood($user);
       }
     }
   }
@@ -5935,7 +5977,7 @@ sub hBan {
   my $id;
   my @banFilters=split(/;/,$bannedUser);
   my $p_user={};
-  my @banListsFields=qw'accountId name country cpu rank access bot level ip';
+  my @banListsFields=qw'accountId name country cpu rank access bot level ip skill skillUncert';
   foreach my $banFilter (@banFilters) {
     my ($filterName,$filterValue)=("name",$banFilter);
     if($banFilter =~ /^\#([1-9]\d*)$/) {
@@ -6737,7 +6779,7 @@ sub hChrank {
     answer("RankMode set to \"$val\" for user $modifiedUser");
   }
   if($lobbyState > 5 && %{$lobby->{battle}} && exists $lobby->{battle}->{users}->{$modifiedUser}) {
-    updateBattleSkill($modifiedUser);
+    updateBattleSkillForNewSkillAndRankModes($modifiedUser);
     if(defined $lobby->{battle}->{users}->{$modifiedUser}->{battleStatus} && $lobby->{battle}->{users}->{$modifiedUser}->{battleStatus}->{mode}) {
       $balanceState=0;
       %balanceTarget=();
@@ -6778,7 +6820,7 @@ sub hChskill {
     answer("SkillMode set to \"$val\" for user $modifiedUser");
   }
   if($lobbyState > 5 && %{$lobby->{battle}} && exists $lobby->{battle}->{users}->{$modifiedUser}) {
-    updateBattleSkill($modifiedUser);
+    updateBattleSkillForNewSkillAndRankModes($modifiedUser);
     if(defined $lobby->{battle}->{users}->{$modifiedUser}->{battleStatus} && $lobby->{battle}->{users}->{$modifiedUser}->{battleStatus}->{mode}) {
       $balanceState=0;
       %balanceTarget=();
@@ -8713,8 +8755,7 @@ sub hPass {
       return 0;
     }
   }
-  my $p_userData=$lobby->{users}->{$user};
-  my $p_ban=$spads->getUserBan($user,$p_userData,isUserAuthenticated($user));
+  my $p_ban=$spads->getUserBan($user,$lobby->{users}->{$user},isUserAuthenticated($user),undef,getPlayerSkillForBanCheck($user));
   if($p_ban->{banType} < 2) {
     answer("Sorry, you are banned");
     return 0;
@@ -10501,7 +10542,7 @@ sub hUnban {
 
   my @banFilters=split(/;/,$bannedUser);
   my $p_filters={};
-  my @banListsFields=qw'accountId name country cpu rank access bot level ip nameOrAccountId';
+  my @banListsFields=qw'accountId name country cpu rank access bot level ip skill skillUncert nameOrAccountId';
   foreach my $banFilter (@banFilters) {
     my ($filterName,$filterValue)=('nameOrAccountId',$banFilter);
     if($banFilter =~ /^\#([1-9]\d*)$/) {
@@ -10753,7 +10794,7 @@ sub hUnlockSpec {
   }elsif(! exists $lobby->{users}->{$user}) {
     $reason='you are not connected to lobby server';
   }else{
-    my $p_ban=$spads->getUserBan($user,$lobby->{users}->{$user},isUserAuthenticated($user));
+    my $p_ban=$spads->getUserBan($user,$lobby->{users}->{$user},isUserAuthenticated($user),undef,getPlayerSkillForBanCheck($user));
     $reason='you are banned' if($p_ban->{banType} < 2);
   }
   if($reason) {
@@ -11158,6 +11199,7 @@ sub hSkill {
       }
       pluginsUpdateSkill($battleSkills{$player},$accountId);
       sendPlayerSkill($player);
+      checkBattleBansForPlayer($player);
       $needRebalance=1 if($previousPlayerSkill != $battleSkills{$player}->{skill} && $lobbyState > 5 && %{$lobby->{battle}} && exists $lobby->{battle}->{users}->{$player}
                           && defined $lobby->{battle}->{users}->{$player}->{battleStatus} && $lobby->{battle}->{users}->{$player}->{battleStatus}->{mode});
     }else{
@@ -11481,8 +11523,7 @@ sub cbClientStatus {
 sub cbClientIpPort {
   my (undef,$user,$ip)=@_;
   seenUserIp($user,$ip);
-  my $p_userData=$lobby->{users}->{$user};
-  my $p_ban=$spads->getUserBan($user,$p_userData,isUserAuthenticated($user),$ip);
+  my $p_ban=$spads->getUserBan($user,$lobby->{users}->{$user},isUserAuthenticated($user),$ip,getPlayerSkillForBanCheck($user));
   queueLobbyCommand(["KICKFROMBATTLE",$user]) if($p_ban->{banType} < 2);
 }
 
@@ -11508,9 +11549,11 @@ sub cbClientBattleStatus {
         $nbPlayers+=$#bots+1;
       }
       my $targetNbPlayers=$conf{nbPlayerById}*$conf{teamSize}*$conf{nbTeams};
-      my $p_userData=$lobby->{users}->{$user};
-      my $p_ban=$spads->getUserBan($user,$p_userData,isUserAuthenticated($user));
-      if($p_ban->{banType} == 2) {
+      my $p_ban=$spads->getUserBan($user,$lobby->{users}->{$user},isUserAuthenticated($user),undef,getPlayerSkillForBanCheck($user));
+      if($p_ban->{banType} < 2) {
+        queueLobbyCommand(["KICKFROMBATTLE",$user]);
+        return;
+      }elsif($p_ban->{banType} == 2) {
         $forceReason="[auto-spec mode]";
         $forceReason.=" (reason: $p_ban->{reason})" if(exists $p_ban->{reason} && defined $p_ban->{reason} && $p_ban->{reason} ne '');
       }elsif($nbPlayers > $targetNbPlayers && $conf{autoSpecExtraPlayers}) {
@@ -11657,8 +11700,7 @@ sub cbUpdateBot {
 sub cbJoinBattleRequest {
   my (undef,$user,$ip)=@_;
   seenUserIp($user,$ip);
-  my $p_userData=$lobby->{users}->{$user};
-  my $p_ban=$spads->getUserBan($user,$p_userData,isUserAuthenticated($user),$ip);
+  my $p_ban=$spads->getUserBan($user,$lobby->{users}->{$user},isUserAuthenticated($user),$ip,getPlayerSkillForBanCheck($user));
   if($p_ban->{banType} < 2) {
     if(exists $p_ban->{reason} && defined $p_ban->{reason}) {
       queueLobbyCommand(['JOINBATTLEDENY',$user,$p_ban->{reason}]);
@@ -11693,8 +11735,7 @@ sub cbJoinedBattle {
 
   delete $pendingSpecJoin{$user} if(exists $pendingSpecJoin{$user});
 
-  my $p_userData=$lobby->{users}->{$user};
-  my $p_ban=$spads->getUserBan($user,$p_userData,isUserAuthenticated($user));
+  my $p_ban=$spads->getUserBan($user,$lobby->{users}->{$user},isUserAuthenticated($user),undef,getPlayerSkillForBanCheck($user));
   if($p_ban->{banType} < 2) {
     queueLobbyCommand(["KICKFROMBATTLE",$user]);
     logMsg("battle","=== $user joined ===") if($conf{logBattleJoinLeave});
@@ -11788,8 +11829,11 @@ sub cbAddBot {
 
   return if(checkUserStatusFlood($user));
 
-  my $p_userData=$lobby->{users}->{$user};
-  my $p_ban=$spads->getUserBan($user,$p_userData,isUserAuthenticated($user));
+  my $p_ban=$spads->getUserBan($user,$lobby->{users}->{$user},isUserAuthenticated($user),undef,getPlayerSkillForBanCheck($user));
+  if($p_ban->{banType} < 2) {
+    queueLobbyCommand(["KICKFROMBATTLE",$user]);
+    return;
+  }
   my @clients=keys %{$lobby->{battle}->{users}};
   my $targetNbPlayers=$conf{nbPlayerById}*$conf{teamSize}*$conf{nbTeams};
   my @bots=keys %{$lobby->{battle}->{bots}};
@@ -12653,7 +12697,7 @@ sub cbAhServerMessage {
 
     $p_lobbyUserData=$p_runningBattle->{users}->{$name} if(! defined $p_lobbyUserData && exists $p_runningBattle->{users}->{$name});
     if(defined $p_lobbyUserData) {
-      my $p_ban=$spads->getUserBan($name,$p_lobbyUserData,isUserAuthenticated($name),$gameIp);
+      my $p_ban=$spads->getUserBan($name,$p_lobbyUserData,isUserAuthenticated($name),$gameIp,getPlayerSkillForBanCheck($name));
       if($p_ban->{banType} < 2) {
         sayBattleAndGame("Kicking $name from game (banned)");
         $autohost->sendChatMessage("/kickbynum $playerNb");

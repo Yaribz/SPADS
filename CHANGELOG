@@ -66,6 +66,7 @@ help.dat:
         the !unban command now also accepts ban hashes as parameter to ease specific ban entry removal
 0.12.2: it is now possible to list aliases with "!list aliases" and to filter settings in "!list settings/hSettings/bSettings/pSettings" output
         remove alias entries (!b,!cv,!n,!spec,!y) as they can be listed with "!list aliases" now
+0.12.3: the !ban/!unban commands now accept skill based bans (new filters: "skill" and "skillUncert")
 
 helpSettings.dat:
 ================
@@ -664,6 +665,9 @@ spads.pl:
 0.11.29: new common aliases from CustomAliases plugin have been integrated into core (!ev,!h,!rc,!rck,!s,!sb,!su,!us,!w)
          it is now possible to list aliases with "!list aliases" and to filter settings in "!list settings/hSettings/bSettings/pSettings" output
          fix "." not matching all maps when calling !learnMaps with syntax "!learnMaps . <hostFilter>"
+0.11.30: skill based bans are now integrated in SPADS core
+         new fields in banLists.conf file ("skill" and "skillUncert")
+         the !ban/!unban commands now accept skill based bans (new filters: "skill" and "skillUncert")
 
 SpadsConf.pm:
 ============
@@ -779,6 +783,8 @@ SpadsConf.pm:
 0.11.8a: use "//=" syntax instead of "if(defined ...)"
 0.11.8b: homogenize quotes and use more efficient list searching functions
 0.11.8c: replace unneeded regular expressions by classic string searches
+0.11.9: skill based bans are now integrated in SPADS core
+        new fields in banLists.conf file ("skill" and "skillUncert")
 
 spadsInstaller.pl:
 =================

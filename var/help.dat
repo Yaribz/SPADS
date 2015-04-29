@@ -24,14 +24,16 @@
 !ban <usernameOrFilters> [<banType> [<duration> [<reason>]]] - ban a user from AutoHost channel and/or battle and/or game (use ; to separate filters, and ~ at start for regexp)
 "!ban badBoy full" bans badBoy for ever from AutoHost channel and battle (same as "!ban badBoy")
 "!ban badBoy battle 10" bans badBoy for 10 minutes from AutoHost battle
-"!ban badBoy spec 1h dguned an ally" forces badBoy to spec for 1 hour with reason "dguned an ally"
+"!ban badBoy spec 1h dguned an ally" forces badBoy to spectate for 1 hour with reason "dguned an ally"
 "!ban ~.*aaa.*" bans anyone who has the string "aaa" in his name for ever from AutoHost channel and battle
 "!ban name=~.*bad.*;cpu=0-2000 battle" bans anyone whose CPU speed is < 2001 and also has "bad" in his name for ever from AutoHost battle
 "!ban ip=192.168.0.1 batt 2d" bans IP 192.168.0.1 for 2 days from AutoHost battle
 "!ban accountId=1234 ba 3w" bans account number "1234" for 3 weeks from AutoHost channel and battle
 "!ban #1234 b 3g" same as above except it bans for the 3 next games instead of for 3 weeks
-"!ban level<=100 s" forces anyone with AutoHost access level less than or equal to 100 to spec
+"!ban level<=100 s" forces anyone with AutoHost access level less than or equal to 100 to spectate
 "!ban country=FR;accountId>900000 f 1m" bans anyone having both a french flag and an accountId greater than 900000 for one month from AutoHost channel and battle
+"!ban skill<25 s 2h" forces low skilled players to spectate for the next 2 hours
+"!ban skillUncert>3 s 5g" forces players with high skill uncertainty to spectate for the next 5 games
 
 [banIp]
 !banIp <username>|#<accountId> [<banType> [<duration> [<reason>]]] - ban a user from battle lobby, based on his latest IP (same as doing "!ban ip=<userIp>")

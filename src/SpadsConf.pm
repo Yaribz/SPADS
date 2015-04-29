@@ -31,7 +31,7 @@ use SimpleLog;
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.11.8c';
+my $moduleVersion='0.11.9';
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 
 my %globalParameters = (lobbyLogin => ["login"],
@@ -264,7 +264,7 @@ my %paramTypes = (login => '[\w\[\]]{2,20}',
                   botList => '[\w\[\]]{2,20} \w+ [^ \;][^\;]*(;[\w\[\]]{2,20} \w+ [^ \;][^\;]*)*',
                   db => '[^\/]+\/[^\@]+\@(?i:dbi)\:\w+\:\w.*');
 
-my @banListsFields=(['accountId','name','country','cpu','rank','access','bot','level','ip'],['banType','startDate','endDate','remainingGames','reason']);
+my @banListsFields=(['accountId','name','country','cpu','rank','access','bot','level','ip','skill','skillUncert'],['banType','startDate','endDate','remainingGames','reason']);
 my @preferencesListsFields=(["accountId"],["autoSetVoteMode","voteMode","votePvMsgDelay","voteRingDelay","minRingDelay","handleSuggestions","password","rankMode",'skillMode',"shareId","spoofProtection",'ircColors','clan']);
 my @usersFields=(["accountId","name","country","cpu","rank","access","bot","auth"],["level"]);
 my @levelsFields=(["level"],["description"]);
@@ -2224,12 +2224,16 @@ sub banExists {
 }
 
 sub getUserBan {
-  my ($self,$name,$p_user,$authenticated,$ip)=@_;
+  my ($self,$name,$p_user,$authenticated,$ip,$skill,$skillUncert)=@_;
+  $skill//='_UNKNOWN_';
+  $skillUncert//='_UNKNOWN_';
   if(! defined $ip) {
     my $id=$p_user->{accountId};
     $id.="($name)" unless($id);
     $ip=$self->getLatestAccountIp($id);
   }
+  $ip=$p_user->{ip} if($ip eq '' && exists $p_user->{ip} && defined $p_user->{ip});
+  $ip='_UNKNOWN_' if($ip eq '');
   my $p_userData={name => $name,
                   accountId => $p_user->{accountId},
                   country => $p_user->{country},
@@ -2238,8 +2242,9 @@ sub getUserBan {
                   access => $p_user->{status}->{access},
                   bot => $p_user->{status}->{bot},
                   level => $self->getUserAccessLevel($name,$p_user,$authenticated),
-                  ip => $ip};
-  $p_userData->{ip}="_UNKNOWN_" if($p_userData->{ip} eq "");
+                  ip => $ip,
+                  skill => $skill,
+                  skillUncert => $skillUncert};
   my $nbPrunedBans = $self->pruneExpiredBans();
   $self->{log}->log("$nbPrunedBans bans have expired in file \"banLists.cfg\"",3) if($nbPrunedBans);
 
