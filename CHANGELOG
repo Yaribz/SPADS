@@ -819,6 +819,8 @@ spadsInstaller.pl:
        make Spring 95 behave like previous versions concerning writable data directory location
 0.13: delay Spring server packages downloads and use unitsync to find which versions to download (Windows)
 0.13a: use ANSI colors on Windows too
+0.13b: fix Perl unitsync interface module generation when the unitsync library path contains spaces
+       prevent infinite loop when using the script in non-interactive mode (crontab ...)
 
 SpadsPluginApi.pm:
 =================

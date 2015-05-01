@@ -2,7 +2,7 @@
 #
 # This program installs SPADS in current directory from remote repository.
 #
-# Copyright (C) 2008-2013  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2015  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -18,13 +18,14 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.13a (2013/11/28)
+# Version 0.13b (2015/05/01)
 
 use strict;
 
+use Cwd;
 use File::Copy;
 use File::Path;
-use Cwd;
+use List::Util 'first';
 
 use SimpleLog;
 use SpadsUpdater;
@@ -35,6 +36,7 @@ my @packages=qw/getDefaultModOptions.pl help.dat helpSettings.dat SpringAutoHost
 my @packagesWinUnitsync=qw/PerlUnitSync.pm PerlUnitSync.dll/;
 my @packagesWinServer=qw/spring-dedicated.exe spring-headless.exe/;
 my $win=$^O eq 'MSWin32' ? 1 : 0;
+my $isInteractive=-t STDIN;
 
 my @pathes;
 if(exists $ENV{PATH}) {
@@ -46,8 +48,8 @@ if(exists $ENV{PATH}) {
 }
 
 my $nullDevice="/dev/null";
-my $perlExecPrefix="";
-my $exeExtension="";
+my $perlExecPrefix='';
+my $exeExtension='';
 my $dllExtension=".so";
 if($win) {
   $nbSteps=11;
@@ -62,14 +64,25 @@ if($win) {
 my %conf;
 $conf{installDir}=cwd();
 
-my $sLog=SimpleLog->new(logFiles => [""],
+my $sLog=SimpleLog->new(logFiles => [''],
                         logLevels => [4],
-                        useANSICodes => [1],
+                        useANSICodes => [$isInteractive ? 1 : 0],
                         useTimestamps => [0],
                         prefix => "[SpadsInstaller] ");
 
+
+sub any (&@) {
+  my $code = shift;
+  return defined first {&{$code}} @_;
+}
+
+sub none (&@) {
+  my $code = shift;
+  return ! defined first {&{$code}} @_;
+}
+
 if(@ARGV) {
-  if($#ARGV == 0 && grep {/^$ARGV[0]$/} qw/stable testing unstable contrib -g/) {
+  if($#ARGV == 0 && any {$ARGV[0] eq $_} qw/stable testing unstable contrib -g/) {
     $conf{release}=$ARGV[0];
   }else{
     $sLog->log("Invalid usage",1);
@@ -125,52 +138,66 @@ if(! $win || (exists $conf{release} && $conf{release} eq "-g")) {
 sub promptChoice {
   my ($prompt,$p_choices,$default)=@_; 
   my @choices=@{$p_choices};
-  my $choicesString=join(",",@choices);
-  my $choice="";
-  while(! grep {/^$choice$/} @choices) {
+  my $choicesString=join(',',@choices);
+  my $choice='';
+  while(none {$choice eq $_} @choices) {
     print "$prompt ($choicesString) [$default] ? ";
     $choice=<STDIN>;
-    $choice="" unless(defined $choice);
+    $choice//='';
     chomp($choice);
-    $choice=$default if($choice eq "");
+    $choice=$default if($choice eq '');
   }
   return $choice;
 }
 
 sub promptExistingFile {
   my ($prompt,$p_fileNames,$default)=@_;
-  my $fileNamesString=join(",",@{$p_fileNames});
-  my $choice="";
+  my $fileNamesString=join(',',@{$p_fileNames});
+  my $choice='';
+  my $firstTry=1;
   while(! isAbsoluteFilePath($choice,$p_fileNames)) {
+    if(! $firstTry && ! $isInteractive) {
+      $sLog->log("Inconsistent data received in non-interactive mode \"$choice\", exiting!",1);
+      exit 1;
+    }
+    $firstTry=0;
     print "$prompt ($fileNamesString) [$default] ? ";
     $choice=<STDIN>;
-    $choice="" unless(defined $choice);
+    print "\n" unless($isInteractive);
+    $choice//='';
     chomp($choice);
-    $choice=$default if($choice eq "");
+    $choice=$default if($choice eq '');
   }
   return $choice;
 }
 
 sub promptExistingDir {
   my ($prompt,$default)=@_;
-  my $choice="";
+  my $choice='';
+  my $firstTry=1;
   while((! $win && $choice !~ /^\//) || ($win && $choice !~ /^[a-zA-Z]\:/) || ! -d $choice) {
+    if(! $firstTry && ! $isInteractive) {
+      $sLog->log("Inconsistent data received in non-interactive mode \"$choice\", exiting!",1);
+      exit 1;
+    }
+    $firstTry=0;
     print "$prompt [$default] ? ";
     $choice=<STDIN>;
-    $choice="" unless(defined $choice);
+    print "\n" unless($isInteractive);
+    $choice//='';
     chomp($choice);
-    $choice=$default if($choice eq "");
+    $choice=$default if($choice eq '');
   }
   return $choice;
 }
 
 sub promptString {
   my $prompt=shift;
-  my $choice="";
-  while($choice eq "") {
+  my $choice='';
+  while($choice eq '') {
     print "$prompt ? ";
     $choice=<STDIN>;
-    $choice="" unless(defined $choice);
+    $choice//='';
     chomp($choice);
   }
   return $choice;
@@ -211,7 +238,7 @@ sub downloadFile {
 }
 
 sub generatePerlUnitSync {
-  my $defaultUnitsync="";
+  my $defaultUnitsync='';
   my @libPathes=@pathes;
   my @unitsyncNames=qw/unitsync.dll/;
   if(! $win) {
@@ -251,8 +278,8 @@ sub generatePerlUnitSync {
     exit 1;
   }
   
-  my $exportedFunctions="";
-  my $exportedFunctionsFixed="";
+  my $exportedFunctions='';
+  my $exportedFunctionsFixed='';
   my $usSrc="unitsync.cpp";
   if(-f $usSrc) {
     if(open(US_CPP,"<$usSrc")) {
@@ -315,7 +342,7 @@ sub generatePerlUnitSync {
     foreach my $inc (@INC) {
       push(@coreIncs,"-I$inc/CORE") if(-d "$inc/CORE");
     }
-    $coreIncsString=join(" ",@coreIncs);
+    $coreIncsString=join(' ',@coreIncs);
   }
 
   system("swig -perl5 PerlUnitSync.i");
@@ -341,13 +368,13 @@ sub generatePerlUnitSync {
     unlink("PerlUnitSync_wrap.o");
     exit 1;
   }
-  my $linkParam="";
+  my $linkParam='';
   if($win) {
     $linkParam=" $ENV{PERL5_LIB}";
   }else{
-    $linkParam=" -Wl,-rpath,$1" if($unitsync =~ /^(.+)\/[^\/]+$/);
+    $linkParam=" -Wl,-rpath,\"$1\"" if($unitsync =~ /^(.+)\/[^\/]+$/);
   }
-  system("g++ -shared PerlUnitSync_wrap.o $unitsync$linkParam -o PerlUnitSync$dllExtension");
+  system("g++ -shared PerlUnitSync_wrap.o \"$unitsync\"$linkParam -o PerlUnitSync$dllExtension");
   unlink("unitsync.h");
   unlink("exportdefines.h");
   unlink("maindefines.h");
@@ -366,10 +393,10 @@ my $nbMods=0;
 my @availableMods=();
 my $springVersion;
 sub checkUnitsync {
-  my $defaultSpringDataDir="";
+  my $defaultSpringDataDir='';
   $defaultSpringDataDir="/share/games/spring" if(! $win && -d "/share/games/spring");
-  $defaultSpringDataDir=$ENV{SPRING_DATADIR} if(exists $ENV{SPRING_DATADIR} && $ENV{SPRING_DATADIR} ne "" && -d $ENV{SPRING_DATADIR});
-  $defaultSpringDataDir=$ENV{SPRING_WRITEDIR} if(exists $ENV{SPRING_WRITEDIR} && $ENV{SPRING_WRITEDIR} ne "" && -d $ENV{SPRING_WRITEDIR});
+  $defaultSpringDataDir=$ENV{SPRING_DATADIR} if(exists $ENV{SPRING_DATADIR} && $ENV{SPRING_DATADIR} ne '' && -d $ENV{SPRING_DATADIR});
+  $defaultSpringDataDir=$ENV{SPRING_WRITEDIR} if(exists $ENV{SPRING_WRITEDIR} && $ENV{SPRING_WRITEDIR} ne '' && -d $ENV{SPRING_WRITEDIR});
   if($win) {
     $conf{dataDir}=promptExistingDir("$currentStep/$nbSteps - Please enter the Spring installation directory",$defaultSpringDataDir);
   }else{
@@ -432,7 +459,7 @@ if(! exists $conf{release}) {
 
 $currentStep=2;
 
-my $updaterLog=SimpleLog->new(logFiles => [""],
+my $updaterLog=SimpleLog->new(logFiles => [''],
                               logLevels => [4],
                               useANSICodes => [1],
                               useTimestamps => [0],
@@ -475,7 +502,7 @@ if($win) {
   }else {
     generatePerlUnitSync();
   }
-  my $defaultSpringDedicated="";
+  my $defaultSpringDedicated='';
   foreach my $path (@pathes) {
     if(-f "$path/spring-$serverType") {
       $defaultSpringDedicated="$path/spring-$serverType";
@@ -511,7 +538,7 @@ if(! $nbMods) {
   $sLog->log("Hit Ctrl-C now if you want to abort this installation to fix the problem, or remember that you will have to set the default mod manually later",2);
   $currentStep+=2;
 }else{
-  my $chosenModNb="";
+  my $chosenModNb='';
   if($#availableMods == 0) {
     $chosenModNb=0;
   }else{
@@ -522,7 +549,7 @@ if(! $nbMods) {
     while($chosenModNb !~ /^\d+$/ || $chosenModNb > $#availableMods) {
       print "$currentStep/$nbSteps - Please choose the AutoHost default mod ? ";
       $chosenModNb=<STDIN>;
-      $chosenModNb="" unless(defined $chosenModNb);
+      $chosenModNb//='';
       chomp($chosenModNb);
     }
   }
@@ -569,9 +596,9 @@ sub makeAbsolutePath {
 print "$currentStep/$nbSteps - Please choose the directory where SPADS will store its dynamic data [$conf{installDir}/var] ? ";
 $currentStep++;
 my $c=<STDIN>;
-$c="" unless(defined $c);
+$c//='';
 chomp($c);
-$c="var" if($c eq "");
+$c="var" if($c eq '');
 $c=makeAbsolutePath($c);
 createDir($c);
 $conf{varDir}=$c;
@@ -579,9 +606,9 @@ $conf{varDir}=$c;
 print "$currentStep/$nbSteps - Please choose the directory where SPADS will write its logs [$conf{installDir}/var/log] ? ";
 $currentStep++;
 $c=<STDIN>;
-$c="" unless(defined $c);
+$c//='';
 chomp($c);
-$c="var/log" if($c eq "");
+$c="var/log" if($c eq '');
 $c=makeAbsolutePath($c);
 createDir($c);
 createDir("$c/chat");
@@ -590,9 +617,9 @@ $conf{logDir}=$c;
 print "$currentStep/$nbSteps - Please choose the directory where SPADS configuration files will be stored [$conf{installDir}/etc] ? ";
 $currentStep++;
 $c=<STDIN>;
-$c="" unless(defined $c);
+$c//='';
 chomp($c);
-$c="etc" if($c eq "");
+$c="etc" if($c eq '');
 $c=makeAbsolutePath($c);
 createDir($c);
 createDir("$c/templates");
