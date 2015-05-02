@@ -1,0 +1,7 @@
+This plugin implements forward confirmed reverse DNS lookup for players joining
+the autohost battle lobby and game. The resolved hostnames are then printed in
+!status output if the user as sufficient rights to see IP addresses.
+By default the DNS cache time is 15 days, the maximum number of simultaneous
+forked processes for reverse DNS lookup is 4 and the maximum size of the reverse
+DNS lookup queue is 100. You can change this by editing the ReverseLookup.conf
+configuration file.
