@@ -48,7 +48,7 @@ $SIG{TERM} = \&sigTermHandler;
 my $MAX_SIGNEDINTEGER=2147483647;
 my $MAX_UNSIGNEDINTEGER=4294967296;
 
-our $spadsVer='0.11.30a';
+our $spadsVer='0.11.30b';
 
 my %optionTypes = (
   0 => "error",
@@ -12886,7 +12886,7 @@ sub pluginsUpdateSkill {
 
 # Main ########################################################################
 
-slog("Initializing SPADS",3);
+slog("Initializing SPADS $spadsVer",3);
 
 # Auto-update ##########################
 

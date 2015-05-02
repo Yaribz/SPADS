@@ -669,6 +669,7 @@ spads.pl:
          new fields in banLists.conf file ("skill" and "skillUncert")
          the !ban/!unban commands now accept skill based bans (new filters: "skill" and "skillUncert")
 0.11.30a: fix "Scalar value @currentVote{...} better written as ..." warnings printed by old Perl versions
+0.11.30b: show SPADS version in "Initializing SPADS" log message
 
 SpadsConf.pm:
 ============
