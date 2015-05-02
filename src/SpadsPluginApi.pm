@@ -21,7 +21,7 @@ package SpadsPluginApi;
 use Exporter 'import';
 @EXPORT=qw/$spadsVersion $spadsDir getLobbyState getSpringPid getSpringServerType getTimestamps getRunningBattle getCurrentVote getPlugin addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives/;
 
-my $apiVersion='0.17';
+my $apiVersion='0.18';
 
 our $spadsVersion=$::spadsVer;
 our $spadsDir=$::cwd;
@@ -711,6 +711,22 @@ C<"TeamFFA">)
 The return value is the skill update status: C<0> (skill not updated by the
 plugin), C<1> (skill updated by the plugin), C<2> (skill updated by the plugin
 in degraded mode)
+
+=item C<updateGameStatusInfo(\%playerStatus,$accessLevel)>
+
+This callback is called by SPADS for each player in game when the C<!status>
+command is called, to allow plugins to update and/or add data which will be
+presented to the user.
+
+C<\%playerStatus> is a reference to the hash containing current player status
+data. The plugin must update existing data or add new data in this hash. For
+example: C<< $playerStatus->{myPluginData}=<myPluginValue> >>
+
+C<$accessLevel> is the autohost access level of the user issuing the C<!status>
+command.
+
+The return value must be a reference to an array containing the names of the
+status information updated or added by the plugin.
 
 =item C<updateStatusInfo(\%playerStatus,$accountId,$modName,$gameType,$accessLevel)>
 

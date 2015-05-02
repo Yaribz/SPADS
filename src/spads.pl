@@ -48,7 +48,7 @@ $SIG{TERM} = \&sigTermHandler;
 my $MAX_SIGNEDINTEGER=2147483647;
 my $MAX_UNSIGNEDINTEGER=4294967296;
 
-our $spadsVer='0.11.30b';
+our $spadsVer='0.11.31';
 
 my %optionTypes = (
   0 => "error",
@@ -10039,9 +10039,12 @@ sub hStatus {
   }
   return 1 if($checkOnly);
 
+  my $userLevel=getUserAccessLevel($user);
+
   my ($p_C,$B)=initUserIrcColors($user);
   my %C=%{$p_C};
   
+  my %pluginStatusInfo;
   if($p_params->[0] eq "game") {
     my @spectators;
     my %runningBattleStatus;
@@ -10080,86 +10083,130 @@ sub hStatus {
         my @midGameIdPlayers;
         @midGameIdPlayers=@{$midGamePlayersById{$internalIdNb}} if(exists $midGamePlayersById{$internalIdNb});
         foreach my $player (sort (@{$runningBattleStatus{$teamNb}->{$idNb}},@midGameIdPlayers)) {
-          my %clientStatus=("$C{5}Name$C{1}" => $player,
-                            "$C{5}Team$C{1}" => $runningBattleMapping{allyTeams}->{$teamNb},
-                            "$C{5}Id$C{1}" => $internalIdNb);
+          my %clientStatus=(Name => $player,
+                            Team => $runningBattleMapping{allyTeams}->{$teamNb},
+                            Id => $internalIdNb);
           if($player =~ /^(.+) \(bot\)$/) {
             my $botName=$1;
-            $clientStatus{"$C{5}Version$C{1}"}="$p_runningBattle->{bots}->{$botName}->{aiDll} ($p_runningBattle->{bots}->{$botName}->{owner})";
+            $clientStatus{Version}="$p_runningBattle->{bots}->{$botName}->{aiDll} ($p_runningBattle->{bots}->{$botName}->{owner})";
           }else{
-            $clientStatus{"$C{5}Name$C{1}"}="+ $player" unless(exists $p_runningBattle->{users}->{$player});
-            $clientStatus{"$C{5}Status$C{1}"}="Not connected";
+            $clientStatus{Name}="+ $player" unless(exists $p_runningBattle->{users}->{$player});
+            $clientStatus{Status}="Not connected";
           }
           my $p_ahPlayer=$autohost->getPlayer($player);
           if(%{$p_ahPlayer}) {
             if($p_ahPlayer->{ready} == 0) {
-              $clientStatus{"$C{5}Ready$C{1}"}="$C{7}Placed$C{1}";
+              $clientStatus{Ready}="$C{7}Placed$C{1}";
             }elsif($p_ahPlayer->{ready} == 1) {
-              $clientStatus{"$C{5}Ready$C{1}"}="$C{3}Yes$C{1}";
+              $clientStatus{Ready}="$C{3}Yes$C{1}";
             }elsif($p_ahPlayer->{ready} == 2) {
-              $clientStatus{"$C{5}Ready$C{1}"}="$C{4}No$C{1}";
+              $clientStatus{Ready}="$C{4}No$C{1}";
             }else{
-              $clientStatus{"$C{5}Ready$C{1}"}="!";
+              $clientStatus{Ready}="!";
             }
             if($p_ahPlayer->{disconnectCause} == -2) {
-              $clientStatus{"$C{5}Status$C{1}"}="$C{14}Loading$C{1}";
+              $clientStatus{Status}="$C{14}Loading$C{1}";
             }elsif($p_ahPlayer->{disconnectCause} == 0) {
-              $clientStatus{"$C{5}Status$C{1}"}="$C{4}Timeouted$C{1}";
+              $clientStatus{Status}="$C{4}Timeouted$C{1}";
             }elsif($p_ahPlayer->{disconnectCause} == 1) {
-              $clientStatus{"$C{5}Status$C{1}"}="$C{7}Disconnected$C{1}";
+              $clientStatus{Status}="$C{7}Disconnected$C{1}";
             }elsif($p_ahPlayer->{disconnectCause} == 2) {
-              $clientStatus{"$C{5}Status$C{1}"}="$C{13}Kicked$C{1}";
+              $clientStatus{Status}="$C{13}Kicked$C{1}";
             }elsif($p_ahPlayer->{disconnectCause} == -1) {
               if($p_ahPlayer->{lost} == 0) {
                 if($ahState == 1) {
-                  $clientStatus{"$C{5}Status$C{1}"}="$C{10}Waiting$C{1}";
+                  $clientStatus{Status}="$C{10}Waiting$C{1}";
                 }else{
-                  $clientStatus{"$C{5}Status$C{1}"}="$C{3}Playing$C{1}";
+                  $clientStatus{Status}="$C{3}Playing$C{1}";
                 }
               }else{
-                $clientStatus{"$C{5}Status$C{1}"}="$C{12}Spectating$C{1}";
+                $clientStatus{Status}="$C{12}Spectating$C{1}";
               }
             }else{
-              $clientStatus{"$C{5}Status$C{1}"}="$C{6}Unknown$C{1}";
+              $clientStatus{Status}="$C{6}Unknown$C{1}";
             }
-            $clientStatus{"$C{5}Version$C{1}"}=$p_ahPlayer->{version};
-            $clientStatus{"$C{5}IP$C{1}"}=$p_ahPlayer->{address};
-            $clientStatus{"$C{5}IP$C{1}"}=$1 if($clientStatus{"$C{5}IP$C{1}"} =~ /^\[(?:::ffff:)?(\d+(?:\.\d+){3})\]:\d+$/);
+            $clientStatus{Version}=$p_ahPlayer->{version};
+            $clientStatus{IP}=$p_ahPlayer->{address};
+            $clientStatus{IP}=$1 if($clientStatus{IP} =~ /^\[(?:::ffff:)?(\d+(?:\.\d+){3})\]:\d+$/);
+            foreach my $pluginName (@pluginsOrder) {
+              if($plugins{$pluginName}->can('updateGameStatusInfo')) {
+                my $p_pluginColumns=$plugins{$pluginName}->updateGameStatusInfo(\%clientStatus,$userLevel);
+                foreach my $pluginColumn (@{$p_pluginColumns}) {
+                  $pluginStatusInfo{$pluginColumn}=$pluginName unless(exists $pluginStatusInfo{$pluginColumn});
+                }
+              }
+            }
           }
-          push(@clientsStatus,\%clientStatus);
+          my %coloredStatus;
+          foreach my $k (keys %clientStatus) {
+            if(exists $pluginStatusInfo{$k}) {
+              $coloredStatus{"$C{6}$k$C{1}"}=$clientStatus{$k};
+            }else{
+              $coloredStatus{"$C{5}$k$C{1}"}=$clientStatus{$k};
+            }
+          }
+          push(@clientsStatus,\%coloredStatus);
         }
       }
     }
     my @midGameSpecs=grep {! exists $p_runningBattle->{users}->{$_} && ! exists $inGameAddedPlayers{$_}} (keys %{$p_ahPlayers});
     foreach my $spec (sort (@spectators,@midGameSpecs)) {
-      my %clientStatus=("$C{5}Name$C{1}" => $spec,
-                        "$C{5}Status$C{1}" => "Not connected");
-      $clientStatus{"$C{5}Name$C{1}"}="+ $spec" unless(exists $p_runningBattle->{users}->{$spec});
+      my %clientStatus=(Name => $spec,
+                        Status => "Not connected");
+      $clientStatus{Name}="+ $spec" unless(exists $p_runningBattle->{users}->{$spec});
       my $p_ahPlayer=$autohost->getPlayer($spec);
       if(%{$p_ahPlayer}) {
         if($p_ahPlayer->{disconnectCause} == -2) {
-          $clientStatus{"$C{5}Status$C{1}"}="$C{14}Loading$C{1}";
+          $clientStatus{Status}="$C{14}Loading$C{1}";
         }elsif($p_ahPlayer->{disconnectCause} == 0) {
-          $clientStatus{"$C{5}Status$C{1}"}="$C{4}Timeouted$C{1}";
+          $clientStatus{Status}="$C{4}Timeouted$C{1}";
         }elsif($p_ahPlayer->{disconnectCause} == 1) {
-          $clientStatus{"$C{5}Status$C{1}"}="$C{7}Disconnected$C{1}";
+          $clientStatus{Status}="$C{7}Disconnected$C{1}";
         }elsif($p_ahPlayer->{disconnectCause} == 2) {
-          $clientStatus{"$C{5}Status$C{1}"}="$C{13}Kicked$C{1}";
+          $clientStatus{Status}="$C{13}Kicked$C{1}";
         }elsif($p_ahPlayer->{disconnectCause} == -1) {
-          $clientStatus{"$C{5}Status$C{1}"}="$C{12}Spectating$C{1}";
+          $clientStatus{Status}="$C{12}Spectating$C{1}";
         }else{
-          $clientStatus{"$C{5}Status$C{1}"}="$C{6}Unknown$C{1}";
+          $clientStatus{Status}="$C{6}Unknown$C{1}";
         }
-        $clientStatus{"$C{5}Version$C{1}"}=$p_ahPlayer->{version};
-        $clientStatus{"$C{5}IP$C{1}"}=$p_ahPlayer->{address};
-        $clientStatus{"$C{5}IP$C{1}"}=$1 if($clientStatus{"$C{5}IP$C{1}"} =~ /^\[(?:::ffff:)?(\d+(?:\.\d+){3})\]:\d+$/);
+        $clientStatus{Version}=$p_ahPlayer->{version};
+        $clientStatus{IP}=$p_ahPlayer->{address};
+        $clientStatus{IP}=$1 if($clientStatus{IP} =~ /^\[(?:::ffff:)?(\d+(?:\.\d+){3})\]:\d+$/);
+        foreach my $pluginName (@pluginsOrder) {
+          if($plugins{$pluginName}->can('updateGameStatusInfo')) {
+            my $p_pluginColumns=$plugins{$pluginName}->updateGameStatusInfo(\%clientStatus,$userLevel);
+            foreach my $pluginColumn (@{$p_pluginColumns}) {
+              $pluginStatusInfo{$pluginColumn}=$pluginName unless(exists $pluginStatusInfo{$pluginColumn});
+            }
+          }
+        }
       }
-      push(@clientsStatus,\%clientStatus) if(exists $p_runningBattle->{users}->{$spec} || (%{$p_ahPlayer} && $p_ahPlayer->{disconnectCause} < 0));
+      my %coloredStatus;
+      foreach my $k (keys %clientStatus) {
+        if(exists $pluginStatusInfo{$k}) {
+          $coloredStatus{"$C{6}$k$C{1}"}=$clientStatus{$k};
+        }else{
+          $coloredStatus{"$C{5}$k$C{1}"}=$clientStatus{$k};
+        }
+      }
+      push(@clientsStatus,\%coloredStatus) if(exists $p_runningBattle->{users}->{$spec} || (%{$p_ahPlayer} && $p_ahPlayer->{disconnectCause} < 0));
     }
-    my @fields=("$C{5}Name$C{1}","$C{5}Team$C{1}","$C{5}Id$C{1}","$C{5}Ready$C{1}","$C{5}Status$C{1}","$C{5}Version$C{1}");
-    @fields=("$C{5}Name$C{1}","$C{5}Team$C{1}","$C{5}Id$C{1}","$C{5}Status$C{1}","$C{5}Version$C{1}") if($startPosType != 2);
-    push(@fields,"$C{5}IP$C{1}") if(getUserAccessLevel($user) >= $conf{minLevelForIpAddr});
-    my $p_statusLines=formatArray(\@fields,\@clientsStatus);
+    my @defaultStatusColumns=qw'Name Team Id Ready Status Version';
+    @defaultStatusColumns=qw'Name Team Id Status Version' if($startPosType != 2);
+    my @newPluginStatusColumns;
+    foreach my $pluginColumn (keys %pluginStatusInfo) {
+      push(@newPluginStatusColumns,$pluginColumn) unless(any {$pluginColumn eq $_} (@defaultStatusColumns,'IP'));
+    }
+    my @statusFields;
+    foreach my $statusField (@defaultStatusColumns,@newPluginStatusColumns,'IP') {
+      next if($statusField eq 'IP' && $userLevel < $conf{minLevelForIpAddr});
+      if(exists $pluginStatusInfo{$statusField}) {
+        push(@statusFields,"$C{6}$statusField$C{1}");
+      }else{
+        push(@statusFields,"$C{5}$statusField$C{1}");
+      }
+    }
+    my $p_statusLines=formatArray(\@statusFields,\@clientsStatus);
     foreach my $statusLine (@{$p_statusLines}) {
       sayPrivate($user,$statusLine);
     }
@@ -10215,7 +10262,6 @@ sub hStatus {
       sayPrivate($user,"$C{7}Battle is empty");
       sayPrivate($user,"===============");
     }else{
-      my $userLevel=getUserAccessLevel($user);
       foreach my $bot (keys %{$p_bBots}) {
         my $botTeam=$p_bBots->{$bot}->{battleStatus}->{team};
         my $botId=$p_bBots->{$bot}->{battleStatus}->{id};
@@ -10227,7 +10273,6 @@ sub hStatus {
         $currentBattleStatus{$botTeam}->{$botId}=[] unless(exists $currentBattleStatus{$botTeam}->{$botId});
         push(@{$currentBattleStatus{$botTeam}->{$botId}},$bot." (bot)");
       }
-      my %pluginStatusInfo;
       foreach my $teamNb (sort {$a <=> $b} keys %currentBattleStatus) {
         foreach my $idNb (sort {$a <=> $b} keys %{$currentBattleStatus{$teamNb}}) {
           foreach my $player (sort @{$currentBattleStatus{$teamNb}->{$idNb}}) {
@@ -10412,21 +10457,19 @@ sub hStatus {
         push(@clientsStatus,\%coloredStatus);
       }
       my @defaultStatusColumns=qw'Name Team Id Clan Ready Rank Skill ID';
-      my %defaultStatusColumnsHash;
-      @defaultStatusColumnsHash{@defaultStatusColumns}=(1) x @defaultStatusColumns;
       my @newPluginStatusColumns;
       foreach my $pluginColumn (keys %pluginStatusInfo) {
-        push(@newPluginStatusColumns,$pluginColumn) unless(exists $defaultStatusColumnsHash{$pluginColumn});
+        push(@newPluginStatusColumns,$pluginColumn) unless(any {$pluginColumn eq $_} (@defaultStatusColumns,'IP'));
       }
       my @statusFields;
-      foreach my $statusField (@defaultStatusColumns,@newPluginStatusColumns) {
+      foreach my $statusField (@defaultStatusColumns,@newPluginStatusColumns,'IP') {
+        next if($statusField eq 'IP' && $userLevel < $conf{minLevelForIpAddr});
         if(exists $pluginStatusInfo{$statusField}) {
           push(@statusFields,"$C{6}$statusField$C{1}");
         }else{
           push(@statusFields,"$C{5}$statusField$C{1}");
         }
       }
-      push(@statusFields,"$C{5}IP$C{1}") if($userLevel >= $conf{minLevelForIpAddr});
       my $p_statusLines=formatArray(\@statusFields,\@clientsStatus);
       foreach my $statusLine (@{$p_statusLines}) {
         sayPrivate($user,$statusLine);

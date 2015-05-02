@@ -670,6 +670,8 @@ spads.pl:
          the !ban/!unban commands now accept skill based bans (new filters: "skill" and "skillUncert")
 0.11.30a: fix "Scalar value @currentVote{...} better written as ..." warnings printed by old Perl versions
 0.11.30b: show SPADS version in "Initializing SPADS" log message
+0.11.31: new plugin customization callback: "updateGameStatusInfo"
+         fix duplicate IP field in !status output when plugins update player IP data in updateStatusInfo callback
 
 SpadsConf.pm:
 ============
@@ -853,6 +855,7 @@ SpadsPluginApi.pm:
 0.15: fix links to Spring autohost interface code (thanks gajop)
 0.16: onReloadConf plugin callback can now return 0 to indicate configuration reload failed
 0.17: new plugin API functions "addSocket,removeSocket" (sockets management for plugins)
+0.18: new plugin customization callback: "updateGameStatusInfo"
 
 SpadsUpdater.pm:
 ===============

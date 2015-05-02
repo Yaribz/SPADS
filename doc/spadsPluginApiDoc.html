@@ -402,6 +402,19 @@
 <p>The return value is the skill update status: <code>0</code> (skill not updated by the plugin), <code>1</code> (skill updated by the plugin), <code>2</code> (skill updated by the plugin in degraded mode)</p>
 
 </dd>
+<dt id="updateGameStatusInfo-playerStatus-accessLevel"><code>updateGameStatusInfo(\%playerStatus,$accessLevel)</code></dt>
+<dd>
+
+<p>This callback is called by SPADS for each player in game when the <code>!status</code> command is called, to allow plugins to update and/or add data which will be presented to the user.</p>
+
+<p><code>\%playerStatus</code> is a reference to the hash containing current player status data. The plugin must update existing data or add new data in this hash. For example: <code><span class="variable">$playerStatus</span><span class="operator">-&gt;</span><span class="operator">{</span><span class="string">myPluginData</span><span class="operator">}</span><span class="operator">=&lt;</span><span class="variable">myPluginValue</span><span class="operator">&gt;</span>
+</code></p>
+
+<p><code>$accessLevel</code> is the autohost access level of the user issuing the <code>!status</code> command.</p>
+
+<p>The return value must be a reference to an array containing the names of the status information updated or added by the plugin.</p>
+
+</dd>
 <dt id="updateStatusInfo-playerStatus-accountId-modName-gameType-accessLevel"><code>updateStatusInfo(\%playerStatus,$accountId,$modName,$gameType,$accessLevel)</code></dt>
 <dd>
 
