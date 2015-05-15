@@ -789,6 +789,7 @@ SpadsConf.pm:
 0.11.8c: replace unneeded regular expressions by classic string searches
 0.11.9: skill based bans are now integrated in SPADS core
         new fields in banLists.conf file ("skill" and "skillUncert")
+0.11.9a: ignore leading and trailing spaces in settings files (should fix a rehost loop bug when the battleName hosting setting contains any leading or trailing space)
 
 spadsInstaller.pl:
 =================

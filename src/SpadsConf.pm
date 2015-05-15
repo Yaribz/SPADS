@@ -31,7 +31,7 @@ use SimpleLog;
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.11.9';
+my $moduleVersion='0.11.9a';
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 
 my %globalParameters = (lobbyLogin => ["login"],
@@ -650,7 +650,7 @@ sub loadSettingsFile {
       $currentSection=$1;
       $newConf{$currentSection}={} unless(exists $newConf{$currentSection});
       next;
-    }elsif(/^([^:]+):(.*)$/) {
+    }elsif(/^([^:]+):\s*((?:.*[^\s])?)\s*$/) {
       my ($param,$value)=($1,$2);
       $param=lc($param) if($caseInsensitiveNoCheck);
       if($currentSection) {
