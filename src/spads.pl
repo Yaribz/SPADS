@@ -48,7 +48,7 @@ $SIG{TERM} = \&sigTermHandler;
 my $MAX_SIGNEDINTEGER=2147483647;
 my $MAX_UNSIGNEDINTEGER=4294967296;
 
-our $spadsVer='0.11.31';
+our $spadsVer='0.11.31a';
 
 my %optionTypes = (
   0 => "error",
@@ -377,8 +377,8 @@ my $autohostSimpleLog=SimpleLog->new(logFiles => [$conf{logDir}."/spads.log"],
 
 my $updaterSimpleLog=SimpleLog->new(logFiles => [$conf{logDir}."/spads.log",""],
                                     logLevels => [$conf{updaterLogLevel},3],
-                                    useANSICodes => [0,1],
-                                    useTimestamps => [1,0],
+                                    useANSICodes => [0,-t STDOUT ? 1 : 0],
+                                    useTimestamps => [1,-t STDOUT ? 0 : 1],
                                     prefix => "[SpadsUpdater] ");
 
 our $lobby = SpringLobbyInterface->new(serverHost => $conf{lobbyHost},

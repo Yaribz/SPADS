@@ -672,6 +672,7 @@ spads.pl:
 0.11.30b: show SPADS version in "Initializing SPADS" log message
 0.11.31: new plugin customization callback: "updateGameStatusInfo"
          fix duplicate IP field in !status output when plugins update player IP data in updateStatusInfo callback
+0.11.31a: timestamps are automatically enabled and colors automatically disabled in STDOUT messages if SPADS output is redirected to a file
 
 SpadsConf.pm:
 ============
@@ -790,6 +791,7 @@ SpadsConf.pm:
 0.11.9: skill based bans are now integrated in SPADS core
         new fields in banLists.conf file ("skill" and "skillUncert")
 0.11.9a: ignore leading and trailing spaces in settings files (should fix a rehost loop bug when the battleName hosting setting contains any leading or trailing space)
+0.11.9b: timestamps are automatically enabled and colors automatically disabled in STDOUT messages if SPADS output is redirected to a file
 
 spadsInstaller.pl:
 =================
@@ -825,6 +827,7 @@ spadsInstaller.pl:
 0.13a: use ANSI colors on Windows too
 0.13b: fix Perl unitsync interface module generation when the unitsync library path contains spaces
        prevent infinite loop when using the script in non-interactive mode (crontab ...)
+0.13c: timestamps are automatically enabled and colors automatically disabled in STDOUT messages if output is redirected to a file
 
 SpadsPluginApi.pm:
 =================
@@ -897,3 +900,4 @@ update.pl:
 0.8: add replay upload scripts
      add "springVersion" parameter for Spring server binaries updates (Windows)
 0.8a: use ANSI colors on Windows too
+0.8b: timestamps are automatically enabled and colors automatically disabled in STDOUT messages if output is redirected to a file

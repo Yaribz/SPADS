@@ -2,7 +2,7 @@
 #
 # This program update SPADS components in current directory from remote repository.
 #
-# Copyright (C) 2008-2013  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2015  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.8a (2013/11/28)
+# Version 0.8b (2015/05/20)
 
 use strict;
 
@@ -31,8 +31,8 @@ $perlExecPrefix="perl " if($win);
 
 my $sLog=SimpleLog->new(logFiles => [""],
                         logLevels => [4],
-                        useANSICodes => [1],
-                        useTimestamps => [0],
+                        useANSICodes => [-t STDOUT ? 1 : 0],
+                        useTimestamps => [-t STDOUT ? 0 : 1],
                         prefix => "[Update] ");
 
 sub invalidUsage {
@@ -138,8 +138,8 @@ invalidUsage() if((exists $packages{'spring-dedicated.exe'} || exists $packages{
 
 my $updaterLog=SimpleLog->new(logFiles => [""],
                               logLevels => [4],
-                              useANSICodes => [1],
-                              useTimestamps => [0],
+                              useANSICodes => [-t STDOUT ? 1 : 0],
+                              useTimestamps => [-t STDOUT ? 0 : 1],
                               prefix => "[SpadsUpdater] ");
 
 my $updater=SpadsUpdater->new(sLog => $updaterLog,

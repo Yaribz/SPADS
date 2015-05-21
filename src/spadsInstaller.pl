@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.13b (2015/05/01)
+# Version 0.13c (2015/05/20)
 
 use strict;
 
@@ -66,8 +66,8 @@ $conf{installDir}=cwd();
 
 my $sLog=SimpleLog->new(logFiles => [''],
                         logLevels => [4],
-                        useANSICodes => [$isInteractive ? 1 : 0],
-                        useTimestamps => [0],
+                        useANSICodes => [-t STDOUT ? 1 : 0],
+                        useTimestamps => [-t STDOUT ? 0 : 1],
                         prefix => "[SpadsInstaller] ");
 
 
@@ -461,8 +461,8 @@ $currentStep=2;
 
 my $updaterLog=SimpleLog->new(logFiles => [''],
                               logLevels => [4],
-                              useANSICodes => [1],
-                              useTimestamps => [0],
+                              useANSICodes => [-t STDOUT ? 1 : 0],
+                              useTimestamps => [-t STDOUT ? 0 : 1],
                               prefix => "[SpadsUpdater] ");
 
 my $updater=SpadsUpdater->new(sLog => $updaterLog,
