@@ -78,7 +78,7 @@ PerlUnitSync.dll;5.20:PerlUnitSync-91.0-5.20.dll
 PerlUnitSync.pm:PerlUnitSync-91.0.pm
 replay_upload.py:replay_upload_0.5.py
 SimpleLog.pm:SimpleLog_0.6.pm
-spads.pl:spads_0.11.31a.pl
+spads.pl:spads_0.11.31b.pl
 SpadsConf.pm:SpadsConf_0.11.9b.pm
 spadsInstaller.pl:spadsInstaller_0.13c.pl
 SpadsPluginApi.pm:SpadsPluginApi_0.18.pm
@@ -111,7 +111,7 @@ PerlUnitSync.dll;5.20:PerlUnitSync-91.0-5.20.dll
 PerlUnitSync.pm:PerlUnitSync-91.0.pm
 replay_upload.py:replay_upload_0.5.py
 SimpleLog.pm:SimpleLog_0.6.pm
-spads.pl:spads_0.11.31a.pl
+spads.pl:spads_0.11.31b.pl
 SpadsConf.pm:SpadsConf_0.11.9b.pm
 spadsInstaller.pl:spadsInstaller_0.13c.pl
 SpadsPluginApi.pm:SpadsPluginApi_0.18.pm

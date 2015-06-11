@@ -48,7 +48,7 @@ $SIG{TERM} = \&sigTermHandler;
 my $MAX_SIGNEDINTEGER=2147483647;
 my $MAX_UNSIGNEDINTEGER=4294967296;
 
-our $spadsVer='0.11.31a';
+our $spadsVer='0.11.31b';
 
 my %optionTypes = (
   0 => "error",
@@ -73,24 +73,20 @@ my @packagesSpads=qw'help.dat helpSettings.dat SpringAutoHostInterface.pm Spring
 my @packagesWinUnitSync=qw'PerlUnitSync.pm PerlUnitSync.dll';
 my @packagesWinServer=qw'spring-dedicated.exe spring-headless.exe';
 my $win=$^O eq 'MSWin32' ? 1 : 0;
+my ($lockFh,$pidFile,$lockAcquired);
 
 eval "use HTML::Entities";
 my $htmlEntitiesUnavailable=$@;
 
 our $cwd=cwd();
-my $perlExecPrefix="";
 my $regLMachine;
-my $STILL_ACTIVE=259;
-my $NORMAL_PRIORITY_CLASS=32;
 if($win) {
   eval "use Win32";
   eval "use Win32::API";
   eval "use Win32::TieRegistry ':KEY_'";
   eval "use Win32::Process";
-  eval "use Win32::Process 'STILL_ACTIVE'; \$STILL_ACTIVE=STILL_ACTIVE; \$NORMAL_PRIORITY_CLASS=NORMAL_PRIORITY_CLASS;";
   $regLMachine=new Win32::TieRegistry("LMachine");
   $regLMachine->Delimiter("/") if(defined $regLMachine);
-  $perlExecPrefix="perl ";
 }
 
 our %spadsHandlers = (
@@ -201,7 +197,7 @@ my %rankTrueSkill=(0 => 20,
 # Basic checks ################################################################
 
 sub invalidUsage {
-  print "usage: $perlExecPrefix$0 <configurationFile> [--doc] [<macroName>=<macroValue> [...]]\n";
+  print "usage: perl $0 <configurationFile> [--doc] [<macroName>=<macroValue> [...]]\n";
   exit 1;
 }
 
@@ -237,15 +233,19 @@ sub slog {
   $sLog->log(@_);
 }
 
+sub fatalError {
+  my $m=shift;
+  slog($m,0);
+  unlink($pidFile) if($lockAcquired);
+  exit 1;
+}
+
 sub intRand {
   rand() =~ /\.(\d+)/;
   return $1 % 99999999;
 }
 
-if(! $spads) {
-  slog("Unable to load SPADS configuration at startup",0);
-  exit 1;
-}
+fatalError('Unable to load SPADS configuration at startup') unless($spads);
 
 my $masterChannel=$spads->{conf}->{masterChannel};
 $masterChannel=$1 if($masterChannel =~ /^([^\s]+)\s/);
@@ -255,7 +255,7 @@ unshift(@INC,$cwd);
 # State variables #############################################################
 
 our %conf=%{$spads->{conf}};
-my ($lSock,$ahSock);
+my $lSock;
 our %sockets;
 tie %sockets, 'Tie::RefHash';
 my $running=1;
@@ -361,7 +361,7 @@ our %battleSkillsCache;
 my %pendingGetSkills;
 my $currentGameType='Duel';
 our %forkedProcesses;
-my ($lockFh,$pidFile);
+our $springServerType=$conf{springServerType};
 
 my $lobbySimpleLog=SimpleLog->new(logFiles => [$conf{logDir}."/spads.log"],
                                   logLevels => [$conf{lobbyInterfaceLogLevel}],
@@ -400,19 +400,6 @@ my $updater = SpadsUpdater->new(sLog => $updaterSimpleLog,
                                 packages => \@packages);
 
 
-our $springServerType=$conf{springServerType};
-if($springServerType eq '') {
-  if($conf{springServer} =~ /spring-dedicated(?:\.exe)?$/i) {
-    $springServerType='dedicated';
-  }elsif($conf{springServer} =~ /spring-headless(?:\.exe)?$/i) {
-    $springServerType='headless';
-  }else{
-    slog("Unable to determine server type (dedicated or headless) automatically from Spring server binary name ($conf{springServer}), please update 'springServerType' setting manually",0);
-    exit 1;
-  }
-}
-
-
 # Binaries update (Windows only) ##############################################
 
 $sLog=$spads->{log};
@@ -441,8 +428,7 @@ if($win) {
       }
       close(UPDATE_INFO);
     }else{
-      slog("Unable to read \"$conf{binDir}/updateInfo.txt\" file",0);
-      exit 1;
+      fatalError("Unable to read \"$conf{binDir}/updateInfo.txt\" file");
     }
   }
   foreach my $updatedPackage (keys %updatedPackages) {
@@ -455,8 +441,7 @@ if($win) {
     unlink("$conf{binDir}/$updatedPackage");
     renameToBeDeleted("$conf{binDir}/$updatedPackage") if(-f "$conf{binDir}/$updatedPackage");
     if(! copy("$conf{binDir}/$updatedPackages{$updatedPackage}","$conf{binDir}/$updatedPackage")) {
-      slog("Unable to copy \"$conf{binDir}/$updatedPackages{$updatedPackage}\" to \"$conf{binDir}/$updatedPackage\", system consistency must be checked manually !",0);
-      exit 1;
+      fatalError("Unable to copy \"$conf{binDir}/$updatedPackages{$updatedPackage}\" to \"$conf{binDir}/$updatedPackage\", system consistency must be checked manually !");
     }
     slog("Copying \"$conf{binDir}/$updatedPackages{$updatedPackage}\" to \"$conf{binDir}/$updatedPackage\" (Windows binary update mode)",5);
   }
@@ -585,7 +570,24 @@ sub handleSigChld {
   }
 }
 
-sub forkedError {
+sub escapeWin32Parameter {
+  my $arg = shift;
+  $arg =~ s/(\\*)"/$1$1\\"/g;
+  if($arg =~ /[ \t]/) {
+    $arg =~ s/(\\*)$/$1$1/;
+    $arg = "\"$arg\"";
+  }
+  return $arg;
+}
+
+sub portableExec {
+  my ($program,@params)=@_;
+  my @args=($program,@params);
+  @args=map {escapeWin32Parameter($_)} @args if($win);
+  return exec {$program} @args;
+}
+
+sub execError {
   my ($msg,$level)=@_;
   slog($msg,$level);
   exit 1;
@@ -2692,7 +2694,11 @@ sub checkAutoUpdate {
       if(! defined $childPid) {
         slog("Unable to fork to launch SPADS updater",1);
       }elsif($childPid == 0) {
-        $SIG{CHLD}="" unless($win);
+        local $SIG{CHLD};
+        if($win) {
+          no warnings 'redefine';
+          eval "sub Win32::Process::DESTROY {}";
+        }
         chdir($cwd);
         my $updateRc=$updater->update();
         if($updateRc < 0) {
@@ -2819,7 +2825,7 @@ sub checkWinProcessStop {
     if($conf{useWin32Process} && defined $springWin32Process) {
       my $exitCode;
       $springWin32Process->GetExitCode($exitCode);
-      if($exitCode != $STILL_ACTIVE) {
+      if($exitCode != Win32::Process::STILL_ACTIVE()) {
         $springWin32Process=undef;
         handleSigChld($springPid,$exitCode);
       }
@@ -4227,18 +4233,23 @@ sub launchGame {
     $gdrEnabled=0;
   }
 
-  my $configString='';
-  if($conf{springConfig} ne '') {
-    $configString="--config \"$conf{springConfig}\"";
-  }
+  my @springServerCmd = ( $conf{springServer} , catfile($conf{varDir},'startscript.txt') );
+  push(@springServerCmd,'--config',$conf{springConfig}) unless($conf{springConfig} eq '');
+  my $logFile=catfile($conf{logDir},"spring-$springServerType.log");
 
   if($conf{useWin32Process}) {
+    open(my $previousStdout,'>&',\*STDOUT);
+    open(my $previousStderr,'>&',\*STDERR);
+    open(STDOUT,'>>',$logFile);
+    open(STDERR,'>>&',\*STDOUT);
     my $rc=Win32::Process::Create($springWin32Process,
                                   $conf{springServer},
-                                  "Spring-$springServerType \"$conf{varDir}\\startscript.txt\" $configString>>\"$conf{logDir}\\spring-$springServerType.log\" 2>\&1",
+                                  join(' ',map {escapeWin32Parameter($_)} @springServerCmd),
+                                  1,
                                   0,
-                                  $NORMAL_PRIORITY_CLASS,
                                   $conf{springDataDir});
+    open(STDOUT,'>&',$previousStdout);
+    open(STDERR,'>&',$previousStderr);
     if(! $rc) {
       $springWin32Process=undef;
       slog("Unable to create Win32 process to launch Spring (".Win32::FormatMessage(Win32::GetLastError()).")",1);
@@ -4251,25 +4262,29 @@ sub launchGame {
       slog("Unable to fork to launch Spring",1);
       return;
     }
-    
     if($childPid == 0) {
-      $SIG{CHLD}="" unless($win);
+      local $SIG{CHLD};
       $ENV{SPRING_DATADIR}=$conf{springDataDir};
       $ENV{SPRING_WRITEDIR}=$conf{varDir};
       if($win) {
+        no warnings 'redefine';
+        eval "sub Win32::Process::DESTROY {}";
         chdir($conf{springDataDir});
-        exec("\"$conf{springServer}\" \"$conf{varDir}/startscript.txt\" $configString>>\"$conf{logDir}/spring-$springServerType.log\" 2>\&1") || forkedError("Unable to launch Spring",1);
+        exec(join(' ',(map {escapeWin32Parameter($_)} @springServerCmd),'>>'.escapeWin32Parameter($logFile),'2>&1')) || execError("Unable to launch Spring ($!)",1);
       }else{
         chdir($conf{varDir});
-        if($conf{springConfig} ne '') {
-          exec($conf{springServer},"$conf{varDir}/startscript.txt",'--config',$conf{springConfig}) || forkedError("Unable to launch Spring",1);
-        }else{
-          exec($conf{springServer},"$conf{varDir}/startscript.txt") || forkedError("Unable to launch Spring",1);
-        }
+        open(my $previousStdout,'>&',\*STDOUT);
+        open(my $previousStderr,'>&',\*STDERR);
+        open(STDOUT,'>>',$logFile);
+        open(STDERR,'>>&',\*STDOUT);
+        portableExec(@springServerCmd);
+        my $execErrorString=$!;
+        open(STDOUT,'>&',$previousStdout);
+        open(STDERR,'>&',$previousStderr);
+        execError("Unable to launch Spring ($execErrorString)",1);
       }
-    }else{
-      $springPid=$childPid;
     }
+    $springPid=$childPid;
   }
   if(%currentVote && exists $currentVote{command}) {
     broadcastMsg("Vote cancelled, launching game...");
@@ -5678,7 +5693,11 @@ sub endGameProcessing {
     slog("Unable to fork to launch endGameCommand",2);
   }else{
     if($childPid == 0) {
-      $SIG{CHLD}="" unless($win);
+      local $SIG{CHLD};
+      if($win) {
+        no warnings 'redefine';
+        eval "sub Win32::Process::DESTROY {}";
+      }
       chdir($cwd);
       
       if($conf{endGameCommandEnv} ne '') {
@@ -5697,7 +5716,7 @@ sub endGameProcessing {
       }
       
       slog("End game command: \"$endGameCommand\"",5);
-      exec($endGameCommand) || forkedError("Unable to launch endGameCommand",2);;
+      exec($endGameCommand) || execError("Unable to launch endGameCommand ($!)",2);;
     }else{
       slog("Executing end game command (pid $childPid)",4);
       $endGameCommandPids{$childPid}={startTime => time,
@@ -10538,7 +10557,7 @@ sub hStop {
       if($conf{useWin32Process} && defined $springWin32Process) {
         broadcastMsg("Killing Spring process (by $user)");
         answer("Killing Spring process") if($source eq "pv");
-        $springWin32Process->Kill(100);
+        $springWin32Process->Kill(137);
       }else{
         broadcastMsg("Unable to stop server, a manual process kill may be required!");
         slog("Spring server is in inconsistent state, a manual process kill may be required!",2);
@@ -10892,7 +10911,11 @@ sub hUpdate {
     return 0;
   }
   if($childPid == 0) {
-    $SIG{CHLD}="" unless($win);
+    local $SIG{CHLD};
+    if($win) {
+      no warnings 'redefine';
+      eval "sub Win32::Process::DESTROY {}";
+    }
     chdir($cwd);
     my $updateRc=$updater->update();
     my ($answerMsg,$exitCode);
@@ -11401,6 +11424,7 @@ sub cbLobbyDisconnect {
 sub cbConnectTimeout {
   $lobbyState=0;
   slog("Timeout while connecting to lobby server ($conf{lobbyHost}:$conf{lobbyPort})",2);
+  $lobby->disconnect();
 }
 
 sub cbLoginAccepted {
@@ -12930,31 +12954,7 @@ sub pluginsUpdateSkill {
 # Main ########################################################################
 
 slog("Initializing SPADS $spadsVer",3);
-
-# Auto-update ##########################
-
-if($conf{autoUpdateRelease} ne "") {
-  $timestamps{autoUpdate}=time;
-  if($updater->isUpdateInProgress()) {
-    slog('Skipping auto-update at start, another updater instance is already running',2);
-  }else{
-    my $updateRc=$updater->update();
-    if($updateRc < 0) {
-      slog("Unable to check or apply SPADS update",2);
-      if($updateRc > -7) {
-        addAlert("UPD-001");
-      }elsif($updateRc == -7) {
-        addAlert("UPD-002");
-      }else{
-        addAlert("UPD-003");
-      }
-    }elsif($updateRc > 0) {
-      sleep(2); # Avoid CPU eating loop in case auto-update is broken (fork bomb protection)
-      restartAfterGame("auto-update");
-      $running=0;
-    }
-  }
-}
+slog('SPADS process is currently running as root!',2) unless($win || $>);
 
 # Documentation ########################
 
@@ -13245,7 +13245,32 @@ sub encodeHtmlHelp {
   return $line;
 }
 
-# Init #################################
+# Auto-update (part 1) #################
+
+if($conf{autoUpdateRelease} ne "") {
+  $timestamps{autoUpdate}=time;
+  if($updater->isUpdateInProgress()) {
+    slog('Skipping auto-update at start, another updater instance is already running',2);
+  }else{
+    my $updateRc=$updater->update();
+    if($updateRc < 0) {
+      slog("Unable to check or apply SPADS update",2);
+      if($updateRc > -7) {
+        addAlert("UPD-001");
+      }elsif($updateRc == -7) {
+        addAlert("UPD-002");
+      }else{
+        addAlert("UPD-003");
+      }
+    }elsif($updateRc > 0) {
+      sleep(2); # Avoid CPU eating loop in case auto-update is broken (fork bomb protection)
+      restartAfterGame("auto-update");
+      $running=0;
+    }
+  }
+}
+
+# Unitsync loading #####################
 
 if($running) {
 
@@ -13253,6 +13278,7 @@ if($running) {
   if(open($lockFh,'>',$lockFile)) {
     $pidFile="$conf{varDir}/spads.pid";
     if(autoRetry(sub {flock($lockFh, LOCK_EX|LOCK_NB)})) {
+      $lockAcquired=1;
       if(open(my $pidFh,'>',$pidFile)) {
         print $pidFh $$;
         close($pidFh);
@@ -13271,25 +13297,21 @@ if($running) {
           slog("Unable to read SPADS PID file \"$pidFile\" ($!)",2);
         }
       }
-      slog("Another SPADS instance (PID $spadsPid) is already running using same varDir ($conf{varDir}), please use a different varDir for every SPADS instance",0);
-      exit 1;
+      fatalError("Another SPADS instance (PID $spadsPid) is already running using same varDir ($conf{varDir}), please use a different varDir for every SPADS instance");
     }
   }else{
-    slog("Unable to write SPADS lock file \"$lockFile\" ($!)",0);
-    exit 1;
+    fatalError("Unable to write SPADS lock file \"$lockFile\" ($!)");
   }
-
-  slog("Using $springServerType Spring server binary",3);
 
   chdir($conf{springDataDir}) if($win);
   eval "use PerlUnitSync";
-  if ($@) {
-    slog("Unable to load PerlUnitSync module ($@)",0);
-    unlink($pidFile);
-    exit 1;
-  }
+  fatalError("Unable to load PerlUnitSync module ($@)") if ($@);
   chdir($cwd) if($win);
   $syncedSpringVersion=PerlUnitSync::GetSpringVersion();
+  fatalError('Unable to load Spring archives at startup') unless(loadArchives());
+
+# Auto-update (part 2) #################
+
   push(@packages,@packagesWinServer) if($conf{autoUpdateBinaries} eq 'yes' || $conf{autoUpdateBinaries} eq 'server');
   $updater = SpadsUpdater->new(sLog => $updaterSimpleLog,
                                localDir => $conf{binDir},
@@ -13297,20 +13319,6 @@ if($running) {
                                release => $conf{autoUpdateRelease},
                                packages => \@packages,
                                syncedSpringVersion => $syncedSpringVersion);
-  if(! loadArchives()) {
-    slog("Unable to load Spring archives at startup",0);
-    unlink($pidFile);
-    exit 1;
-  }
-  @predefinedColors=(generateColorPanel(1,1),
-                     {red => 100, green => 100, blue => 100},
-                     generateColorPanel(0.45,1),
-                     {red => 150, green => 150, blue => 150},
-                     generateColorPanel(1,0.6),
-                     {red => 50, green => 50, blue => 50},
-                     generateColorPanel(0.25,1),
-                     {red => 200, green => 200, blue => 200},
-                     generateColorPanel(1,0.25));
 
   if($conf{autoUpdateBinaries} eq 'yes' || $conf{autoUpdateBinaries} eq 'server') {
     if($updater->isUpdateInProgress()) {
@@ -13327,13 +13335,30 @@ if($running) {
     }
   }
 }
+
+# Init #################################
+
 if($running) {
-  if($conf{autoLoadPlugins} ne '') {
-    my @pluginNames=split(/;/,$conf{autoLoadPlugins});
-    foreach my $pluginName (@pluginNames) {
-      loadPluginModule($pluginName);
+  if($springServerType eq '') {
+    if($conf{springServer} =~ /spring-dedicated(?:\.exe)?$/i) {
+      $springServerType='dedicated';
+    }elsif($conf{springServer} =~ /spring-headless(?:\.exe)?$/i) {
+      $springServerType='headless';
+    }else{
+      fatalError("Unable to determine server type (dedicated or headless) automatically from Spring server binary name ($conf{springServer}), please update 'springServerType' setting manually");
     }
   }
+  slog("Using $springServerType Spring server binary",3);
+
+  @predefinedColors=(generateColorPanel(1,1),
+                     {red => 100, green => 100, blue => 100},
+                     generateColorPanel(0.45,1),
+                     {red => 150, green => 150, blue => 150},
+                     generateColorPanel(1,0.6),
+                     {red => 50, green => 50, blue => 50},
+                     generateColorPanel(0.25,1),
+                     {red => 200, green => 200, blue => 200},
+                     generateColorPanel(1,0.25));
 
   $autohost->addCallbacks({SERVER_STARTED => \&cbAhServerStarted,
                            SERVER_GAMEOVER => \&cbAhServerGameOver,
@@ -13348,19 +13373,19 @@ if($running) {
                            SERVER_MESSAGE => \&cbAhServerMessage,
                            GAME_TEAMSTAT => \&cbAhGameTeamStat});
 
-  $ahSock = $autohost->open();
-  if(! $ahSock) {
-    slog("Unable to create socket for Spring AutoHost interface",0);
-    unlink($pidFile);
-    exit 1;
+  fatalError('Unable to create socket for Spring AutoHost interface') unless($autohost->open());
+  $sockets{$autohost->{autoHostSock}} = sub { $autohost->receiveCommand() };
+
+  if($conf{autoLoadPlugins} ne '') {
+    my @pluginNames=split(/;/,$conf{autoLoadPlugins});
+    foreach my $pluginName (@pluginNames) {
+      loadPluginModule($pluginName);
+    }
   }
-  $sockets{$ahSock} = sub { $autohost->receiveCommand() };
+
 }
 
-if(! $win) {
-  $SIG{CHLD} = \&sigChldHandler;
-  slog('SPADS process is currently running as root!',2) unless($>);
-}
+$SIG{CHLD} = \&sigChldHandler unless($win);
 
 # Main loop ############################
 
@@ -13369,20 +13394,18 @@ while($running) {
   if(! $lobbyState && ! $quitAfterGame) {
     if($timestamps{connectAttempt} != 0 && $conf{lobbyReconnectDelay} == 0) {
       quitAfterGame('disconnected from lobby server, no reconnection delay configured');
-    }else{
-      if(time-$timestamps{connectAttempt} > $conf{lobbyReconnectDelay}) {
-        $timestamps{connectAttempt}=time;
-        $lobbyState=1;
-        delete $sockets{$lSock} if(defined $lSock);
-        $lobby->addCallbacks({REDIRECT => \&cbRedirect});
-        $lSock = $lobby->connect(\&cbLobbyDisconnect,{TASSERVER => \&cbLobbyConnect},\&cbConnectTimeout);
-        if($lSock) {
-          $sockets{$lSock} = sub { $lobby->receiveCommand() };
-        }else{
-          $lobby->removeCallbacks(['REDIRECT']);
-          $lobbyState=0;
-          slog("Connection to lobby server failed",1);
-        }
+    }elsif(time-$timestamps{connectAttempt} > $conf{lobbyReconnectDelay}) {
+      $timestamps{connectAttempt}=time;
+      $lobbyState=1;
+      delete $sockets{$lSock} if(defined $lSock);
+      $lobby->addCallbacks({REDIRECT => \&cbRedirect});
+      $lSock = $lobby->connect(\&cbLobbyDisconnect,{TASSERVER => \&cbLobbyConnect},\&cbConnectTimeout);
+      if($lSock) {
+        $sockets{$lSock} = sub { $lobby->receiveCommand() };
+      }else{
+        $lobby->removeCallbacks(['REDIRECT']);
+        $lobbyState=0;
+        slog("Connection to lobby server failed",1);
       }
     }
   }
@@ -13484,7 +13507,7 @@ while($running) {
     autoManageBattle();
   }
 
-  if($autohost->getState() == 0) {
+  if($autohost->getState() == 0 && $springPid == 0) {
     if($quitAfterGame == 1 || $quitAfterGame == 2) {
       slog("Game is not running, exiting",3);
       $running=0;
@@ -13535,22 +13558,16 @@ if($lobbyState) {
   }
   $lobby->disconnect();
 }
-$autohost->close() if(defined $autohost->{autoHostSock} && $autohost->{autoHostSock});
+$autohost->close() if($autohost->{autoHostSock});
 $spads->dumpDynamicData();
 unlink($pidFile) if(defined $pidFile);
 close($lockFh) if(defined $lockFh);
 if($quitAfterGame == 2 || $quitAfterGame == 4 || $quitAfterGame == 6) {
-  $SIG{CHLD}="" unless($win);
+  local $SIG{CHLD};
   chdir($cwd);
   my @paramsRestart=map {"$_=$confMacros{$_}"} (keys %confMacros);
-  if($win) {
-    map {s/\\+\"/\"/g} @paramsRestart;
-    map {s/\"/\\\"/g} @paramsRestart;
-    map {s/^(.*)$/\"$1\"/} @paramsRestart;
-    exec($^X,"\"$0\"","\"$confFile\"",@paramsRestart) || forkedError("Unable to restart SPADS",0);
-  }else{
-    exec($^X,$0,$confFile,@paramsRestart) || forkedError("Unable to restart SPADS",0);
-  }
+  portableExec($^X,$0,$confFile,@paramsRestart);
+  execError("Unable to restart SPADS ($!)",0);
 }
 
 exit 0;

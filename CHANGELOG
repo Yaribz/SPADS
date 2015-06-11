@@ -673,6 +673,12 @@ spads.pl:
 0.11.31: new plugin customization callback: "updateGameStatusInfo"
          fix duplicate IP field in !status output when plugins update player IP data in updateStatusInfo callback
 0.11.31a: timestamps are automatically enabled and colors automatically disabled in STDOUT messages if SPADS output is redirected to a file
+0.11.31b: Spring server output logging to <logDir>/spring-<serverType>.log should now be functional for all process spawning modes and all platforms
+          SPADS now waits until Spring server process has fully exited before restarting
+          Win32 processes no longer report wrong exit code each time a thread terminates (Windows)
+          improve parameters escaping when restarting or launching sub-processes (Windows)
+          reordered initialization code and documentation generation code
+          minor cleanups and code factorizations
 
 SpadsConf.pm:
 ============
