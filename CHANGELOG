@@ -679,6 +679,9 @@ spads.pl:
           improve parameters escaping when restarting or launching sub-processes (Windows)
           reordered initialization code and documentation generation code
           minor cleanups and code factorizations
+0.11.31c: make Spring directories management through environment variables consistent between Linux and Windows (auto-restart if needed)
+          log unitsync errors when unitsync Init call fails
+          simplify restart code
 
 SpadsConf.pm:
 ============

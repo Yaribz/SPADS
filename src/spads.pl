@@ -48,7 +48,7 @@ $SIG{TERM} = \&sigTermHandler;
 my $MAX_SIGNEDINTEGER=2147483647;
 my $MAX_UNSIGNEDINTEGER=4294967296;
 
-our $spadsVer='0.11.31b';
+our $spadsVer='0.11.31c';
 
 my %optionTypes = (
   0 => "error",
@@ -445,7 +445,6 @@ if($win) {
     }
     slog("Copying \"$conf{binDir}/$updatedPackages{$updatedPackage}\" to \"$conf{binDir}/$updatedPackage\" (Windows binary update mode)",5);
   }
-  $ENV{PATH}="$ENV{PATH};$cwd;$conf{springDataDir}";
 }
 
 # Subfunctions ################################################################
@@ -620,6 +619,39 @@ sub none (&@) {
 sub all (&@) {
   my $code = shift;
   return ! defined first {! &{$code}} @_;
+}
+
+sub areSamePaths {
+  my ($p1,$p2)=map {File::Spec->canonpath($_)} @_;
+  ($p1,$p2)=map {lc($_)} ($p1,$p2) if($win);
+  return $p1 eq $p2;
+}
+
+sub setSpringEnv {
+  my ($unitSyncPath,$writeDir,$dataDir)=@_;
+  my $needRestart=0;
+  my ($varName,$pathSep)=$win?('PATH',';'):('LD_LIBRARY_PATH',':');
+  die "Unable to handle unitsync path containing \"$pathSep\" character!" unless(index($unitSyncPath,$pathSep) == -1);
+  $ENV{"SPADS_$varName"}=$ENV{$varName}//'_UNDEF_' unless(exists $ENV{"SPADS_$varName"});
+  my @currentPaths=split(/$pathSep/,$ENV{$varName}//'');
+  if(! @currentPaths || ! areSamePaths($currentPaths[0],$unitSyncPath)) {
+    my @origPaths=$ENV{"SPADS_$varName"} eq '_UNDEF_' ? () : split(/$pathSep/,$ENV{"SPADS_$varName"});
+    my @newPaths;
+    foreach my $path (@origPaths) {
+      push(@newPaths,$path) unless(areSamePaths($path,$unitSyncPath));
+    }
+    $ENV{$varName}=join($pathSep,$unitSyncPath,@newPaths);
+    $needRestart=1;
+  }
+  if(! areSamePaths($writeDir,$ENV{SPRING_WRITEDIR}//'')) {
+    $ENV{SPRING_WRITEDIR}=$writeDir;
+    $needRestart=1;
+  }
+  if(! areSamePaths($dataDir,$ENV{SPRING_DATADIR}//'')) {
+    $ENV{SPRING_DATADIR}=$dataDir;
+    $needRestart=1;
+  }
+  portableExec($^X,$0,@ARGV) if($needRestart);
 }
 
 sub generateGameId {
@@ -952,10 +984,11 @@ sub loadArchives {
   my $verbose=shift;
   $verbose//=0;
   pingIfNeeded();
-  $ENV{SPRING_DATADIR}=$conf{springDataDir};
-  $ENV{SPRING_WRITEDIR}=$conf{varDir};
-  chdir($conf{springDataDir});
   if(! PerlUnitSync::Init(0,0)) {
+    while(my $unitSyncErr=PerlUnitSync::GetNextError()) {
+      chomp($unitSyncErr);
+      slog("UnitSync error: $unitSyncErr",1);
+    }
     slog("Unable to initialize UnitSync library",1);
     chdir($cwd);
     return 0;
@@ -2699,7 +2732,6 @@ sub checkAutoUpdate {
           no warnings 'redefine';
           eval "sub Win32::Process::DESTROY {}";
         }
-        chdir($cwd);
         my $updateRc=$updater->update();
         if($updateRc < 0) {
           slog("Unable to check or apply SPADS update",2);
@@ -4247,7 +4279,7 @@ sub launchGame {
                                   join(' ',map {escapeWin32Parameter($_)} @springServerCmd),
                                   1,
                                   0,
-                                  $conf{springDataDir});
+                                  $conf{varDir});
     open(STDOUT,'>&',$previousStdout);
     open(STDERR,'>&',$previousStderr);
     if(! $rc) {
@@ -4264,15 +4296,12 @@ sub launchGame {
     }
     if($childPid == 0) {
       local $SIG{CHLD};
-      $ENV{SPRING_DATADIR}=$conf{springDataDir};
-      $ENV{SPRING_WRITEDIR}=$conf{varDir};
+      chdir($conf{varDir});
       if($win) {
         no warnings 'redefine';
         eval "sub Win32::Process::DESTROY {}";
-        chdir($conf{springDataDir});
         exec(join(' ',(map {escapeWin32Parameter($_)} @springServerCmd),'>>'.escapeWin32Parameter($logFile),'2>&1')) || execError("Unable to launch Spring ($!)",1);
       }else{
-        chdir($conf{varDir});
         open(my $previousStdout,'>&',\*STDOUT);
         open(my $previousStderr,'>&',\*STDERR);
         open(STDOUT,'>>',$logFile);
@@ -5575,7 +5604,6 @@ sub translateSideIfNeeded {
 
 sub getGameDataFromLog {
   my $logFile="$conf{varDir}/infolog.txt";
-  $logFile="$conf{springDataDir}/infolog.txt" if($win && $syncedSpringVersion =~ /^(\d+)/ && $1 < 95);
   my ($demoFile,$gameId);
   if(open(SPRINGLOG,"<$logFile")) {
     while(<SPRINGLOG>) {
@@ -5698,7 +5726,6 @@ sub endGameProcessing {
         no warnings 'redefine';
         eval "sub Win32::Process::DESTROY {}";
       }
-      chdir($cwd);
       
       if($conf{endGameCommandEnv} ne '') {
         my @envVarDeclarations=split(/;/,$conf{endGameCommandEnv});
@@ -9091,7 +9118,6 @@ sub hReloadConf {
   $spads->dumpDynamicData();
   $timestamps{dataDump}=time;
 
-  chdir($cwd);
   my $newSpads;
   if($keepSettings) {
     $newSpads=SpadsConf->new($confFile,$sLog,$p_macrosUsedForReload,$spads);
@@ -10916,7 +10942,6 @@ sub hUpdate {
       no warnings 'redefine';
       eval "sub Win32::Process::DESTROY {}";
     }
-    chdir($cwd);
     my $updateRc=$updater->update();
     my ($answerMsg,$exitCode);
     if($updateRc < 0) {
@@ -12953,9 +12978,6 @@ sub pluginsUpdateSkill {
 
 # Main ########################################################################
 
-slog("Initializing SPADS $spadsVer",3);
-slog('SPADS process is currently running as root!',2) unless($win || $>);
-
 # Documentation ########################
 
 if($genDoc) {
@@ -13245,6 +13267,13 @@ sub encodeHtmlHelp {
   return $line;
 }
 
+# Environment setup ####################
+
+setSpringEnv($conf{springDataDir},$conf{varDir},$conf{springDataDir});
+
+slog("Initializing SPADS $spadsVer",3);
+slog('SPADS process is currently running as root!',2) unless($win || $>);
+
 # Auto-update (part 1) #################
 
 if($conf{autoUpdateRelease} ne "") {
@@ -13303,10 +13332,8 @@ if($running) {
     fatalError("Unable to write SPADS lock file \"$lockFile\" ($!)");
   }
 
-  chdir($conf{springDataDir}) if($win);
   eval "use PerlUnitSync";
   fatalError("Unable to load PerlUnitSync module ($@)") if ($@);
-  chdir($cwd) if($win);
   $syncedSpringVersion=PerlUnitSync::GetSpringVersion();
   fatalError('Unable to load Spring archives at startup') unless(loadArchives());
 
@@ -13563,10 +13590,7 @@ $spads->dumpDynamicData();
 unlink($pidFile) if(defined $pidFile);
 close($lockFh) if(defined $lockFh);
 if($quitAfterGame == 2 || $quitAfterGame == 4 || $quitAfterGame == 6) {
-  local $SIG{CHLD};
-  chdir($cwd);
-  my @paramsRestart=map {"$_=$confMacros{$_}"} (keys %confMacros);
-  portableExec($^X,$0,$confFile,@paramsRestart);
+  portableExec($^X,$0,$confFile,map {"$_=$confMacros{$_}"} (keys %confMacros));
   execError("Unable to restart SPADS ($!)",0);
 }
 
