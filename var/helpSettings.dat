@@ -219,11 +219,12 @@ headless
 <null>
 
 [global:springDataDir]
-Spring data directory
+Spring data directories
 -
-Absolute path of the Spring directory containing maps, mods, base files...
+Absolute pathes of the directories containing Spring maps, mods, base files...
+Directories must be separated by colons (":") on Linux, and by semicolons (";") on Windows.
 -
-Any writable directory
+Any readable directories
 -
 %dataDir% (set during installation, examples: "/share/games/spring", "C:\Program files\Spring")
 
@@ -773,7 +774,7 @@ The "userDataRetention" global setting contains the number of days during which 
 [global:useWin32Process]
 Use Win32 process
 -
-Specifies if SPADS must use an alternate fork method (using Win32 process) on Windows.
+Specifies if SPADS must use the native process spawning method to launch Spring server on Windows (using Win32 process instead of Perl fork emulation)
 -
 0: Perl fork implementation is used to spawn Spring server process
 1: Win32 process is used to spawn Spring server process (allowed on Windows platform only)

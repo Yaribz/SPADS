@@ -48,7 +48,7 @@ $SIG{TERM} = \&sigTermHandler;
 my $MAX_SIGNEDINTEGER=2147483647;
 my $MAX_UNSIGNEDINTEGER=4294967296;
 
-our $spadsVer='0.11.31c';
+our $spadsVer='0.11.32';
 
 my %optionTypes = (
   0 => "error",
@@ -627,28 +627,47 @@ sub areSamePaths {
   return $p1 eq $p2;
 }
 
-sub setSpringEnv {
-  my ($unitSyncPath,$writeDir,$dataDir)=@_;
+sub splitPaths {
+  my $pathsString=shift;
+  return () unless(defined $pathsString);
+  my $pathSep=$win?';':':';
+  return split(/$pathSep/,$pathsString);
+}
+
+sub setEnvVarFirstPaths {
+  my ($varName,@firstPaths)=@_;
+  my $pathSep=$win?';':':';
   my $needRestart=0;
-  my ($varName,$pathSep)=$win?('PATH',';'):('LD_LIBRARY_PATH',':');
-  die "Unable to handle unitsync path containing \"$pathSep\" character!" unless(index($unitSyncPath,$pathSep) == -1);
+  die "Unable to handle path containing \"$pathSep\" character!" if(any {index($_,$pathSep) != -1} @firstPaths);
   $ENV{"SPADS_$varName"}=$ENV{$varName}//'_UNDEF_' unless(exists $ENV{"SPADS_$varName"});
   my @currentPaths=split(/$pathSep/,$ENV{$varName}//'');
-  if(! @currentPaths || ! areSamePaths($currentPaths[0],$unitSyncPath)) {
+  $needRestart=1 if($#currentPaths < $#firstPaths);
+  if(! $needRestart) {
+    for my $i (0..$#firstPaths) {
+      if(! areSamePaths($currentPaths[$i],$firstPaths[$i])) {
+        $needRestart=1;
+        last;
+      }
+    }
+  }
+  if($needRestart) {
     my @origPaths=$ENV{"SPADS_$varName"} eq '_UNDEF_' ? () : split(/$pathSep/,$ENV{"SPADS_$varName"});
     my @newPaths;
     foreach my $path (@origPaths) {
-      push(@newPaths,$path) unless(areSamePaths($path,$unitSyncPath));
+      push(@newPaths,$path) unless(any {areSamePaths($path,$_)} @firstPaths);
     }
-    $ENV{$varName}=join($pathSep,$unitSyncPath,@newPaths);
-    $needRestart=1;
+    $ENV{$varName}=join($pathSep,@firstPaths,@newPaths);
   }
-  if(! areSamePaths($writeDir,$ENV{SPRING_WRITEDIR}//'')) {
-    $ENV{SPRING_WRITEDIR}=$writeDir;
-    $needRestart=1;
-  }
-  if(! areSamePaths($dataDir,$ENV{SPRING_DATADIR}//'')) {
-    $ENV{SPRING_DATADIR}=$dataDir;
+  return $needRestart;
+}
+
+sub setSpringEnv {
+  my ($unitSyncPath,@dataDirs)=@_;
+  my $needRestart=0;
+  $needRestart=1 if(setEnvVarFirstPaths($win?'PATH':'LD_LIBRARY_PATH',$unitSyncPath));
+  $needRestart=1 if(setEnvVarFirstPaths('SPRING_DATADIR',@dataDirs));
+  if(! areSamePaths($dataDirs[0],$ENV{SPRING_WRITEDIR}//'')) {
+    $ENV{SPRING_WRITEDIR}=$dataDirs[0];
     $needRestart=1;
   }
   portableExec($^X,$0,@ARGV) if($needRestart);
@@ -1427,13 +1446,14 @@ sub getDirModifTime {
 }
 
 sub getArchivesChangeTime {
-  my $archivesChangeTs=getDirModifTime("$conf{springDataDir}/base");
-  my $dirChangeTs=getDirModifTime("$conf{springDataDir}/games");
-  $archivesChangeTs=$dirChangeTs if($dirChangeTs > $archivesChangeTs);
-  $dirChangeTs=getDirModifTime("$conf{springDataDir}/maps");
-  $archivesChangeTs=$dirChangeTs if($dirChangeTs > $archivesChangeTs);
-  $dirChangeTs=getDirModifTime("$conf{springDataDir}/packages");
-  $archivesChangeTs=$dirChangeTs if($dirChangeTs > $archivesChangeTs);
+  my @dataDirs=splitPaths($conf{springDataDir});
+  my $archivesChangeTs=0;
+  foreach my $dataDir (@dataDirs) {
+    foreach my $dataSubDir (qw'base games maps packages') {
+      my $dirChangeTs=getDirModifTime("$dataDir/$dataSubDir");
+      $archivesChangeTs=$dirChangeTs if($dirChangeTs > $archivesChangeTs);
+    }
+  }
   return $archivesChangeTs;
 }
 
@@ -5683,13 +5703,7 @@ sub endGameProcessing {
   }
 
   if(defined $demoFile) {
-    if(! file_name_is_absolute($demoFile)) {
-      if($syncedSpringVersion =~ /^(\d+)/ && $1 < 95) {
-        $demoFile=catfile($conf{springDataDir},$demoFile);
-      }else{
-        $demoFile=catfile($conf{varDir},$demoFile);
-      }
-    }
+    $demoFile=catfile($conf{varDir},$demoFile) unless(file_name_is_absolute($demoFile));
   }else{
     $demoFile='UNKNOWN';
   }
@@ -13269,7 +13283,7 @@ sub encodeHtmlHelp {
 
 # Environment setup ####################
 
-setSpringEnv($conf{springDataDir},$conf{varDir},$conf{springDataDir});
+setSpringEnv((splitPaths($conf{springDataDir}))[0],$conf{varDir},splitPaths($conf{springDataDir}));
 
 slog("Initializing SPADS $spadsVer",3);
 slog('SPADS process is currently running as root!',2) unless($win || $>);

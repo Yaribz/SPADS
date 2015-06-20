@@ -135,6 +135,8 @@ helpSettings.dat:
 0.5.3a: default value for springieEmulation is now "warn"
 0.5.4: the kickBanDuration global setting now also accepts durations expressed in number of games
        default kickBanDuration is 300 (5 minutes)
+0.5.5: it is now possible to specify multiple Spring data directories through the "springDataDir" global setting
+       clarify useWin32Process documentation
 
 spads.pl:
 ========
@@ -682,6 +684,8 @@ spads.pl:
 0.11.31c: make Spring directories management through environment variables consistent between Linux and Windows (auto-restart if needed)
           log unitsync errors when unitsync Init call fails
           simplify restart code
+0.11.32: it is now possible to specify multiple Spring data directories through the "springDataDir" global setting
+         the varDir is now also used by old Spring versions (< 96) as writable data directory
 
 SpadsConf.pm:
 ============
@@ -801,6 +805,8 @@ SpadsConf.pm:
         new fields in banLists.conf file ("skill" and "skillUncert")
 0.11.9a: ignore leading and trailing spaces in settings files (should fix a rehost loop bug when the battleName hosting setting contains any leading or trailing space)
 0.11.9b: timestamps are automatically enabled and colors automatically disabled in STDOUT messages if SPADS output is redirected to a file
+0.12.0: it is now possible to specify multiple Spring data directories through the "springDataDir" global setting
+        Spring data directory no longer needs to be writable
 
 spadsInstaller.pl:
 =================

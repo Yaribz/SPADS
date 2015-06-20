@@ -29,9 +29,24 @@ use Storable qw'nstore retrieve dclone';
 
 use SimpleLog;
 
+sub any (&@) {
+  my $code = shift;
+  return defined first {&{$code}} @_;
+}
+
+sub none (&@) {
+  my $code = shift;
+  return ! defined first {&{$code}} @_;
+}
+
+sub all (&@) {
+  my $code = shift;
+  return ! defined first {! &{$code}} @_;
+}
+
 # Internal data ###############################################################
 
-my $moduleVersion='0.11.9b';
+my $moduleVersion='0.12.0';
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 
 my %globalParameters = (lobbyLogin => ["login"],
@@ -55,7 +70,7 @@ my %globalParameters = (lobbyLogin => ["login"],
                         etcDir => ["readableDir"],
                         varDir => ["writableDir"],
                         logDir => ["writableDir"],
-                        springDataDir => ["writableDir"],
+                        springDataDir => ["readableDirs"],
                         autoReloadArchivesMinDelay => ["integer"],
                         sendRecordPeriod => ["integer"],
                         maxBytesSent => ["integer"],
@@ -212,6 +227,7 @@ my %paramTypes = (login => '[\w\[\]]{2,20}',
                   autoRestartType => "(on|off|whenEmpty|whenOnlySpec)",
                   onBadSpringVersionType => '(closeBattle|quit)',
                   readableDir => sub { return (-d $_[0] && -x $_[0] && -r $_[0]) },
+                  readableDirs => sub { return $_[0] ne '' && (all {-d $_ && -x $_ && -r $_} split($win?';':':',$_[0])) },
                   writableDir => sub { return (-d $_[0] && -x $_[0] && -r $_[0] && -w $_[0]) },
                   integerCouple => '\d+;\d+',
                   integerTriplet => '\d+;\d+;\d+',
@@ -472,16 +488,6 @@ sub aindex (\@$;$) {
     return $pos if $aref->[$pos] eq $val;
   }
   return -1;
-}
-
-sub any (&@) {
-  my $code = shift;
-  return defined first {&{$code}} @_;
-}
-
-sub none (&@) {
-  my $code = shift;
-  return ! defined first {&{$code}} @_;
 }
 
 sub checkValue {
