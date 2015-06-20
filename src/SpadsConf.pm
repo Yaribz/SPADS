@@ -46,7 +46,7 @@ sub all (&@) {
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.12.0';
+my $moduleVersion='0.11.10';
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 
 my %globalParameters = (lobbyLogin => ["login"],
