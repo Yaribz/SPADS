@@ -686,6 +686,9 @@ spads.pl:
           simplify restart code
 0.11.32: it is now possible to specify multiple Spring data directories through the "springDataDir" global setting
          the varDir is now also used by old Spring versions (< 96) as writable data directory
+0.11.33: setting environment variables no longer requires a restart except for LD_LIBRARY_PATH (Linux)
+         the _putenv CRT function is now used to set environment variables so they can be seen by unitsync without restarting (Windows)
+         clean up int32/uint32 casting code
 
 SpadsConf.pm:
 ============
@@ -843,6 +846,9 @@ spadsInstaller.pl:
 0.13b: fix Perl unitsync interface module generation when the unitsync library path contains spaces
        prevent infinite loop when using the script in non-interactive mode (crontab ...)
 0.13c: timestamps are automatically enabled and colors automatically disabled in STDOUT messages if output is redirected to a file
+0.14: PerlUnitSync module generation: use -m32 compile option to force 32-bit compilation and support MinGW-w64 (Windows)
+      PerlUnitSync module generation: link libgcc and libstdc++ statically to limit dependencies (Windows)
+      log unitsync errors when unitsync Init call fails
 
 SpadsPluginApi.pm:
 =================

@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.13c (2015/05/20)
+# Version 0.14 (2015/06/22)
 
 use strict;
 
@@ -334,17 +334,6 @@ sub generatePerlUnitSync {
     exit 1;
   }
 
-  my $coreIncsString;
-  if($win) {
-    $coreIncsString="-I$ENV{MINGDIR}/include -I$ENV{PERL5_INCLUDE}";
-  }else{
-    my @coreIncs;
-    foreach my $inc (@INC) {
-      push(@coreIncs,"-I$inc/CORE") if(-d "$inc/CORE");
-    }
-    $coreIncsString=join(' ',@coreIncs);
-  }
-
   system("swig -perl5 PerlUnitSync.i");
   if($?) {
     $sLog->log("Error during Unitsync wrapper source generation",1);
@@ -355,6 +344,17 @@ sub generatePerlUnitSync {
     unlink("PerlUnitSync_wrap.c");
     unlink("PerlUnitSync.pm");
     exit 1;
+  }
+
+  my $coreIncsString;
+  if($win) {
+    $coreIncsString="-I$ENV{MINGDIR}/include -I$ENV{PERL5_INCLUDE} -m32";
+  }else{
+    my @coreIncs;
+    foreach my $inc (@INC) {
+      push(@coreIncs,"-I$inc/CORE") if(-d "$inc/CORE");
+    }
+    $coreIncsString=join(' ',@coreIncs);
   }
   system("g++ -fpic -c PerlUnitSync_wrap.c -Dbool=char $coreIncsString");
   if($?) {
@@ -370,7 +370,7 @@ sub generatePerlUnitSync {
   }
   my $linkParam='';
   if($win) {
-    $linkParam=" $ENV{PERL5_LIB}";
+    $linkParam=" $ENV{PERL5_LIB} -static-libgcc -static-libstdc++ -m32";
   }else{
     $linkParam=" -Wl,-rpath,\"$1\"" if($unitsync =~ /^(.+)\/[^\/]+$/);
   }
@@ -420,6 +420,10 @@ sub checkUnitsync {
   }
   
   if(! PerlUnitSync::Init(0,0)) {
+    while(my $unitSyncErr=PerlUnitSync::GetNextError()) {
+      chomp($unitSyncErr);
+      $sLog->log("UnitSync error: $unitSyncErr",1);
+    }
     $sLog->log("Unable to initialize UnitSync library",1);
     exit 1;
   }

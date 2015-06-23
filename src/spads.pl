@@ -45,10 +45,10 @@ use SpringLobbyInterface;
 
 $SIG{TERM} = \&sigTermHandler;
 
-my $MAX_SIGNEDINTEGER=2147483647;
-my $MAX_UNSIGNEDINTEGER=4294967296;
+sub int32 { return unpack('l',pack('l',shift)) }
+sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.11.32';
+our $spadsVer='0.11.33';
 
 my %optionTypes = (
   0 => "error",
@@ -246,6 +246,7 @@ sub intRand {
 }
 
 fatalError('Unable to load SPADS configuration at startup') unless($spads);
+fatalError('Unable to import _putenv from msvcrt.dll ('.Win32::FormatMessage(Win32::GetLastError()).')') if($win && ! Win32::API->Import('msvcrt', 'int __cdecl _putenv (char* envstring)'));
 
 my $masterChannel=$spads->{conf}->{masterChannel};
 $masterChannel=$1 if($masterChannel =~ /^([^\s]+)\s/);
@@ -661,16 +662,26 @@ sub setEnvVarFirstPaths {
   return $needRestart;
 }
 
+sub exportWin32EnvVar {
+  my $envVar=shift;
+  my $envVarDef="$envVar=".($ENV{$envVar}//'');
+  fatalError("Unable to export environment variable definition \"$envVarDef\"") unless(int32(_putenv($envVarDef)) == 0);
+}
+
 sub setSpringEnv {
   my ($unitSyncPath,@dataDirs)=@_;
-  my $needRestart=0;
-  $needRestart=1 if(setEnvVarFirstPaths($win?'PATH':'LD_LIBRARY_PATH',$unitSyncPath));
-  $needRestart=1 if(setEnvVarFirstPaths('SPRING_DATADIR',@dataDirs));
-  if(! areSamePaths($dataDirs[0],$ENV{SPRING_WRITEDIR}//'')) {
-    $ENV{SPRING_WRITEDIR}=$dataDirs[0];
-    $needRestart=1;
+
+  setEnvVarFirstPaths('SPRING_DATADIR',@dataDirs);
+  exportWin32EnvVar('SPRING_DATADIR') if($win);
+
+  $ENV{SPRING_WRITEDIR}=$dataDirs[0] unless(areSamePaths($dataDirs[0],$ENV{SPRING_WRITEDIR}//''));
+  exportWin32EnvVar('SPRING_WRITEDIR') if($win);
+
+  if($win) {
+    setEnvVarFirstPaths('PATH',$unitSyncPath);
+  }else{
+    portableExec($^X,$0,@ARGV) if(setEnvVarFirstPaths('LD_LIBRARY_PATH',$unitSyncPath));
   }
-  portableExec($^X,$0,@ARGV) if($needRestart);
 }
 
 sub generateGameId {
@@ -1025,11 +1036,10 @@ sub loadArchives {
   my %availableMapsByNames=();
   for my $mapNb (0..($nbMaps-1)) {
     my $mapName = PerlUnitSync::GetMapName($mapNb);
-    my $mapChecksum = PerlUnitSync::GetMapChecksum($mapNb);
+    my $mapChecksum = int32(PerlUnitSync::GetMapChecksum($mapNb));
     PerlUnitSync::GetMapArchiveCount($mapName);
     my $mapArchive = PerlUnitSync::GetMapArchiveName(0);
     $mapArchive=$1 if($mapArchive =~ /([^\\\/]+)$/);
-    $mapChecksum-=$MAX_UNSIGNEDINTEGER if($mapChecksum > $MAX_SIGNEDINTEGER);
     $availableMaps[$mapNb]={name=>$mapName,hash=>$mapChecksum,archive=>$mapArchive,options=>{}};
     if(exists $availableMapsByNames{$mapName}) {
       slog("Duplicate archives found for map \"$mapName\" ($mapArchive)",2)
@@ -1112,8 +1122,7 @@ sub loadArchives {
       last;
     }
     my $modArchive = PerlUnitSync::GetPrimaryModArchive($modNb);
-    my $modChecksum = PerlUnitSync::GetPrimaryModChecksum($modNb);
-    $modChecksum-=$MAX_UNSIGNEDINTEGER if($modChecksum > $MAX_SIGNEDINTEGER);
+    my $modChecksum = int32(PerlUnitSync::GetPrimaryModChecksum($modNb));
     my $cachedMod=getMod($modName);
     if(defined $cachedMod && $modChecksum && $modChecksum == $cachedMod->{hash}) {
       $newAvailableMods[$modNb]=$cachedMod;
@@ -1200,9 +1209,9 @@ sub getMapHash {
 sub getMapHashAndArchive {
   my $mapName=shift;
   for my $mapNb (0..$#availableMaps) {
-    return ($availableMaps[$mapNb]->{hash},$availableMaps[$mapNb]->{archive}) if($availableMaps[$mapNb]->{name} eq $mapName);
+    return (uint32($availableMaps[$mapNb]->{hash}),$availableMaps[$mapNb]->{archive}) if($availableMaps[$mapNb]->{name} eq $mapName);
   }
-  return ($spads->getMapHash($mapName,$syncedSpringVersion),'');
+  return (uint32($spads->getMapHash($mapName,$syncedSpringVersion)),'');
 }
 
 sub getMod {
@@ -1291,7 +1300,7 @@ sub getSysInfo {
         slog("Unable to retrieve total physical memory through GlobalMemoryStatus function (Win32 API)",2);
       }
     }else{
-      slog("Unable to retrieve total physical memory through GlobalMemoryStatus function (Win32 API)",2);
+      slog('Unable to import GlobalMemoryStatus from kernel32.dll ('.Win32::FormatMessage(Win32::GetLastError()).')',2);
     }
 
     $uptime=int(Win32::GetTickCount() / 1000);
@@ -4225,10 +4234,7 @@ sub launchGame {
 
   return 1 if($checkOnly);
 
-  if(! $mapAvailableLocally) {
-    $additionalData{"game/MapHash"}=$spads->getMapHash($currentMap,$syncedSpringVersion);
-    $additionalData{"game/MapHash"}+=$MAX_UNSIGNEDINTEGER if($additionalData{"game/MapHash"} < 0);
-  }
+  $additionalData{"game/MapHash"}=uint32($spads->getMapHash($currentMap,$syncedSpringVersion)) unless($mapAvailableLocally);
 
   if($conf{autoSaveBoxes}) {
     my $p_startRects=$lobby->{battle}->{startRects};
@@ -8562,7 +8568,6 @@ sub hMapLink {
   return 1 if($checkOnly);
 
   my ($mapHash,$mapArchive)=getMapHashAndArchive($conf{map});
-  $mapHash+=$MAX_UNSIGNEDINTEGER if($mapHash < 0);
 
   my $mapLink;
   if($mapArchive eq '') {
@@ -11857,7 +11862,6 @@ sub cbJoinedBattle {
   my $level=getUserAccessLevel($user);
   my $levelDescription=$spads->getLevelDescription($level);
   my ($mapHash,$mapArchive)=getMapHashAndArchive($conf{map});
-  $mapHash+=$MAX_UNSIGNEDINTEGER if($mapHash < 0);
 
   my $mapLink;
   if($mapArchive eq '') {
