@@ -18,121 +18,93 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.14 (2015/06/22)
+# Version 0.15 (2015/06/23)
 
 use strict;
 
 use Cwd;
+use File::Basename 'fileparse';
 use File::Copy;
 use File::Path;
+use File::Spec;
 use List::Util 'first';
 
 use SimpleLog;
 use SpadsUpdater;
 
-my $currentStep=1;
-my $nbSteps=13;
-my @packages=qw/getDefaultModOptions.pl help.dat helpSettings.dat SpringAutoHostInterface.pm SpringLobbyInterface.pm SimpleLog.pm spads.pl SpadsConf.pm spadsInstaller.pl SpadsUpdater.pm SpadsPluginApi.pm update.pl argparse.py replay_upload.py/;
-my @packagesWinUnitsync=qw/PerlUnitSync.pm PerlUnitSync.dll/;
-my @packagesWinServer=qw/spring-dedicated.exe spring-headless.exe/;
-my $win=$^O eq 'MSWin32' ? 1 : 0;
+sub any (&@) { my $c = shift; return defined first {&$c} @_; }
+sub all (&@) { my $c = shift; return ! defined first {! &$c} @_; }
+sub none (&@) { my $c = shift; return ! defined first {&$c} @_; }
+sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
+
+my @packages=qw'getDefaultModOptions.pl help.dat helpSettings.dat SpringAutoHostInterface.pm SpringLobbyInterface.pm SimpleLog.pm spads.pl SpadsConf.pm spadsInstaller.pl SpadsUpdater.pm SpadsPluginApi.pm update.pl argparse.py replay_upload.py';
+my @packagesWinUnitsync=qw'PerlUnitSync.pm PerlUnitSync.dll';
+my @packagesWinServer=qw'spring-dedicated.exe spring-headless.exe';
+
+my $win=$^O eq 'MSWin32';
 my $isInteractive=-t STDIN;
+my $nullDevice=File::Spec->devnull();
+my $currentStep=1;
+my ($nbSteps,$pathSep,$perlUnitsyncLibName)=$win?(12,';','PerlUnitSync.dll'):(14,':','PerlUnitSync.so');
+my @pathes=splitPaths($ENV{PATH});
+my %conf=(installDir => File::Spec->canonpath(cwd()));
 
-my @pathes;
-if(exists $ENV{PATH}) {
-  if($win) {
-    @pathes=split(/;/,$ENV{PATH});
-  }else{
-    @pathes=split(/:/,$ENV{PATH});
-  }
-}
-
-my $nullDevice="/dev/null";
-my $perlExecPrefix='';
-my $exeExtension='';
-my $dllExtension=".so";
 if($win) {
-  $nbSteps=11;
-  $nullDevice="nul";
-  $perlExecPrefix="perl ";
-  $exeExtension=".exe";
-  $dllExtension=".dll";
+  $conf{updateBin}='yes';
   push(@pathes,cwd());
   push(@packages,@packagesWinUnitsync);
+}else{
+  $conf{updateBin}='no';
 }
-
-my %conf;
-$conf{installDir}=cwd();
 
 my $sLog=SimpleLog->new(logFiles => [''],
                         logLevels => [4],
                         useANSICodes => [-t STDOUT ? 1 : 0],
                         useTimestamps => [-t STDOUT ? 0 : 1],
-                        prefix => "[SpadsInstaller] ");
+                        prefix => '[SpadsInstaller] ');
 
-
-sub any (&@) {
-  my $code = shift;
-  return defined first {&{$code}} @_;
-}
-
-sub none (&@) {
-  my $code = shift;
-  return ! defined first {&{$code}} @_;
-}
 
 if(@ARGV) {
-  if($#ARGV == 0 && any {$ARGV[0] eq $_} qw/stable testing unstable contrib -g/) {
+  if($#ARGV == 0 && any {$ARGV[0] eq $_} qw'stable testing unstable contrib -g') {
     $conf{release}=$ARGV[0];
   }else{
-    $sLog->log("Invalid usage",1);
+    $sLog->log('Invalid usage',1);
     print "Usage:\n";
-    print "  $perlExecPrefix$0 [release]\n";
-    print "  $perlExecPrefix$0 -g\n";
+    print "  perl $0 [release]\n";
+    print "  perl $0 -g\n";
     print "      release: \"stable\", \"testing\", \"unstable\" or \"contrib\"\n";
     print "      -g: (re)generate unitsync wrapper only\n";
     exit 1;
   }
 }
 
-my %prereqFound=(swig => 0,
-                 "g++" => 0,
-                 wget => 0);
+my %prereqFound=(swig => 0, 'g++' => 0, wget => 0);
 foreach my $prereq (keys %prereqFound) {
-  foreach my $path (@pathes) {
-    if(-f "$path/$prereq$exeExtension") {
-      $prereqFound{$prereq}=1;
-      last;
-    }
-  }
+  $prereqFound{$prereq}=1 if(any {-f "$_/$prereq".($win?'.exe':'')} @pathes);
 }
-if(! $prereqFound{wget}) {
-  $sLog->log("Couldn't find wget, please install wget before installing SPADS",1);
-  exit 1;
-}
-if(! $win || (exists $conf{release} && $conf{release} eq "-g")) {
-  if(! $prereqFound{swig}) {
-    $sLog->log("Couldn't find Swig, please install Swig for Perl Unitsync interface module generation",1);
-    exit 1;
-  }
-  if(! $prereqFound{"g++"}) {
-    $sLog->log("Couldn't find g++, please install g++ for Perl Unitsync interface module generation",1);
-    exit 1;
-  }
+fatalError("Couldn't find wget, please install wget before installing SPADS") unless($prereqFound{wget});
+if(! $win || (exists $conf{release} && $conf{release} eq '-g')) {
+  fatalError("Couldn't find Swig, please install Swig for Perl Unitsync interface module generation") unless($prereqFound{swig});
+  fatalError("Couldn't find g++, please install g++ for Perl Unitsync interface module generation") unless($prereqFound{'g++'});
   if($win) {
-    if(! exists $ENV{PERL5_INCLUDE} || ! -d $ENV{PERL5_INCLUDE}) {
-      $sLog->log("The PERL5_INCLUDE environment variable must be set to your Perl CORE include directory (for instance: \"C:\\Perl\\lib\\CORE\")",1);
-      exit 1;
-    }
-    if(! exists $ENV{PERL5_LIB} || $ENV{PERL5_LIB} !~ /^[a-zA-Z]\:/ || ! -f $ENV{PERL5_LIB}) {
-      $sLog->log("The PERL5_LIB environment variable must be set to your Perl CORE library absolute path (for instance: \"C:\\Perl\\lib\\CORE\\perl510.lib\")",1);
-      exit 1;
-    }
-    if(! exists $ENV{MINGDIR} || ! -d "$ENV{MINGDIR}/include") {
-      $sLog->log("The MINGDIR environment variable must be set to your MinGW install directory (for instance: \"C:\\mingw\")",1);
-      exit 1;
-    }
+    fatalError('The PERL5_INCLUDE environment variable must be set to your Perl CORE include directory (for instance: "C:\\Perl\\lib\\CORE")')
+        unless(exists $ENV{PERL5_INCLUDE} && -d $ENV{PERL5_INCLUDE});
+    fatalError('The PERL5_LIB environment variable must be set to your Perl CORE library absolute path (for instance: "C:\\Perl\\lib\\CORE\\libperl520.a")')
+        unless(exists $ENV{PERL5_LIB} && isAbsolutePath($ENV{PERL5_LIB}) && -f $ENV{PERL5_LIB});
+    fatalError('The MINGDIR environment variable must be set to your MinGW install directory (for instance: "C:\\mingw")')
+        unless(exists $ENV{MINGDIR} && -d "$ENV{MINGDIR}/include");
   }
+}
+
+sub fatalError { $sLog->log(shift,0); exit 1; }
+
+sub splitPaths { return split(/$pathSep/,shift//''); }
+
+sub isAbsolutePath {
+  my $fileName=shift;
+  my $fileSpecRes=File::Spec->file_name_is_absolute($fileName);
+  return $fileSpecRes == 2 if($win);
+  return $fileSpecRes;
 }
 
 sub promptChoice {
@@ -151,35 +123,28 @@ sub promptChoice {
 }
 
 sub promptExistingFile {
-  my ($prompt,$p_fileNames,$default)=@_;
-  my $fileNamesString=join(',',@{$p_fileNames});
+  my ($prompt,$fileName,$default)=@_;
   my $choice='';
   my $firstTry=1;
-  while(! isAbsoluteFilePath($choice,$p_fileNames)) {
-    if(! $firstTry && ! $isInteractive) {
-      $sLog->log("Inconsistent data received in non-interactive mode \"$choice\", exiting!",1);
-      exit 1;
-    }
+  while(! isAbsoluteFilePath($choice,$fileName)) {
+    fatalError("Inconsistent data received in non-interactive mode \"$choice\", exiting!") unless($firstTry || $isInteractive);
     $firstTry=0;
-    print "$prompt ($fileNamesString) [$default] ? ";
+    print "$prompt ($fileName) [$default] ? ";
     $choice=<STDIN>;
     print "\n" unless($isInteractive);
     $choice//='';
     chomp($choice);
     $choice=$default if($choice eq '');
   }
-  return $choice;
+  return isAbsoluteFilePath($choice,$fileName);
 }
 
 sub promptExistingDir {
-  my ($prompt,$default)=@_;
+  my ($prompt,$default,$acceptEmpty)=@_;
   my $choice='';
   my $firstTry=1;
-  while((! $win && $choice !~ /^\//) || ($win && $choice !~ /^[a-zA-Z]\:/) || ! -d $choice) {
-    if(! $firstTry && ! $isInteractive) {
-      $sLog->log("Inconsistent data received in non-interactive mode \"$choice\", exiting!",1);
-      exit 1;
-    }
+  while(! isAbsolutePath($choice) || ! -d $choice || index($choice,$pathSep) != -1) {
+    fatalError("Inconsistent data received in non-interactive mode \"$choice\", exiting!") unless($firstTry || $isInteractive);
     $firstTry=0;
     print "$prompt [$default] ? ";
     $choice=<STDIN>;
@@ -187,6 +152,7 @@ sub promptExistingDir {
     $choice//='';
     chomp($choice);
     $choice=$default if($choice eq '');
+    last if($choice eq '' && $acceptEmpty);
   }
   return $choice;
 }
@@ -204,25 +170,20 @@ sub promptString {
 }
 
 sub isAbsoluteFilePath {
-  my ($path,$p_fileNames)=@_;
-  foreach my $fileName (@{$p_fileNames}) {
-    my $fileRegExp=quotemeta($fileName);
-    if($win) {
-      return 1 if($path =~ /^[a-zA-Z]\:.*[\/\\]$fileRegExp$/ && -f $path);
-    }else{
-      return 1 if($path =~ /^\/.*\/$fileRegExp$/ && -f $path);
-    }
+  my ($path,$fileName)=@_;
+  return '' unless(isAbsolutePath($path));
+  if(! -f $path) {
+    $path=File::Spec->catfile($path,$fileName);
+    return '' unless(-f $path);
   }
-  return 0;
+  return '' unless((File::Spec->splitpath($path))[2] eq $fileName);
+  return $path;
 }
 
 sub createDir {
   my $dir=shift;
   eval { mkpath($dir) };
-  if ($@) {
-    $sLog->log("Couldn't create directory \"$dir\" ($@)",1);
-    exit 1;
-  }
+  fatalError("Couldn't create directory \"$dir\" ($@)") if($@);
   $sLog->log("Directory \"$dir\" created",3);
 }
 
@@ -237,50 +198,37 @@ sub downloadFile {
   return 1;
 }
 
+sub unlinkUnitsyncTmpFiles {
+  map {unlink($_)} (qw'unitsync.h unitsync.cpp exportdefines.h maindefines.h PerlUnitSync.i PerlUnitSync_wrap.c PerlUnitSync_wrap.o');
+}
+
+sub unlinkUnitsyncModuleFiles {
+  map {unlink($_)} ('PerlUnitSync.pm',$perlUnitsyncLibName);
+}
+
+my $unitsyncDir;
 sub generatePerlUnitSync {
   my $defaultUnitsync='';
-  my @libPathes=@pathes;
-  my @unitsyncNames=qw/unitsync.dll/;
-  if(! $win) {
-    @unitsyncNames=qw/libunitsync.so/;
-    @libPathes=split(/:/,$ENV{LD_LIBRARY_PATH}) if(exists $ENV{LD_LIBRARY_PATH});
-    push(@libPathes,"/lib");
-  }
-  my $found=0;
+  my ($unitsyncLibName,@libPathes)=$win?('unitsync.dll',@pathes):('libunitsync.so',split(/:/,$ENV{LD_LIBRARY_PATH}//''),'/lib');
   foreach my $libPath (@libPathes) {
-    foreach my $unitsyncName (@unitsyncNames) {
-      if(-f "$libPath/$unitsyncName") {
-        $found=1;
-        $defaultUnitsync="$libPath/$unitsyncName";
-        last;
-      }
+    if(-f "$libPath/$unitsyncLibName") {
+      $defaultUnitsync=File::Spec->catfile($libPath,$unitsyncLibName);
+      last;
     }
-    last if($found);
   }
-  my $unitsync=promptExistingFile("$currentStep/$nbSteps - Please enter the absolute path of the unitsync library",\@unitsyncNames,$defaultUnitsync);
+  my $unitsync=promptExistingFile("$currentStep/$nbSteps - Please enter the absolute path of the unitsync library",$unitsyncLibName,$defaultUnitsync);
   $currentStep++;
+  $unitsyncDir=File::Spec->canonpath((fileparse($unitsync))[1]);
 
-  $sLog->log("Generating Perl Unitsync interface module",3);
-  exit 1 unless(downloadFile("http://planetspads.free.fr/spads/unitsync/src/unitsync.h","unitsync.h"));
-  if(! downloadFile("http://planetspads.free.fr/spads/unitsync/src/unitsync.cpp","unitsync.cpp")) {
-    unlink("unitsync.h");
-    exit 1;
-  }
-  if(! downloadFile("http://planetspads.free.fr/spads/unitsync/src/exportdefines.h","exportdefines.h")) {
-    unlink("unitsync.h");
-    unlink("unitsync.cpp");
-    exit 1;
-  }
-  if(! downloadFile("http://planetspads.free.fr/spads/unitsync/src/maindefines.h","maindefines.h")) {
-    unlink("unitsync.h");
-    unlink("unitsync.cpp");
-    unlink("exportdefines.h");
+  $sLog->log('Generating Perl Unitsync interface module',3);
+  if(notall {downloadFile("http://planetspads.free.fr/spads/unitsync/src/$_",$_)} (qw'unitsync.h unitsync.cpp exportdefines.h maindefines.h')) {
+    unlinkUnitsyncTmpFiles();
     exit 1;
   }
   
   my $exportedFunctions='';
   my $exportedFunctionsFixed='';
-  my $usSrc="unitsync.cpp";
+  my $usSrc='unitsync.cpp';
   if(-f $usSrc) {
     if(open(US_CPP,"<$usSrc")) {
       while(<US_CPP>) {
@@ -299,24 +247,15 @@ sub generatePerlUnitSync {
       }
       close(US_CPP);
     }else{
-      $sLog->log("Unable to open unitsync source file ($usSrc)",1);
-      unlink("unitsync.h");
-      unlink("unitsync.cpp");
-      unlink("exportdefines.h");
-      unlink("maindefines.h");
-      exit 1;
+      unlinkUnitsyncTmpFiles();
+      fatalError("Unable to open unitsync source file ($usSrc)");
     }
   }else{
-    $sLog->log("Unable to find unitsync source file ($usSrc)",1);
-    unlink("unitsync.h");
-    unlink("unitsync.cpp");
-    unlink("exportdefines.h");
-    unlink("maindefines.h");
-    exit 1;
+    unlinkUnitsyncTmpFiles();
+    fatalError("Unable to find unitsync source file ($usSrc)");
   }
-  unlink("unitsync.cpp");
 
-  if(open(PUS_INT,">PerlUnitSync.i")) {
+  if(open(PUS_INT,'>PerlUnitSync.i')) {
     print PUS_INT "\%module PerlUnitSync\n";
     print PUS_INT "\%{\n";
     print PUS_INT "#include \"exportdefines.h\"\n";
@@ -327,114 +266,142 @@ sub generatePerlUnitSync {
     print PUS_INT $exportedFunctionsFixed;
     close(PUS_INT);
   }else{
-    $sLog->log("Unable to write Perl Unitsync interface file (PerlUnitSync.i)",1);
-    unlink("unitsync.h");
-    unlink("exportdefines.h");
-    unlink("maindefines.h");
-    exit 1;
+    unlinkUnitsyncTmpFiles();
+    fatalError('Unable to write Perl Unitsync interface file (PerlUnitSync.i)');
   }
 
-  system("swig -perl5 PerlUnitSync.i");
+  system('swig -perl5 PerlUnitSync.i');
   if($?) {
-    $sLog->log("Error during Unitsync wrapper source generation",1);
-    unlink("unitsync.h");
-    unlink("exportdefines.h");
-    unlink("maindefines.h");
-    unlink("PerlUnitSync.i");
-    unlink("PerlUnitSync_wrap.c");
-    unlink("PerlUnitSync.pm");
-    exit 1;
+    unlinkUnitsyncTmpFiles();
+    unlinkUnitsyncModuleFiles();
+    fatalError('Error during Unitsync wrapper source generation');
   }
 
   my $coreIncsString;
   if($win) {
-    $coreIncsString="-I$ENV{MINGDIR}/include -I$ENV{PERL5_INCLUDE} -m32";
+    $coreIncsString="\"-I$ENV{MINGDIR}\\include\" \"-I$ENV{PERL5_INCLUDE}\" -m32";
   }else{
     my @coreIncs;
     foreach my $inc (@INC) {
-      push(@coreIncs,"-I$inc/CORE") if(-d "$inc/CORE");
+      push(@coreIncs,"\"-I$inc/CORE\"") if(-d "$inc/CORE");
     }
-    $coreIncsString=join(' ',@coreIncs);
+    $coreIncsString=join(' ','-fpic',@coreIncs);
   }
-  system("g++ -fpic -c PerlUnitSync_wrap.c -Dbool=char $coreIncsString");
+  system("g++ -c PerlUnitSync_wrap.c -Dbool=char $coreIncsString");
   if($?) {
-    $sLog->log("Error during Unitsync wrapper compilation",1);
-    unlink("unitsync.h");
-    unlink("exportdefines.h");
-    unlink("maindefines.h");
-    unlink("PerlUnitSync.i");
-    unlink("PerlUnitSync_wrap.c");
-    unlink("PerlUnitSync.pm");
-    unlink("PerlUnitSync_wrap.o");
-    exit 1;
+    unlinkUnitsyncTmpFiles();
+    unlinkUnitsyncModuleFiles();
+    fatalError('Error during Unitsync wrapper compilation');
   }
+
   my $linkParam='';
   if($win) {
-    $linkParam=" $ENV{PERL5_LIB} -static-libgcc -static-libstdc++ -m32";
+    $linkParam=" \"$ENV{PERL5_LIB}\" -static-libgcc -static-libstdc++ -m32";
   }else{
     $linkParam=" -Wl,-rpath,\"$1\"" if($unitsync =~ /^(.+)\/[^\/]+$/);
   }
-  system("g++ -shared PerlUnitSync_wrap.o \"$unitsync\"$linkParam -o PerlUnitSync$dllExtension");
-  unlink("unitsync.h");
-  unlink("exportdefines.h");
-  unlink("maindefines.h");
-  unlink("PerlUnitSync.i");
-  unlink("PerlUnitSync_wrap.c");
-  unlink("PerlUnitSync_wrap.o");
+  system("g++ -shared PerlUnitSync_wrap.o \"$unitsync\"$linkParam -o $perlUnitsyncLibName");
+  unlinkUnitsyncTmpFiles();
   if($?) {
-    $sLog->log("Error during Perl Unitsync interface library compilation",1);
-    unlink("PerlUnitSync.pm");
-    unlink("PerlUnitSync$dllExtension");
-    exit 1;
+    unlinkUnitsyncModuleFiles();
+    fatalError('Error during Perl Unitsync interface library compilation');
   }
 }
 
-my $nbMods=0;
+sub exportWin32EnvVar {
+  my $envVar=shift;
+  my $envVarDef="$envVar=".($ENV{$envVar}//'');
+  fatalError("Unable to export environment variable definition \"$envVarDef\"") unless(_putenv($envVarDef) == 0);
+}
+
 my @availableMods=();
 my $springVersion;
 sub checkUnitsync {
-  my $defaultSpringDataDir='';
-  $defaultSpringDataDir="/share/games/spring" if(! $win && -d "/share/games/spring");
-  $defaultSpringDataDir=$ENV{SPRING_DATADIR} if(exists $ENV{SPRING_DATADIR} && $ENV{SPRING_DATADIR} ne '' && -d $ENV{SPRING_DATADIR});
-  $defaultSpringDataDir=$ENV{SPRING_WRITEDIR} if(exists $ENV{SPRING_WRITEDIR} && $ENV{SPRING_WRITEDIR} ne '' && -d $ENV{SPRING_WRITEDIR});
-  if($win) {
-    $conf{dataDir}=promptExistingDir("$currentStep/$nbSteps - Please enter the Spring installation directory",$defaultSpringDataDir);
+  my $defaultDataDir='';
+  if(defined $unitsyncDir && -d "$unitsyncDir/base") {
+    $defaultDataDir=$unitsyncDir;
   }else{
-    $conf{dataDir}=promptExistingDir("$currentStep/$nbSteps - Please enter the absolute path of the spring data directory (for maps, mods...)",$defaultSpringDataDir);
+    my @potentialDataDirs=splitPaths($ENV{SPRING_DATADIR});
+    push(@potentialDataDirs,'/share/games/spring') unless($win);
+    foreach my $potentialDataDir (@potentialDataDirs) {
+      if(-d "$potentialDataDir/base") {
+        $defaultDataDir=$potentialDataDir;
+        last;
+      }
+    }
   }
+  my $promptMsg=$win?'Please enter the Spring installation directory':'Please enter the absolute path of the main Spring data directory (containing Spring base content)';
+  my $mainDataDir=promptExistingDir("$currentStep/$nbSteps - $promptMsg",$defaultDataDir);
   $currentStep++;
-
-  $sLog->log("Checking Perl Unitsync interface module",3);
+  my $secondaryDataDir=promptExistingDir("$currentStep/$nbSteps - Please enter the absolute path of a secondary Spring data directory containing additional maps or mods (optional, press enter to skip)",'',1);
+  $currentStep++;
+  $conf{dataDir}=$mainDataDir;
+  $conf{dataDir}.="$pathSep$secondaryDataDir" if($secondaryDataDir ne '');
   $ENV{SPRING_DATADIR}=$conf{dataDir};
-  $ENV{SPRING_WRITEDIR}=$conf{dataDir};
+  $ENV{SPRING_WRITEDIR}=$mainDataDir;
   if($win) {
-    $ENV{PATH}="$ENV{PATH};$conf{dataDir}";
-    push(@INC,$conf{installDir});
-    chdir($conf{dataDir});
+    eval 'use Win32::API';
+    fatalError('Unable to import _putenv from msvcrt.dll ('.Win32::FormatMessage(Win32::GetLastError()).')')
+        unless(Win32::API->Import('msvcrt', 'int __cdecl _putenv (char* envstring)'));
+    exportWin32EnvVar('SPRING_DATADIR');
+    exportWin32EnvVar('SPRING_WRITEDIR');
+    $ENV{PATH}="$mainDataDir;$ENV{PATH}";
   }
 
-  eval "use PerlUnitSync";
-  if ($@) {
-    $sLog->log("Unable to load Perl Unitsync interface module ($@)",1);
-    exit 1;
-  }
+  $sLog->log('Checking Perl Unitsync interface module',3);
+
+  eval 'use PerlUnitSync';
+  fatalError("Unable to load Perl Unitsync interface module ($@)") if($@);
   
   if(! PerlUnitSync::Init(0,0)) {
     while(my $unitSyncErr=PerlUnitSync::GetNextError()) {
       chomp($unitSyncErr);
       $sLog->log("UnitSync error: $unitSyncErr",1);
     }
-    $sLog->log("Unable to initialize UnitSync library",1);
-    exit 1;
+    fatalError('Unable to initialize UnitSync library');
   }
   
-  $nbMods = PerlUnitSync::GetPrimaryModCount();
+  my $nbMods = PerlUnitSync::GetPrimaryModCount();
   for my $modNb (0..($nbMods-1)) {
-    push(@availableMods,PerlUnitSync::GetPrimaryModName($modNb));
+    my $nbInfo = PerlUnitSync::GetPrimaryModInfoCount($modNb);
+    my $modName='';
+    for my $infoNb (0..($nbInfo-1)) {
+      next if(PerlUnitSync::GetInfoKey($infoNb) ne 'name');
+      $modName=PerlUnitSync::GetInfoValueString($infoNb);
+      last;
+    }
+    if($modName eq '') {
+      $sLog->log("Unable to find mod name for mod \#$modNb",1);
+      next;
+    }
+    push(@availableMods,$modName);
   }
   $springVersion=PerlUnitSync::GetSpringVersion();
   PerlUnitSync::UnInit();
   chdir($conf{installDir});
+}
+
+sub escapeWin32Parameter {
+  my $arg = shift;
+  $arg =~ s/(\\*)"/$1$1\\"/g;
+  if($arg =~ /[ \t]/) {
+    $arg =~ s/(\\*)$/$1$1/;
+    $arg = "\"$arg\"";
+  }
+  return $arg;
+}
+
+sub portableExec {
+  my ($program,@params)=@_;
+  my @args=($program,@params);
+  @args=map {escapeWin32Parameter($_)} @args if($win);
+  return exec {$program} @args;
+}
+
+sub makeAbsolutePath {
+  my $path=shift;
+  $path=File::Spec->catdir($conf{installDir},$path) unless(isAbsolutePath($path));
+  return $path;
 }
 
 if(! exists $conf{release}) {
@@ -443,18 +410,18 @@ if(! exists $conf{release}) {
   print "You can stop this installation at any time by hitting Ctrl-c.\n";
   print "Note: if SPADS is already installed on the system, you don't need to reinstall it to run multiple autohosts. Instead, you can share SPADS binaries and use multiple configuration files and/or configuration macros.\n\n";
   
-  $conf{release}=promptChoice("1/$nbSteps - Which SPADS release do you want to install",[qw/stable testing unstable contrib/],"testing");
-}elsif($conf{release} eq "-g") {
-  $nbSteps=2;
+  $conf{release}=promptChoice("1/$nbSteps - Which SPADS release do you want to install",[qw'stable testing unstable contrib'],'testing');
+}elsif($conf{release} eq '-g') {
+  $nbSteps=3;
   print "\nExecuting SPADS installer in Perl Unitsync interface generation mode.\n";
   print "The installer will ask you $nbSteps questions to (re)generate the Perl Unitsync interface module.\n";
   print "You can stop this process at any time by hitting Ctrl-c.\n\n";
-
+  
   generatePerlUnitSync();
 
   checkUnitsync();
 
-  $sLog->log("No Spring mod found",2) if(! $nbMods);
+  $sLog->log('No Spring mod found',2) unless(@availableMods);
 
   print "\nPerl Unitsync interface module (re)generated.\n";
   print "\n" unless($win);
@@ -467,54 +434,34 @@ my $updaterLog=SimpleLog->new(logFiles => [''],
                               logLevels => [4],
                               useANSICodes => [-t STDOUT ? 1 : 0],
                               useTimestamps => [-t STDOUT ? 0 : 1],
-                              prefix => "[SpadsUpdater] ");
+                              prefix => '[SpadsUpdater] ');
 
 my $updater=SpadsUpdater->new(sLog => $updaterLog,
                               localDir => cwd(),
-                              repository => "http://planetspads.free.fr/spads/repository",
+                              repository => 'http://planetspads.free.fr/spads/repository',
                               release => $conf{release},
                               packages => \@packages);
 
 my $updaterRc=$updater->update();
-if($updaterRc < 0) {
-  $sLog->log("Unable to retrieve SPADS packages",1);
-  exit 1;
-}
+fatalError('Unable to retrieve SPADS packages') if($updaterRc < 0);
 if($updaterRc > 0) {
   if($win) {
     print "\nSPADS installer has been updated, it must now be restarted as follows: \"perl $0 $conf{release}\"\n";
     exit 0;
-  }else{
-    $sLog->log("Restarting installer after update...",3);
-    sleep(2);
-    exec("$0 $conf{release}");
   }
+  $sLog->log('Restarting installer after update...',3);
+  sleep(2);
+  portableExec($^X,$0,$conf{release});
+  fatalError('Unable to restart installer');
 }
-$sLog->log("Components are up to date, proceeding with installation...",3);
-
-my $serverType=promptChoice("$currentStep/$nbSteps - Which type of server do you want to use (\"headless\" requires much more resource and doesn't support \"ghost maps\", but it allows running AI bots and LUA scripts at server side)?",[qw/dedicated headless/],'dedicated');
-$currentStep++;
-
-if($win) {
-  $conf{updateBin}="yes";
-  $conf{dedicated}="$conf{installDir}/spring-$serverType.exe";
-}else{
-  $conf{updateBin}="no";
-  if(-f "PerlUnitSync.pm" && -f "PerlUnitSync.so") {
-    $sLog->log("Perl Unitsync interface module already exists, skipping generation",3);
+$sLog->log('SPADS components are up to date, proceeding with installation...',3);
+if(! $win) {
+  if(-f 'PerlUnitSync.pm' && -f 'PerlUnitSync.so') {
+    $sLog->log('Perl Unitsync interface module already exists, skipping generation (use "-g" flag to force re-generation)',3);
     $currentStep++;
   }else {
     generatePerlUnitSync();
   }
-  my $defaultSpringDedicated='';
-  foreach my $path (@pathes) {
-    if(-f "$path/spring-$serverType") {
-      $defaultSpringDedicated="$path/spring-$serverType";
-      last;
-    }
-  }
-  $conf{dedicated}=promptExistingFile("$currentStep/$nbSteps - Please enter the absolute path of the spring $serverType server",["spring-$serverType"],$defaultSpringDedicated);
-  $currentStep++;
 }
 
 checkUnitsync();
@@ -522,24 +469,44 @@ checkUnitsync();
 if($win) {
   $updater=SpadsUpdater->new(sLog => $updaterLog,
                              localDir => cwd(),
-                             repository => "http://planetspads.free.fr/spads/repository",
+                             repository => 'http://planetspads.free.fr/spads/repository',
                              release => $conf{release},
                              packages => \@packagesWinServer,
                              syncedSpringVersion => $springVersion);
   $updaterRc=$updater->update();
-  if($updaterRc < 0) {
-    $sLog->log("Unable to retrieve Spring server binaries",1);
-    exit 1;
-  }
+  fatalError('Unable to retrieve Spring server binaries') if($updaterRc < 0);
   $sLog->log("Spring server binaries updated for Spring $springVersion",3) if($updaterRc > 0);
 }
 
-@availableMods=sort(@availableMods);
-$conf{modName}="_NO_MOD_FOUND_";
+my $serverType=promptChoice("$currentStep/$nbSteps - Which type of server do you want to use (\"headless\" requires much more resource and doesn't support \"ghost maps\", but it allows running AI bots and LUA scripts on server side)?",[qw'dedicated headless'],'dedicated');
+$currentStep++;
+my $springServer=$win?"spring-$serverType.exe":"spring-$serverType";
 
-if(! $nbMods) {
+if($win) {
+  $conf{dedicated}=File::Spec->catfile($conf{installDir},$springServer);
+}else{
+  my $defaultSpringServerPath='';
+  if(defined $unitsyncDir && -f "$unitsyncDir/$springServer") {
+    $defaultSpringServerPath=File::Spec->catfile($unitsyncDir,$springServer);
+  }else{
+    my @potentialSpringServerDirs=splitPaths($ENV{SPRING_DATADIR});
+    foreach my $path (@potentialSpringServerDirs,@pathes) {
+      if(-f "$path/$springServer") {
+        $defaultSpringServerPath=File::Spec->catfile($path,$springServer);
+        last;
+      }
+    }
+  }
+  $conf{dedicated}=promptExistingFile("$currentStep/$nbSteps - Please enter the absolute path of the spring $serverType server",$springServer,$defaultSpringServerPath);
+  $currentStep++;
+}
+
+@availableMods=sort(@availableMods);
+$conf{modName}='_NO_MOD_FOUND_';
+
+if(! @availableMods) {
   $sLog->log("No Spring mod found, consequently the \"modName\" parameter in \"hostingPresets.conf\" will NOT be auto-configured",2);
-  $sLog->log("Hit Ctrl-C now if you want to abort this installation to fix the problem, or remember that you will have to set the default mod manually later",2);
+  $sLog->log('Hit Ctrl-C now if you want to abort this installation to fix the problem, or remember that you will have to set the default mod manually later',2);
   $currentStep+=2;
 }else{
   my $chosenModNb='';
@@ -573,10 +540,11 @@ if(! $nbMods) {
   }
 
   if($isLatestMod) {
-    my $useLatestMod=promptChoice("$currentStep/$nbSteps - You chose the latest version of this mod currently available locally in your \"games\" or \"packages\" folder. Do you want to enable new mod auto-detection to always host the latest version available locally ?",[qw/yes no/],"yes");
-    if($useLatestMod eq "yes") {
+    my $chosenModText=$#availableMods>0?'You chose the latest version of this mod currently available in your "games" and "packages" folders. ':'';
+    my $useLatestMod=promptChoice("$currentStep/$nbSteps - ${chosenModText}Do you want to enable new mod auto-detection to always host the latest version of this mod available in your \"games\" and \"packages\" folders?",[qw'yes no'],'yes');
+    if($useLatestMod eq 'yes') {
       $sLog->log("Using following regular expression as default AutoHost mod filter: \"$modFilter\"",3);
-      $modFilter="~".$modFilter;
+      $modFilter='~'.$modFilter;
       $conf{modName}=$modFilter;
     }else{
       $sLog->log("Using \"$conf{modName}\" as default AutoHost mod",3);
@@ -587,46 +555,40 @@ if(! $nbMods) {
   $currentStep++;
 }
 
-sub makeAbsolutePath {
-  my $path=shift;
-  if($win) {
-    $path="$conf{installDir}/$path" unless($path =~ /^[a-zA-Z]\:/);
-  }else{
-    $path="$conf{installDir}/$path" unless($path =~ /^\//);
-  }
-  return $path;
-}
-
-print "$currentStep/$nbSteps - Please choose the directory where SPADS will store its dynamic data [$conf{installDir}/var] ? ";
+my $defaultDir=File::Spec->catdir($conf{installDir},'var');
+print "$currentStep/$nbSteps - Please choose the directory where SPADS dynamic data will be stored [$defaultDir] ? ";
 $currentStep++;
 my $c=<STDIN>;
 $c//='';
 chomp($c);
-$c="var" if($c eq '');
+$c=$defaultDir if($c eq '');
 $c=makeAbsolutePath($c);
 createDir($c);
 $conf{varDir}=$c;
+$conf{pluginsDir}=File::Spec->catdir($conf{varDir},'plugins');
 
-print "$currentStep/$nbSteps - Please choose the directory where SPADS will write its logs [$conf{installDir}/var/log] ? ";
+$defaultDir=File::Spec->catdir($conf{varDir},'log');
+print "$currentStep/$nbSteps - Please choose the directory where SPADS will write the logs [$defaultDir] ? ";
 $currentStep++;
 $c=<STDIN>;
 $c//='';
 chomp($c);
-$c="var/log" if($c eq '');
+$c=$defaultDir if($c eq '');
 $c=makeAbsolutePath($c);
 createDir($c);
-createDir("$c/chat");
+createDir(File::Spec->catdir($c,'chat'));
 $conf{logDir}=$c;
 
-print "$currentStep/$nbSteps - Please choose the directory where SPADS configuration files will be stored [$conf{installDir}/etc] ? ";
+$defaultDir=File::Spec->catdir($conf{installDir},'etc');
+print "$currentStep/$nbSteps - Please choose the directory where SPADS configuration files will be stored [$defaultDir] ? ";
 $currentStep++;
 $c=<STDIN>;
 $c//='';
 chomp($c);
-$c="etc" if($c eq '');
+$c=$defaultDir if($c eq '');
 $c=makeAbsolutePath($c);
 createDir($c);
-createDir("$c/templates");
+createDir(File::Spec->catdir($c,'templates'));
 $conf{etcDir}=$c;
 
 $conf{login}=promptString("$currentStep/$nbSteps - Please enter the AutoHost lobby login (the lobby account must already exist)");
@@ -637,21 +599,15 @@ $conf{owner}=promptString("$currentStep/$nbSteps - Please enter the lobby login 
 $currentStep++;
 
 
-my @confFiles=qw/banLists.conf battlePresets.conf commands.conf hostingPresets.conf levels.conf mapBoxes.conf mapLists.conf spads.conf users.conf/;
-$sLog->log("Downloading SPADS configuration templates",3);
+my @confFiles=qw'banLists.conf battlePresets.conf commands.conf hostingPresets.conf levels.conf mapBoxes.conf mapLists.conf spads.conf users.conf';
+$sLog->log('Downloading SPADS configuration templates',3);
+exit 1 unless(all {downloadFile("http://planetspads.free.fr/spads/conf/templates/$conf{release}/$_",File::Spec->catdir($conf{etcDir},'templates',$_))} @confFiles);
+$sLog->log('Customizing SPADS configuration',3);
 foreach my $confFile (@confFiles) {
-  exit 1 unless(downloadFile("http://planetspads.free.fr/spads/conf/templates/$conf{release}/$confFile","$conf{etcDir}/templates/$confFile"));
-}
-$sLog->log("Customizing SPADS configuration",3);
-foreach my $confFile (@confFiles) {
-  if(! open(TEMPLATE,"<$conf{etcDir}/templates/$confFile")) {
-    $sLog->log("Unable to read configuration template \"$conf{etcDir}/templates/$confFile\"",1);
-    exit 1;
-  }
-  if(! open(CONF,">$conf{etcDir}/$confFile")) {
-    $sLog->log("Unable to write configuration file \"$conf{etcDir}/$confFile\"",1);
-    exit 1;
-  }
+  my $confFileTemplate=File::Spec->catfile($conf{etcDir},'templates',$confFile);
+  fatalError("Unable to read configuration template \"$confFileTemplate\"") unless(open(TEMPLATE,"<$confFileTemplate"));
+  my $confFilePath=File::Spec->catfile($conf{etcDir},$confFile);
+  fatalError("Unable to write configuration file \"$confFilePath\"") unless(open(CONF,">$confFilePath"));
   while(<TEMPLATE>) {
     foreach my $macroName (keys %conf) {
       s/\%$macroName\%/$conf{$macroName}/g;
@@ -664,8 +620,4 @@ foreach my $confFile (@confFiles) {
 
 print "\nSPADS has been installed in current directory with default configuration and minimal customization.\n";
 print "You can check your configuration files in \"$conf{etcDir}\" and update them if needed.\n";
-if($win) {
-  print "You can then launch SPADS with \"perl spads.pl $conf{etcDir}/spads.conf\"\n";
-}else{
-  print "You can then launch SPADS with \"./spads.pl $conf{etcDir}/spads.conf\"\n";
-}
+print "You can then launch SPADS with \"perl spads.pl ".File::Spec->catfile($conf{etcDir},'spads.conf')."\"\n";
