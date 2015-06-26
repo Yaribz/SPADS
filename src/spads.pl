@@ -48,7 +48,7 @@ $SIG{TERM} = sub { quitAfterGame("SIGTERM signal received") };
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.11.34';
+our $spadsVer='0.11.34a';
 
 my %optionTypes = (
   0 => "error",
@@ -10542,7 +10542,7 @@ sub hStatus {
             $skill="$C{13}?$battleSkills{$spec}->{skill}?$C{1}";
           }
         }else{
-          slog("Undefined skill rank for spectator $spec, using lobby rank instead in status command output!",1);
+          slog("Undefined skill for spectator $spec, using lobby rank instead in status command output!",1) unless($spec eq $conf{lobbyLogin});
         }
         $clientStatus{Rank}=$rank;
         $clientStatus{Skill}=$skill;

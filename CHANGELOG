@@ -692,6 +692,7 @@ spads.pl:
 0.11.34: factorize process and socket management code
          fix LAN IP addresses not detected when DHCP is used (Windows)
          fix misformatting of some Win32 error messages (Windows)
+0.11.34a: fix error message when issuing !status in headless mode
 
 SpadsConf.pm:
 ============
