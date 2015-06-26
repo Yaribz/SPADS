@@ -24,11 +24,13 @@ spring-dedicated.exe;94:spring-dedicated-94.0.exe
 spring-dedicated.exe;95:spring-dedicated-95.0.exe
 spring-dedicated.exe;96:spring-dedicated-96.0.exe
 spring-dedicated.exe;98:spring-dedicated-98.0.exe
+spring-dedicated.exe;99:spring-dedicated-99.0.exe
 spring-headless.exe;91:spring-headless-91.0.exe.zip
 spring-headless.exe;94:spring-headless-94.0.exe.zip
 spring-headless.exe;95:spring-headless-95.0.exe.zip
 spring-headless.exe;96:spring-headless-96.0.exe.zip
 spring-headless.exe;98:spring-headless-98.0.exe.zip
+spring-headless.exe;99:spring-headless-99.0.exe.zip
 update.pl:update_0.8a.pl
 
 [testing]
@@ -57,11 +59,13 @@ spring-dedicated.exe;94:spring-dedicated-94.0.exe
 spring-dedicated.exe;95:spring-dedicated-95.0.exe
 spring-dedicated.exe;96:spring-dedicated-96.0.exe
 spring-dedicated.exe;98:spring-dedicated-98.0.exe
+spring-dedicated.exe;99:spring-dedicated-99.0.exe
 spring-headless.exe;91:spring-headless-91.0.exe.zip
 spring-headless.exe;94:spring-headless-94.0.exe.zip
 spring-headless.exe;95:spring-headless-95.0.exe.zip
 spring-headless.exe;96:spring-headless-96.0.exe.zip
 spring-headless.exe;98:spring-headless-98.0.exe.zip
+spring-headless.exe;99:spring-headless-99.0.exe.zip
 update.pl:update_0.8b.pl
 
 [unstable]
@@ -90,11 +94,13 @@ spring-dedicated.exe;94:spring-dedicated-94.0.exe
 spring-dedicated.exe;95:spring-dedicated-95.0.exe
 spring-dedicated.exe;96:spring-dedicated-96.0.exe
 spring-dedicated.exe;98:spring-dedicated-98.0.exe
+spring-dedicated.exe;99:spring-dedicated-99.0.exe
 spring-headless.exe;91:spring-headless-91.0.exe.zip
 spring-headless.exe;94:spring-headless-94.0.exe.zip
 spring-headless.exe;95:spring-headless-95.0.exe.zip
 spring-headless.exe;96:spring-headless-96.0.exe.zip
 spring-headless.exe;98:spring-headless-98.0.exe.zip
+spring-headless.exe;99:spring-headless-99.0.exe.zip
 update.pl:update_0.8b.pl
 
 [contrib]
@@ -123,9 +129,11 @@ spring-dedicated.exe;94:spring-dedicated-94.0.exe
 spring-dedicated.exe;95:spring-dedicated-95.0.exe
 spring-dedicated.exe;96:spring-dedicated-96.0.exe
 spring-dedicated.exe;98:spring-dedicated-98.0.exe
+spring-dedicated.exe;99:spring-dedicated-99.0.exe
 spring-headless.exe;91:spring-headless-91.0.exe.zip
 spring-headless.exe;94:spring-headless-94.0.exe.zip
 spring-headless.exe;95:spring-headless-95.0.exe.zip
 spring-headless.exe;96:spring-headless-96.0.exe.zip
 spring-headless.exe;98:spring-headless-98.0.exe.zip
+spring-headless.exe;99:spring-headless-99.0.exe.zip
 update.pl:update_0.8b.pl
