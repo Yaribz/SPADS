@@ -689,6 +689,9 @@ spads.pl:
 0.11.33: setting environment variables no longer requires a restart except for LD_LIBRARY_PATH (Linux)
          the _putenv CRT function is now used to set environment variables so they can be seen by unitsync without restarting (Windows)
          clean up int32/uint32 casting code
+0.11.34: factorize process and socket management code
+         fix LAN IP addresses not detected when DHCP is used (Windows)
+         fix misformatting of some Win32 error messages (Windows)
 
 SpadsConf.pm:
 ============
@@ -893,6 +896,7 @@ SpadsPluginApi.pm:
 0.16: onReloadConf plugin callback can now return 0 to indicate configuration reload failed
 0.17: new plugin API functions "addSocket,removeSocket" (sockets management for plugins)
 0.18: new plugin customization callback: "updateGameStatusInfo"
+0.19: process and socket management logic moved to SPADS core
 
 SpadsUpdater.pm:
 ===============

@@ -21,7 +21,7 @@ package SpadsPluginApi;
 use Exporter 'import';
 @EXPORT=qw/$spadsVersion $spadsDir getLobbyState getSpringPid getSpringServerType getTimestamps getRunningBattle getCurrentVote getPlugin addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives/;
 
-my $apiVersion='0.18';
+my $apiVersion='0.19';
 
 our $spadsVersion=$::spadsVer;
 our $spadsDir=$::cwd;
@@ -146,20 +146,9 @@ sub removeSpringCommandHandler {
 ################################
 
 sub forkProcess {
-  my ($p_processFunction,$p_endCallback)=@_;
-  my $plugin=caller();
-  my $childPid = fork();
-  if(! defined $childPid) {
-    ::slog("Unable to fork process for plugin $plugin !",1);
-    return 0;
-  }elsif($childPid == 0) {
-    $SIG{CHLD}='' unless($win);
-    &{$p_processFunction}();
-    exit 0;
-  }else{
-    $::forkedProcesses{$childPid}=$p_endCallback;
-    return $childPid;
-  }
+  my $childPid = ::forkProcess(@_);
+  ::slog('Failed to fork process for plugin '.caller().' !',1) if($childPid == 0);
+  return $childPid;
 }
 
 ################################
@@ -167,25 +156,21 @@ sub forkProcess {
 ################################
 
 sub addSocket {
-  my ($socket,$p_readCallback)=@_;
-  my $plugin=caller();
-  if(exists $::sockets{$socket}) {
-    ::slog("Unable to add socket for plugin $plugin: socket has already been added!",2);
+  if(::registerSocket(@_)) {
+    return 1;
+  }else{
+    ::slog('Unable to add socket for plugin '.caller().' !',2);
     return 0;
   }
-  $::sockets{$socket}=$p_readCallback;
-  return 1;
 }
 
 sub removeSocket {
-  my $socket=shift;
-  my $plugin=caller();
-  if(! exists $::sockets{$socket}) {
-    ::slog("Unable to remove socket for plugin $plugin: unknown socket!",2);
+  if(::unregisterSocket(@_)) {
+    return 1;
+  }else{
+    ::slog('Unable to remove socket for plugin '.caller().' !',2);
     return 0;
   }
-  delete $::sockets{$socket};
-  return 1;
 }
 
 ################################
@@ -1108,8 +1093,6 @@ strongly recommended to use the accessors from the API instead:
 
 =item C<%::currentVote>
 
-=item C<%::forkedProcesses>
-
 =item C<$::lobby>
 
 =item C<$::lobbyState>
@@ -1117,8 +1100,6 @@ strongly recommended to use the accessors from the API instead:
 =item C<$::p_runningBattle>
 
 =item C<%::plugins>
-
-=item C<%::sockets>
 
 =item C<$::spads>
 

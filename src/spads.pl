@@ -43,12 +43,12 @@ use SpadsUpdater;
 use SpringAutoHostInterface;
 use SpringLobbyInterface;
 
-$SIG{TERM} = \&sigTermHandler;
+$SIG{TERM} = sub { quitAfterGame("SIGTERM signal received") };
 
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.11.33';
+our $spadsVer='0.11.34';
 
 my %optionTypes = (
   0 => "error",
@@ -246,7 +246,7 @@ sub intRand {
 }
 
 fatalError('Unable to load SPADS configuration at startup') unless($spads);
-fatalError('Unable to import _putenv from msvcrt.dll ('.Win32::FormatMessage(Win32::GetLastError()).')') if($win && ! Win32::API->Import('msvcrt', 'int __cdecl _putenv (char* envstring)'));
+fatalError('Unable to import _putenv from msvcrt.dll ('.getLastWin32Error().')') if($win && ! Win32::API->Import('msvcrt', 'int __cdecl _putenv (char* envstring)'));
 
 my $masterChannel=$spads->{conf}->{masterChannel};
 $masterChannel=$1 if($masterChannel =~ /^([^\s]+)\s/);
@@ -256,8 +256,7 @@ unshift(@INC,$cwd);
 # State variables #############################################################
 
 our %conf=%{$spads->{conf}};
-my $lSock;
-our %sockets;
+my %sockets;
 tie %sockets, 'Tie::RefHash';
 my $running=1;
 my ($quitAfterGame,$closeBattleAfterGame)=(0,0);
@@ -307,9 +306,8 @@ my $p_answerFunction;
 our %currentVote=();
 our $springPid=0;
 my $springWin32Process;
-my $updaterPid=0;
 my %endGameData;
-my %endGameCommandPids;
+my $nbEndGameCommandRunning=0;
 my %gdr;
 my %gdrIPs;
 my @gdrQueue;
@@ -361,7 +359,9 @@ my %battleSkills;
 our %battleSkillsCache;
 my %pendingGetSkills;
 my $currentGameType='Duel';
-our %forkedProcesses;
+my %forkedProcesses;
+my %win32Processes;
+tie %win32Processes, 'Tie::RefHash';
 our $springServerType=$conf{springServerType};
 
 my $lobbySimpleLog=SimpleLog->new(logFiles => [$conf{logDir}."/spads.log"],
@@ -450,124 +450,143 @@ if($win) {
 
 # Subfunctions ################################################################
 
-sub sigTermHandler {
-  quitAfterGame("SIGTERM signal received");
-}
-
-sub sigChldHandler {
-  my $childPid;
-  while($childPid = waitpid(-1,WNOHANG)) {
+sub reapForkedProcesses {
+  while(my $childPid = waitpid(-1,WNOHANG)) {
     last if($childPid == -1);
-    my $exitCode=$? >> 8;
-    my $signalNb=$? & 127;
-    my $hasCoreDump=$? & 128;
-    handleSigChld($childPid,$exitCode,$signalNb,$hasCoreDump);
+    if(exists $forkedProcesses{$childPid}) {
+      &{$forkedProcesses{$childPid}}($? >> 8,$? & 127,$? & 128,$childPid);
+      delete $forkedProcesses{$childPid};
+    }
   }
-  $SIG{CHLD} = \&sigChldHandler;
 }
 
-sub handleSigChld {
-  my ($childPid,$exitCode,$signalNb,$hasCoreDump)=@_;
+sub reapWin32Processes {
+  foreach my $win32Process (keys %win32Processes) {
+    $win32Process->GetExitCode(my $exitCode);
+    if($exitCode != Win32::Process::STILL_ACTIVE()) {
+      &{$win32Processes{$win32Process}}($exitCode);
+      delete $win32Processes{$win32Process};
+    }
+  }
+}
+
+sub onSpringProcessExit {
+  my ($exitCode,$signalNb,$hasCoreDump)=@_;
   $signalNb//=0;
   $hasCoreDump//=0;
-  if($childPid == $springPid) {
-    if(%{$p_runningBattle}) {
-      %springPrematureEndData=(ec => $exitCode, ts => time, signal => $signalNb, core => $hasCoreDump);
-    }else{
-      my $gameRunningTime=secToTime(time-$timestamps{lastGameStart});
-      if(($exitCode && $exitCode != 255) || $signalNb || $hasCoreDump) {
-        $autohost->serverQuitHandler() if($autohost->{state});
-        my $logMsg="Spring crashed (running time: $gameRunningTime";
-        if($signalNb) {
-          $logMsg.=", interrupted by signal $signalNb";
-          $logMsg.=", exit code: $exitCode" if($exitCode);
-        }else{
-          $logMsg.=", exit code: $exitCode";
-        }
-        $logMsg.=', core dumped' if($hasCoreDump);
-        $logMsg.=')';
-        slog($logMsg,1);
-        broadcastMsg("Spring crashed ! (running time: $gameRunningTime)");
-        addAlert('SPR-001');
+  if(%{$p_runningBattle}) {
+    %springPrematureEndData=(ec => $exitCode, ts => time, signal => $signalNb, core => $hasCoreDump);
+  }else{
+    my $gameRunningTime=secToTime(time-$timestamps{lastGameStart});
+    if(($exitCode && $exitCode != 255) || $signalNb || $hasCoreDump) {
+      $autohost->serverQuitHandler() if($autohost->{state});
+      my $logMsg="Spring crashed (running time: $gameRunningTime";
+      if($signalNb) {
+        $logMsg.=", interrupted by signal $signalNb";
+        $logMsg.=", exit code: $exitCode" if($exitCode);
       }else{
-        slog('Spring server detected sync errors during game',2) if($exitCode == 255);
-        broadcastMsg("Server stopped (running time: $gameRunningTime)");
-        endGameProcessing();
-        delete $pendingAlerts{'SPR-001'};
+        $logMsg.=", exit code: $exitCode";
       }
-      $inGameTime+=time-$timestamps{lastGameStart};
-      setAsOutOfGame();
-    }
-  }elsif($childPid == $updaterPid) {
-    $exitCode-=256 if($exitCode > 128);
-    if($exitCode || $signalNb || $hasCoreDump) {
-      if($exitCode > -7) {
-        delete @pendingAlerts{('UPD-002','UPD-003')};
-        addAlert('UPD-001');
-      }elsif($exitCode == -7) {
-        delete @pendingAlerts{('UPD-001','UPD-003')};
-        addAlert('UPD-002');
-      }else{
-        delete @pendingAlerts{('UPD-001','UPD-002')};
-        addAlert('UPD-003');
-      }
+      $logMsg.=', core dumped' if($hasCoreDump);
+      $logMsg.=')';
+      slog($logMsg,1);
+      broadcastMsg("Spring crashed ! (running time: $gameRunningTime)");
+      addAlert('SPR-001');
     }else{
-      delete @pendingAlerts{('UPD-001','UPD-002','UPD-003')};
+      slog('Spring server detected sync errors during game',2) if($exitCode == 255);
+      broadcastMsg("Server stopped (running time: $gameRunningTime)");
+      endGameProcessing();
+      delete $pendingAlerts{'SPR-001'};
     }
-    if($conf{autoRestartForUpdate} ne "off" && (! $quitAfterGame) && (! $updater->isUpdateInProgress())) {
-      autoRestartForUpdate();
-    }
-    $updaterPid=0;
-  }elsif(exists $endGameCommandPids{$childPid}) {
-    my $executionTime=secToTime(time-$endGameCommandPids{$childPid}->{startTime});
-    if($conf{endGameCommandMsg} ne '' && $lobbyState > 5 && %{$lobby->{battle}}) {
-      my @endGameMsgs=@{$spads->{values}->{endGameCommandMsg}};
-      foreach my $endGameMsg (@endGameMsgs) {
-        if($endGameMsg =~ /^\((\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*)\)(.+)$/) {
-          $endGameMsg=$2;
-          my @filters=split(/,/,$1);
-          my $match=0;
-          foreach my $filter (@filters) {
-            if($filter =~ /^\d+$/ && $exitCode == $filter) {
-              $match=1;
-              last;
-            }
-            if($filter =~ /^(\d+)-(\d+)$/ && $exitCode >= $1 && $exitCode <= $2) {
-              $match=1;
-              last;
-            }
-          }
-          next unless($match);
-        }
-
-        my $escapedMod=$endGameCommandPids{$childPid}->{mod};
-        $escapedMod=~s/([^A-Za-z0-9])/sprintf("%%%02X", ord($1))/eg;
-        my $escapedMap=$endGameCommandPids{$childPid}->{map};
-        $escapedMap=~s/([^A-Za-z0-9])/sprintf("%%%02X", ord($1))/eg;
-        my $escapedDemoName=$endGameCommandPids{$childPid}->{demoFile};
-        $escapedDemoName=$1 if($escapedDemoName =~ /[\/\\]([^\/\\]+)$/);
-        $escapedDemoName=~s/([^A-Za-z0-9])/sprintf("%%%02X", ord($1))/eg;
-
-        $endGameMsg=~s/\%engineVersion/$endGameCommandPids{$childPid}->{engineVersion}/g;
-        $endGameMsg=~s/\%mod/$escapedMod/g;
-        $endGameMsg=~s/\%map/$escapedMap/g;
-        $endGameMsg=~s/\%type/$endGameCommandPids{$childPid}->{type}/g;
-        $endGameMsg=~s/\%ahName/$conf{lobbyLogin}/g;
-        $endGameMsg=~s/\%ahAccountId/$endGameCommandPids{$childPid}->{ahAccountId}/g;
-        $endGameMsg=~s/\%demoName/$escapedDemoName/g;
-        $endGameMsg=~s/\%gameId/$endGameCommandPids{$childPid}->{gameId}/g;
-        $endGameMsg=~s/\%result/$endGameCommandPids{$childPid}->{result}/g;
-
-        sayBattle($endGameMsg);
-      }
-    }
-    delete $endGameCommandPids{$childPid};
-    slog("End game command finished (pid: $childPid, execution time: $executionTime, return code: $exitCode)",4);
-    slog("End game commmand exited with non-null return code ($exitCode)",2) if($exitCode);
-  }elsif(exists $forkedProcesses{$childPid}) {
-    &{$forkedProcesses{$childPid}}($exitCode,$signalNb,$hasCoreDump);
-    delete $forkedProcesses{$childPid};
+    $inGameTime+=time-$timestamps{lastGameStart};
+    setAsOutOfGame();
   }
+}
+
+sub onUpdaterProcessExit {
+  my ($exitCode,$signalNb,$hasCoreDump)=@_;
+  $exitCode-=256 if($exitCode > 128);
+  if($exitCode || $signalNb || $hasCoreDump) {
+    if($exitCode > -7) {
+      delete @pendingAlerts{('UPD-002','UPD-003')};
+      addAlert('UPD-001');
+    }elsif($exitCode == -7) {
+      delete @pendingAlerts{('UPD-001','UPD-003')};
+      addAlert('UPD-002');
+    }else{
+      delete @pendingAlerts{('UPD-001','UPD-002')};
+      addAlert('UPD-003');
+    }
+  }else{
+    delete @pendingAlerts{('UPD-001','UPD-002','UPD-003')};
+  }
+  if($conf{autoRestartForUpdate} ne "off" && (! $quitAfterGame) && (! $updater->isUpdateInProgress())) {
+    autoRestartForUpdateIfNeeded();
+  }
+}
+
+sub forkProcess {
+  my ($p_processFunction,$p_endCallback)=@_;
+  my $childPid = fork();
+  if(! defined $childPid) {
+    slog("Unable to fork process, $!",1);
+    return 0;
+  }
+  if($childPid == 0) {
+    local $SIG{CHLD};
+    if($win) {
+      no warnings 'redefine';
+      eval "sub Win32::Process::DESTROY {}";
+    }
+    &{$p_processFunction}();
+    exit 0;
+  }
+  $forkedProcesses{$childPid}=$p_endCallback;
+  return $childPid;
+}
+
+sub getLastWin32Error {
+  my $errorMsg=Win32::FormatMessage(Win32::GetLastError());
+  return 'unknown error' unless(defined $errorMsg);
+  $errorMsg=~s/\cM?\cJ$//;
+  return $errorMsg;
+}
+
+sub createWin32Process {
+  if(! $win) {
+    slog('Unable to create Win32 process, incompatible OS',1);
+    return 0;
+  }
+  my ($applicationPath,$p_commandParams,$workingDirectory,$p_endCallback,$p_stdRedirections)=@_;
+  my ($inheritHandles,$previousStdout,$previousStderr)=(0,undef,undef);
+  if(defined $p_stdRedirections) {
+    $inheritHandles=1;
+    open($previousStdout,'>&',\*STDOUT);
+    open($previousStderr,'>&',\*STDERR);
+    foreach my $p_redirection (@{$p_stdRedirections}) {
+      if(lc($p_redirection->[0]) eq 'stdout') {
+        open(STDOUT,$p_redirection->[1]);
+      }elsif(lc($p_redirection->[0]) eq 'stderr') {
+        open(STDERR,$p_redirection->[1]);
+      }
+    }
+  }
+  my $win32ProcCreateRes = Win32::Process::Create(my $win32Process,
+                                                  $applicationPath,
+                                                  join(' ',map {escapeWin32Parameter($_)} ($applicationPath,@{$p_commandParams})),
+                                                  $inheritHandles,
+                                                  0,
+                                                  $workingDirectory);
+  if(defined $p_stdRedirections) {
+    open(STDOUT,'>&',$previousStdout);
+    open(STDERR,'>&',$previousStderr);
+  }
+  if(! $win32ProcCreateRes) {
+    slog('Unable to create Win32 process ('.getLastWin32Error().')',1);
+    return 0;
+  }
+  $win32Processes{$win32Process}=$p_endCallback;
+  return $win32Process;
 }
 
 sub escapeWin32Parameter {
@@ -591,6 +610,26 @@ sub execError {
   my ($msg,$level)=@_;
   slog($msg,$level);
   exit 1;
+}
+
+sub registerSocket {
+  my ($socket,$p_readCallback)=@_;
+  if(exists $sockets{$socket}) {
+    slog('Unable to register socket (already registered)',2);
+    return 0;
+  }
+  $sockets{$socket}=$p_readCallback;
+  return 1;
+}
+
+sub unregisterSocket {
+  my $socket=shift;
+  if(! exists $sockets{$socket}) {
+    slog('Unable to unregister socket (unknown socket)',2);
+    return 0;
+  }
+  delete $sockets{$socket};
+  return 1;
 }
 
 sub autoRetry {
@@ -1291,7 +1330,7 @@ sub getSysInfo {
       $memStatus->{'TotalPage'}    = 0;
       $memStatus->{'AvailPage'}    = 0;
       $memStatus->{'TotalVirtual'} = 0;
-      $memStatus->{'AvailVirtual'} = 0;      
+      $memStatus->{'AvailVirtual'} = 0;
       GlobalMemoryStatus($memStatus);
       if($memStatus->{dwLength} != 0) {
         $memAmount=int($memStatus->{'TotalPhys'} / (1024 * 1024));
@@ -1300,7 +1339,7 @@ sub getSysInfo {
         slog("Unable to retrieve total physical memory through GlobalMemoryStatus function (Win32 API)",2);
       }
     }else{
-      slog('Unable to import GlobalMemoryStatus from kernel32.dll ('.Win32::FormatMessage(Win32::GetLastError()).')',2);
+      slog('Unable to import GlobalMemoryStatus from kernel32.dll ('.getLastWin32Error().')',2);
     }
 
     $uptime=int(Win32::GetTickCount() / 1000);
@@ -1398,7 +1437,12 @@ sub getLocalLanIp {
       foreach my $interface (@interfaces) {
         my $netIntEntry=$netIntsEntry->Open($interface, { Access => KEY_READ() });
         my $ipAddr=$netIntEntry->GetValue("IPAddress");
-        push(@ips,$1) if(defined $ipAddr && $ipAddr =~ /(\d+\.\d+\.\d+\.\d+)/);
+        if(defined $ipAddr && $ipAddr =~ /(\d+\.\d+\.\d+\.\d+)/) {
+          push(@ips,$1);
+        }else{
+          $ipAddr=$netIntEntry->GetValue("DhcpIPAddress");
+          push(@ips,$1) if(defined $ipAddr && $ipAddr =~ /(\d+\.\d+\.\d+\.\d+)/);
+        }
       }
     }else{
       slog("Unable to find network interfaces in registry, trying ipconfig workaround...",2);
@@ -1407,7 +1451,7 @@ sub getLocalLanIp {
         next unless($line =~ /IP.*\:\s*(\d+\.\d+\.\d+\.\d+)\s/);
         push(@ips,$1);
       }
-    }    
+    }
   }else{
     $ENV{LANG}="C";
     my $ifconfigBin;
@@ -2601,7 +2645,7 @@ sub checkTimedEvents {
   checkCurrentMapListForLearnedMaps();
   checkAntiFloodDataPurge();
   checkAdvertMsg();
-  checkWinProcessStop();
+  checkWinProcessStop() if($win);
   pluginsEventLoop();
   checkPendingGetSkills();
 }
@@ -2752,28 +2796,22 @@ sub checkAutoUpdate {
     if($updater->isUpdateInProgress()) {
       slog('Skipping auto-update, another updater instance is already running',2);
     }else{
-      my $childPid = fork();
-      if(! defined $childPid) {
+      if(! forkProcess(
+             sub {
+               my $updateRc=$updater->update();
+               if($updateRc < 0) {
+                 slog("Unable to check or apply SPADS update",2);
+                 exit $updateRc;
+               }
+               exit 0;
+             },
+             \&onUpdaterProcessExit)) {
         slog("Unable to fork to launch SPADS updater",1);
-      }elsif($childPid == 0) {
-        local $SIG{CHLD};
-        if($win) {
-          no warnings 'redefine';
-          eval "sub Win32::Process::DESTROY {}";
-        }
-        my $updateRc=$updater->update();
-        if($updateRc < 0) {
-          slog("Unable to check or apply SPADS update",2);
-          exit $updateRc;
-        }
-        exit 0;
-      }else{
-        $updaterPid=$childPid;
       }
     }
   }
   if($conf{autoRestartForUpdate} ne "off" && (! $quitAfterGame) && (! $updater->isUpdateInProgress()) && time - $timestamps{autoRestartCheck} > 300) {
-    autoRestartForUpdate();
+    autoRestartForUpdateIfNeeded();
   }
 }
 
@@ -2874,24 +2912,8 @@ sub checkAdvertMsg {
 }
 
 sub checkWinProcessStop {
-  if($win) {
-    my $childPid;
-    while($childPid = waitpid(-1,WNOHANG)) {
-      last if($childPid == -1);
-      my $exitCode=$? >> 8;
-      my $signalNb=$? & 127;
-      my $hasCoreDump=$? & 128;
-      handleSigChld($childPid,$exitCode,$signalNb,$hasCoreDump);
-    }
-    if($conf{useWin32Process} && defined $springWin32Process) {
-      my $exitCode;
-      $springWin32Process->GetExitCode($exitCode);
-      if($exitCode != Win32::Process::STILL_ACTIVE()) {
-        $springWin32Process=undef;
-        handleSigChld($springPid,$exitCode);
-      }
-    }
-  }
+  reapForkedProcesses();
+  reapWin32Processes();
 }
 
 sub pluginsEventLoop {
@@ -2924,7 +2946,7 @@ sub checkPendingGetSkills {
   }
 }
 
-sub autoRestartForUpdate {
+sub autoRestartForUpdateIfNeeded {
   $timestamps{autoRestartCheck}=time;
   my $updateTimestamp=0;
   if(-f "$conf{binDir}/updateInfo.txt") {
@@ -4291,55 +4313,46 @@ sub launchGame {
     $gdrEnabled=0;
   }
 
-  my @springServerCmd = ( $conf{springServer} , catfile($conf{varDir},'startscript.txt') );
-  push(@springServerCmd,'--config',$conf{springConfig}) unless($conf{springConfig} eq '');
+  my @springServerCmdParams = ( catfile($conf{varDir},'startscript.txt') );
+  push(@springServerCmdParams,'--config',$conf{springConfig}) unless($conf{springConfig} eq '');
   my $logFile=catfile($conf{logDir},"spring-$springServerType.log");
 
   if($conf{useWin32Process}) {
-    open(my $previousStdout,'>&',\*STDOUT);
-    open(my $previousStderr,'>&',\*STDERR);
-    open(STDOUT,'>>',$logFile);
-    open(STDERR,'>>&',\*STDOUT);
-    my $rc=Win32::Process::Create($springWin32Process,
-                                  $conf{springServer},
-                                  join(' ',map {escapeWin32Parameter($_)} @springServerCmd),
-                                  1,
-                                  0,
-                                  $conf{varDir});
-    open(STDOUT,'>&',$previousStdout);
-    open(STDERR,'>&',$previousStderr);
-    if(! $rc) {
+    $springWin32Process=createWin32Process($conf{springServer},
+                                           \@springServerCmdParams,
+                                           $conf{varDir},
+                                           \&onSpringProcessExit,
+                                           [[STDOUT => ">>$logFile"],[STDERR => '>>&STDOUT']]);
+    if(! $springWin32Process) {
       $springWin32Process=undef;
-      slog("Unable to create Win32 process to launch Spring (".Win32::FormatMessage(Win32::GetLastError()).")",1);
+      slog('Unable to create Win32 process to launch Spring',1);
       return;
     }
     $springPid=$springWin32Process->GetProcessID();
   }else{
-    my $childPid = fork();
-    if(! defined $childPid) {
-      slog("Unable to fork to launch Spring",1);
+    $springPid=forkProcess(
+      sub {
+        chdir($conf{varDir});
+        if($win) {
+          exec(join(' ',(map {escapeWin32Parameter($_)} ($conf{springServer},@springServerCmdParams)),'>>'.escapeWin32Parameter($logFile),'2>&1')) || execError("Unable to launch Spring ($!)",1);
+        }else{
+          open(my $previousStdout,'>&',\*STDOUT);
+          open(my $previousStderr,'>&',\*STDERR);
+          open(STDOUT,'>>',$logFile);
+          open(STDERR,'>>&',\*STDOUT);
+          portableExec($conf{springServer},@springServerCmdParams);
+          my $execErrorString=$!;
+          open(STDOUT,'>&',$previousStdout);
+          open(STDERR,'>&',$previousStderr);
+          execError("Unable to launch Spring ($execErrorString)",1);
+        }
+      },
+      \&onSpringProcessExit);
+    if(! $springPid) {
+      $springPid=0;
+      slog('Unable to fork to launch Spring',1);
       return;
     }
-    if($childPid == 0) {
-      local $SIG{CHLD};
-      chdir($conf{varDir});
-      if($win) {
-        no warnings 'redefine';
-        eval "sub Win32::Process::DESTROY {}";
-        exec(join(' ',(map {escapeWin32Parameter($_)} @springServerCmd),'>>'.escapeWin32Parameter($logFile),'2>&1')) || execError("Unable to launch Spring ($!)",1);
-      }else{
-        open(my $previousStdout,'>&',\*STDOUT);
-        open(my $previousStderr,'>&',\*STDERR);
-        open(STDOUT,'>>',$logFile);
-        open(STDERR,'>>&',\*STDOUT);
-        portableExec(@springServerCmd);
-        my $execErrorString=$!;
-        open(STDOUT,'>&',$previousStdout);
-        open(STDERR,'>&',$previousStderr);
-        execError("Unable to launch Spring ($execErrorString)",1);
-      }
-    }
-    $springPid=$childPid;
   }
   if(%currentVote && exists $currentVote{command}) {
     broadcastMsg("Vote cancelled, launching game...");
@@ -5729,55 +5742,93 @@ sub endGameProcessing {
     $endGameCommand=~s/\%$placeHolder/$endGameData{$placeHolder}/g;
   }
 
-  if(%endGameCommandPids) {
-    my @pidList=keys %endGameCommandPids;
+  if($nbEndGameCommandRunning) {
     my $warningEndMessage='previous end game command is still running';
-    $warningEndMessage="the ".($#pidList+1)." previous end game commands are still running" if($#pidList > 0);
-    slog("Launching new end game command but $warningEndMessage",2);
+    $warningEndMessage="$nbEndGameCommandRunning previous end game commands are still running" if($nbEndGameCommandRunning > 1);
+    slog("Launching new end game command but the $warningEndMessage",2);
   }
   
-  my $childPid = fork();
-  if(! defined $childPid) {
-    slog("Unable to fork to launch endGameCommand",2);
-  }else{
-    if($childPid == 0) {
-      local $SIG{CHLD};
-      if($win) {
-        no warnings 'redefine';
-        eval "sub Win32::Process::DESTROY {}";
-      }
-      
-      if($conf{endGameCommandEnv} ne '') {
-        my @envVarDeclarations=split(/;/,$conf{endGameCommandEnv});
-        foreach my $envVarDeclaration (@envVarDeclarations) {
-          if($envVarDeclaration =~ /^(\w+)=(.*)$/) {
-            my ($envVar,$envValue)=($1,$2);
-            foreach my $placeHolder (keys %endGameData) {
-              $envValue=~s/\%$placeHolder/$endGameData{$placeHolder}/g;
-            }
-            $ENV{$envVar}=$envValue;
-          }else{
-            slog("Ignoring invalid environment variable declaration \"$envVarDeclaration\" in \"endGameCommandEnv\" setting",2)
-          }
-        }
-      }
-      
-      slog("End game command: \"$endGameCommand\"",5);
-      exec($endGameCommand) || execError("Unable to launch endGameCommand ($!)",2);;
-    }else{
-      slog("Executing end game command (pid $childPid)",4);
-      $endGameCommandPids{$childPid}={startTime => time,
-                                      engineVersion => $endGameData{engineVersion},
-                                      mod => $endGameData{mod},
-                                      map => $endGameData{map},
-                                      type => $endGameData{type},
-                                      ahAccountId => $endGameData{ahAccountId},
-                                      demoFile => $endGameData{demoFile},
-                                      gameId => $endGameData{gameId},
-                                      result => $endGameData{result}};
-    }
-  }
+  my %endGameCommandData=(startTime => time,
+                          engineVersion => $endGameData{engineVersion},
+                          mod => $endGameData{mod},
+                          map => $endGameData{map},
+                          type => $endGameData{type},
+                          ahAccountId => $endGameData{ahAccountId},
+                          demoFile => $endGameData{demoFile},
+                          gameId => $endGameData{gameId},
+                          result => $endGameData{result});
+  if(my $childPid = forkProcess(
+       sub {
+         if($conf{endGameCommandEnv} ne '') {
+           my @envVarDeclarations=split(/;/,$conf{endGameCommandEnv});
+           foreach my $envVarDeclaration (@envVarDeclarations) {
+             if($envVarDeclaration =~ /^(\w+)=(.*)$/) {
+               my ($envVar,$envValue)=($1,$2);
+               foreach my $placeHolder (keys %endGameData) {
+                 $envValue=~s/\%$placeHolder/$endGameData{$placeHolder}/g;
+               }
+               $ENV{$envVar}=$envValue;
+             }else{
+               slog("Ignoring invalid environment variable declaration \"$envVarDeclaration\" in \"endGameCommandEnv\" setting",2)
+             }
+           }
+         }
+         slog("End game command: \"$endGameCommand\"",5);
+         exec($endGameCommand) || execError("Unable to launch endGameCommand ($!)",2);;
+       },
+       sub {
+         my ($exitCode,$signalNb,$hasCoreDump,$endGameCommandPid)=@_;
+         $nbEndGameCommandRunning--;
+         my $executionTime=secToTime(time-$endGameCommandData{startTime});
+         if($conf{endGameCommandMsg} ne '' && $lobbyState > 5 && %{$lobby->{battle}}) {
+           my @endGameMsgs=@{$spads->{values}->{endGameCommandMsg}};
+           foreach my $endGameMsg (@endGameMsgs) {
+             if($endGameMsg =~ /^\((\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*)\)(.+)$/) {
+               $endGameMsg=$2;
+               my @filters=split(/,/,$1);
+               my $match=0;
+               foreach my $filter (@filters) {
+                 if($filter =~ /^\d+$/ && $exitCode == $filter) {
+                   $match=1;
+                   last;
+                 }
+                 if($filter =~ /^(\d+)-(\d+)$/ && $exitCode >= $1 && $exitCode <= $2) {
+                   $match=1;
+                   last;
+                 }
+               }
+               next unless($match);
+             }
 
+             my $escapedMod=$endGameCommandData{mod};
+             $escapedMod=~s/([^A-Za-z0-9])/sprintf("%%%02X", ord($1))/eg;
+             my $escapedMap=$endGameCommandData{map};
+             $escapedMap=~s/([^A-Za-z0-9])/sprintf("%%%02X", ord($1))/eg;
+             my $escapedDemoName=$endGameCommandData{demoFile};
+             $escapedDemoName=$1 if($escapedDemoName =~ /[\/\\]([^\/\\]+)$/);
+             $escapedDemoName=~s/([^A-Za-z0-9])/sprintf("%%%02X", ord($1))/eg;
+
+             $endGameMsg=~s/\%engineVersion/$endGameCommandData{engineVersion}/g;
+             $endGameMsg=~s/\%mod/$escapedMod/g;
+             $endGameMsg=~s/\%map/$escapedMap/g;
+             $endGameMsg=~s/\%type/$endGameCommandData{type}/g;
+             $endGameMsg=~s/\%ahName/$conf{lobbyLogin}/g;
+             $endGameMsg=~s/\%ahAccountId/$endGameCommandData{ahAccountId}/g;
+             $endGameMsg=~s/\%demoName/$escapedDemoName/g;
+             $endGameMsg=~s/\%gameId/$endGameCommandData{gameId}/g;
+             $endGameMsg=~s/\%result/$endGameCommandData{result}/g;
+
+             sayBattle($endGameMsg);
+           }
+         }
+         slog("End game command finished (pid: $endGameCommandPid, execution time: $executionTime, return code: $exitCode)",4);
+         slog("End game commmand exited with non-null return code ($exitCode)",2) if($exitCode);
+       })) {
+    $nbEndGameCommandRunning++;
+    slog("Executing end game command (pid $childPid)",4);
+  }else{
+    slog("Unable to fork to launch endGameCommand",2);
+  }
 }
 
 # SPADS commands handlers #####################################################
@@ -10950,42 +11001,35 @@ sub hUpdate {
                                release => $release,
                                packages => \@updatePackages,
                                syncedSpringVersion => $syncedSpringVersion);
-  my $childPid = fork();
-  if(! defined $childPid) {
+  if(! forkProcess(
+         sub {
+           my $updateRc=$updater->update();
+           my ($answerMsg,$exitCode);
+           if($updateRc < 0) {
+             if($updateRc == -7) {
+               $answerMsg="Unable to update SPADS components (manual action required for new major version), please check logs for further information" ;
+             }else{
+               $answerMsg="Unable to update SPADS components (error code: $updateRc), please check logs for further information";
+             }
+             $exitCode=$updateRc;
+           }elsif($updateRc == 0) {
+             $answerMsg="No update available for $release release (SPADS components are already up to date)";
+             $exitCode=0;
+           }else{
+             $answerMsg="$updateRc SPADS component(s) updated (a restart is needed to apply modifications)";
+             $exitCode=0;
+           }
+           if($source eq "pv") {
+             logMsg("pv_$user","<$conf{lobbyLogin}> $answerMsg") if($conf{logPvChat});
+             sendLobbyCommand([["SAYPRIVATE",$user,$answerMsg]]);
+           }else{
+             answer($answerMsg);
+           }
+           exit $exitCode;
+         },
+         \&onUpdaterProcessExit)) {
     answer("Unable to update: cannot fork to launch SPADS updater");
     return 0;
-  }
-  if($childPid == 0) {
-    local $SIG{CHLD};
-    if($win) {
-      no warnings 'redefine';
-      eval "sub Win32::Process::DESTROY {}";
-    }
-    my $updateRc=$updater->update();
-    my ($answerMsg,$exitCode);
-    if($updateRc < 0) {
-      if($updateRc == -7) {
-        $answerMsg="Unable to update SPADS components (manual action required for new major version), please check logs for further information" ;
-      }else{
-        $answerMsg="Unable to update SPADS components (error code: $updateRc), please check logs for further information";
-      }
-      $exitCode=$updateRc;
-    }elsif($updateRc == 0) {
-      $answerMsg="No update available for $release release (SPADS components are already up to date)";
-      $exitCode=0;
-    }else{
-      $answerMsg="$updateRc SPADS component(s) updated (a restart is needed to apply modifications)";
-      $exitCode=0;
-    }
-    if($source eq "pv") {
-      logMsg("pv_$user","<$conf{lobbyLogin}> $answerMsg") if($conf{logPvChat});
-      sendLobbyCommand([["SAYPRIVATE",$user,$answerMsg]]);
-    }else{
-      answer($answerMsg);
-    }
-    exit $exitCode;
-  }else{
-    $updaterPid=$childPid;
   }
 }
 
@@ -11459,6 +11503,7 @@ sub cbLobbyDisconnect {
   foreach my $joinedChan (keys %{$lobby->{channels}}) {
     logMsg("channel_$joinedChan","=== $conf{lobbyLogin} left ===") if($conf{logChanJoinLeave});
   }
+  unregisterSocket($lobby->{lobbySock});
   $lobby->disconnect();
   foreach my $pluginName (@pluginsOrder) {
     $plugins{$pluginName}->onLobbyDisconnected() if($plugins{$pluginName}->can('onLobbyDisconnected'));
@@ -11468,6 +11513,7 @@ sub cbLobbyDisconnect {
 sub cbConnectTimeout {
   $lobbyState=0;
   slog("Timeout while connecting to lobby server ($conf{lobbyHost}:$conf{lobbyPort})",2);
+  unregisterSocket($lobby->{lobbySock});
   $lobby->disconnect();
 }
 
@@ -11523,6 +11569,7 @@ sub cbLoginDenied {
     $triedGhostWorkaround=0;
   }
   $lobbyState=0;
+  unregisterSocket($lobby->{lobbySock});
   $lobby->disconnect();
 }
 
@@ -11530,6 +11577,7 @@ sub cbAgreementEnd {
   slog("Spring Lobby agreement has not been accepted for this account yet, please login with a Spring lobby client and accept the agreement",1);
   quitAfterGame("Spring Lobby agreement not accepted yet for this account");
   $lobbyState=0;
+  unregisterSocket($lobby->{lobbySock});
   $lobby->disconnect();
 }
 
@@ -11540,6 +11588,7 @@ sub cbLoginTimeout {
   foreach my $joinedChan (keys %{$lobby->{channels}}) {
     logMsg("channel_$joinedChan","=== $conf{lobbyLogin} left ===") if($conf{logChanJoinLeave});
   }
+  unregisterSocket($lobby->{lobbySock});
   $lobby->disconnect();
 }
 
@@ -13419,7 +13468,7 @@ if($running) {
                            GAME_TEAMSTAT => \&cbAhGameTeamStat});
 
   fatalError('Unable to create socket for Spring AutoHost interface') unless($autohost->open());
-  $sockets{$autohost->{autoHostSock}} = sub { $autohost->receiveCommand() };
+  fatalError('Unable to register Spring AutoHost interface socket') unless(registerSocket($autohost->{autoHostSock},sub { $autohost->receiveCommand() }));
 
   if($conf{autoLoadPlugins} ne '') {
     my @pluginNames=split(/;/,$conf{autoLoadPlugins});
@@ -13430,7 +13479,7 @@ if($running) {
 
 }
 
-$SIG{CHLD} = \&sigChldHandler unless($win);
+$SIG{CHLD} = sub { local ($!, $?); reapForkedProcesses(); } unless($win);
 
 # Main loop ############################
 
@@ -13442,11 +13491,11 @@ while($running) {
     }elsif(time-$timestamps{connectAttempt} > $conf{lobbyReconnectDelay}) {
       $timestamps{connectAttempt}=time;
       $lobbyState=1;
-      delete $sockets{$lSock} if(defined $lSock);
       $lobby->addCallbacks({REDIRECT => \&cbRedirect});
-      $lSock = $lobby->connect(\&cbLobbyDisconnect,{TASSERVER => \&cbLobbyConnect},\&cbConnectTimeout);
-      if($lSock) {
-        $sockets{$lSock} = sub { $lobby->receiveCommand() };
+      if($lobby->connect(\&cbLobbyDisconnect,{TASSERVER => \&cbLobbyConnect},\&cbConnectTimeout)) {
+        if(! registerSocket($lobby->{lobbySock},sub { $lobby->receiveCommand() })) {
+          quitAfterGame('unable to register Spring lobby interface socket');
+        }
       }else{
         $lobby->removeCallbacks(['REDIRECT']);
         $lobbyState=0;
@@ -13483,6 +13532,7 @@ while($running) {
     foreach my $joinedChan (keys %{$lobby->{channels}}) {
       logMsg("channel_$joinedChan","=== $conf{lobbyLogin} left ===") if($conf{logChanJoinLeave});
     }
+    unregisterSocket($lobby->{lobbySock});
     $lobby->disconnect();
     foreach my $pluginName (@pluginsOrder) {
       $plugins{$pluginName}->onLobbyDisconnected() if($plugins{$pluginName}->can('onLobbyDisconnected'));
@@ -13500,6 +13550,7 @@ while($running) {
     foreach my $joinedChan (keys %{$lobby->{channels}}) {
       logMsg("channel_$joinedChan","=== $conf{lobbyLogin} left ===") if($conf{logChanJoinLeave});
     }
+    unregisterSocket($lobby->{lobbySock});
     $lobby->disconnect();
     $conf{lobbyHost}=$ip;
     $conf{lobbyPort}=$port;
@@ -13601,9 +13652,13 @@ if($lobbyState) {
   }else{
     sendLobbyCommand([['EXIT','AutoHost shutting down']]);
   }
+  unregisterSocket($lobby->{lobbySock});
   $lobby->disconnect();
 }
-$autohost->close() if($autohost->{autoHostSock});
+if($autohost->{autoHostSock}) {
+  unregisterSocket($autohost->{autoHostSock});
+  $autohost->close();
+}
 $spads->dumpDynamicData();
 unlink($pidFile) if(defined $pidFile);
 close($lockFh) if(defined $lockFh);
