@@ -689,9 +689,11 @@ spads.pl:
 0.11.33: setting environment variables no longer requires a restart except for LD_LIBRARY_PATH (Linux)
          the _putenv CRT function is now used to set environment variables so they can be seen by unitsync without restarting (Windows)
          clean up int32/uint32 casting code
+0.11.33a: backport of 0.11.35a (download SimpleEvent module to prepare version 0.11.35)
 0.11.34: factorize process and socket management code
          fix LAN IP addresses not detected when DHCP is used (Windows)
          fix misformatting of some Win32 error messages (Windows)
+0.11.34b: backport of 0.11.35a (download SimpleEvent module to prepare version 0.11.35)
 0.11.34a: fix error message when issuing !status in headless mode
 0.11.35: use SimpleEvent module which brings AnyEvent support for multi event loop compatibility
 0.11.35a: add SimpleEvent to the list of auto-updated modules
