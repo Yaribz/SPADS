@@ -735,14 +735,16 @@
 
 <dl>
 
-<dt id="forkProcess-processFunction-endProcessCallback"><code>forkProcess(\&amp;processFunction,\&amp;endProcessCallback)</code></dt>
+<dt id="forkProcess-processFunction-endProcessCallback-preventQueuing-1"><code>forkProcess(\&amp;processFunction,\&amp;endProcessCallback,$preventQueuing=1)</code></dt>
 <dd>
 
 <p>This function allows plugins to fork a process from main SPADS process, for parallel processing. It returns the PID of the forked process on success, or 0 if the child process couldn&#39;t be forked.</p>
 
 <p><code>\&amp;processFunction</code> is a reference to a function containing the code to be executed in the forked process (no parameter is passed to this function). This function can call <code>exit</code> to end the forked process with a specific exit code. If it returns without calling exit, then the exit code <code>0</code> will be used.</p>
 
-<p><code>\&amp;endProcessCallback</code> is a reference to a function containing the code to be executed in SPADS main process, once the forked process exited. Following parameters are passed to this function: <code>$exitCode</code> (exit code of the forked process), <code>$signalNb</code> (signal number responsible for forked process termination if any), <code>$hasCoreDump</code> (boolean flag indicating if a core dump occured in the forked process)</p>
+<p><code>\&amp;endProcessCallback</code> is a reference to a function containing the code to be executed in SPADS main process, once the forked process exited. Following parameters are passed to this function: <code>$exitCode</code> (exit code of the forked process), <code>$signalNb</code> (signal number responsible for forked process termination if any), <code>$hasCoreDump</code> (boolean flag indicating if a core dump occured in the forked process), <code>$pid</code> (PID of the forked process that just exited).</p>
+
+<p><code>$preventQueuing</code> is an optional boolean parameter (default value: 1) indicating if the fork request must not be queued (i.e., the fork request will fail instead of being queued if too many forked processes are already running)</p>
 
 </dd>
 </dl>

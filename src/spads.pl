@@ -26,29 +26,29 @@ use Digest::MD5 'md5_base64';
 use Fcntl qw':DEFAULT :flock';
 use File::Copy;
 use File::Spec::Functions qw'catfile file_name_is_absolute';
-use IO::Select;
-use IO::Socket::INET;
 use IPC::Cmd 'can_run';
 use List::Util qw'first shuffle';
 use MIME::Base64;
-use POSIX qw':sys_wait_h ceil uname';
+use POSIX qw'ceil uname';
 use Storable qw'nfreeze dclone';
 use Text::ParseWords;
-use Tie::RefHash;
 use Time::HiRes;
 
+use SimpleEvent;
 use SimpleLog;
 use SpadsConf;
 use SpadsUpdater;
 use SpringAutoHostInterface;
 use SpringLobbyInterface;
 
-$SIG{TERM} = sub { quitAfterGame("SIGTERM signal received") };
-
+sub any (&@) { my $c = shift; return defined first {&$c} @_; }
+sub all (&@) { my $c = shift; return ! defined first {! &$c} @_; }
+sub none (&@) { my $c = shift; return ! defined first {&$c} @_; }
+sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.11.34a';
+our $spadsVer='0.11.35';
 
 my %optionTypes = (
   0 => "error",
@@ -84,7 +84,6 @@ if($win) {
   eval "use Win32";
   eval "use Win32::API";
   eval "use Win32::TieRegistry ':KEY_'";
-  eval "use Win32::Process";
   $regLMachine=new Win32::TieRegistry("LMachine");
   $regLMachine->Delimiter("/") if(defined $regLMachine);
 }
@@ -256,9 +255,7 @@ unshift(@INC,$cwd);
 # State variables #############################################################
 
 our %conf=%{$spads->{conf}};
-my %sockets;
-tie %sockets, 'Tie::RefHash';
-my $running=1;
+my $abortSpadsStartForAutoUpdate=0;
 my ($quitAfterGame,$closeBattleAfterGame)=(0,0);
 our %timestamps=(connectAttempt => 0,
                  ping => 0,
@@ -341,7 +338,6 @@ my %pendingSpecJoin;
 my %lastRungUsers;
 my $triedGhostWorkaround=0;
 my $inGameTime=0;
-my $advertTime;
 my $accountInGameTime;
 my $cpuModel;
 my ($os,$mem,$sysUptime)=getSysInfo();
@@ -359,9 +355,6 @@ my %battleSkills;
 our %battleSkillsCache;
 my %pendingGetSkills;
 my $currentGameType='Duel';
-my %forkedProcesses;
-my %win32Processes;
-tie %win32Processes, 'Tie::RefHash';
 our $springServerType=$conf{springServerType};
 
 my $lobbySimpleLog=SimpleLog->new(logFiles => [$conf{logDir}."/spads.log"],
@@ -381,6 +374,12 @@ my $updaterSimpleLog=SimpleLog->new(logFiles => [$conf{logDir}."/spads.log",""],
                                     useANSICodes => [0,-t STDOUT ? 1 : 0],
                                     useTimestamps => [1,-t STDOUT ? 0 : 1],
                                     prefix => "[SpadsUpdater] ");
+
+my $simpleEventSimpleLog=SimpleLog->new(logFiles => [$conf{logDir}.'/spads.log',''],
+                                        logLevels => [$conf{spadsLogLevel},3],
+                                        useANSICodes => [0,-t STDOUT ? 1 : 0],
+                                        useTimestamps => [1,-t STDOUT ? 0 : 1],
+                                        prefix => "[SimpleEvent] ");
 
 our $lobby = SpringLobbyInterface->new(serverHost => $conf{lobbyHost},
                                        serverPort => $conf{lobbyPort},
@@ -450,28 +449,8 @@ if($win) {
 
 # Subfunctions ################################################################
 
-sub reapForkedProcesses {
-  while(my $childPid = waitpid(-1,WNOHANG)) {
-    last if($childPid == -1);
-    if(exists $forkedProcesses{$childPid}) {
-      &{$forkedProcesses{$childPid}}($? >> 8,$? & 127,$? & 128,$childPid);
-      delete $forkedProcesses{$childPid};
-    }
-  }
-}
-
-sub reapWin32Processes {
-  foreach my $win32Process (keys %win32Processes) {
-    $win32Process->GetExitCode(my $exitCode);
-    if($exitCode != Win32::Process::STILL_ACTIVE()) {
-      &{$win32Processes{$win32Process}}($exitCode);
-      delete $win32Processes{$win32Process};
-    }
-  }
-}
-
 sub onSpringProcessExit {
-  my ($exitCode,$signalNb,$hasCoreDump)=@_;
+  my (undef,$exitCode,$signalNb,$hasCoreDump)=@_;
   $signalNb//=0;
   $hasCoreDump//=0;
   if(%{$p_runningBattle}) {
@@ -504,7 +483,7 @@ sub onSpringProcessExit {
 }
 
 sub onUpdaterProcessExit {
-  my ($exitCode,$signalNb,$hasCoreDump)=@_;
+  my (undef,$exitCode,$signalNb,$hasCoreDump)=@_;
   $exitCode-=256 if($exitCode > 128);
   if($exitCode || $signalNb || $hasCoreDump) {
     if($exitCode > -7) {
@@ -525,68 +504,12 @@ sub onUpdaterProcessExit {
   }
 }
 
-sub forkProcess {
-  my ($p_processFunction,$p_endCallback)=@_;
-  my $childPid = fork();
-  if(! defined $childPid) {
-    slog("Unable to fork process, $!",1);
-    return 0;
-  }
-  if($childPid == 0) {
-    local $SIG{CHLD};
-    if($win) {
-      no warnings 'redefine';
-      eval "sub Win32::Process::DESTROY {}";
-    }
-    &{$p_processFunction}();
-    exit 0;
-  }
-  $forkedProcesses{$childPid}=$p_endCallback;
-  return $childPid;
-}
-
 sub getLastWin32Error {
-  my $errorMsg=Win32::FormatMessage(Win32::GetLastError());
-  return 'unknown error' unless(defined $errorMsg);
+  my $errorNb=Win32::GetLastError();
+  return 'unknown error' unless($errorNb);
+  my $errorMsg=Win32::FormatMessage($errorNb);
   $errorMsg=~s/\cM?\cJ$//;
   return $errorMsg;
-}
-
-sub createWin32Process {
-  if(! $win) {
-    slog('Unable to create Win32 process, incompatible OS',1);
-    return 0;
-  }
-  my ($applicationPath,$p_commandParams,$workingDirectory,$p_endCallback,$p_stdRedirections)=@_;
-  my ($inheritHandles,$previousStdout,$previousStderr)=(0,undef,undef);
-  if(defined $p_stdRedirections) {
-    $inheritHandles=1;
-    open($previousStdout,'>&',\*STDOUT);
-    open($previousStderr,'>&',\*STDERR);
-    foreach my $p_redirection (@{$p_stdRedirections}) {
-      if(lc($p_redirection->[0]) eq 'stdout') {
-        open(STDOUT,$p_redirection->[1]);
-      }elsif(lc($p_redirection->[0]) eq 'stderr') {
-        open(STDERR,$p_redirection->[1]);
-      }
-    }
-  }
-  my $win32ProcCreateRes = Win32::Process::Create(my $win32Process,
-                                                  $applicationPath,
-                                                  join(' ',map {escapeWin32Parameter($_)} ($applicationPath,@{$p_commandParams})),
-                                                  $inheritHandles,
-                                                  0,
-                                                  $workingDirectory);
-  if(defined $p_stdRedirections) {
-    open(STDOUT,'>&',$previousStdout);
-    open(STDERR,'>&',$previousStderr);
-  }
-  if(! $win32ProcCreateRes) {
-    slog('Unable to create Win32 process ('.getLastWin32Error().')',1);
-    return 0;
-  }
-  $win32Processes{$win32Process}=$p_endCallback;
-  return $win32Process;
 }
 
 sub escapeWin32Parameter {
@@ -612,26 +535,6 @@ sub execError {
   exit 1;
 }
 
-sub registerSocket {
-  my ($socket,$p_readCallback)=@_;
-  if(exists $sockets{$socket}) {
-    slog('Unable to register socket (already registered)',2);
-    return 0;
-  }
-  $sockets{$socket}=$p_readCallback;
-  return 1;
-}
-
-sub unregisterSocket {
-  my $socket=shift;
-  if(! exists $sockets{$socket}) {
-    slog('Unable to unregister socket (unknown socket)',2);
-    return 0;
-  }
-  delete $sockets{$socket};
-  return 1;
-}
-
 sub autoRetry {
   my ($p_f,$retryNb,$delayMs)=@_;
   $retryNb//=50;
@@ -644,21 +547,6 @@ sub autoRetry {
     $res=&{$p_f}();
   }
   return $res;
-}
-
-sub any (&@) {
-  my $code = shift;
-  return defined first {&{$code}} @_;
-}
-
-sub none (&@) {
-  my $code = shift;
-  return ! defined first {&{$code}} @_;
-}
-
-sub all (&@) {
-  my $code = shift;
-  return ! defined first {! &{$code}} @_;
 }
 
 sub areSamePaths {
@@ -2645,7 +2533,6 @@ sub checkTimedEvents {
   checkCurrentMapListForLearnedMaps();
   checkAntiFloodDataPurge();
   checkAdvertMsg();
-  checkWinProcessStop() if($win);
   pluginsEventLoop();
   checkPendingGetSkills();
 }
@@ -2796,7 +2683,7 @@ sub checkAutoUpdate {
     if($updater->isUpdateInProgress()) {
       slog('Skipping auto-update, another updater instance is already running',2);
     }else{
-      if(! forkProcess(
+      if(! SimpleEvent::forkProcess(
              sub {
                my $updateRc=$updater->update();
                if($updateRc < 0) {
@@ -2909,11 +2796,6 @@ sub checkAdvertMsg {
       $timestamps{advert}=time;
     }
   }
-}
-
-sub checkWinProcessStop {
-  reapForkedProcesses();
-  reapWin32Processes();
 }
 
 sub pluginsEventLoop {
@@ -4318,11 +4200,12 @@ sub launchGame {
   my $logFile=catfile($conf{logDir},"spring-$springServerType.log");
 
   if($conf{useWin32Process}) {
-    $springWin32Process=createWin32Process($conf{springServer},
-                                           \@springServerCmdParams,
-                                           $conf{varDir},
-                                           \&onSpringProcessExit,
-                                           [[STDOUT => ">>$logFile"],[STDERR => '>>&STDOUT']]);
+    $springWin32Process=SimpleEvent::createWin32Process($conf{springServer},
+                                                        \@springServerCmdParams,
+                                                        $conf{varDir},
+                                                        \&onSpringProcessExit,
+                                                        [[STDOUT => ">>$logFile"],[STDERR => '>>&STDOUT']],
+                                                        1);
     if(! $springWin32Process) {
       $springWin32Process=undef;
       slog('Unable to create Win32 process to launch Spring',1);
@@ -4330,7 +4213,7 @@ sub launchGame {
     }
     $springPid=$springWin32Process->GetProcessID();
   }else{
-    $springPid=forkProcess(
+    $springPid=SimpleEvent::forkProcess(
       sub {
         chdir($conf{varDir});
         if($win) {
@@ -4347,7 +4230,8 @@ sub launchGame {
           execError("Unable to launch Spring ($execErrorString)",1);
         }
       },
-      \&onSpringProcessExit);
+      \&onSpringProcessExit,
+      1);
     if(! $springPid) {
       $springPid=0;
       slog('Unable to fork to launch Spring',1);
@@ -5757,7 +5641,7 @@ sub endGameProcessing {
                           demoFile => $endGameData{demoFile},
                           gameId => $endGameData{gameId},
                           result => $endGameData{result});
-  if(my $childPid = forkProcess(
+  if(my $childPid = SimpleEvent::forkProcess(
        sub {
          if($conf{endGameCommandEnv} ne '') {
            my @envVarDeclarations=split(/;/,$conf{endGameCommandEnv});
@@ -5777,7 +5661,7 @@ sub endGameProcessing {
          exec($endGameCommand) || execError("Unable to launch endGameCommand ($!)",2);;
        },
        sub {
-         my ($exitCode,$signalNb,$hasCoreDump,$endGameCommandPid)=@_;
+         my ($endGameCommandPid,$exitCode,$signalNb,$hasCoreDump)=@_;
          $nbEndGameCommandRunning--;
          my $executionTime=secToTime(time-$endGameCommandData{startTime});
          if($conf{endGameCommandMsg} ne '' && $lobbyState > 5 && %{$lobby->{battle}}) {
@@ -5825,7 +5709,11 @@ sub endGameProcessing {
          slog("End game commmand exited with non-null return code ($exitCode)",2) if($exitCode);
        })) {
     $nbEndGameCommandRunning++;
-    slog("Executing end game command (pid $childPid)",4);
+    if($childPid == -1) {
+      slog("End game command queued...",3);
+    }else{
+      slog("Executing end game command (pid $childPid)",4);
+    }
   }else{
     slog("Unable to fork to launch endGameCommand",2);
   }
@@ -9212,6 +9100,7 @@ sub hReloadConf {
     $autohostSimpleLog->setLevels([$conf{autoHostInterfaceLogLevel}]);
     $updaterSimpleLog->setLevels([$conf{updaterLogLevel},3]);
     $sLog->setLevels([$conf{spadsLogLevel},3]);
+    $simpleEventSimpleLog->setLevels([$conf{spadsLogLevel},3]);
 
     quitAfterGame("Unable to reload Spring archives") unless(loadArchives());
     setDefaultMapOfMaplist() if($spads->{conf}->{map} eq '');
@@ -11001,7 +10890,7 @@ sub hUpdate {
                                release => $release,
                                packages => \@updatePackages,
                                syncedSpringVersion => $syncedSpringVersion);
-  if(! forkProcess(
+  if(! SimpleEvent::forkProcess(
          sub {
            my $updateRc=$updater->update();
            my ($answerMsg,$exitCode);
@@ -11031,6 +10920,7 @@ sub hUpdate {
     answer("Unable to update: cannot fork to launch SPADS updater");
     return 0;
   }
+  return 1;
 }
 
 sub hVersion {
@@ -11059,18 +10949,24 @@ sub hVersion {
   }
 
   sayPrivate($user,"$C{12}$conf{lobbyLogin}$C{1} is running ${B}$C{5}SPADS $C{10}v$spadsVer$B$C{1} ($autoUpdateString), with following components:");
-  sayPrivate($user,"- $C{5}Perl$C{10} $^V");
-  sayPrivate($user,"- $C{5}Spring$C{10} v$syncedSpringVersion");
+  my %versionedComponents=(Perl => $^V,
+                           Spring => 'v'.$syncedSpringVersion,
+                           SimpleEvent => 'v'.SimpleEvent::getVersion());
   my %components = (SpringLobbyInterface => $lobby,
                     SpringAutoHostInterface => $autohost,
                     SpadsConf => $spads,
                     SimpleLog => $sLog,
                     SpadsUpdater => $updater);
   foreach my $module (keys %components) {
-    my $ver=$components{$module}->getVersion();
-    sayPrivate($user,"- $C{5}$module$C{10} v$ver");
+    $versionedComponents{$module}='v'.$components{$module}->getVersion();
   }
-
+  my $simpleEventModel=SimpleEvent::getModel();
+  if(defined $simpleEventModel && $simpleEventModel ne 'internal') {
+    $versionedComponents{AnyEvent}=$AnyEvent::VERSION."$C{1} ($simpleEventModel)";
+  }
+  foreach my $component (sort keys %versionedComponents) {
+    sayPrivate($user,"- $C{5}$component$C{10} $versionedComponents{$component}");
+  }
   foreach my $pluginName (@pluginsOrder) {
     my $pluginVersion=$plugins{$pluginName}->getVersion();
     sayPrivate($user,"- $C{3}$pluginName$C{10} v$pluginVersion$C{1} (plugin)");
@@ -11503,7 +11399,7 @@ sub cbLobbyDisconnect {
   foreach my $joinedChan (keys %{$lobby->{channels}}) {
     logMsg("channel_$joinedChan","=== $conf{lobbyLogin} left ===") if($conf{logChanJoinLeave});
   }
-  unregisterSocket($lobby->{lobbySock});
+  SimpleEvent::unregisterSocket($lobby->{lobbySock});
   $lobby->disconnect();
   foreach my $pluginName (@pluginsOrder) {
     $plugins{$pluginName}->onLobbyDisconnected() if($plugins{$pluginName}->can('onLobbyDisconnected'));
@@ -11513,7 +11409,7 @@ sub cbLobbyDisconnect {
 sub cbConnectTimeout {
   $lobbyState=0;
   slog("Timeout while connecting to lobby server ($conf{lobbyHost}:$conf{lobbyPort})",2);
-  unregisterSocket($lobby->{lobbySock});
+  SimpleEvent::unregisterSocket($lobby->{lobbySock});
   $lobby->disconnect();
 }
 
@@ -11569,7 +11465,7 @@ sub cbLoginDenied {
     $triedGhostWorkaround=0;
   }
   $lobbyState=0;
-  unregisterSocket($lobby->{lobbySock});
+  SimpleEvent::unregisterSocket($lobby->{lobbySock});
   $lobby->disconnect();
 }
 
@@ -11577,7 +11473,7 @@ sub cbAgreementEnd {
   slog("Spring Lobby agreement has not been accepted for this account yet, please login with a Spring lobby client and accept the agreement",1);
   quitAfterGame("Spring Lobby agreement not accepted yet for this account");
   $lobbyState=0;
-  unregisterSocket($lobby->{lobbySock});
+  SimpleEvent::unregisterSocket($lobby->{lobbySock});
   $lobby->disconnect();
 }
 
@@ -11588,7 +11484,7 @@ sub cbLoginTimeout {
   foreach my $joinedChan (keys %{$lobby->{channels}}) {
     logMsg("channel_$joinedChan","=== $conf{lobbyLogin} left ===") if($conf{logChanJoinLeave});
   }
-  unregisterSocket($lobby->{lobbySock});
+  SimpleEvent::unregisterSocket($lobby->{lobbySock});
   $lobby->disconnect();
 }
 
@@ -13361,14 +13257,14 @@ if($conf{autoUpdateRelease} ne "") {
     }elsif($updateRc > 0) {
       sleep(2); # Avoid CPU eating loop in case auto-update is broken (fork bomb protection)
       restartAfterGame("auto-update");
-      $running=0;
+      $abortSpadsStartForAutoUpdate=1;
     }
   }
 }
 
 # Unitsync loading #####################
 
-if($running) {
+if(! $abortSpadsStartForAutoUpdate) {
 
   my $lockFile="$conf{varDir}/spads.lock";
   if(open($lockFh,'>',$lockFile)) {
@@ -13424,7 +13320,7 @@ if($running) {
       }elsif($updateRc > 0) {
         sleep(2); # Avoid CPU eating loop in case auto-update is broken (fork bomb protection)
         restartAfterGame("auto-update");
-        $running=0;
+        $abortSpadsStartForAutoUpdate=1;
       }
     }
   }
@@ -13432,7 +13328,7 @@ if($running) {
 
 # Init #################################
 
-if($running) {
+if(! $abortSpadsStartForAutoUpdate) {
   if($springServerType eq '') {
     if($conf{springServer} =~ /spring-dedicated(?:\.exe)?$/i) {
       $springServerType='dedicated';
@@ -13467,8 +13363,16 @@ if($running) {
                            SERVER_MESSAGE => \&cbAhServerMessage,
                            GAME_TEAMSTAT => \&cbAhGameTeamStat});
 
+  my $simpleEventMode='internal';
+  if(exists $confMacros{eventModel}) {
+    fatalError("Invalid event model \"$confMacros{eventModel}\" specified in SPADS command line") unless(any {$confMacros{eventModel} eq $_} (qw'auto internal AnyEvent'));
+    $simpleEventMode=$confMacros{eventModel};
+    $simpleEventMode=undef if($simpleEventMode eq 'auto');
+  }
+  fatalError('Unable to initialize SimpleEvent module') unless(SimpleEvent::init(mode => $simpleEventMode, sLog => $simpleEventSimpleLog));
+  fatalError('Unable to register SIGTERM') unless($win || SimpleEvent::registerSignal('TERM', sub { quitAfterGame('SIGTERM signal received'); } ));
   fatalError('Unable to create socket for Spring AutoHost interface') unless($autohost->open());
-  fatalError('Unable to register Spring AutoHost interface socket') unless(registerSocket($autohost->{autoHostSock},sub { $autohost->receiveCommand() }));
+  fatalError('Unable to register Spring AutoHost interface socket') unless(SimpleEvent::registerSocket($autohost->{autoHostSock},sub { $autohost->receiveCommand() }));
 
   if($conf{autoLoadPlugins} ne '') {
     my @pluginNames=split(/;/,$conf{autoLoadPlugins});
@@ -13477,14 +13381,21 @@ if($running) {
     }
   }
 
+  SimpleEvent::addTimer('SpadsMainLoop',0,1,\&mainLoop);
+  SimpleEvent::startLoop(\&postMainLoop);
 }
-
-$SIG{CHLD} = sub { local ($!, $?); reapForkedProcesses(); } unless($win);
 
 # Main loop ############################
 
-while($running) {
+sub mainLoop {
+  checkLobbyConnection();
+  checkQueuedLobbyCommands();
+  checkTimedEvents();
+  manageBattle();
+  checkExit();
+}
 
+sub checkLobbyConnection {
   if(! $lobbyState && ! $quitAfterGame) {
     if($timestamps{connectAttempt} != 0 && $conf{lobbyReconnectDelay} == 0) {
       quitAfterGame('disconnected from lobby server, no reconnection delay configured');
@@ -13493,7 +13404,7 @@ while($running) {
       $lobbyState=1;
       $lobby->addCallbacks({REDIRECT => \&cbRedirect});
       if($lobby->connect(\&cbLobbyDisconnect,{TASSERVER => \&cbLobbyConnect},\&cbConnectTimeout)) {
-        if(! registerSocket($lobby->{lobbySock},sub { $lobby->receiveCommand() })) {
+        if(! SimpleEvent::registerSocket($lobby->{lobbySock},sub { $lobby->receiveCommand(); checkQueuedLobbyCommands(); })) {
           quitAfterGame('unable to register Spring lobby interface socket');
         }
       }else{
@@ -13502,15 +13413,6 @@ while($running) {
         slog("Connection to lobby server failed",1);
       }
     }
-  }
-
-  checkQueuedLobbyCommands();
-
-  checkTimedEvents();
-
-  my @pendingSockets=IO::Select->new(keys %sockets)->can_read(1);
-  foreach my $pendingSock (@pendingSockets) {
-    &{$sockets{$pendingSock}}($pendingSock);
   }
 
   if( $lobbyState > 0 && ( (time - $timestamps{connectAttempt} > 30 && time - $lobby->{lastRcvTs} > 60) || $lobbyBrokenConnection ) ) {
@@ -13532,7 +13434,7 @@ while($running) {
     foreach my $joinedChan (keys %{$lobby->{channels}}) {
       logMsg("channel_$joinedChan","=== $conf{lobbyLogin} left ===") if($conf{logChanJoinLeave});
     }
-    unregisterSocket($lobby->{lobbySock});
+    SimpleEvent::unregisterSocket($lobby->{lobbySock});
     $lobby->disconnect();
     foreach my $pluginName (@pluginsOrder) {
       $plugins{$pluginName}->onLobbyDisconnected() if($plugins{$pluginName}->can('onLobbyDisconnected'));
@@ -13550,7 +13452,7 @@ while($running) {
     foreach my $joinedChan (keys %{$lobby->{channels}}) {
       logMsg("channel_$joinedChan","=== $conf{lobbyLogin} left ===") if($conf{logChanJoinLeave});
     }
-    unregisterSocket($lobby->{lobbySock});
+    SimpleEvent::unregisterSocket($lobby->{lobbySock});
     $lobby->disconnect();
     $conf{lobbyHost}=$ip;
     $conf{lobbyPort}=$port;
@@ -13560,7 +13462,9 @@ while($running) {
                                        warnForUnhandledMessages => 0);
     $timestamps{connectAttempt}=0;
   }
+}
 
+sub manageBattle {
   openBattle() if($lobbyState == 4 && ! $closeBattleAfterGame);
 
   closeBattle() if($lobbyState >= 6 && $closeBattleAfterGame && $autohost->getState() == 0);
@@ -13602,17 +13506,19 @@ while($running) {
     }
     autoManageBattle();
   }
+}
 
+sub checkExit {
   if($autohost->getState() == 0 && $springPid == 0) {
     if($quitAfterGame == 1 || $quitAfterGame == 2) {
       slog("Game is not running, exiting",3);
-      $running=0;
+      SimpleEvent::stopLoop();
     }elsif($quitAfterGame) {
       if($lobbyState > 5) {
         my @players=keys %{$lobby->{battle}->{users}};
         if($#players == 0) {
           slog("Game is not running and battle is empty, exiting",3);
-          $running=0;
+          SimpleEvent::stopLoop();
         }elsif($quitAfterGame > 4) {
           my $containsPlayer=0;
           foreach my $p (@players) {
@@ -13623,42 +13529,43 @@ while($running) {
           }
           if(! $containsPlayer) {
             slog("Game is not running and battle only contains spectators, exiting",3);
-            $running=0;
+            SimpleEvent::stopLoop();
           }
         }
       }else{
         slog("Game is not running and battle is closed, exiting",3);
-        $running=0;
+        SimpleEvent::stopLoop();
       }
     }
   }
-
 }
 
 # Exit handling ########################
 
-while(@pluginsOrder) {
-  my $pluginName=pop(@pluginsOrder);
-  unloadPlugin($pluginName);
-}
-if($lobbyState) {
-  foreach my $joinedChan (keys %{$lobby->{channels}}) {
-    logMsg("channel_$joinedChan","=== $conf{lobbyLogin} left ===") if($conf{logChanJoinLeave});
+sub postMainLoop {
+  while(@pluginsOrder) {
+    my $pluginName=pop(@pluginsOrder);
+    unloadPlugin($pluginName);
   }
-  logMsg("battle","=== $conf{lobbyLogin} left ===") if($lobbyState > 5 && $conf{logBattleJoinLeave});
-  $lobbyState=0;
-  if($quitAfterGame == 2 || $quitAfterGame == 4 || $quitAfterGame == 6) {
-    sendLobbyCommand([['EXIT','AutoHost restarting']]);
-  }else{
-    sendLobbyCommand([['EXIT','AutoHost shutting down']]);
+  if($lobbyState) {
+    foreach my $joinedChan (keys %{$lobby->{channels}}) {
+      logMsg("channel_$joinedChan","=== $conf{lobbyLogin} left ===") if($conf{logChanJoinLeave});
+    }
+    logMsg("battle","=== $conf{lobbyLogin} left ===") if($lobbyState > 5 && $conf{logBattleJoinLeave});
+    $lobbyState=0;
+    if($quitAfterGame == 2 || $quitAfterGame == 4 || $quitAfterGame == 6) {
+      sendLobbyCommand([['EXIT','AutoHost restarting']]);
+    }else{
+      sendLobbyCommand([['EXIT','AutoHost shutting down']]);
+    }
+    SimpleEvent::unregisterSocket($lobby->{lobbySock});
+    $lobby->disconnect();
   }
-  unregisterSocket($lobby->{lobbySock});
-  $lobby->disconnect();
-}
-if($autohost->{autoHostSock}) {
-  unregisterSocket($autohost->{autoHostSock});
+  SimpleEvent::unregisterSocket($autohost->{autoHostSock});
   $autohost->close();
+  SimpleEvent::removeTimer('SpadsMainLoop');
 }
+
 $spads->dumpDynamicData();
 unlink($pidFile) if(defined $pidFile);
 close($lockFh) if(defined $lockFh);

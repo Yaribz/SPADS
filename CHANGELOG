@@ -693,6 +693,7 @@ spads.pl:
          fix LAN IP addresses not detected when DHCP is used (Windows)
          fix misformatting of some Win32 error messages (Windows)
 0.11.34a: fix error message when issuing !status in headless mode
+0.11.35: use SimpleEvent module which brings AnyEvent support for multi event loop compatibility
 
 SpadsConf.pm:
 ============
@@ -898,6 +899,9 @@ SpadsPluginApi.pm:
 0.17: new plugin API functions "addSocket,removeSocket" (sockets management for plugins)
 0.18: new plugin customization callback: "updateGameStatusInfo"
 0.19: process and socket management logic moved to SPADS core
+0.20: use SimpleEvent module which brings AnyEvent support for multi event loop compatibility
+      the "forkProcess" API function now supports a new boolean parameter indicating if the fork request can be queued
+      the "endProcessCallback" parameter provided in "forkProcess" API function calls now receives the PID of the exited process as 4th parameter
 
 SpadsUpdater.pm:
 ===============

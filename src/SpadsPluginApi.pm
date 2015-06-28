@@ -21,7 +21,7 @@ package SpadsPluginApi;
 use Exporter 'import';
 @EXPORT=qw/$spadsVersion $spadsDir getLobbyState getSpringPid getSpringServerType getTimestamps getRunningBattle getCurrentVote getPlugin addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives/;
 
-my $apiVersion='0.19';
+my $apiVersion='0.20';
 
 our $spadsVersion=$::spadsVer;
 our $spadsDir=$::cwd;
@@ -146,7 +146,9 @@ sub removeSpringCommandHandler {
 ################################
 
 sub forkProcess {
-  my $childPid = ::forkProcess(@_);
+  my ($p_processFunction,$p_endCallback,$preventQueuing)=@_;
+  $preventQueuing//=1;
+  my $childPid = SimpleEvent::forkProcess($p_processFunction, sub { &{$p_endCallback}($_[1],$_[2],$_[3],$_[0]) },$preventQueuing);
   ::slog('Failed to fork process for plugin '.caller().' !',1) if($childPid == 0);
   return $childPid;
 }
@@ -156,7 +158,7 @@ sub forkProcess {
 ################################
 
 sub addSocket {
-  if(::registerSocket(@_)) {
+  if(SimpleEvent::registerSocket(@_)) {
     return 1;
   }else{
     ::slog('Unable to add socket for plugin '.caller().' !',2);
@@ -165,7 +167,7 @@ sub addSocket {
 }
 
 sub removeSocket {
-  if(::unregisterSocket(@_)) {
+  if(SimpleEvent::unregisterSocket(@_)) {
     return 1;
   }else{
     ::slog('Unable to remove socket for plugin '.caller().' !',2);
@@ -1019,7 +1021,7 @@ C<$level> is the log level of the message: C<0> (critical), C<1> (error), C<2>
 
 =over 2
 
-=item C<forkProcess(\&processFunction,\&endProcessCallback)>
+=item C<forkProcess(\&processFunction,\&endProcessCallback,$preventQueuing=1)>
 
 This function allows plugins to fork a process from main SPADS process, for
 parallel processing. It returns the PID of the forked process on success, or 0
@@ -1035,7 +1037,11 @@ executed in SPADS main process, once the forked process exited. Following
 parameters are passed to this function: C<$exitCode> (exit code of the forked
 process), C<$signalNb> (signal number responsible for forked process termination
 if any), C<$hasCoreDump> (boolean flag indicating if a core dump occured in the
-forked process)
+forked process), C<$pid> (PID of the forked process that just exited).
+
+C<$preventQueuing> is an optional boolean parameter (default value: 1)
+indicating if the fork request must not be queued (i.e., the fork request will
+fail instead of being queued if too many forked processes are already running)
 
 =back
 
