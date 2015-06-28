@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.8b (2015/05/20)
+# Version 0.9 (2015/06/28)
 
 use strict;
 
@@ -79,6 +79,7 @@ for my $argNb (1..$#ARGV) {
                'helpSettings.dat' => 1,
                'SpringAutoHostInterface.pm' => 1,
                'SpringLobbyInterface.pm' => 1,
+               'SimpleEvent.pm' => 1,
                'SimpleLog.pm' => 1,
                'spads.pl' => 1,
                'SpadsConf.pm' => 1,
@@ -112,6 +113,7 @@ for my $argNb (1..$#ARGV) {
                'helpSettings.dat' => 1,
                'SpringAutoHostInterface.pm' => 1,
                'SpringLobbyInterface.pm' => 1,
+               'SimpleEvent.pm' => 1,
                'SimpleLog.pm' => 1,
                'spads.pl' => 1,
                'SpadsConf.pm' => 1,

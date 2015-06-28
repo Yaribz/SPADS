@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.15 (2015/06/23)
+# Version 0.15a (2015/06/28)
 
 use strict;
 
@@ -37,7 +37,7 @@ sub all (&@) { my $c = shift; return ! defined first {! &$c} @_; }
 sub none (&@) { my $c = shift; return ! defined first {&$c} @_; }
 sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 
-my @packages=qw'getDefaultModOptions.pl help.dat helpSettings.dat SpringAutoHostInterface.pm SpringLobbyInterface.pm SimpleLog.pm spads.pl SpadsConf.pm spadsInstaller.pl SpadsUpdater.pm SpadsPluginApi.pm update.pl argparse.py replay_upload.py';
+my @packages=qw'getDefaultModOptions.pl help.dat helpSettings.dat SpringAutoHostInterface.pm SpringLobbyInterface.pm SimpleEvent.pm SimpleLog.pm spads.pl SpadsConf.pm spadsInstaller.pl SpadsUpdater.pm SpadsPluginApi.pm update.pl argparse.py replay_upload.py';
 my @packagesWinUnitsync=qw'PerlUnitSync.pm PerlUnitSync.dll';
 my @packagesWinServer=qw'spring-dedicated.exe spring-headless.exe';
 
