@@ -698,6 +698,7 @@ spads.pl:
 0.11.34a: fix error message when issuing !status in headless mode
 0.11.35: use SimpleEvent module which brings AnyEvent support for multi event loop compatibility
 0.11.35a: add SimpleEvent to the list of auto-updated modules
+0.11.35b: unregister TERM signal when exiting
 
 SpadsConf.pm:
 ============

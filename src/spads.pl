@@ -48,7 +48,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.11.35a';
+our $spadsVer='0.11.35b';
 
 my %optionTypes = (
   0 => "error",
@@ -13561,6 +13561,7 @@ sub postMainLoop {
     SimpleEvent::unregisterSocket($lobby->{lobbySock});
     $lobby->disconnect();
   }
+  SimpleEvent::unregisterSignal('TERM') unless($win);
   SimpleEvent::unregisterSocket($autohost->{autoHostSock});
   $autohost->close();
   SimpleEvent::removeTimer('SpadsMainLoop');
