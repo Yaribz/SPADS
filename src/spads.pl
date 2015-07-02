@@ -48,7 +48,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.11.35b';
+our $spadsVer='0.11.35c';
 
 my %optionTypes = (
   0 => "error",
@@ -9282,7 +9282,7 @@ sub hRing {
         }
       }else{
         $ringType='unready player';
-        if($autohost->{players}->{$gUserNb}->{ready} != 1
+        if($autohost->{players}->{$gUserNb}->{ready} < 1
            && exists $p_bUsers->{$player}
            && exists $p_runningBattle->{users}->{$player}
            && (! defined $p_runningBattle->{users}->{$player}->{battleStatus} 
@@ -10101,12 +10101,10 @@ sub hStatus {
           if(%{$p_ahPlayer}) {
             if($p_ahPlayer->{ready} == 0) {
               $clientStatus{Ready}="$C{7}Placed$C{1}";
-            }elsif($p_ahPlayer->{ready} == 1) {
+            }elsif($p_ahPlayer->{ready} > 0) {
               $clientStatus{Ready}="$C{3}Yes$C{1}";
-            }elsif($p_ahPlayer->{ready} == 2) {
-              $clientStatus{Ready}="$C{4}No$C{1}";
             }else{
-              $clientStatus{Ready}="!";
+              $clientStatus{Ready}="$C{4}No$C{1}";
             }
             if($p_ahPlayer->{disconnectCause} == -2) {
               $clientStatus{Status}="$C{14}Loading$C{1}";
@@ -12182,7 +12180,7 @@ sub cbAhPlayerJoined {
           slog("Player \"$user\" hasn't joined yet, auto-force start isn't possible.",5);
           return;
         }
-        if($startPosType == 2 && $p_ahPlayers->{$user}->{ready} != 1) {
+        if($startPosType == 2 && $p_ahPlayers->{$user}->{ready} < 1) {
           slog("Player \"$user\" isn't ready yet, auto-force start isn't possible.",5);
           return;
         }
@@ -12231,7 +12229,7 @@ sub cbAhPlayerReady {
           slog("Player \"$user\" hasn't joined yet, auto-force start isn't possible.",5);
           return;
         }
-        if($startPosType == 2 && $p_ahPlayers->{$user}->{ready} != 1) {
+        if($startPosType == 2 && $p_ahPlayers->{$user}->{ready} < 1) {
           slog("Player \"$user\" isn't ready yet, auto-force start isn't possible.",5);
           return;
         }
