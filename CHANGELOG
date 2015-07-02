@@ -700,6 +700,7 @@ spads.pl:
 0.11.35a: add SimpleEvent to the list of auto-updated modules
 0.11.35b: unregister TERM signal when exiting
 0.11.35c: fix players readied through LUA not detected as ready by SPADS
+0.11.35d: minor fix in !version output for AnyEvent module
 
 SpadsConf.pm:
 ============

@@ -48,7 +48,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.11.35c';
+our $spadsVer='0.11.35d';
 
 my %optionTypes = (
   0 => "error",
@@ -10960,7 +10960,7 @@ sub hVersion {
   }
   my $simpleEventModel=SimpleEvent::getModel();
   if(defined $simpleEventModel && $simpleEventModel ne 'internal') {
-    $versionedComponents{AnyEvent}=$AnyEvent::VERSION."$C{1} ($simpleEventModel)";
+    $versionedComponents{AnyEvent}='v'.$AnyEvent::VERSION."$C{1} ($simpleEventModel)";
   }
   foreach my $component (sort keys %versionedComponents) {
     sayPrivate($user,"- $C{5}$component$C{10} $versionedComponents{$component}");
