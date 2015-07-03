@@ -822,6 +822,7 @@ SpadsConf.pm:
 0.11.9b: timestamps are automatically enabled and colors automatically disabled in STDOUT messages if SPADS output is redirected to a file
 0.11.10: it is now possible to specify multiple Spring data directories through the "springDataDir" global setting
          Spring data directory no longer needs to be writable
+0.11.10a: use more compact version of any/all/none/notall list functions
 
 spadsInstaller.pl:
 =================

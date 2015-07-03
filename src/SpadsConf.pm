@@ -29,24 +29,14 @@ use Storable qw'nstore retrieve dclone';
 
 use SimpleLog;
 
-sub any (&@) {
-  my $code = shift;
-  return defined first {&{$code}} @_;
-}
-
-sub none (&@) {
-  my $code = shift;
-  return ! defined first {&{$code}} @_;
-}
-
-sub all (&@) {
-  my $code = shift;
-  return ! defined first {! &{$code}} @_;
-}
+sub any (&@) { my $c = shift; return defined first {&$c} @_; }
+sub all (&@) { my $c = shift; return ! defined first {! &$c} @_; }
+sub none (&@) { my $c = shift; return ! defined first {&$c} @_; }
+sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.11.10';
+my $moduleVersion='0.11.10a';
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 
 my %globalParameters = (lobbyLogin => ["login"],
