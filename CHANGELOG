@@ -910,6 +910,8 @@ SpadsPluginApi.pm:
 0.20: use SimpleEvent module which brings AnyEvent support for multi event loop compatibility
       the "forkProcess" API function now supports a new boolean parameter indicating if the fork request can be queued
       the "endProcessCallback" parameter provided in "forkProcess" API function calls now receives the PID of the exited process as 4th parameter
+0.21: add "forkCall", "addTimer" and "removeTimer" API functions
+      the timer management API functions should now be privileged over the "eventLoop" callback which is too intensive for standard use
 
 SpadsUpdater.pm:
 ===============

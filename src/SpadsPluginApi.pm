@@ -19,9 +19,9 @@
 package SpadsPluginApi;
 
 use Exporter 'import';
-@EXPORT=qw/$spadsVersion $spadsDir getLobbyState getSpringPid getSpringServerType getTimestamps getRunningBattle getCurrentVote getPlugin addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives/;
+@EXPORT=qw/$spadsVersion $spadsDir getLobbyState getSpringPid getSpringServerType getTimestamps getRunningBattle getCurrentVote getPlugin addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess forkCall addTimer removeTimer addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives/;
 
-my $apiVersion='0.20';
+my $apiVersion='0.21';
 
 our $spadsVersion=$::spadsVer;
 our $spadsDir=$::cwd;
@@ -151,6 +151,28 @@ sub forkProcess {
   my $childPid = SimpleEvent::forkProcess($p_processFunction, sub { &{$p_endCallback}($_[1],$_[2],$_[3],$_[0]) },$preventQueuing);
   ::slog('Failed to fork process for plugin '.caller().' !',1) if($childPid == 0);
   return $childPid;
+}
+
+sub forkCall {
+  my $childPid = SimpleEvent::forkCall(@_);
+  ::slog('Failed to fork process for function call by plugin '.caller().' !',1) if($childPid == 0);
+  return $childPid;
+}
+
+################################
+# Timers management
+################################
+
+sub addTimer {
+  my ($name,$delay,$interval,$p_callback)=@_;
+  $name=caller().'::'.$name;
+  return SimpleEvent::addTimer($name,$delay,$interval,$p_callback);
+}
+
+sub removeTimer {
+  my $name=shift;
+  $name=caller().'::'.$name;
+  return SimpleEvent::removeTimer($name);
 }
 
 ################################
@@ -745,18 +767,18 @@ status information updated or added by the plugin.
 =head2 Event loop callback
 
 SPADS uses the asynchronous programming paradigm, so it is based on a main event
-loop. The following callback is called during each iteration of this event loop,
-to allow plugins to use same paradigm or simply manage time events:
+loop. The following callback is called during each iteration of this event loop:
 
 =over 2
 
 =item C<eventLoop()>
 
-The plugins must manage all their time related operations (timeouts, scheduled
-actions...) in this callback. This is also the place to check for results of
-asynchronous calls, or to serialize regularly persistent data to avoid losing
-them in case of crash for example. This callback shouldn't be blocking,
-otherwise SPADS may become unstable.
+Warning: this callback is called very frequently (during each iteration of SPADS
+main event loop), so performing complex operations here can be very intensive on
+the CPU. It is recommended to use timers (C<addTimer>/C<removeTimer> functions)
+instead for all time related operations (timeouts, scheduled actions, regular
+serialization of persistent data to avoid data loss...). This callback shouldn't
+be blocking, otherwise SPADS may become unstable.
 
 =back
 
@@ -1024,8 +1046,8 @@ C<$level> is the log level of the message: C<0> (critical), C<1> (error), C<2>
 =item C<forkProcess(\&processFunction,\&endProcessCallback,$preventQueuing=1)>
 
 This function allows plugins to fork a process from main SPADS process, for
-parallel processing. It returns the PID of the forked process on success, or 0
-if the child process couldn't be forked.
+parallel processing. It returns the PID of the forked process on success, C<-1>
+if the fork request has been queued, or C<0> if the fork request failed.
 
 C<\&processFunction> is a reference to a function containing the code to be
 executed in the forked process (no parameter is passed to this function). This
@@ -1033,7 +1055,7 @@ function can call C<exit> to end the forked process with a specific exit code.
 If it returns without calling exit, then the exit code C<0> will be used.
 
 C<\&endProcessCallback> is a reference to a function containing the code to be
-executed in SPADS main process, once the forked process exited. Following
+executed in main SPADS process, once the forked process exited. Following
 parameters are passed to this function: C<$exitCode> (exit code of the forked
 process), C<$signalNb> (signal number responsible for forked process termination
 if any), C<$hasCoreDump> (boolean flag indicating if a core dump occured in the
@@ -1042,6 +1064,62 @@ forked process), C<$pid> (PID of the forked process that just exited).
 C<$preventQueuing> is an optional boolean parameter (default value: 1)
 indicating if the fork request must not be queued (i.e., the fork request will
 fail instead of being queued if too many forked processes are already running)
+
+=item C<forkCall(\&processFunction,\&endProcessCallback,$preventQueuing=0)>
+
+This function allows plugins to call a function asynchronously and retrieve the
+data returned by this function (this is done internally by forking a process to
+execute the function and use a socketpair to transmit the result back to the
+parent process). It returns the PID of the forked process on success, C<-1> if
+the fork request has been queued, or C<0> on error.
+
+C<\&processFunction> is a reference to a function containing the code to be
+executed in the forked process (no parameter is passed to this function). This
+function must not call C<exit>, it should use C<return> instead to return
+values (scalars, arrays, hashes...) that will be passed to the callback.
+
+C<\&endProcessCallback> is a reference to a function containing the code to be
+executed in main SPADS process, once the forked function call
+(C<\&processFunction>) returned. The values returned by the forked function call
+will be passed as parameters to this callback.
+
+C<$preventQueuing> is an optional boolean parameter (default value: 0)
+indicating if the fork request must not be queued (i.e., the fork request will
+fail instead of being queued if too many forked processes are already running)
+
+=back
+
+=head2 Timers management
+
+=over 2
+
+=item C<addTimer($name,$delay,$interval,\&callback)>
+
+This function allows plugins to add timed events (timers) in order to delay
+and/or repeat code execution. It returns C<1> if the timer has correctly been
+added, C<0> else.
+
+C<$name> is a unique name given by the plugin for this timer.
+
+C<$delay> is the delay in seconds before executing the C<\&callback> function.
+
+C<$interval> is the interval in seconds between each execution of the
+C<\&callback> function. If this value is set to 0, the C<\&callback> function
+will be executed only once.
+
+C<\&callback> is a reference to a function containing the code to be executed
+when the timed event occurs. This callback must not be blocking, otherwise SPADS
+may become unstable.
+
+=item C<removeTimer($name)>
+
+This function must be used by plugins to remove timed events (timers) added
+previously with the C<addTimer> function. It returns C<1> if the timer could be
+removed, C<0> else. Note: Non-repeating timers (i.e. having null interval value)
+are automatically removed once they are triggered. 
+
+C<$name> is the unique timer name given by the plugin when the timer was added
+using the C<addTimer> function.
 
 =back
 
@@ -1052,7 +1130,7 @@ fail instead of being queued if too many forked processes are already running)
 =item C<addSocket(\$socketObject,\&readCallback)>
 
 This function allows plugins to add sockets to SPADS asynchronous network
-system. It returns 1 if the socket has correctly been added, 0 else.
+system. It returns C<1> if the socket has correctly been added, C<0> else.
 
 C<\$socketObject> is a reference to a socket object created by the plugin
 
@@ -1065,7 +1143,7 @@ read data from the socket (C<sysread()> or C<recv()> for example).
 =item C<removeSocket(\$socketObject)>
 
 This function allows plugins to remove sockets from SPADS asynchronous network
-system. It returns 1 if the socket has correctly been removed, 0 else.
+system. It returns C<1> if the socket has correctly been removed, C<0> else.
 
 C<\$socketObject> is a reference to a socket object previously added by the
 plugin

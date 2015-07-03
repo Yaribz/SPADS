@@ -36,6 +36,7 @@
       <li><a href="#Time-utils">Time utils</a></li>
       <li><a href="#Data-formatting">Data formatting</a></li>
       <li><a href="#Forking-processes">Forking processes</a></li>
+      <li><a href="#Timers-management">Timers management</a></li>
       <li><a href="#Sockets-management">Sockets management</a></li>
     </ul>
   </li>
@@ -438,14 +439,14 @@
 
 <h2 id="Event-loop-callback">Event loop callback</h2>
 
-<p>SPADS uses the asynchronous programming paradigm, so it is based on a main event loop. The following callback is called during each iteration of this event loop, to allow plugins to use same paradigm or simply manage time events:</p>
+<p>SPADS uses the asynchronous programming paradigm, so it is based on a main event loop. The following callback is called during each iteration of this event loop:</p>
 
 <dl>
 
 <dt id="eventLoop"><code>eventLoop()</code></dt>
 <dd>
 
-<p>The plugins must manage all their time related operations (timeouts, scheduled actions...) in this callback. This is also the place to check for results of asynchronous calls, or to serialize regularly persistent data to avoid losing them in case of crash for example. This callback shouldn&#39;t be blocking, otherwise SPADS may become unstable.</p>
+<p>Warning: this callback is called very frequently (during each iteration of SPADS main event loop), so performing complex operations here can be very intensive on the CPU. It is recommended to use timers (<code>addTimer</code>/<code>removeTimer</code> functions) instead for all time related operations (timeouts, scheduled actions, regular serialization of persistent data to avoid data loss...). This callback shouldn&#39;t be blocking, otherwise SPADS may become unstable.</p>
 
 </dd>
 </dl>
@@ -738,13 +739,53 @@
 <dt id="forkProcess-processFunction-endProcessCallback-preventQueuing-1"><code>forkProcess(\&amp;processFunction,\&amp;endProcessCallback,$preventQueuing=1)</code></dt>
 <dd>
 
-<p>This function allows plugins to fork a process from main SPADS process, for parallel processing. It returns the PID of the forked process on success, or 0 if the child process couldn&#39;t be forked.</p>
+<p>This function allows plugins to fork a process from main SPADS process, for parallel processing. It returns the PID of the forked process on success, <code>-1</code> if the fork request has been queued, or <code>0</code> if the fork request failed.</p>
 
 <p><code>\&amp;processFunction</code> is a reference to a function containing the code to be executed in the forked process (no parameter is passed to this function). This function can call <code>exit</code> to end the forked process with a specific exit code. If it returns without calling exit, then the exit code <code>0</code> will be used.</p>
 
-<p><code>\&amp;endProcessCallback</code> is a reference to a function containing the code to be executed in SPADS main process, once the forked process exited. Following parameters are passed to this function: <code>$exitCode</code> (exit code of the forked process), <code>$signalNb</code> (signal number responsible for forked process termination if any), <code>$hasCoreDump</code> (boolean flag indicating if a core dump occured in the forked process), <code>$pid</code> (PID of the forked process that just exited).</p>
+<p><code>\&amp;endProcessCallback</code> is a reference to a function containing the code to be executed in main SPADS process, once the forked process exited. Following parameters are passed to this function: <code>$exitCode</code> (exit code of the forked process), <code>$signalNb</code> (signal number responsible for forked process termination if any), <code>$hasCoreDump</code> (boolean flag indicating if a core dump occured in the forked process), <code>$pid</code> (PID of the forked process that just exited).</p>
 
 <p><code>$preventQueuing</code> is an optional boolean parameter (default value: 1) indicating if the fork request must not be queued (i.e., the fork request will fail instead of being queued if too many forked processes are already running)</p>
+
+</dd>
+<dt id="forkCall-processFunction-endProcessCallback-preventQueuing-0"><code>forkCall(\&amp;processFunction,\&amp;endProcessCallback,$preventQueuing=0)</code></dt>
+<dd>
+
+<p>This function allows plugins to call a function asynchronously and retrieve the data returned by this function (this is done internally by forking a process to execute the function and use a socketpair to transmit the result back to the parent process). It returns the PID of the forked process on success, <code>-1</code> if the fork request has been queued, or <code>0</code> on error.</p>
+
+<p><code>\&amp;processFunction</code> is a reference to a function containing the code to be executed in the forked process (no parameter is passed to this function). This function must not call <code>exit</code>, it should use <code>return</code> instead to return values (scalars, arrays, hashes...) that will be passed to the callback.</p>
+
+<p><code>\&amp;endProcessCallback</code> is a reference to a function containing the code to be executed in main SPADS process, once the forked function call (<code>\&amp;processFunction</code>) returned. The values returned by the forked function call will be passed as parameters to this callback.</p>
+
+<p><code>$preventQueuing</code> is an optional boolean parameter (default value: 0) indicating if the fork request must not be queued (i.e., the fork request will fail instead of being queued if too many forked processes are already running)</p>
+
+</dd>
+</dl>
+
+<h2 id="Timers-management">Timers management</h2>
+
+<dl>
+
+<dt id="addTimer-name-delay-interval-callback"><code>addTimer($name,$delay,$interval,\&amp;callback)</code></dt>
+<dd>
+
+<p>This function allows plugins to add timed events (timers) in order to delay and/or repeat code execution. It returns <code>1</code> if the timer has correctly been added, <code>0</code> else.</p>
+
+<p><code>$name</code> is a unique name given by the plugin for this timer.</p>
+
+<p><code>$delay</code> is the delay in seconds before executing the <code>\&amp;callback</code> function.</p>
+
+<p><code>$interval</code> is the interval in seconds between each execution of the <code>\&amp;callback</code> function. If this value is set to 0, the <code>\&amp;callback</code> function will be executed only once.</p>
+
+<p><code>\&amp;callback</code> is a reference to a function containing the code to be executed when the timed event occurs. This callback must not be blocking, otherwise SPADS may become unstable.</p>
+
+</dd>
+<dt id="removeTimer-name"><code>removeTimer($name)</code></dt>
+<dd>
+
+<p>This function must be used by plugins to remove timed events (timers) added previously with the <code>addTimer</code> function. It returns <code>1</code> if the timer could be removed, <code>0</code> else. Note: Non-repeating timers (i.e. having null interval value) are automatically removed once they are triggered.</p>
+
+<p><code>$name</code> is the unique timer name given by the plugin when the timer was added using the <code>addTimer</code> function.</p>
 
 </dd>
 </dl>
@@ -756,7 +797,7 @@
 <dt id="addSocket-socketObject-readCallback"><code>addSocket(\$socketObject,\&amp;readCallback)</code></dt>
 <dd>
 
-<p>This function allows plugins to add sockets to SPADS asynchronous network system. It returns 1 if the socket has correctly been added, 0 else.</p>
+<p>This function allows plugins to add sockets to SPADS asynchronous network system. It returns <code>1</code> if the socket has correctly been added, <code>0</code> else.</p>
 
 <p><code>\$socketObject</code> is a reference to a socket object created by the plugin</p>
 
@@ -766,7 +807,7 @@
 <dt id="removeSocket-socketObject"><code>removeSocket(\$socketObject)</code></dt>
 <dd>
 
-<p>This function allows plugins to remove sockets from SPADS asynchronous network system. It returns 1 if the socket has correctly been removed, 0 else.</p>
+<p>This function allows plugins to remove sockets from SPADS asynchronous network system. It returns <code>1</code> if the socket has correctly been removed, <code>0</code> else.</p>
 
 <p><code>\$socketObject</code> is a reference to a socket object previously added by the plugin</p>
 
