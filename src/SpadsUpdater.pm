@@ -20,21 +20,15 @@ package SpadsUpdater;
 
 use strict;
 
-use Fcntl qw(:DEFAULT :flock);
+use Fcntl qw':DEFAULT :flock';
 use File::Copy;
+use HTTP::Tiny;
+use IO::Uncompress::Unzip qw'unzip $UnzipError';
 use Time::HiRes;
 
-my $nullDevice="/dev/null";
 my $win=$^O eq 'MSWin32' ? 1 : 0;
-my $perlExecPrefix="./";
-if($win) {
-  $nullDevice="nul";
-  $perlExecPrefix="perl ";
-  eval "use IO::Uncompress::Unzip qw(unzip)";
-  $IO::Uncompress::Unzip::UnzipError='';
-}
 
-my $moduleVersion='0.8';
+my $moduleVersion='0.9';
 
 my @constructorParams = qw/sLog localDir repository release packages/;
 my @optionalConstructorParams = 'syncedSpringVersion';
@@ -114,7 +108,7 @@ sub isUpdateInProgress {
 }
 
 sub update {
-  my ($self,$verbose,$force)=@_;
+  my ($self,undef,$force)=@_;
   my $sl=$self->{sLog};
   my $lockFile="$self->{localDir}/SpadsUpdater.lock";
   my $lockFh;
@@ -127,18 +121,26 @@ sub update {
     close($lockFh);
     return -1;
   }
-  my $res=$self->updateUnlocked($verbose,$force);
+  my $res=$self->updateUnlocked($force);
   flock($lockFh, LOCK_UN);
   close($lockFh);
   return $res;
 }
 
+sub downloadFile {
+  my ($url,$file)=@_;
+  my $httpRes=HTTP::Tiny->new(timeout => 10)->mirror($url,$file);
+  if(! $httpRes->{success} || ! -f $file) {
+    unlink($file);
+    return 0;
+  }
+  return 2 if($httpRes->{status} == 304);
+  return 1;
+}
+
 sub updateUnlocked {
-  my ($self,$verbose,$force)=@_;
-  $verbose=0 unless(defined $verbose);
-  $force=0 unless(defined $force);
-  my $redirectString="";
-  $redirectString=" >$nullDevice 2>&1" unless($verbose);
+  my ($self,$force)=@_;
+  $force//=0;
   my $sl=$self->{sLog};
 
   my %currentPackages;
@@ -155,10 +157,8 @@ sub updateUnlocked {
   }
 
   my %allAvailablePackages;
-  system("wget -T 10 -t 2 $self->{repository}/packages.txt -O packages.txt$redirectString");
-  if($? || ! -f "packages.txt") {
+  if(! downloadFile("$self->{repository}/packages.txt",'packages.txt')) {
     $sl->log("Unable to download package list",1);
-    unlink("packages.txt");
     return -4;
   }
   if(open(PACKAGES,"<packages.txt")) {
@@ -209,7 +209,7 @@ sub updateUnlocked {
             if($currentMajor ne $availableMajor) {
               $sl->log("Major version number of package $packageName has changed ($currentVersion -> $availableVersion), which means that it requires manual operations before update.",2);
               $sl->log("Please check the section concerning this update in the manual update help: http://planetspads.free.fr/spads/repository/UPDATE",2);
-              $sl->log("Then force package update with \"${perlExecPrefix}update.pl $self->{release} -f $packageName\" (or \"${perlExecPrefix}update.pl $self->{release} -f -a\" to force update of all SPADS packages).",2);
+              $sl->log("Then force package update with \"perl update.pl $self->{release} -f $packageName\" (or \"perl update.pl $self->{release} -f -a\" to force update of all SPADS packages).",2);
               return -7;
             }
           }
@@ -219,24 +219,20 @@ sub updateUnlocked {
       $updateMsg.=" from \"$currentVersion\"" unless($currentVersion eq "_UNKNOWN_");
       $sl->log("$updateMsg to \"$availableVersion\"",4);
       if($availablePackages{$packageName} =~ /\.zip$/) {
-        system("wget -T 10 -t 2 $self->{repository}/$availableVersion.zip -O \"$self->{localDir}/$availableVersion.zip\"$redirectString");
-        if($? || ! -f "$self->{localDir}/$availableVersion.zip") {
+        if(! downloadFile("$self->{repository}/$availableVersion.zip","$self->{localDir}/$availableVersion.zip")) {
           $sl->log("Unable to download package \"$availableVersion.zip\"",1);
-          unlink("$self->{localDir}/$availableVersion.zip");
           return -8;
         }
         if(! unzip("$self->{localDir}/$availableVersion.zip","$self->{localDir}/$availableVersion",{BinModeOut=>1})) {
-          $sl->log("Unable to unzip package \"$availableVersion.zip\" ($IO::Uncompress::Unzip::UnzipError)",1);
+          $sl->log("Unable to unzip package \"$availableVersion.zip\" (".($UnzipError//'unknown error').')',1);
           unlink("$self->{localDir}/$availableVersion.zip");
           return -9;
         }
         unlink("$self->{localDir}/$availableVersion.zip");
         $availablePackages{$packageName}=$availableVersion;
       }else{
-        system("wget -T 10 -t 2 $self->{repository}/$availableVersion -O \"$self->{localDir}/$availableVersion.tmp\"$redirectString");
-        if($? || ! -f "$self->{localDir}/$availableVersion.tmp") {
+        if(! downloadFile("$self->{repository}/$availableVersion","$self->{localDir}/$availableVersion.tmp")) {
           $sl->log("Unable to download package \"$availableVersion\"",1);
-          unlink("$self->{localDir}/$availableVersion.tmp");
           return -8;
         }
         if(! move("$self->{localDir}/$availableVersion.tmp","$self->{localDir}/$availableVersion")) {
@@ -245,7 +241,8 @@ sub updateUnlocked {
           return -9;
         }
       }
-      chmod(0755,"$self->{localDir}/$availableVersion") if($availableVersion =~ /\.pl$/ || $availableVersion =~ /\.py$/);
+      chmod(0755,"$self->{localDir}/$availableVersion") if($availableVersion =~ /\.(pl|py)$/);
+      utime(undef,undef,"$self->{localDir}/$availableVersion") if($availableVersion =~ /\.(exe|dll)$/);
       push(@updatedPackages,$packageName);
     }
   }

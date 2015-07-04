@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.15a (2015/06/28)
+# Version 0.16 (2015/07/04)
 
 use strict;
 
@@ -27,6 +27,7 @@ use File::Basename 'fileparse';
 use File::Copy;
 use File::Path;
 use File::Spec;
+use HTTP::Tiny;
 use List::Util 'first';
 
 use SimpleLog;
@@ -43,7 +44,6 @@ my @packagesWinServer=qw'spring-dedicated.exe spring-headless.exe';
 
 my $win=$^O eq 'MSWin32';
 my $isInteractive=-t STDIN;
-my $nullDevice=File::Spec->devnull();
 my $currentStep=1;
 my ($nbSteps,$pathSep,$perlUnitsyncLibName)=$win?(12,';','PerlUnitSync.dll'):(14,':','PerlUnitSync.so');
 my @pathes=splitPaths($ENV{PATH});
@@ -78,11 +78,10 @@ if(@ARGV) {
   }
 }
 
-my %prereqFound=(swig => 0, 'g++' => 0, wget => 0);
+my %prereqFound=(swig => 0, 'g++' => 0);
 foreach my $prereq (keys %prereqFound) {
   $prereqFound{$prereq}=1 if(any {-f "$_/$prereq".($win?'.exe':'')} @pathes);
 }
-fatalError("Couldn't find wget, please install wget before installing SPADS") unless($prereqFound{wget});
 if(! $win || (exists $conf{release} && $conf{release} eq '-g')) {
   fatalError("Couldn't find Swig, please install Swig for Perl Unitsync interface module generation") unless($prereqFound{swig});
   fatalError("Couldn't find g++, please install g++ for Perl Unitsync interface module generation") unless($prereqFound{'g++'});
@@ -189,12 +188,13 @@ sub createDir {
 
 sub downloadFile {
   my ($url,$file)=@_;
-  system("wget -T 10 -t 2 $url -O \"$file\" >$nullDevice 2>&1");
-  if($? || ! -f $file) {
+  my $httpRes=HTTP::Tiny->new(timeout => 10)->mirror($url,$file);
+  if(! $httpRes->{success} || ! -f $file) {
     $sLog->log("Unable to download $file from $url",1);
     unlink($file);
     return 0;
   }
+  return 2 if($httpRes->{status} == 304);
   return 1;
 }
 

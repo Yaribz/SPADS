@@ -2,14 +2,15 @@ package DownloadArchives;
 
 use strict;
 
-use File::Spec;
+use File::Spec::Functions 'catfile';
+use HTTP::Tiny;
 use List::Util 'first';
 
 use SpadsPluginApi;
 
 no warnings 'redefine';
 
-my $pluginVersion='0.2';
+my $pluginVersion='0.3';
 my $requiredSpadsVersion='0.11.4';
 
 my %globalPluginParams = ( commandsFile => ['notNull'],
@@ -88,15 +89,72 @@ sub getWritableDataSubDir {
   return $dir;
 }
 
+sub getFileNameFromUrl {
+  return $1 if(shift =~ /[^\/]\/([^\/\\]+)\/?$/);
+  return undef;
+}
+
+sub getRecommendedFileName {
+  my @contentDispositionValues=split(/;/,shift//'');
+  foreach my $contentDispositionValue (@contentDispositionValues) {
+    return $1 if($contentDispositionValue =~ /^\s*filename\s*=\s*"?(.+)"?\s*$/i);
+  }
+  return undef;
+}
+
+sub generateRandomFileChars {
+  my $length=shift;
+  my @fileChars=split('','abcdefghijklmnopqrstuvwxyz1234567890');
+  my $randomFileChars='';
+  for (1..$length) {
+    $randomFileChars.=$fileChars[int(rand($#fileChars+1))];
+  }
+  return $randomFileChars;
+}
+
 sub downloadFileForked {
   my ($self,$url,$dlDir)=@_;
-  if(! chdir($dlDir)) {
-    slog("Unable to go into \"$dlDir\" directory, cancelling download!",2);
+  my $defaultFileName=getFileNameFromUrl($url);
+  if($url !~ /^http:\/\//i || ! defined $defaultFileName) {
+    slog("Invalid URL \"$url\", cancelling download!",2);
+    exit 1;
+  }
+  srand();
+  my $tmpFile=catfile($dlDir,"$defaultFileName.".generateRandomFileChars(6).'.tmp');
+  require Fcntl;
+  my $fh;
+  if(! sysopen($fh,$tmpFile,Fcntl::O_CREAT()|Fcntl::O_EXCL()|Fcntl::O_WRONLY())) {
+    slog("Unable to create temporary file \"$tmpFile\" for download: $!",2);
     exit 2;
   }
-  my $nullDevice=File::Spec->devnull();
-  system("wget -T 10 -t 2 --content-disposition \"$url\" >$nullDevice 2>&1");
-  exit 1 if($?);
+  binmode $fh;
+  my $httpRes=HTTP::Tiny->new(timeout => 10)->request('GET',$url,{data_callback => sub { print {$fh} $_[0] }});
+  if(! close($fh)) {
+    unlink($tmpFile);
+    slog("Error while closing temporary file \"$tmpFile\" for download: $!",2);
+    exit 3;
+  }
+  if($httpRes->{success}) {
+    my $fileName;
+    $fileName=getRecommendedFileName($httpRes->{headers}->{'content-disposition'})
+        if(exists $httpRes->{headers} && exists $httpRes->{headers}->{'content-disposition'});
+    $fileName//=getFileNameFromUrl($httpRes->{url}) if(exists $httpRes->{url} && defined $httpRes->{url});
+    $fileName//=$defaultFileName;
+    $fileName=catfile($dlDir,$fileName);
+    if(! rename($tmpFile,$fileName)) {
+      unlink($tmpFile);
+      slog("Error while replacing file \"$fileName\" with downloaded one: $!",2);
+      exit 4;
+    }
+  }else{
+    unlink($tmpFile);
+    my @reasonStrings;
+    push(@reasonStrings,$httpRes->{status}) if(exists $httpRes->{status} && defined $httpRes->{status});
+    push(@reasonStrings,$httpRes->{reason}) if(exists $httpRes->{reason} && defined $httpRes->{reason});
+    my $reasonString=@reasonStrings?join(' - ',@reasonStrings):'unknown error';
+    slog("Error while downloading file from \"$url\" ($reasonString)",2);
+    exit 5;
+  }
   exit 0;
 }
 

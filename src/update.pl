@@ -18,16 +18,14 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.9 (2015/06/28)
+# Version 0.10 (2015/07/04)
 
 use strict;
 
 use SimpleLog;
 use SpadsUpdater;
 
-my $perlExecPrefix="";
 my $win=$^O eq 'MSWin32' ? 1 : 0;
-$perlExecPrefix="perl " if($win);
 
 my $sLog=SimpleLog->new(logFiles => [""],
                         logLevels => [4],
@@ -38,20 +36,19 @@ my $sLog=SimpleLog->new(logFiles => [""],
 sub invalidUsage {
   $sLog->log("Invalid usage",1);
   print "Usage:\n";
-  print "  $perlExecPrefix$0 <release> [-v] [-f] -a\n";
+  print "  perl $0 <release> [-f] -a\n";
   if($win) {
-    print "  $perlExecPrefix$0 <release> [-v] [-f] -u\n";
-    print "  $perlExecPrefix$0 <release> <springVersion> [-v] -s\n";
-    print "  $perlExecPrefix$0 <release> <springVersion> [-v] [-f] -A\n";
+    print "  perl $0 <release> [-f] -u\n";
+    print "  perl $0 <release> <springVersion> -s\n";
+    print "  perl $0 <release> <springVersion> [-f] -A\n";
   }
   if($win) {
-    print "  $perlExecPrefix$0 <release> [<springVersion>] [-v] [-f] <packageName> [<packageName2> [<packageName3> ...]]\n";
+    print "  perl $0 <release> [<springVersion>] [-f] <packageName> [<packageName2> [<packageName3> ...]]\n";
   }else{
-    print "  $perlExecPrefix$0 <release> [-v] [-f] <packageName> [<packageName2> [<packageName3> ...]]\n";
+    print "  perl $0 <release> [-f] <packageName> [<packageName2> [<packageName3> ...]]\n";
   }
   print "      <release>: release to update (\"stable\", \"testing\", \"unstable\" or \"contrib\")\n";
   print "      <springVersion>: Major Spring version (integer, example: \"95\")\n" if($win);
-  print "      -v: verbose mode\n";
   print "      -f: force package update (even if it requires manual updates of configuration files)\n";
   print "      -a: updates all SPADS packages\n";
   if($win) {
@@ -67,11 +64,9 @@ invalidUsage() if($#ARGV < 1 || ! grep {/^$ARGV[0]$/} qw/stable testing unstable
 my $release=$ARGV[0];
 
 my %packages;
-my ($verbose,$force,$syncedSpringVersion)=(0,0,'UNKNOWN');
+my ($force,$syncedSpringVersion)=(0,'UNKNOWN');
 for my $argNb (1..$#ARGV) {
-  if($ARGV[$argNb] eq "-v") {
-    $verbose=1;
-  }elsif($ARGV[$argNb] eq "-f") {
+  if($ARGV[$argNb] eq "-f") {
     $force=1;
   }elsif($ARGV[$argNb] eq "-a") {
     %packages=('getDefaultModOptions.pl' => 1,
@@ -151,7 +146,7 @@ my $updater=SpadsUpdater->new(sLog => $updaterLog,
                               packages => \@packs,
                               syncedSpringVersion => $syncedSpringVersion);
 
-my $updaterRc=$updater->update($verbose,$force);
+my $updaterRc=$updater->update(0,$force);
 if($updaterRc < 0) {
   $sLog->log("Unable to update package(s)",1);
   exit 1;
