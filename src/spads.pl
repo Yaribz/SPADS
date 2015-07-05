@@ -21,6 +21,7 @@
 
 use strict;
 
+use Config;
 use Cwd;
 use Digest::MD5 'md5_base64';
 use Fcntl qw':DEFAULT :flock';
@@ -48,7 +49,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.11.35d';
+our $spadsVer='0.11.35e';
 
 my %optionTypes = (
   0 => "error",
@@ -10947,7 +10948,7 @@ sub hVersion {
   }
 
   sayPrivate($user,"$C{12}$conf{lobbyLogin}$C{1} is running ${B}$C{5}SPADS $C{10}v$spadsVer$B$C{1} ($autoUpdateString), with following components:");
-  my %versionedComponents=(Perl => $^V,
+  my %versionedComponents=(Perl => $^V."$C{1} ($Config{archname})",
                            Spring => 'v'.$syncedSpringVersion,
                            SimpleEvent => 'v'.SimpleEvent::getVersion());
   my %components = (SpringLobbyInterface => $lobby,
