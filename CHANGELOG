@@ -877,6 +877,8 @@ spadsInstaller.pl:
       new placeholder "%pluginsDir%" in configuration templates, to avoid "/" in pluginsDir setting on Windows
 0.15a: add SimpleEvent to the list of auto-updated modules
 0.16: replace wget by HTTP::Tiny
+0.17: add hardcoded Spring default data directories to secondary Spring data directory search paths
+      add "%program files%\Spring" in Spring installation search paths (Windows)
 
 SpadsPluginApi.pm:
 =================

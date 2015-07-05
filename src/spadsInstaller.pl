@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.16 (2015/07/04)
+# Version 0.17 (2015/07/05)
 
 use strict;
 
@@ -45,14 +45,17 @@ my @packagesWinServer=qw'spring-dedicated.exe spring-headless.exe';
 my $win=$^O eq 'MSWin32';
 my $isInteractive=-t STDIN;
 my $currentStep=1;
-my ($nbSteps,$pathSep,$perlUnitsyncLibName)=$win?(12,';','PerlUnitSync.dll'):(14,':','PerlUnitSync.so');
+my ($nbSteps,$pathSep,$perlUnitsyncLibName,$defaultUnitsyncDir)=$win?(12,';','PerlUnitSync.dll'):(14,':','PerlUnitSync.so','/lib');
 my @pathes=splitPaths($ENV{PATH});
 my %conf=(installDir => File::Spec->canonpath(cwd()));
 
 if($win) {
+  eval 'use Win32';
+  eval 'use Win32::API';
   $conf{updateBin}='yes';
   push(@pathes,cwd());
   push(@packages,@packagesWinUnitsync);
+  $defaultUnitsyncDir=File::Spec->catdir(Win32::GetFolderPath(Win32::CSIDL_PROGRAM_FILES()),'Spring');
 }else{
   $conf{updateBin}='no';
 }
@@ -139,7 +142,7 @@ sub promptExistingFile {
 }
 
 sub promptExistingDir {
-  my ($prompt,$default,$acceptEmpty)=@_;
+  my ($prompt,$default,$acceptSpecialValue)=@_;
   my $choice='';
   my $firstTry=1;
   while(! isAbsolutePath($choice) || ! -d $choice || index($choice,$pathSep) != -1) {
@@ -151,7 +154,7 @@ sub promptExistingDir {
     $choice//='';
     chomp($choice);
     $choice=$default if($choice eq '');
-    last if($choice eq '' && $acceptEmpty);
+    last if(defined $acceptSpecialValue && $choice eq $acceptSpecialValue);
   }
   return $choice;
 }
@@ -209,8 +212,8 @@ sub unlinkUnitsyncModuleFiles {
 my $unitsyncDir;
 sub generatePerlUnitSync {
   my $defaultUnitsync='';
-  my ($unitsyncLibName,@libPathes)=$win?('unitsync.dll',@pathes):('libunitsync.so',split(/:/,$ENV{LD_LIBRARY_PATH}//''),'/lib');
-  foreach my $libPath (@libPathes) {
+  my ($unitsyncLibName,@libPathes)=$win?('unitsync.dll',@pathes):('libunitsync.so',split(/:/,$ENV{LD_LIBRARY_PATH}//''));
+  foreach my $libPath (@libPathes,$defaultUnitsyncDir) {
     if(-f "$libPath/$unitsyncLibName") {
       $defaultUnitsync=File::Spec->catfile($libPath,$unitsyncLibName);
       last;
@@ -314,6 +317,12 @@ sub exportWin32EnvVar {
   fatalError("Unable to export environment variable definition \"$envVarDef\"") unless(_putenv($envVarDef) == 0);
 }
 
+sub areSamePaths {
+  my ($p1,$p2)=map {File::Spec->canonpath($_)} @_;
+  ($p1,$p2)=map {lc($_)} ($p1,$p2) if($win);
+  return $p1 eq $p2;
+}
+
 my @availableMods=();
 my $springVersion;
 sub checkUnitsync {
@@ -322,7 +331,11 @@ sub checkUnitsync {
     $defaultDataDir=$unitsyncDir;
   }else{
     my @potentialDataDirs=splitPaths($ENV{SPRING_DATADIR});
-    push(@potentialDataDirs,'/share/games/spring') unless($win);
+    if($win) {
+      push(@potentialDataDirs,$defaultUnitsyncDir);
+    }else{
+      push(@potentialDataDirs,'/share/games/spring');
+    }
     foreach my $potentialDataDir (@potentialDataDirs) {
       if(-d "$potentialDataDir/base") {
         $defaultDataDir=$potentialDataDir;
@@ -333,14 +346,34 @@ sub checkUnitsync {
   my $promptMsg=$win?'Please enter the Spring installation directory':'Please enter the absolute path of the main Spring data directory (containing Spring base content)';
   my $mainDataDir=promptExistingDir("$currentStep/$nbSteps - $promptMsg",$defaultDataDir);
   $currentStep++;
-  my $secondaryDataDir=promptExistingDir("$currentStep/$nbSteps - Please enter the absolute path of a secondary Spring data directory containing additional maps or mods (optional, press enter to skip)",'',1);
+  my $defaultSecondaryDataDir='none';
+  my @potentialDataDirs=splitPaths($ENV{SPRING_DATADIR});
+  if($win) {
+    my $win32PersonalDir=Win32::GetFolderPath(Win32::CSIDL_PERSONAL());
+    my $win32CommonAppDataDir=Win32::GetFolderPath(Win32::CSIDL_COMMON_APPDATA());
+    push(@potentialDataDirs,
+         File::Spec->catdir($win32PersonalDir,'My Games','Spring'),
+         File::Spec->catdir($win32PersonalDir,'Spring'),
+         File::Spec->catdir($win32CommonAppDataDir,'Spring'));
+  }else{
+    push(@potentialDataDirs,File::Spec->catdir($ENV{HOME},'.spring'),File::Spec->catdir($ENV{HOME},'.config','spring')) if(defined $ENV{HOME});
+    push(@potentialDataDirs,File::Spec->catdir($ENV{XDG_CONFIG_HOME},'spring')) if(defined $ENV{XDG_CONFIG_HOME});
+  }
+  foreach my $potentialDataDir (@potentialDataDirs) {
+    if((! areSamePaths($potentialDataDir,$mainDataDir))
+       && (! -d "$potentialDataDir/base")
+       && (any {-d "$potentialDataDir/$_"} (qw'games maps packages'))) {
+      $defaultSecondaryDataDir=$potentialDataDir;
+      last;
+    }
+  }
+  my $secondaryDataDir=promptExistingDir("$currentStep/$nbSteps - Please enter the absolute path of a secondary Spring data directory containing additional maps or mods (optional, ".($defaultSecondaryDataDir eq 'none' ? 'press enter' : 'enter "none"').' to skip)',$defaultSecondaryDataDir,'none');
   $currentStep++;
   $conf{dataDir}=$mainDataDir;
-  $conf{dataDir}.="$pathSep$secondaryDataDir" if($secondaryDataDir ne '');
+  $conf{dataDir}.="$pathSep$secondaryDataDir" unless($secondaryDataDir eq 'none');
   $ENV{SPRING_DATADIR}=$conf{dataDir};
   $ENV{SPRING_WRITEDIR}=$mainDataDir;
   if($win) {
-    eval 'use Win32::API';
     fatalError('Unable to import _putenv from msvcrt.dll ('.Win32::FormatMessage(Win32::GetLastError()).')')
         unless(Win32::API->Import('msvcrt', 'int __cdecl _putenv (char* envstring)'));
     exportWin32EnvVar('SPRING_DATADIR');
@@ -457,7 +490,7 @@ if($updaterRc > 0) {
 $sLog->log('SPADS components are up to date, proceeding with installation...',3);
 if(! $win) {
   if(-f 'PerlUnitSync.pm' && -f 'PerlUnitSync.so') {
-    $sLog->log('Perl Unitsync interface module already exists, skipping generation (use "-g" flag to force re-generation)',3);
+    $sLog->log('Perl Unitsync interface module already exists, skipping generation (use "-g" flag to force generation)',3);
     $currentStep++;
   }else {
     generatePerlUnitSync();
