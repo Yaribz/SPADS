@@ -943,6 +943,10 @@ SpadsUpdater.pm:
 0.8: a lock file is now used to prevent race conditions instead of a basic flag file
 0.9: replace wget by HTTP::Tiny
      use IO::Uncompress::Unzip module on Linux too
+0.10: add automatic Spring installation for autohost functionality
+      use persistent HTTP::Tiny object instead of creating a new one for each download
+      automatically add execution permission on downloaded files which have no extension (no '.' in name)
+      add debug logs
 
 update.pl:
 =========
