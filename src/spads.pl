@@ -49,7 +49,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.11.35e';
+our $spadsVer='0.11.35f';
 
 my %optionTypes = (
   0 => "error",
@@ -10342,8 +10342,10 @@ sub hStatus {
                 }else{
                   $skill="$C{13}?$battleSkills{$player}->{skill}?$C{1}";
                 }
+              }elsif($player eq $conf{lobbyLogin}) {
+                $skill='';
               }else{
-                slog("Undefined skill for player $player, using lobby rank instead in status command output!",1) unless($player eq $conf{lobbyLogin});
+                slog("Undefined skill for player $player, using lobby rank instead in status command output!",1);
               }
               $clientStatus{Rank}=$rank;
               $clientStatus{Skill}=$skill;
@@ -10429,8 +10431,10 @@ sub hStatus {
           }else{
             $skill="$C{13}?$battleSkills{$spec}->{skill}?$C{1}";
           }
+        }elsif($spec eq $conf{lobbyLogin}) {
+          $skill='';
         }else{
-          slog("Undefined skill for spectator $spec, using lobby rank instead in status command output!",1) unless($spec eq $conf{lobbyLogin});
+          slog("Undefined skill for spectator $spec, using lobby rank instead in status command output!",1);
         }
         $clientStatus{Rank}=$rank;
         $clientStatus{Skill}=$skill;

@@ -702,6 +702,7 @@ spads.pl:
 0.11.35c: fix players readied through LUA not detected as ready by SPADS
 0.11.35d: minor fix in !version output for AnyEvent module
 0.11.35e: show more detailed info for perl in !version output
+0.11.35f: hide meaningless autohost account skill value in !status output when using headless server
 
 SpadsConf.pm:
 ============
