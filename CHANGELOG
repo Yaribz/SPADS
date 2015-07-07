@@ -949,6 +949,7 @@ SpadsUpdater.pm:
       use persistent HTTP::Tiny object instead of creating a new one for each download
       automatically add execution permission on downloaded files which have no extension (no '.' in name)
       add debug logs
+0.10a: fix execution permission on downloaded files which have no extension
 
 update.pl:
 =========

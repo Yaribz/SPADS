@@ -38,7 +38,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $archName=$win?'win32':($Config{ptrsize} > 4 ? 'linux64' : 'linux32');
 
-my $moduleVersion='0.10';
+my $moduleVersion='0.10a';
 
 my @constructorParams = qw'sLog localDir repository release packages';
 my @optionalConstructorParams = qw'syncedSpringVersion springDir';
@@ -399,7 +399,7 @@ sub updateUnlocked {
           return -9;
         }
       }
-      chmod(0755,"$self->{localDir}/$availableVersion") if($availableVersion =~ /\.(pl|py)$/ || index($availableVersion,'.') == -1);
+      chmod(0755,"$self->{localDir}/$availableVersion") if($availableVersion =~ /\.(pl|py)$/ || index($packageName,'.') == -1);
       utime(undef,undef,"$self->{localDir}/$availableVersion") if($availableVersion =~ /\.(exe|dll)$/);
       push(@updatedPackages,$packageName);
     }
