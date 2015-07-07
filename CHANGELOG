@@ -703,6 +703,7 @@ spads.pl:
 0.11.35d: minor fix in !version output for AnyEvent module
 0.11.35e: show more detailed info for perl in !version output
 0.11.35f: hide meaningless autohost account skill value in !status output when using headless server
+0.11.35g: add 7zip binary to the list of packages
 
 SpadsConf.pm:
 ============
@@ -880,6 +881,7 @@ spadsInstaller.pl:
 0.16: replace wget by HTTP::Tiny
 0.17: add hardcoded Spring default data directories to secondary Spring data directory search paths
       add "%program files%\Spring" in Spring installation search paths (Windows)
+0.17a: add 7zip binary to the list of packages
 
 SpadsPluginApi.pm:
 =================
@@ -967,3 +969,4 @@ update.pl:
 0.8b: timestamps are automatically enabled and colors automatically disabled in STDOUT messages if output is redirected to a file
 0.9: add SimpleEvent to the list of auto-updated modules
 0.10: remove verbose mode
+0.10a: add 7zip binary to the list of packages

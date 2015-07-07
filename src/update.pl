@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.10 (2015/07/04)
+# Version 0.10a (2015/07/07)
 
 use strict;
 
@@ -83,7 +83,8 @@ for my $argNb (1..$#ARGV) {
                'SpadsUpdater.pm' => 1,
                'update.pl' => 1,
                'argparse.py' => 1,
-               'replay_upload.py' => 1);
+               'replay_upload.py' => 1,
+               ($win?'7za.exe':'7za') => 1);
   }elsif($ARGV[$argNb] eq "-u") {
     if(! $win) {
       $sLog->log("The \"-u\" option is only available on Windows",1);
@@ -121,7 +122,8 @@ for my $argNb (1..$#ARGV) {
                'PerlUnitSync.pm' => 1,
                'PerlUnitSync.dll' => 1,
                'spring-dedicated.exe' => 1,
-               'spring-headless.exe' => 1);
+               'spring-headless.exe' => 1,
+               ($win?'7za.exe':'7za') => 1);
   }elsif($ARGV[$argNb] =~ /^\d+$/) {
     $syncedSpringVersion=$ARGV[$argNb];
   }else{

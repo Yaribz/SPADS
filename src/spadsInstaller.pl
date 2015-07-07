@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.17 (2015/07/05)
+# Version 0.17a (2015/07/07)
 
 use strict;
 
@@ -38,11 +38,12 @@ sub all (&@) { my $c = shift; return ! defined first {! &$c} @_; }
 sub none (&@) { my $c = shift; return ! defined first {&$c} @_; }
 sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 
-my @packages=qw'getDefaultModOptions.pl help.dat helpSettings.dat SpringAutoHostInterface.pm SpringLobbyInterface.pm SimpleEvent.pm SimpleLog.pm spads.pl SpadsConf.pm spadsInstaller.pl SpadsUpdater.pm SpadsPluginApi.pm update.pl argparse.py replay_upload.py';
+my $win=$^O eq 'MSWin32';
+
+my @packages=(qw'getDefaultModOptions.pl help.dat helpSettings.dat SpringAutoHostInterface.pm SpringLobbyInterface.pm SimpleEvent.pm SimpleLog.pm spads.pl SpadsConf.pm spadsInstaller.pl SpadsUpdater.pm SpadsPluginApi.pm update.pl argparse.py replay_upload.py',$win?'7za.exe':'7za');
 my @packagesWinUnitsync=qw'PerlUnitSync.pm PerlUnitSync.dll';
 my @packagesWinServer=qw'spring-dedicated.exe spring-headless.exe';
 
-my $win=$^O eq 'MSWin32';
 my $isInteractive=-t STDIN;
 my $currentStep=1;
 my ($nbSteps,$pathSep,$perlUnitsyncLibName,$defaultUnitsyncDir)=$win?(12,';','PerlUnitSync.dll'):(14,':','PerlUnitSync.so','/lib');

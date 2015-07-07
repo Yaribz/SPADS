@@ -71,6 +71,8 @@ spring-headless.exe;99:spring-headless-99.0.exe.zip
 update.pl:update_0.9.pl
 
 [unstable]
+7za:7za-9.20
+7za.exe:7za-9.20.exe
 argparse.py:argparse-1.2.1.py
 getDefaultModOptions.pl:getDefaultModOptions_0.4d.pl
 help.dat:help_0.12.3.dat
@@ -85,9 +87,9 @@ PerlUnitSync.pm:PerlUnitSync-91.0.pm
 replay_upload.py:replay_upload_0.5.py
 SimpleEvent.pm:SimpleEvent_0.1b.pm
 SimpleLog.pm:SimpleLog_0.6.pm
-spads.pl:spads_0.11.35f.pl
+spads.pl:spads_0.11.35g.pl
 SpadsConf.pm:SpadsConf_0.11.10a.pm
-spadsInstaller.pl:spadsInstaller_0.17.pl
+spadsInstaller.pl:spadsInstaller_0.17a.pl
 SpadsPluginApi.pm:SpadsPluginApi_0.21.pm
 SpadsUpdater.pm:SpadsUpdater_0.10.pm
 SpringAutoHostInterface.pm:SpringAutoHostInterface_0.11.pm
@@ -104,9 +106,11 @@ spring-headless.exe;95:spring-headless-95.0.exe.zip
 spring-headless.exe;96:spring-headless-96.0.exe.zip
 spring-headless.exe;98:spring-headless-98.0.exe.zip
 spring-headless.exe;99:spring-headless-99.0.exe.zip
-update.pl:update_0.10.pl
+update.pl:update_0.10a.pl
 
 [contrib]
+7za:7za-9.20
+7za.exe:7za-9.20.exe
 argparse.py:argparse-1.2.1.py
 getDefaultModOptions.pl:getDefaultModOptions_0.4d.pl
 help.dat:help_0.12.3.dat
@@ -121,9 +125,9 @@ PerlUnitSync.pm:PerlUnitSync-91.0.pm
 replay_upload.py:replay_upload_0.5.py
 SimpleEvent.pm:SimpleEvent_0.1b.pm
 SimpleLog.pm:SimpleLog_0.6.pm
-spads.pl:spads_0.11.35f.pl
+spads.pl:spads_0.11.35g.pl
 SpadsConf.pm:SpadsConf_0.11.10a.pm
-spadsInstaller.pl:spadsInstaller_0.17.pl
+spadsInstaller.pl:spadsInstaller_0.17a.pl
 SpadsPluginApi.pm:SpadsPluginApi_0.21.pm
 SpadsUpdater.pm:SpadsUpdater_0.10.pm
 SpringAutoHostInterface.pm:SpringAutoHostInterface_0.11.pm
@@ -140,4 +144,4 @@ spring-headless.exe;95:spring-headless-95.0.exe.zip
 spring-headless.exe;96:spring-headless-96.0.exe.zip
 spring-headless.exe;98:spring-headless-98.0.exe.zip
 spring-headless.exe;99:spring-headless-99.0.exe.zip
-update.pl:update_0.10.pl
+update.pl:update_0.10a.pl
