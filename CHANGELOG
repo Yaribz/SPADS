@@ -704,6 +704,8 @@ spads.pl:
 0.11.35e: show more detailed info for perl in !version output
 0.11.35f: hide meaningless autohost account skill value in !status output when using headless server
 0.11.35g: add 7zip binary to the list of packages
+0.11.35h: sayChan function now accepts an undefined value as first argument, in this case it sends the message to the master channel
+          plugin mandatory functions existence and required SPADS version are now checked before loading the module to avoid inconsistent module load state
 
 SpadsConf.pm:
 ============

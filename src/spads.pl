@@ -49,7 +49,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.11.35g';
+our $spadsVer='0.11.35h';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 
@@ -2039,6 +2039,7 @@ sub sayBattleUser {
 
 sub sayChan {
   my ($chan,$msg)=@_;
+  $chan//=$masterChannel;
   return unless($lobbyState >= 4 && (exists $lobby->{channels}->{$chan}));
   my $p_messages=splitMsg($msg,$conf{maxChatMessageLength}-9-length($chan));
   foreach my $mes (@{$p_messages}) {
@@ -12863,6 +12864,22 @@ sub loadPlugin {
 sub loadPluginModule {
   my $pluginName=shift;
 
+  foreach my $mandatoryPluginFunction (qw'getVersion getRequiredSpadsVersion') {
+    my $hasMandatoryFunc;
+    eval "\$hasMandatoryFunc=$pluginName->can('$mandatoryPluginFunction')";
+    if(! $hasMandatoryFunc) {
+      slog("Unable to load plugin \"$pluginName\", mandatory plugin function missing: $mandatoryPluginFunction",1);
+      return 0;
+    }
+  }
+
+  my $requiredSpadsVersion;
+  eval "\$requiredSpadsVersion=$pluginName->getRequiredSpadsVersion()";
+  if(compareVersions($spadsVer,$requiredSpadsVersion) < 0) {
+    slog("Unable to load plugin \"$pluginName\", this plugin requires a SPADS version >= $requiredSpadsVersion, current is $spadsVer",1);
+    return 0;
+  }
+
   my $hasDependencies;
   eval "\$hasDependencies=$pluginName->can('getDependencies')";
 
@@ -12887,18 +12904,6 @@ sub loadPluginModule {
   }
   if(! defined $plugin) {
     slog("Unable to initialize plugin module \"$pluginName\"",1);
-    return 0;
-  }
-  my @mandatoryPluginFunctions=qw'getVersion getRequiredSpadsVersion';
-  foreach my $mandatoryPluginFunction (@mandatoryPluginFunctions) {
-    if(! $plugin->can($mandatoryPluginFunction)) {
-      slog("Unable to load plugin \"$pluginName\", mandatory plugin function missing: $mandatoryPluginFunction",1);
-      return 0;
-    }
-  }
-  my $requiredSpadsVersion=$plugin->getRequiredSpadsVersion();
-  if(compareVersions($spadsVer,$requiredSpadsVersion) < 0) {
-    slog("Unable to load plugin \"$pluginName\", this plugin requires a SPADS version >= $requiredSpadsVersion, current is $spadsVer",1);
     return 0;
   }
 
