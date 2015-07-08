@@ -91,7 +91,7 @@ spads.pl:spads_0.11.35h.pl
 SpadsConf.pm:SpadsConf_0.11.10a.pm
 spadsInstaller.pl:spadsInstaller_0.17a.pl
 SpadsPluginApi.pm:SpadsPluginApi_0.21.pm
-SpadsUpdater.pm:SpadsUpdater_0.10a.pm
+SpadsUpdater.pm:SpadsUpdater_0.11.pm
 SpringAutoHostInterface.pm:SpringAutoHostInterface_0.11.pm
 SpringLobbyInterface.pm:SpringLobbyInterface_0.21.pm
 spring-dedicated.exe;91:spring-dedicated-91.0.exe
@@ -129,7 +129,7 @@ spads.pl:spads_0.11.35h.pl
 SpadsConf.pm:SpadsConf_0.11.10a.pm
 spadsInstaller.pl:spadsInstaller_0.17a.pl
 SpadsPluginApi.pm:SpadsPluginApi_0.21.pm
-SpadsUpdater.pm:SpadsUpdater_0.10a.pm
+SpadsUpdater.pm:SpadsUpdater_0.11.pm
 SpringAutoHostInterface.pm:SpringAutoHostInterface_0.11.pm
 SpringLobbyInterface.pm:SpringLobbyInterface_0.21.pm
 spring-dedicated.exe;91:spring-dedicated-91.0.exe

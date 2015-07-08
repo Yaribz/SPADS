@@ -38,7 +38,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $archName=$win?'win32':($Config{ptrsize} > 4 ? 'linux64' : 'linux32');
 
-my $moduleVersion='0.10a';
+my $moduleVersion='0.11';
 
 my @constructorParams = qw'sLog localDir repository release packages';
 my @optionalConstructorParams = qw'syncedSpringVersion springDir';
@@ -78,14 +78,13 @@ sub new {
 
   $self->{repository}=~s/\/$//;
   $self->{syncedSpringVersion}='UNKNOWN' unless(exists $self->{syncedSpringVersion});
-  $self->{httpTiny}=HTTP::Tiny->new(timeout => 10);
   return $self;
 }
 
 sub resolveSpringReleaseNameToVersion {
   my ($self,$release)=@_;
   my $sl=$self->{sLog};
-  my $httpTiny=$self->{httpTiny};
+  my $httpTiny=HTTP::Tiny->new(timeout => 10);
   if($release eq 'stable') {
     my $httpRes=$httpTiny->request('GET',"$springVersionWikiTemplateUrl:Stable");
     if($httpRes->{success} && $httpRes->{content} =~ /id="mw-content-text".*>([^<>]+)\n/) {
@@ -134,7 +133,7 @@ sub getAvailableSpringVersions {
     return [];
   }
   my $branch=$springBranches{$type};
-  my $httpRes=$self->{httpTiny}->request('GET',"$springBuildbotUrl/$branch/");
+  my $httpRes=HTTP::Tiny->new(timeout => 10)->request('GET',"$springBuildbotUrl/$branch/");
   my @versions;
   @versions=$httpRes->{content} =~ /href="([^"]+)\/">\1\//g if($httpRes->{success});
   $sl->log("Unable to get available Spring versions for branch \"$branch\"",2) unless(@versions);
@@ -274,7 +273,20 @@ sub downloadFile {
   my ($self,$url,$file)=@_;
   my $sl=$self->{sLog};
   $sl->log("Downloading file from \"$url\" to \"$file\"...",5);
-  my $httpRes=$self->{httpTiny}->mirror($url,$file);
+  my $fh;
+  if(! open($fh,'>',$file)) {
+    $sl->log("Unable to write file \"$file\" for download: $!",1);
+    $_[3]=-1;
+    return 0;
+  }
+  binmode $fh;
+  my $httpRes=HTTP::Tiny->new(timeout => 10)->request('GET',$url,{data_callback => sub { print {$fh} $_[0] }});
+  if(! close($fh)) {
+    $sl->log("Error while closing file \"$file\" after download: $!",1);
+    unlink($file);
+    $_[3]=-2;
+    return 0;
+  }
   if(! $httpRes->{success} || ! -f $file) {
     $sl->log("Failed to download file from \"$url\" to \"$file\" (HTTP status: $httpRes->{status})",5);
     unlink($file);
@@ -282,7 +294,6 @@ sub downloadFile {
     return 0;
   }
   $sl->log("File downloaded from \"$url\" to \"$file\" (HTTP status: $httpRes->{status})",5);
-  return 2 if($httpRes->{status} == 304);
   return 1;
 }
 
@@ -377,7 +388,7 @@ sub updateUnlocked {
       $updateMsg.=" from \"$currentVersion\"" unless($currentVersion eq "_UNKNOWN_");
       $sl->log("$updateMsg to \"$availableVersion\"",4);
       if($availablePackages{$packageName} =~ /\.zip$/) {
-        if(! $self->downloadFile("$self->{repository}/$availableVersion.zip","$self->{localDir}/$availableVersion.zip")) {
+        if(! $self->downloadFile("$self->{repository}/$availableVersion.zip",catfile($self->{localDir},"$availableVersion.zip"))) {
           $sl->log("Unable to download package \"$availableVersion.zip\"",1);
           return -8;
         }
@@ -389,7 +400,7 @@ sub updateUnlocked {
         unlink("$self->{localDir}/$availableVersion.zip");
         $availablePackages{$packageName}=$availableVersion;
       }else{
-        if(! $self->downloadFile("$self->{repository}/$availableVersion","$self->{localDir}/$availableVersion.tmp")) {
+        if(! $self->downloadFile("$self->{repository}/$availableVersion",catfile($self->{localDir},"$availableVersion.tmp"))) {
           $sl->log("Unable to download package \"$availableVersion\"",1);
           return -8;
         }
@@ -400,7 +411,6 @@ sub updateUnlocked {
         }
       }
       chmod(0755,"$self->{localDir}/$availableVersion") if($availableVersion =~ /\.(pl|py)$/ || index($packageName,'.') == -1);
-      utime(undef,undef,"$self->{localDir}/$availableVersion") if($availableVersion =~ /\.(exe|dll)$/);
       push(@updatedPackages,$packageName);
     }
   }
@@ -470,8 +480,7 @@ sub checkSpringVersionAvailability {
   my $p_availableVersions = $self->getAvailableSpringVersions(_getSpringVersionType($version));
   return (0,'version unavailable for download') unless(any {$version eq $_} @{$p_availableVersions});
   my ($baseUrlRequired,undef,$requiredArchive)=_getSpringVersionDownloadInfo($version);
-  my $httpTiny=$self->{httpTiny};
-  my $httpRes=$httpTiny->request('GET',$baseUrlRequired);
+  my $httpRes=HTTP::Tiny->new(timeout => 10)->request('GET',$baseUrlRequired);
   if($httpRes->{success}) {
     return (1) if(index($httpRes->{content},">$requiredArchive<") != -1);
     return (-2,'archive not found');
