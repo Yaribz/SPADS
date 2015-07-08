@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.10a (2015/07/07)
+# Version 0.10b (2015/07/08)
 
 use strict;
 
@@ -38,7 +38,6 @@ sub invalidUsage {
   print "Usage:\n";
   print "  perl $0 <release> [-f] -a\n";
   if($win) {
-    print "  perl $0 <release> [-f] -u\n";
     print "  perl $0 <release> <springVersion> -s\n";
     print "  perl $0 <release> <springVersion> [-f] -A\n";
   }
@@ -52,9 +51,8 @@ sub invalidUsage {
   print "      -f: force package update (even if it requires manual updates of configuration files)\n";
   print "      -a: updates all SPADS packages\n";
   if($win) {
-    print "      -u: updates all Spring unitsync binaries\n";
-    print "      -s: updates all Spring dedicated server binaries\n";
-    print "      -A: updates all SPADS packages and Spring binaries\n";
+    print "      -s: updates all Spring server binaries\n";
+    print "      -A: updates all SPADS packages and Spring server binaries\n";
   }
   print "      <packageName>: package to update\n";
   exit 1;
@@ -85,13 +83,7 @@ for my $argNb (1..$#ARGV) {
                'argparse.py' => 1,
                'replay_upload.py' => 1,
                ($win?'7za.exe':'7za') => 1);
-  }elsif($ARGV[$argNb] eq "-u") {
-    if(! $win) {
-      $sLog->log("The \"-u\" option is only available on Windows",1);
-      invalidUsage();
-    }
-    %packages=('PerlUnitSync.pm' => 1,
-               'PerlUnitSync.dll' => 1);
+    $packages{'PerlUnitSync.pm'}=1 if($win);
   }elsif($ARGV[$argNb] eq "-s") {
     if(! $win) {
       $sLog->log("The \"-s\" option is only available on Windows",1);
@@ -119,11 +111,10 @@ for my $argNb (1..$#ARGV) {
                'update.pl' => 1,
                'argparse.py' => 1,
                'replay_upload.py' => 1,
+               '7za.exe' => 1,
                'PerlUnitSync.pm' => 1,
-               'PerlUnitSync.dll' => 1,
                'spring-dedicated.exe' => 1,
-               'spring-headless.exe' => 1,
-               ($win?'7za.exe':'7za') => 1);
+               'spring-headless.exe' => 1);
   }elsif($ARGV[$argNb] =~ /^\d+$/) {
     $syncedSpringVersion=$ARGV[$argNb];
   }else{

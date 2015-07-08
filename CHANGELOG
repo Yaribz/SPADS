@@ -137,6 +137,11 @@ helpSettings.dat:
        default kickBanDuration is 300 (5 minutes)
 0.5.5: it is now possible to specify multiple Spring data directories through the "springDataDir" global setting
        clarify useWin32Process documentation
+0.5.6: values "unitsync" and "server" for "autoUpdateBinaries" setting are now deprecated
+
+PerlUnitSync.pm:
+===============
+91.0a: first public version, based on Spring 91 unitsync API header file (Windows)
 
 spads.pl:
 ========
@@ -706,6 +711,9 @@ spads.pl:
 0.11.35g: add 7zip binary to the list of packages
 0.11.35h: sayChan function now accepts an undefined value as first argument, in this case it sends the message to the master channel
           plugin mandatory functions existence and required SPADS version are now checked before loading the module to avoid inconsistent module load state
+0.11.36: replace Swig with Win32::API for unitsync library interface, which should make SPADS compatible with Strawberry Perl (Windows)
+         remove the obsolete PerlUnitSync.dll library from the list of auto-updated binary packages (Windows)
+         fix binary update workaround on Windows trying to update obsolete packages and resulting in fatal errors (Windows)
 
 SpadsConf.pm:
 ============
@@ -884,6 +892,7 @@ spadsInstaller.pl:
 0.17: add hardcoded Spring default data directories to secondary Spring data directory search paths
       add "%program files%\Spring" in Spring installation search paths (Windows)
 0.17a: add 7zip binary to the list of packages
+0.17b: remove the obsolete PerlUnitSync.dll library from the list of auto-updated binary packages (Windows)
 
 SpadsPluginApi.pm:
 =================
@@ -922,6 +931,7 @@ SpadsPluginApi.pm:
       the "endProcessCallback" parameter provided in "forkProcess" API function calls now receives the PID of the exited process as 4th parameter
 0.21: add "forkCall", "addTimer" and "removeTimer" API functions
       the timer management API functions should now be privileged over the "eventLoop" callback which is too intensive for standard use
+0.21a: fix missing parameter in "sayChan" function documentation
 
 SpadsUpdater.pm:
 ===============
@@ -975,3 +985,5 @@ update.pl:
 0.9: add SimpleEvent to the list of auto-updated modules
 0.10: remove verbose mode
 0.10a: add 7zip binary to the list of packages
+0.10b: remove the obsolete PerlUnitSync.dll library from the list of auto-updated binary packages (Windows)
+       remove the -u switch which was used to update the Perl unitsync interface binaries

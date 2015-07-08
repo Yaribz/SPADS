@@ -21,7 +21,7 @@ package SpadsPluginApi;
 use Exporter 'import';
 @EXPORT=qw/$spadsVersion $spadsDir getLobbyState getSpringPid getSpringServerType getTimestamps getRunningBattle getCurrentVote getPlugin addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess forkCall addTimer removeTimer addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives/;
 
-my $apiVersion='0.21';
+my $apiVersion='0.21a';
 
 our $spadsVersion=$::spadsVer;
 our $spadsDir=$::cwd;
@@ -1005,7 +1005,7 @@ C<$level> is the log level of the message: C<0> (critical), C<1> (error), C<2>
 
 =item C<sayBattleUser($user,$message)>
 
-=item C<sayChan($message)>
+=item C<sayChan($channel,$message)>
 
 =item C<sayGame($message)>
 

@@ -49,7 +49,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.11.35h';
+our $spadsVer='0.11.36';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 
@@ -73,7 +73,7 @@ my @noIrcStyle=(\%noColor,'');
 my @readOnlySettings=qw'description commandsfile battlepreset hostingpreset welcomemsg welcomemsgingame maplink ghostmaplink preset battlename advertmsg endgamecommand endgamecommandenv endgamecommandmsg';
 
 my @packagesSpads=(qw'help.dat helpSettings.dat SpringAutoHostInterface.pm SpringLobbyInterface.pm SimpleEvent.pm SimpleLog.pm spads.pl SpadsConf.pm SpadsUpdater.pm SpadsPluginApi.pm argparse.py replay_upload.py',$win?'7za.exe':'7za');
-my @packagesWinUnitSync=qw'PerlUnitSync.pm PerlUnitSync.dll';
+push(@packagesSpads,'PerlUnitSync.pm') if($win);
 my @packagesWinServer=qw'spring-dedicated.exe spring-headless.exe';
 my ($lockFh,$pidFile,$lockAcquired);
 
@@ -393,8 +393,6 @@ our $autohost = SpringAutoHostInterface->new(autoHostPort => $conf{autoHostPort}
                                              warnForUnhandledMessages => 0);
 
 my @packages=@packagesSpads;
-push(@packages,@packagesWinUnitSync) if($conf{autoUpdateBinaries} eq "yes" || $conf{autoUpdateBinaries} eq "unitsync");
-
 my $updater = SpadsUpdater->new(sLog => $updaterSimpleLog,
                                 localDir => $conf{binDir},
                                 repository => "http://planetspads.free.fr/spads/repository",
@@ -434,18 +432,20 @@ if($win) {
     }
   }
   foreach my $updatedPackage (keys %updatedPackages) {
-    next unless($updatedPackage =~ /\.(exe|dll)$/);
-    if(-f "$conf{binDir}/$updatedPackages{$updatedPackage}" && -f "$conf{binDir}/$updatedPackage") {
-      my @origStat=stat("$conf{binDir}/$updatedPackages{$updatedPackage}");
-      my @destStat=stat("$conf{binDir}/$updatedPackage");
+    my $updatedPackagePath=catfile($conf{binDir},$updatedPackage);
+    my $versionedUpdatedPackagePath=catfile($conf{binDir},$updatedPackages{$updatedPackage});
+    next unless($updatedPackage =~ /\.(exe|dll)$/ && -f $versionedUpdatedPackagePath);
+    if(-f $updatedPackagePath) {
+      my @origStat=stat($versionedUpdatedPackagePath);
+      my @destStat=stat($updatedPackagePath);
       next if($origStat[9] <= $destStat[9]);
+      unlink($updatedPackagePath);
+      renameToBeDeleted($updatedPackagePath) if(-f $updatedPackagePath);
     }
-    unlink("$conf{binDir}/$updatedPackage");
-    renameToBeDeleted("$conf{binDir}/$updatedPackage") if(-f "$conf{binDir}/$updatedPackage");
-    if(! copy("$conf{binDir}/$updatedPackages{$updatedPackage}","$conf{binDir}/$updatedPackage")) {
-      fatalError("Unable to copy \"$conf{binDir}/$updatedPackages{$updatedPackage}\" to \"$conf{binDir}/$updatedPackage\", system consistency must be checked manually !");
+    if(! copy($versionedUpdatedPackagePath,$updatedPackagePath)) {
+      fatalError("Unable to copy \"$versionedUpdatedPackagePath\" to \"$updatedPackagePath\", system consistency must be checked manually !");
     }
-    slog("Copying \"$conf{binDir}/$updatedPackages{$updatedPackage}\" to \"$conf{binDir}/$updatedPackage\" (Windows binary update mode)",5);
+    slog("Copied \"$versionedUpdatedPackagePath\" to \"$updatedPackagePath\" (Windows binary update mode)",5);
   }
 }
 
@@ -10886,7 +10886,6 @@ sub hUpdate {
   }
   
   my @updatePackages=@packagesSpads;
-  push(@updatePackages,@packagesWinUnitSync) if($conf{autoUpdateBinaries} eq "yes" || $conf{autoUpdateBinaries} eq "unitsync");
   push(@updatePackages,@packagesWinServer) if($conf{autoUpdateBinaries} eq "yes" || $conf{autoUpdateBinaries} eq "server");
 
   $updater = SpadsUpdater->new(sLog => $updaterSimpleLog,

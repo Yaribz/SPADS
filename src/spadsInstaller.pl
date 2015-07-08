@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.17a (2015/07/07)
+# Version 0.17b (2015/07/08)
 
 use strict;
 
@@ -41,8 +41,8 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 my $win=$^O eq 'MSWin32';
 
 my @packages=(qw'getDefaultModOptions.pl help.dat helpSettings.dat SpringAutoHostInterface.pm SpringLobbyInterface.pm SimpleEvent.pm SimpleLog.pm spads.pl SpadsConf.pm spadsInstaller.pl SpadsUpdater.pm SpadsPluginApi.pm update.pl argparse.py replay_upload.py',$win?'7za.exe':'7za');
-my @packagesWinUnitsync=qw'PerlUnitSync.pm PerlUnitSync.dll';
 my @packagesWinServer=qw'spring-dedicated.exe spring-headless.exe';
+my $perlUnitsyncModule='PerlUnitSync.pm';
 
 my $isInteractive=-t STDIN;
 my $currentStep=1;
@@ -55,7 +55,7 @@ if($win) {
   eval 'use Win32::API';
   $conf{updateBin}='yes';
   push(@pathes,cwd());
-  push(@packages,@packagesWinUnitsync);
+  push(@packages,$perlUnitsyncModule);
   $defaultUnitsyncDir=File::Spec->catdir(Win32::GetFolderPath(Win32::CSIDL_PROGRAM_FILES()),'Spring');
 }else{
   $conf{updateBin}='no';
@@ -207,7 +207,7 @@ sub unlinkUnitsyncTmpFiles {
 }
 
 sub unlinkUnitsyncModuleFiles {
-  map {unlink($_)} ('PerlUnitSync.pm',$perlUnitsyncLibName);
+  map {unlink($_)} ($perlUnitsyncModule,$perlUnitsyncLibName);
 }
 
 my $unitsyncDir;
@@ -490,7 +490,7 @@ if($updaterRc > 0) {
 }
 $sLog->log('SPADS components are up to date, proceeding with installation...',3);
 if(! $win) {
-  if(-f 'PerlUnitSync.pm' && -f 'PerlUnitSync.so') {
+  if(-f $perlUnitsyncModule && -f $perlUnitsyncLibName) {
     $sLog->log('Perl Unitsync interface module already exists, skipping generation (use "-g" flag to force generation)',3);
     $currentStep++;
   }else {
