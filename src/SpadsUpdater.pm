@@ -38,14 +38,25 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $archName=$win?'win32':($Config{ptrsize} > 4 ? 'linux64' : 'linux32');
 
-my $moduleVersion='0.11';
+my $moduleVersion='0.12';
 
 my @constructorParams = qw'sLog localDir repository release packages';
 my @optionalConstructorParams = qw'syncedSpringVersion springDir';
 
-my $springBuildbotUrl='https://springrts.com/dl/buildbot/default';
-my $springVersionWikiTemplateUrl='https://springrts.com/wiki/Template:EngineVersion';
+my $springBuildbotUrl='http://springrts.com/dl/buildbot/default';
+my $springVersionUrl='http://planetspads.free.fr/spring/SpringVersion';
 my %springBranches=(release => 'master', dev => 'develop');
+
+my $httpTinyCanSsl;
+if(HTTP::Tiny->can('can_ssl')) {
+  $httpTinyCanSsl=HTTP::Tiny->can_ssl();
+}else{
+  $httpTinyCanSsl=eval { require IO::Socket::SSL;
+                         IO::Socket::SSL->VERSION(1.42);
+                         require Net::SSLeay;
+                         Net::SSLeay->VERSION(1.49);
+                         1; };
+}
 
 sub getVersion {
   return $moduleVersion;
@@ -86,7 +97,7 @@ sub resolveSpringReleaseNameToVersion {
   my $sl=$self->{sLog};
   my $httpTiny=HTTP::Tiny->new(timeout => 10);
   if($release eq 'stable') {
-    my $httpRes=$httpTiny->request('GET',"$springVersionWikiTemplateUrl:Stable");
+    my $httpRes=$httpTiny->request('GET',"$springVersionUrl.Stable");
     if($httpRes->{success} && $httpRes->{content} =~ /id="mw-content-text".*>([^<>]+)\n/) {
       return $1;
     }else{
@@ -95,7 +106,7 @@ sub resolveSpringReleaseNameToVersion {
     }
   }elsif($release eq 'testing') {
     my ($testingRelease,$latestRelease);
-    my $httpRes=$httpTiny->request('GET',"$springVersionWikiTemplateUrl:Testing");
+    my $httpRes=$httpTiny->request('GET',"$springVersionUrl.Testing");
     if($httpRes->{success} && $httpRes->{content} =~ /id="mw-content-text".*>([^<>]+)\n/) {
       $testingRelease=$1;
     }else{
@@ -272,6 +283,17 @@ sub update {
 sub downloadFile {
   my ($self,$url,$file)=@_;
   my $sl=$self->{sLog};
+  if($url !~ /^http:\/\//i) {
+    if($url =~ /^https:\/\//i) {
+      if(! $httpTinyCanSsl) {
+        $sl->log("Unable to to download file to \"$file\", IO::Socket::SSL version 1.42 or superior and Net::SSLeay version 1.49 or superior are required for SSL support",1);
+        return 0;
+      }
+    }else{
+      $sl->log("Unable to download file to \"$file\", unknown URL type \"$url\"",1);
+      return 0;
+    }
+  }
   $sl->log("Downloading file from \"$url\" to \"$file\"...",5);
   my $fh;
   if(! open($fh,'>',$file)) {

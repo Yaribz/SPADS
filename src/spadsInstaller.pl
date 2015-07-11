@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.17b (2015/07/08)
+# Version 0.17c (2015/07/10)
 
 use strict;
 
@@ -52,7 +52,8 @@ my %conf=(installDir => File::Spec->canonpath(cwd()));
 
 if($win) {
   eval 'use Win32';
-  eval 'use Win32::API';
+  die "\nSPADS requires Win32::API module version 0.73 or superior.\nPlease update your Perl installation (Perl 5.16.2 or superior is recommended)\n"
+      unless(eval { require Win32::API; Win32::API->VERSION(0.73); 1; });
   $conf{updateBin}='yes';
   push(@pathes,cwd());
   push(@packages,$perlUnitsyncModule);

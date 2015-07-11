@@ -49,7 +49,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.11.36';
+our $spadsVer='0.11.36a';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 
@@ -84,7 +84,8 @@ our $cwd=cwd();
 my $regLMachine;
 if($win) {
   eval "use Win32";
-  eval "use Win32::API";
+  die "\nSPADS requires Win32::API module version 0.73 or superior.\nPlease update your Perl installation (Perl 5.16.2 or superior is recommended)\n"
+      unless(eval { require Win32::API; Win32::API->VERSION(0.73); 1; });
   eval "use Win32::TieRegistry ':KEY_'";
   $regLMachine=new Win32::TieRegistry("LMachine");
   $regLMachine->Delimiter("/") if(defined $regLMachine);

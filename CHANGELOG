@@ -714,6 +714,7 @@ spads.pl:
 0.11.36: replace Swig with Win32::API for unitsync library interface, which should make SPADS compatible with Strawberry Perl (Windows)
          remove the obsolete PerlUnitSync.dll library from the list of auto-updated binary packages (Windows)
          fix binary update workaround on Windows trying to update obsolete packages and resulting in fatal errors (Windows)
+0.11.36a: check Win32::API module version at start (Windows)
 
 SpadsConf.pm:
 ============
@@ -893,6 +894,7 @@ spadsInstaller.pl:
       add "%program files%\Spring" in Spring installation search paths (Windows)
 0.17a: add 7zip binary to the list of packages
 0.17b: remove the obsolete PerlUnitSync.dll library from the list of auto-updated binary packages (Windows)
+0.17c: check Win32::API module version at start (Windows)
 
 SpadsPluginApi.pm:
 =================
@@ -964,6 +966,9 @@ SpadsUpdater.pm:
 0.10a: fix execution permission on downloaded files which have no extension
 0.11: revert "use persistent HTTP::Tiny object" which is not thread safe
       make errors in "downloadFile" function not fatal
+0.12: use a non-SSL URL to retrieve Spring versions (Perl SSL modules aren't installed by default on Linux)
+      initialize SSL modules if available when loading the module to fix threading related crashes when fetching SSL URLs
+      prevent SSL downloads if Perl SSL modules aren't available to avoid fatal error
 
 update.pl:
 =========
