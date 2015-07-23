@@ -49,7 +49,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.11.36a';
+our $spadsVer='0.11.36b';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 
@@ -12212,7 +12212,7 @@ sub cbAhPlayerReady {
   my (undef,$playerNb,$readyState)=@_;
   return unless(exists $autohost->{players}->{$playerNb});
   my $name=$autohost->{players}->{$playerNb}->{name};
-  return unless($readyState == 1);
+  return unless($readyState > 0);
   logMsg("game","=== $name is ready ===") if($conf{logGameServerMsg});
 
   if($autohost->getState() == 1 && $timestamps{autoForcePossible} == 0 && exists($p_runningBattle->{scriptTags}->{"game/startpostype"})) {

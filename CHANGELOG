@@ -715,6 +715,7 @@ spads.pl:
          remove the obsolete PerlUnitSync.dll library from the list of auto-updated binary packages (Windows)
          fix binary update workaround on Windows trying to update obsolete packages and resulting in fatal errors (Windows)
 0.11.36a: check Win32::API module version at start (Windows)
+0.11.36b: fix auto-force start not working when players are readied through LUA
 
 SpadsConf.pm:
 ============
