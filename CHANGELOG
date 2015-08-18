@@ -138,6 +138,7 @@ helpSettings.dat:
 0.5.5: it is now possible to specify multiple Spring data directories through the "springDataDir" global setting
        clarify useWin32Process documentation
 0.5.6: values "unitsync" and "server" for "autoUpdateBinaries" setting are now deprecated
+0.5.7: local AI bots colors can now be configured
 
 PerlUnitSync.pm:
 ===============
@@ -716,6 +717,9 @@ spads.pl:
          fix binary update workaround on Windows trying to update obsolete packages and resulting in fatal errors (Windows)
 0.11.36a: check Win32::API module version at start (Windows)
 0.11.36b: fix auto-force start not working when players are readied through LUA
+0.11.37: default local AI bots color is now red instead of black
+         local AI bots colors can now be configured (they have precedence over players colors regarding team colors auto-fixing)
+         team colors auto-fixing is now only performed after auto-balancing to save useless force commands
 
 SpadsConf.pm:
 ============
@@ -838,6 +842,7 @@ SpadsConf.pm:
 0.11.10: it is now possible to specify multiple Spring data directories through the "springDataDir" global setting
          Spring data directory no longer needs to be writable
 0.11.10a: use more compact version of any/all/none/notall list functions
+0.11.11: local AI bots colors can now be configured
 
 spadsInstaller.pl:
 =================

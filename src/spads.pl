@@ -49,7 +49,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.11.36b';
+our $spadsVer='0.11.37';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 
@@ -3917,6 +3917,15 @@ sub getFixedColorsOf {
 
   my %idColors;
   if($conf{colorSensitivity}) {
+    for my $bot (keys %{$p_bots}) {
+      next unless($p_bots->{$bot}->{owner} eq $conf{lobbyLogin});
+      my $colorId=$conf{idShareMode} eq "off" ? $bot.' (bot)' : $p_bots->{$bot}->{battleStatus}->{id};
+      if(! exists $idColors{$colorId}) {
+        if(minDistance($p_bots->{$bot}->{color},\%idColors) > $conf{colorSensitivity}*1000 && colorDistance($p_bots->{$bot}->{color},{red => 255, blue => 255, green => 255}) > 7000) {
+          $idColors{$colorId}=$p_bots->{$bot}->{color};
+        }
+      }
+    }
     for my $player (keys %{$p_players}) {
       next unless(defined $p_players->{$player}->{battleStatus});
       next unless($p_players->{$player}->{battleStatus}->{mode});
@@ -3928,6 +3937,7 @@ sub getFixedColorsOf {
       }
     }
     for my $bot (keys %{$p_bots}) {
+      next if($p_bots->{$bot}->{owner} eq $conf{lobbyLogin});
       my $colorId=$conf{idShareMode} eq "off" ? $bot.' (bot)' : $p_bots->{$bot}->{battleStatus}->{id};
       if(! exists $idColors{$colorId}) {
         if(minDistance($p_bots->{$bot}->{color},\%idColors) > $conf{colorSensitivity}*1000 && colorDistance($p_bots->{$bot}->{color},{red => 255, blue => 255, green => 255}) > 7000) {
@@ -4967,7 +4977,7 @@ sub autoManageBattle {
           slog("Unable to auto-add a local AI bot (not enough AI bot definitions in \"localBots\" preset setting)",2);
           last;
         }else{
-          my ($botName,$botSide,$botAi)=($p_nextLocalBot->{name},$p_nextLocalBot->{side},$p_nextLocalBot->{ai});
+          my ($botName,$botSide,$botAi,$p_botColor)=($p_nextLocalBot->{name},$p_nextLocalBot->{side},$p_nextLocalBot->{ai},$p_nextLocalBot->{color});
           my $realBotSide=translateSideIfNeeded($botSide);
           if(! defined $realBotSide) {
             slog("Invalid bot side \"$botSide\" for current MOD, using default MOD side instead",2);
@@ -4976,7 +4986,7 @@ sub autoManageBattle {
             $botSide=$realBotSide;
           }
           $pendingLocalBotAuto{$botName}=time;
-          queueLobbyCommand(['ADDBOT',$botName,$lobby->marshallBattleStatus({side => $botSide, sync => 0, bonus => 0, mode => 1, team => 0, id => 0, ready => 1}),0,$botAi]);
+          queueLobbyCommand(['ADDBOT',$botName,$lobby->marshallBattleStatus({side => $botSide, sync => 0, bonus => 0, mode => 1, team => 0, id => 0, ready => 1}),$lobby->marshallColor($p_botColor),$botAi]);
           $timestamps{battleChange}=time;
         }
       }
@@ -5021,17 +5031,19 @@ sub autoManageBattle {
       return if(time - $timestamps{balance} < 5 || time - $timestamps{autoBalance} < 1);
       $timestamps{autoBalance}=time;
       balance();
+      return;
     }
   }
+
   if($conf{autoFixColors} ne 'off') {
     return if($battleState < 1);
     return if($conf{autoFixColors} eq 'on' && $battleState < 2);
     if(! $colorsState) {
       return if(time - $timestamps{fixColors} < 5);
       fixColors();
+      return;
     }
   }
-  return unless(($conf{autoBalance} eq 'off' || $balanceState) && ($conf{autoFixColors} eq 'off' || $colorsState));
 
   if($conf{autoStart} ne 'off') {
     return if($battleState < 1 || %{$lobby->{battle}->{bots}});
@@ -5480,11 +5492,15 @@ sub getPresetLocalBots {
   my @localBotsNames;
   my %localBots;
   foreach my $localBotString (@localBotsStrings) {
-    if($localBotString=~/^([\w\[\]]{2,20}) (\w+) ([^ \;][^\;]*)$/) {
-      my ($lBotName,$lBotSide,$lBotAi)=($1,$2,$3);
+    if($localBotString=~/^([\w\[\]]{2,20}) (\w+(?:#[\da-fA-F]{6})?) ([^ \;][^\;]*)$/) {
+      my ($lBotName,$lBotSide,$lBotAi,$p_lBotColor)=($1,$2,$3,{red => 255, green => 0, blue => 0});
+      if($lBotSide =~ /^(\w+)#([\da-fA-F]{2})([\da-fA-F]{2})([\da-fA-F]{2})$/) {
+        ($lBotSide,$p_lBotColor)=($1,{red => hex $2, green => hex $3, blue => hex $4});
+      }
       push(@localBotsNames,$lBotName);
       $localBots{$lBotName}={side => $lBotSide,
-                             ai => $lBotAi};
+                             ai => $lBotAi,
+                             color => $p_lBotColor};
     }else{
       slog("Unable to read local bot entry in \"localBots\" preset setting: \"$localBotString\"",2);
     }
@@ -5503,7 +5519,8 @@ sub getNextLocalBot {
          && ! exists $pendingLocalBotManual{$lBotName.$i} && ! exists $pendingLocalBotAuto{$lBotName.$i}) {
         %nextLocalBot=(name => $lBotName.$i,
                        side => $p_localBots->{$lBotName}->{side},
-                       ai => $p_localBots->{$lBotName}->{ai});
+                       ai => $p_localBots->{$lBotName}->{ai},
+                       color => $p_localBots->{$lBotName}->{color});
         last;
       }
     }
@@ -5753,9 +5770,10 @@ sub hAddBot {
   my ($botName,$botSide,@botAiStrings)=@{$p_params};
   my $botAi;
   $botAi=join(' ',@botAiStrings) if(@botAiStrings);
+  my $p_botColor;
 
+  my ($p_localBotsNames,$p_localBots)=getPresetLocalBots();
   if(! defined $botName || ! defined $botSide || ! defined $botAi) {
-    my ($p_localBotsNames,$p_localBots)=getPresetLocalBots();
     if(! @{$p_localBotsNames}) {
       answer("Unable to add bot: incomplete !addBot command and no local bot defined in \"localBots\" preset setting");
       return 0;
@@ -5769,6 +5787,7 @@ sub hAddBot {
       $botName=$p_nextLocalBot->{name};
       $botSide=$p_nextLocalBot->{side};
       $botAi=$p_nextLocalBot->{ai};
+      $p_botColor=$p_nextLocalBot->{color};
     }
     if(! defined $botSide) {
       if(exists $p_localBots->{$botName}) {
@@ -5785,6 +5804,13 @@ sub hAddBot {
         answer("Unable to add bot: bot AI is missing and bot name is unknown in \"localBots\" preset setting");
         return 0;
       }
+    }
+  }
+  if(! defined $p_botColor) {
+    if(exists $p_localBots->{$botName}) {
+      $p_botColor=$p_localBots->{$botName}->{color};
+    }else{
+      $p_botColor={red => 255, green => 0, blue => 0};
     }
   }
 
@@ -5818,7 +5844,7 @@ sub hAddBot {
 
   sayBattle("Adding local AI bot $botName (by $user)");
   $pendingLocalBotManual{$botName}=time;
-  queueLobbyCommand(['ADDBOT',$botName,$lobby->marshallBattleStatus({side => $botSide, sync => 0, bonus => 0, mode => 1, team => 0, id => 0, ready => 1}),0,$botAi]);
+  queueLobbyCommand(['ADDBOT',$botName,$lobby->marshallBattleStatus({side => $botSide, sync => 0, bonus => 0, mode => 1, team => 0, id => 0, ready => 1}),$lobby->marshallColor($p_botColor),$botAi]);
 }
 
 sub hAddBox {

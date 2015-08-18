@@ -1351,12 +1351,13 @@ Local bots
 -
 This is the list of predefined local bots. Automatically added bots are taken from this list (see [set:autoAddBotNb]).
 -
-[<name> <side> <ai>[;<name2> <side2> <ai2>[...]]]
+[<name> <side>[#<rgbColor>] <ai>[;<name2> <side2>[#<rgbColor2>] <ai2>[...]]]
   where <name> is the name of the bot (string, example: "joe")
         <side> is the faction of the bot (can be the faction number or the faction name)
+        <rgbColor> is the default color of the bot in hexadecimal RGB format (example: "FF0000" for red)
         <ai> is the exact name of the AI used by the bot (string, example: "E323AI")
 -
-joe 0 E323AI;jim core KAIK
+joe 0 E323AI;jim core#FF0000 KAIK
 
 [set:allowedLocalAIs]
 Allowed local AIs

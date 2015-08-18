@@ -36,7 +36,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.11.10a';
+my $moduleVersion='0.11.11';
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 
 my %globalParameters = (lobbyLogin => ["login"],
@@ -267,7 +267,7 @@ my %paramTypes = (login => '[\w\[\]]{2,20}',
                                    }
                                    return 1;
                                  },
-                  botList => '[\w\[\]]{2,20} \w+ [^ \;][^\;]*(;[\w\[\]]{2,20} \w+ [^ \;][^\;]*)*',
+                  botList => '[\w\[\]]{2,20} \w+(#[\da-fA-F]{6})? [^ \;][^\;]*(;[\w\[\]]{2,20} \w+(#[\da-fA-F]{6})? [^ \;][^\;]*)*',
                   db => '[^\/]+\/[^\@]+\@(?i:dbi)\:\w+\:\w.*');
 
 my @banListsFields=(['accountId','name','country','cpu','rank','access','bot','level','ip','skill','skillUncert'],['banType','startDate','endDate','remainingGames','reason']);
