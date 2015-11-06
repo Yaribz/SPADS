@@ -49,7 +49,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.11.37';
+our $spadsVer='0.11.38';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 
@@ -4148,6 +4148,16 @@ sub launchGame {
   if((! $force) && $conf{autoFixColors} ne 'off' && ! $colorsState) {
     answer("Unable to start game, autoFixColors is enabled but colors haven't been fixed yet - use !forceStart to bypass");
     return 0;
+  }
+
+  foreach my $pluginName (@pluginsOrder) {
+    if($plugins{$pluginName}->can('preGameCheck')) {
+      my $reason=$plugins{$pluginName}->preGameCheck($force,$checkOnly,$automatic//0);
+      if($reason) {
+        answer("Unable to start game, $reason") unless($automatic);
+        return 0;
+      }
+    }
   }
 
   return 1 if($checkOnly);

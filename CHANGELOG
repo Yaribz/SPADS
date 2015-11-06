@@ -720,6 +720,7 @@ spads.pl:
 0.11.37: default local AI bots color is now red instead of black
          local AI bots colors can now be configured (they have precedence over players colors regarding team colors auto-fixing)
          team colors auto-fixing is now only performed after auto-balancing to save useless force commands
+0.11.38: new plugin event callback: preGameCheck
 
 SpadsConf.pm:
 ============
@@ -940,6 +941,7 @@ SpadsPluginApi.pm:
 0.21: add "forkCall", "addTimer" and "removeTimer" API functions
       the timer management API functions should now be privileged over the "eventLoop" callback which is too intensive for standard use
 0.21a: fix missing parameter in "sayChan" function documentation
+0.22: new plugin event callback: preGameCheck
 
 SpadsUpdater.pm:
 ===============

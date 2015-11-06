@@ -21,7 +21,7 @@ package SpadsPluginApi;
 use Exporter 'import';
 @EXPORT=qw/$spadsVersion $spadsDir getLobbyState getSpringPid getSpringServerType getTimestamps getRunningBattle getCurrentVote getPlugin addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess forkCall addTimer removeTimer addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives/;
 
-my $apiVersion='0.21a';
+my $apiVersion='0.22';
 
 our $spadsVersion=$::spadsVer;
 our $spadsDir=$::cwd;
@@ -533,6 +533,24 @@ passed)
 This callback is called each time a SPADS command has been executed.
 
 If C<$commandResult> is defined and set to 0, then it means the command failed.
+
+=item C<preGameCheck($force,$checkOnly,$automatic)>
+
+This callback is called each time a game is going to be launched, to allow
+plugins to perform pre-game checks and prevent the game from starting if needed.
+
+C<$force> is C<1> if the game is being launched using C<!forceStart> command,
+C<0> else
+
+C<$checkOnly> is C<1> if the callback is being called in the context of a vote
+call, C<0> else
+
+C<$automatic> is C<1> if the game is being launched automatically through
+autoStart functionality, C<0> else
+
+The return value must be the reason for preventing the game from starting (for
+example "too many players for current map"), or undef to allow the game to
+start.
 
 =item C<preSpadsCommand($command,$source,$user,\@params)>
 
