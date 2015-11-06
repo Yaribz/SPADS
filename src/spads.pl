@@ -4105,7 +4105,17 @@ sub launchGame {
     answer("Unable to start game, $p_battleState->{warning} - use !forceStart to bypass") unless($automatic);
     return 0;
   }
-
+	
+  my $commandAllowed=1;
+  if(! $checkOnly) {
+	foreach my $pluginName (@pluginsOrder) {
+		$commandAllowed=$plugins{$pluginName}->beforeStart($automatic,$force) if($plugins{$pluginName}->can('beforeStart'));
+		last unless($commandAllowed);
+	}
+  }
+  
+  return 0 unless $commandAllowed;
+  
   my %additionalData=('game/AutohostPort' => $conf{autoHostPort},
                       'playerData' => {});
   $additionalData{'game/HostIP'}=$conf{forceHostIp};
