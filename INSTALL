@@ -1,7 +1,7 @@
 To install SPADS on Linux/UNIX, you have to:
 ============================================
 
-1) Ensure Perl, swig, g++, and wget are installed and available in your PATH
+1) Ensure Perl, swig and g++ are installed and available in your PATH
 2) Install Spring dedicated, and remember "spring-dedicated" and "Spring data directory" locations (they will be asked during SPADS installation)
 3) Install at least one mod in Spring data directory
 4) Run "./spadsInstaller.pl" (SPADS will be installed in current directory)
@@ -15,8 +15,8 @@ Then you can run SPADS as follows:
 To install SPADS on Windows, you have to:
 =========================================
 
-1) Install ActivePerl Windows (x86) (available here: http://www.activestate.com/activeperl/downloads), and ensure your Perl bin directory is in your PATH environement variable
-2) Install wget (available here: http://downloads.sourceforge.net/gnuwin32/wget-1.11.4-1-setup.exe), and ensure your wget bin directory is in your PATH environment variable
+1) Install ActivePerl Windows (x86) (available here: http://www.activestate.com/activeperl/downloads) or Strawberry Perl (32bit) (available here: http://strawberryperl.com)
+2) Ensure your Perl bin directory is in your PATH environement variable
 3) Install Spring if not installed yet, and remember install location (it will be asked during SPADS installation as "Spring data directory")
 4) Install at least one Spring mod
 5) Open a Command shell, go in the directory where you extracted SPADS installation files, and run "perl spadsInstaller.pl" (SPADS will be installed in current directory)
