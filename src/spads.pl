@@ -49,7 +49,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.11.38';
+our $spadsVer='0.11.38a';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 
@@ -4154,7 +4154,7 @@ sub launchGame {
     if($plugins{$pluginName}->can('preGameCheck')) {
       my $reason=$plugins{$pluginName}->preGameCheck($force,$checkOnly,$automatic//0);
       if($reason) {
-        answer("Unable to start game, $reason") unless($automatic);
+        answer("Unable to start game, $reason") unless($automatic || $reason eq '1');
         return 0;
       }
     }

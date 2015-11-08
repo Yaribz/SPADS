@@ -21,7 +21,7 @@ package SpadsPluginApi;
 use Exporter 'import';
 @EXPORT=qw/$spadsVersion $spadsDir getLobbyState getSpringPid getSpringServerType getTimestamps getRunningBattle getCurrentVote getPlugin addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess forkCall addTimer removeTimer addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives/;
 
-my $apiVersion='0.22';
+my $apiVersion='0.22a';
 
 our $spadsVersion=$::spadsVer;
 our $spadsDir=$::cwd;
@@ -549,8 +549,8 @@ C<$automatic> is C<1> if the game is being launched automatically through
 autoStart functionality, C<0> else
 
 The return value must be the reason for preventing the game from starting (for
-example "too many players for current map"), or undef to allow the game to
-start.
+example C<"too many players for current map">), or C<1> if no reason can be given,
+or undef to allow the game to start.
 
 =item C<preSpadsCommand($command,$source,$user,\@params)>
 

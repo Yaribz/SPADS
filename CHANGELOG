@@ -721,6 +721,7 @@ spads.pl:
          local AI bots colors can now be configured (they have precedence over players colors regarding team colors auto-fixing)
          team colors auto-fixing is now only performed after auto-balancing to save useless force commands
 0.11.38: new plugin event callback: preGameCheck
+0.11.38a: allow plugins to prevent game start without generating a message in battle lobby
 
 SpadsConf.pm:
 ============
@@ -942,6 +943,7 @@ SpadsPluginApi.pm:
       the timer management API functions should now be privileged over the "eventLoop" callback which is too intensive for standard use
 0.21a: fix missing parameter in "sayChan" function documentation
 0.22: new plugin event callback: preGameCheck
+0.22a: the "preGameCheck" callback can now return a special value "1" which prevents game start without generating any message in battle lobby
 
 SpadsUpdater.pm:
 ===============
