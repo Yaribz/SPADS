@@ -1068,11 +1068,14 @@ on
 [set:autoStop]
 Auto-stop mode
 -
-Specifies if and when game must be automatically stopped
+Specifies if and when game must be automatically stopped, with a configurable delay.
 -
-noOpponent: game is auto-stopped when game is over or when there is only one team with connected alive player(s)
-onlySpec: game is auto-stopped when game is over or when only spectators are still connected
-gameOver: game is auto-stopped when game is over only
+noOpponent: game is auto-stopped when game is over or when there is only one team with connected alive player(s) (delay: 5 seconds)
+noOpponent(<delay>): game is auto-stopped when game is over or when there is only one team with connected alive player(s) (delay: <delay> seconds)
+onlySpec: game is auto-stopped when game is over or when only spectators are still connected (delay: 5 seconds)
+onlySpec(<delay>): game is auto-stopped when game is over or when only spectators are still connected (delay: <delay> seconds)
+gameOver: game is auto-stopped when game is over only (delay: 5 seconds)
+gameOver(<delay>): game is auto-stopped when game is over only (delay: <delay> seconds)
 off: game is not auto-stopped by AutoHost
 -
 gameOver
@@ -1164,8 +1167,9 @@ Integer
 [set:extraBox]
 Extra box
 -
-Specifies the number of extra boxes that much be created in addition to normal team start boxes.
-This preset setting is only used by SPADS to separate normal sets of stat boxes from special sets of start boxes when saving/loading map start boxes. That way, saved boxes for King Of The Hill don't overwrite normal team games start boxes for instance.
+Specifies the number of extra map boxes required by current game, in addition to the normal start boxes.
+Extra boxes are special boxes required by some specific game modes such as King Of The Hill. Contrary to normal start boxes, extra boxes are not used to specify a team start location. Instead, they are used to give special meanings to specific map locations.
+SPADS uses this setting to manage totally independent groups of saved map boxes (one for each value of the extraBox setting).
 -
 Integer
 -

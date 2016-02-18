@@ -139,6 +139,8 @@ helpSettings.dat:
        clarify useWin32Process documentation
 0.5.6: values "unitsync" and "server" for "autoUpdateBinaries" setting are now deprecated
 0.5.7: local AI bots colors can now be configured
+0.5.8: the "autoStop" preset setting can now contain a delay value to replace the 5 seconds default
+       help for "extraBox" preset setting improved
 
 PerlUnitSync.pm:
 ===============
@@ -722,6 +724,7 @@ spads.pl:
          team colors auto-fixing is now only performed after auto-balancing to save useless force commands
 0.11.38: new plugin event callback: preGameCheck
 0.11.38a: allow plugins to prevent game start without generating a message in battle lobby
+0.11.39: the "autoStop" preset setting can now contain a delay value to replace the 5 seconds default
 
 SpadsConf.pm:
 ============
@@ -845,6 +848,7 @@ SpadsConf.pm:
          Spring data directory no longer needs to be writable
 0.11.10a: use more compact version of any/all/none/notall list functions
 0.11.11: local AI bots colors can now be configured
+0.11.12: the "autoStop" preset setting can now contain a delay value to replace the 5 seconds default
 
 spadsInstaller.pl:
 =================

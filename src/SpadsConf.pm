@@ -36,7 +36,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.11.11';
+my $moduleVersion='0.11.12';
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 
 my %globalParameters = (lobbyLogin => ["login"],
@@ -243,7 +243,7 @@ my %paramTypes = (login => '[\w\[\]]{2,20}',
                   idShareModeType => "(all|auto|manual|clan|off)",
                   deathMode => "(killall|com|comcontrol)",
                   autoParamType => "(on|off|advanced)",
-                  autoStopType => '(gameOver|noOpponent|onlySpec|off)',
+                  autoStopType => '(gameOver(\(\d+\))?|noOpponent(\(\d+\))?|onlySpec(\(\d+\))?|off)',
                   onOffWarnType => "(on|off|warn)",
                   voteMode => "(normal|away)",
                   rankMode => '(account|ip|[0-7])',

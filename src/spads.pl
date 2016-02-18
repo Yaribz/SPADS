@@ -49,7 +49,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.11.38a';
+our $spadsVer='0.11.39';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 
@@ -2728,7 +2728,7 @@ sub checkAutoForceStart {
 }
 
 sub checkAutoStopTimestamp {
-  if($springPid && $autohost->getState() && $timestamps{autoStop} > 0 && time-$timestamps{autoStop} > 4) {
+  if($springPid && $autohost->getState() && $timestamps{autoStop} > 0 && time-$timestamps{autoStop} >= 0) {
     $timestamps{autoStop}=-1;
     $autohost->sendChatMessage("/kill");
   }
@@ -5475,7 +5475,7 @@ sub getSmurfsData {
 }
 
 sub checkAutoStop {
-  return unless(($conf{autoStop} eq 'noOpponent' || $conf{autoStop} eq 'onlySpec') && $springPid && $autohost->getState() == 2 && $timestamps{autoStop} == 0);
+  return unless(($conf{autoStop} =~ /^noOpponent/ || $conf{autoStop} =~ /^onlySpec/) && $springPid && $autohost->getState() == 2 && $timestamps{autoStop} == 0);
   my %aliveTeams;
   foreach my $player (keys %{$p_runningBattle->{users}}) {
     next unless(defined $p_runningBattle->{users}->{$player}->{battleStatus} && $p_runningBattle->{users}->{$player}->{battleStatus}->{mode});
@@ -5493,7 +5493,7 @@ sub checkAutoStop {
     $aliveTeams{$botTeam}=1;
   }
   my $nbAliveTeams=keys %aliveTeams;
-  $timestamps{autoStop}=time if(($conf{autoStop} eq 'noOpponent' && $nbAliveTeams < 2) || ($conf{autoStop} eq 'onlySpec' && $nbAliveTeams == 0));
+  $timestamps{autoStop}=time + ($conf{autoStop} =~ /\((\d+)\)$/ ? $1 : 5) if(($conf{autoStop} =~ /^noOpponent/ && $nbAliveTeams < 2) || ($conf{autoStop} =~ /^onlySpec/ && $nbAliveTeams == 0));
 }
 
 
@@ -12310,7 +12310,7 @@ sub cbAhPlayerLeft {
   }
   if($springServerType eq 'dedicated' && $autohost->{state} == 3 && $timestamps{gameOver} == 0) {
     $timestamps{gameOver}=time;
-    $timestamps{autoStop}=time if($timestamps{autoStop} == 0 && $conf{autoStop} ne 'off');
+    $timestamps{autoStop}=time + ($conf{autoStop} =~ /\((\d+)\)$/ ? $1 : 5) if($timestamps{autoStop} == 0 && $conf{autoStop} ne 'off');
   }else{
     checkAutoStop();
   }
@@ -12430,7 +12430,7 @@ sub cbAhServerGameOver {
   slog("Game over ($autohost->{players}->{$playerNb}->{name})",4);
   return if(($springServerType eq 'dedicated' && $autohost->{state} < 3)
             || ($springServerType eq 'headless' && $autohost->{players}->{$playerNb}->{name} ne $conf{lobbyLogin}));
-  $timestamps{autoStop}=time if($timestamps{autoStop} == 0 && $conf{autoStop} ne 'off');
+  $timestamps{autoStop}=time + ($conf{autoStop} =~ /\((\d+)\)$/ ? $1 : 5) if($timestamps{autoStop} == 0 && $conf{autoStop} ne 'off');
   $timestamps{gameOver}=time if($timestamps{gameOver} == 0);
 }
 
