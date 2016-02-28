@@ -141,6 +141,7 @@ helpSettings.dat:
 0.5.7: local AI bots colors can now be configured
 0.5.8: the "autoStop" preset setting can now contain a delay value to replace the 5 seconds default
        help for "extraBox" preset setting improved
+0.5.8a: default value for "onBadSpringVersion" global setting changed (multi-engine lobby protocol extension is now used by default when needed)
 
 PerlUnitSync.pm:
 ===============

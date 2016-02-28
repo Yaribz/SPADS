@@ -181,11 +181,11 @@ Action for bad Spring version
 -
 Action to be performed when the Spring version used by the AutoHost doesn't match the default one broadcasted by the lobby server.
 -
-<null>: use experimental multi-engine lobby protocol extension (not implemented by all lobby clients)
+<null>: run normally (use multi-engine lobby protocol extension to open battle lobby)
 closeBattle: battle lobby is automatically closed
 quit: SPADS exits automatically
 -
-closeBattle
+<null>
 
 [global:springConfig]
 Spring config file path
