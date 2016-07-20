@@ -984,6 +984,7 @@ SpadsUpdater.pm:
 0.12: use a non-SSL URL to retrieve Spring versions (Perl SSL modules aren't installed by default on Linux)
       initialize SSL modules if available when loading the module to fix threading related crashes when fetching SSL URLs
       prevent SSL downloads if Perl SSL modules aren't available to avoid fatal error
+0.12a: update automatic Spring installation code to comply with Spring buildbot output files changes
 
 update.pl:
 =========

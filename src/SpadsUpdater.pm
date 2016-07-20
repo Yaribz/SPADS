@@ -38,7 +38,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $archName=$win?'win32':($Config{ptrsize} > 4 ? 'linux64' : 'linux32');
 
-my $moduleVersion='0.12';
+my $moduleVersion='0.12a';
 
 my @constructorParams = qw'sLog localDir repository release packages';
 my @optionalConstructorParams = qw'syncedSpringVersion springDir';
@@ -113,7 +113,7 @@ sub resolveSpringReleaseNameToVersion {
       $sl->log("Unable to retrieve Spring version number for $release release!",2);
       return undef;
     }
-    $httpRes=$httpTiny->request('GET',"$springBuildbotUrl/$springBranches{release}/LATEST");
+    $httpRes=$httpTiny->request('GET',"$springBuildbotUrl/$springBranches{release}/LATEST_$archName");
     if($httpRes->{success} && defined $httpRes->{content}) {
       $latestRelease=$httpRes->{content};
       chomp($latestRelease);
@@ -123,7 +123,7 @@ sub resolveSpringReleaseNameToVersion {
     }
     return $testingRelease gt $latestRelease ? $testingRelease : $latestRelease;
   }elsif($release eq 'unstable') {
-    my $httpRes=$httpTiny->request('GET',"$springBuildbotUrl/$springBranches{dev}/LATEST");
+    my $httpRes=$httpTiny->request('GET',"$springBuildbotUrl/$springBranches{dev}/LATEST_$archName");
     if($httpRes->{success} && $httpRes->{content} =~ /^{$springBranches{dev}}(.+)$/) {
       return $1;
     }else{
@@ -486,7 +486,7 @@ sub _getSpringVersionDownloadInfo {
   my $versionInArchives = $versionType eq 'release' ? $version : "{$branch}$version";
   my ($requiredArchive,@optionalArchives);
   if($win) {
-    $requiredArchive="spring_${versionInArchives}_minimal-portable.7z";
+    $requiredArchive="spring_${versionInArchives}_".(_compareSpringVersions($version,102)<0?'':'win32-').'minimal-portable.7z';
     @optionalArchives=("${versionInArchives}_spring-dedicated.7z","${versionInArchives}_spring-headless.7z")
   }else{
     $requiredArchive="spring_${versionInArchives}_minimal-portable-$archName-static.7z";
