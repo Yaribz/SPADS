@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.17c (2015/07/10)
+# Version 0.17d (2016/08/18)
 
 use strict;
 
@@ -292,7 +292,7 @@ sub generatePerlUnitSync {
     }
     $coreIncsString=join(' ','-fpic',@coreIncs);
   }
-  system("g++ -c PerlUnitSync_wrap.c -Dbool=char $coreIncsString");
+  system("g++ -c PerlUnitSync_wrap.c $coreIncsString");
   if($?) {
     unlinkUnitsyncTmpFiles();
     unlinkUnitsyncModuleFiles();

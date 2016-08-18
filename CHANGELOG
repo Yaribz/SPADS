@@ -908,6 +908,7 @@ spadsInstaller.pl:
 0.17a: add 7zip binary to the list of packages
 0.17b: remove the obsolete PerlUnitSync.dll library from the list of auto-updated binary packages (Windows)
 0.17c: check Win32::API module version at start (Windows)
+0.17d: remove obsolete workaround for internal Perl bool type definition (causes problems with new compilers)
 
 SpadsPluginApi.pm:
 =================
