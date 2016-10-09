@@ -3,7 +3,7 @@
 # This program prints the default mod options of each Spring mod installed,
 # using the unitsync library.
 #
-# Copyright (C) 2008-2013  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2016  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -19,7 +19,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.4d (2014/01/05)
+# Version 0.5 (2016/09/30)
 
 use strict;
 
@@ -111,6 +111,10 @@ if ($@) {
 }
 
 if(! PerlUnitSync::Init(0,0)) {
+  while(my $unitSyncErr=PerlUnitSync::GetNextError()) {
+    chomp($unitSyncErr);
+    print("ERROR - UnitSync error: $unitSyncErr\n");
+  }
   print("ERROR - Unable to initialize UnitSync library (try specifying the Spring data directory as command line parameter)\n");
   exit 0;
 }
@@ -133,6 +137,17 @@ for my $modNb (0..($nbMods-1)) {
   }
   my $modArchive = PerlUnitSync::GetPrimaryModArchive($modNb);
   $availableMods[$modNb]={name=>$modName,archive=>$modArchive};
+}
+
+sub getRangeStepFromBoundaries {
+  my $maxNbDecimals=0;
+  for my $boundaryValue (@_) {
+    if($boundaryValue =~ /\.(\d+)$/) {
+      my $nbDecimals=length($1);
+      $maxNbDecimals=$nbDecimals if($nbDecimals > $maxNbDecimals);
+    }
+  }
+  return 10**(-$maxNbDecimals);
 }
 
 sub printModOptions {
@@ -162,11 +177,20 @@ sub printModOptions {
       printRes("|$valuesString") if($valuesString);
       printRes("\n");
     }elsif($p_option->{type} eq "number") {
-      $comment.=" ($p_option->{numberMin}..$p_option->{numberMax})";
+      $comment.=" ($p_option->{numberMin}..$p_option->{numberMax}";
+      my $stepString='';
+      if($p_option->{numberStep} > 0) {
+        if(getRangeStepFromBoundaries($p_option->{numberMin},$p_option->{numberMax}) != $p_option->{numberStep}) {
+          $comment.=", step: $p_option->{numberStep}";
+          $stepString="\%$p_option->{numberStep}";
+        }
+      }else{
+        $comment.=', no quantization';
+        $stepString="\%0";
+      }
+      $comment.=')';
       printRes("\n#$comment\n") if($generateComments);
-      printRes("$p_option->{key}:$p_option->{default}");
-      printRes("|$p_option->{numberMin}-$p_option->{numberMax}") if($p_option->{numberMin} =~ /^-?\d+(?:\.\d)?$/ && $p_option->{numberMax} =~ /^-?\d+(?:\.\d)?$/);
-      printRes("\n");
+      printRes("$p_option->{key}:$p_option->{default}|$p_option->{numberMin}-$p_option->{numberMax}$stepString\n");
     }elsif($p_option->{type} eq "string") {
       $comment.=" (max length: $p_option->{stringMaxLen})";
       printRes("\n#$comment\n") if($generateComments);
@@ -184,7 +208,11 @@ sub printModOptions {
 
 sub formatNumber {
   my $n=shift;
-  $n=sprintf("%.1f",$n) if($n=~/^-?\d+\.\d+$/);
+  if(index($n,'.') != -1) {
+    $n=sprintf('%.7f',$n);
+    $n=~s/\.?0*$//;
+  }
+  $n=~s/^0+(\d.*)$/$1/;
   return $n;
 }
 
@@ -216,6 +244,7 @@ for my $modNb (0..$#availableMods) {
       $option{default}=formatNumber(PerlUnitSync::GetOptionNumberDef($optionIdx));
       $option{numberMin}=formatNumber(PerlUnitSync::GetOptionNumberMin($optionIdx));
       $option{numberMax}=formatNumber(PerlUnitSync::GetOptionNumberMax($optionIdx));
+      $option{numberStep}=formatNumber(PerlUnitSync::GetOptionNumberStep($optionIdx));
     }elsif($option{type} eq "string") {
       $option{default}=PerlUnitSync::GetOptionStringDef($optionIdx);
       $option{stringMaxLen}=PerlUnitSync::GetOptionStringMaxLen($optionIdx);

@@ -16,6 +16,9 @@ getDefaultModOptions.pl:
 0.4c: "mods" folder is no longer listed as subdirectory of spring data directory
       make Spring 95 behave like previous versions concerning writable data directory location
 0.4d: fix setting ranges and negative values handling
+0.5: "step" parameters are now taken into account for number range modoptions
+     improved handling of float numbers received through unitsync library
+     show unitsync error messages when unitsync library initialization fails
 
 help.dat:
 ========
@@ -726,6 +729,8 @@ spads.pl:
 0.11.38: new plugin event callback: preGameCheck
 0.11.38a: allow plugins to prevent game start without generating a message in battle lobby
 0.11.39: the "autoStop" preset setting can now contain a delay value to replace the 5 seconds default
+0.11.39a: "step" parameters are now taken into account for number range map/modoptions
+          improved handling of float numbers received through unitsync library
 
 SpadsConf.pm:
 ============

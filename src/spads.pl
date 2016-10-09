@@ -2,7 +2,7 @@
 #
 # SPADS: Spring Perl Autohost for Dedicated Server
 #
-# Copyright (C) 2008-2015  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2016  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -49,7 +49,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.11.39';
+our $spadsVer='0.11.39a';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 
@@ -821,7 +821,11 @@ sub getMaxLength {
 
 sub formatNumber {
   my $n=shift;
-  $n=sprintf("%.1f",$n) if($n=~/^-?\d+\.\d+$/);
+  if(index($n,'.') != -1) {
+    $n=sprintf('%.7f',$n);
+    $n=~s/\.?0*$//;
+  }
+  $n=~s/^0+(\d.*)$/$1/;
   return $n;
 }
 
@@ -837,20 +841,28 @@ sub formatInteger {
   return $n;
 }
 
-sub isRange { return $_[0] =~ /^-?\d+(?:\.\d+)?--?\d+(?:\.\d+)?$/; }
+sub isRange { return $_[0] =~ /^-?\d+(?:\.\d+)?--?\d+(?:\.\d+)?(?:\%\d+(?:\.\d+)?)?$/; }
+
+sub getRangeStepFromBoundaries {
+  my $maxNbDecimals=0;
+  for my $boundaryValue (@_) {
+    if($boundaryValue =~ /\.(\d+)$/) {
+      my $nbDecimals=length($1);
+      $maxNbDecimals=$nbDecimals if($nbDecimals > $maxNbDecimals);
+    }
+  }
+  return 10**(-$maxNbDecimals);
+}
 
 sub matchRange {
   my ($range,$val)=@_;
-  return 0 unless($val =~ /^-?\d+(?:\.\d)?$/);
-  $range=~/^(-?\d+(?:\.\d+)?)-(-?\d+(?:\.\d+)?)$/;
+  return 0 unless($val =~ /^-?\d+(?:\.\d+)?$/ && $val eq formatNumber($val));
+  $range=~/^(-?\d+(?:\.\d+)?)-(-?\d+(?:\.\d+)?)(?:\%(\d+(?:\.\d+)?))?$/;
   my ($minValue,$maxValue)=($1,$2);
-  if(index($val,'.') > 0) {
-    return 0 if(index($minValue,'.') < 0 && index($maxValue,'.') < 0);
-  }else{
-    return 0 if($val ne $val+0);
-  }
-  return 1 if($minValue <= $val && $val <= $maxValue);
-  return 0;
+  my $stepValue=$3//getRangeStepFromBoundaries($minValue,$maxValue);
+  return 0 unless($minValue <= $val && $val <= $maxValue);
+  return 0 if($stepValue > 0 && ($val / $stepValue) !~ /^-?\d+$/);
+  return 1;
 }
 
 sub limitLineSize {
@@ -1020,6 +1032,11 @@ sub loadArchives {
           $option{default}=formatNumber(PerlUnitSync::GetOptionNumberDef($optionIdx));
           $option{numberMin}=formatNumber(PerlUnitSync::GetOptionNumberMin($optionIdx));
           $option{numberMax}=formatNumber(PerlUnitSync::GetOptionNumberMax($optionIdx));
+          $option{numberStep}=formatNumber(PerlUnitSync::GetOptionNumberStep($optionIdx));
+          if($option{numberStep} < 0) {
+            slog("Invalid step value \"$option{numberStep}\" for number range (map option: \"$option{key}\")",2);
+            $option{numberStep}=0;
+          }
         }elsif($option{type} eq "string") {
           $option{default}=PerlUnitSync::GetOptionStringDef($optionIdx);
           $option{stringMaxLen}=PerlUnitSync::GetOptionStringMaxLen($optionIdx);
@@ -1082,6 +1099,11 @@ sub loadArchives {
         $option{default}=formatNumber(PerlUnitSync::GetOptionNumberDef($optionIdx));
         $option{numberMin}=formatNumber(PerlUnitSync::GetOptionNumberMin($optionIdx));
         $option{numberMax}=formatNumber(PerlUnitSync::GetOptionNumberMax($optionIdx));
+        $option{numberStep}=formatNumber(PerlUnitSync::GetOptionNumberStep($optionIdx));
+        if($option{numberStep} < 0) {
+          slog("Invalid step value \"$option{numberStep}\" for number range (mod option: \"$option{key}\")",2);
+          $option{numberStep}=0;
+        }
       }elsif($option{type} eq "string") {
         $option{default}=PerlUnitSync::GetOptionStringDef($optionIdx);
         $option{stringMaxLen}=PerlUnitSync::GetOptionStringMaxLen($optionIdx);
@@ -5262,7 +5284,9 @@ sub getBSettingAllowedValues {
     }elsif($optionType eq "list") {
       @allowedValues=keys %{$p_option->{list}};
     }elsif($optionType eq "number") {
-      push(@allowedValues,"$p_option->{numberMin}-$p_option->{numberMax}");
+      my $rangeString="$p_option->{numberMin}-$p_option->{numberMax}";
+      $rangeString.="\%$p_option->{numberStep}" if(getRangeStepFromBoundaries($p_option->{numberMin},$p_option->{numberMax}) != $p_option->{numberStep});
+      push(@allowedValues,$rangeString);
     }
   }
 
@@ -7301,7 +7325,13 @@ sub hHelp {
             sayPrivate($user,"  $itemKey: $listItems{$itemKey}->{name} ($listItems{$itemKey}->{description})");
           }
         }elsif($p_option->{type} eq "number") {
-          sayPrivate($user,"  $p_option->{numberMin} .. $p_option->{numberMax}");
+          my $allowedRangeString="  $p_option->{numberMin} .. $p_option->{numberMax}";
+          if($p_option->{numberStep} > 0) {
+            $allowedRangeString.=" (step: $p_option->{numberStep})" if(getRangeStepFromBoundaries($p_option->{numberMin},$p_option->{numberMax}) != $p_option->{numberStep});
+          }else{
+            $allowedRangeString.=' (no quantization)';
+          }
+          sayPrivate($user,$allowedRangeString);
         }elsif($p_option->{type} eq "string") {
           sayPrivate($user,"  any string with a maximum length of $p_option->{stringMaxLen}");
         }
