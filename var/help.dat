@@ -121,10 +121,12 @@
 !fixColors - tries to fix colors automatically
 
 [force]
-!force <username> id|team|spec [number] - forces a player to spec, or sets his id to <number> or ally team to <number> (for local AI bots, <username> can be prefixed with '%')
-"!force foo id 2" forces player foo to take id 2
-"!force foo spec" forces foo to spec (alias: !spec)
-"!force * (player1,player2)(player3+player4,player5)" forces players1-5 ids and teams as described by brackets (for teams), commas (for ids) and '+' (for shared ids)
+!force <username> id|team|spec|bonus [number] - forces a player to spec, or sets his id/team/bonus to <number> (for AI bots, <username> can be prefixed with '%' to avoid ambiguity)
+"!force foo id 2" forces player "foo" to take id 2
+"!force %foo team 2" forces AI bot "foo" into team 2
+"!force foo bonus 50" gives 50% resource bonus to player "foo"
+"!force foo spec" forces player "foo" to spec (alias: !spec)
+"!force * (player1,player2)(player3+player4,player5)" forces players1-5 ids and teams to comply with the manual balance described by brackets, commas and '+' signs (alias: !fb)
 
 [forcePreset]
 !forcePreset <preset> - changes current global SPADS preset, bypassing the allowed presets list (use "!list presets" to list available presets)

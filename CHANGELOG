@@ -71,6 +71,7 @@ help.dat:
         remove alias entries (!b,!cv,!n,!spec,!y) as they can be listed with "!list aliases" now
 0.12.3: the !ban/!unban commands now accept skill based bans (new filters: "skill" and "skillUncert")
 0.12.4: the "!force" command can now be used to force full battle balance in one command: "!force * (player1,player2)(player3,player4)..."
+0.12.5: the "!force" command can now be used to give resource bonus
 
 helpSettings.dat:
 ================
@@ -733,6 +734,7 @@ spads.pl:
 0.11.39a: "step" parameters are now taken into account for number range map/modoptions
           improved handling of float numbers received through unitsync library
 0.11.40: the "!force" command can now be used to force full battle balance in one command: "!force * (player1,player2)(player3,player4)..."
+0.11.41: the "!force" command can now be used to give resource bonus
 
 SpadsConf.pm:
 ============

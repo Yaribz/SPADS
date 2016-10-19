@@ -49,7 +49,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.11.40';
+our $spadsVer='0.11.41';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 
@@ -7119,6 +7119,12 @@ sub hForce {
         invalidSyntax($user,'force');
         return 0;
       }
+    }elsif($type eq 'bonus') {
+      if(! defined $nb || $nb !~ /^\d+$/ || $nb > 100) {
+        invalidSyntax($user,'force');
+        return 0;
+      }
+      $nb+=0;
     }else{
       invalidSyntax($user,'force');
       return 0;
@@ -7199,6 +7205,8 @@ sub hForce {
         $p_battleStatus->{team}=$nb-1;
       }elsif($type eq 'id') {
         $p_battleStatus->{id}=$nb-1;
+      }elsif($type eq 'bonus') {
+        $p_battleStatus->{bonus}=$nb;
       }else{
         answer('Unable to process manual balance command (internal error)');
         slog("Unable to process manual balance command (invalid type: $type)",1);
@@ -7213,6 +7221,8 @@ sub hForce {
         queueLobbyCommand(['FORCETEAMNO',$player,$nb-1]);
       }elsif($type eq 'team') {
         queueLobbyCommand(['FORCEALLYNO',$player,$nb-1]);
+      }elsif($type eq 'bonus') {
+        queueLobbyCommand(['HANDICAP',$player,$nb]);
       }else{
         answer('Unable to process manual balance command (internal error)');
         slog("Unable to process manual balance command (invalid type: $type)",1);
@@ -12596,9 +12606,11 @@ sub cbAhServerQuit {
 
   foreach my $player (keys %{$p_runningBattle->{users}}) {
     if(defined $p_runningBattle->{users}->{$player}->{battleStatus}
-       && $p_runningBattle->{users}->{$player}->{battleStatus}->{mode}
-       && exists $winningTeams{$p_runningBattle->{users}->{$player}->{battleStatus}->{team}}) {
+       && $p_runningBattle->{users}->{$player}->{battleStatus}->{mode}) {
+      $cheating=1 if($p_runningBattle->{users}->{$player}->{battleStatus}->{bonus});
+      if(exists $winningTeams{$p_runningBattle->{users}->{$player}->{battleStatus}->{team}}) {
         push(@{$winningTeams{$p_runningBattle->{users}->{$player}->{battleStatus}->{team}}},$player);
+      }
     }
   }
   my @bots=keys %{$p_runningBattle->{bots}};
