@@ -49,7 +49,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.11.39a';
+our $spadsVer='0.11.40';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 
@@ -2333,6 +2333,7 @@ sub getCmdAliases {
                   coop => ['pSet','shareId'],
                   cv => ['callVote'],
                   ev => ['endVote'],
+                  fb => ['force','*'],
                   h => ['help'],
                   map => ['set','map'],
                   n => ['vote','n'],
@@ -7040,110 +7041,187 @@ sub hForce {
   my ($source,$user,$p_params,$checkOnly)=@_;
 
   if($lobbyState < 6 || ! %{$lobby->{battle}}) {
-    answer("Unable to force player battle status, battle lobby is closed");
+    answer('Unable to force player battle status, battle lobby is closed');
     return 0;
   }
 
-  if($#{$p_params} != 1 && $#{$p_params} != 2) {
-    invalidSyntax($user,"force");
+  if($#{$p_params} < 1) {
+    invalidSyntax($user,'force');
     return 0;
   }
 
-  my ($player,$type,$nb)=@{$p_params};
-
-  if(lc($type) eq "id" || lc($type) eq "team") {
-    if($conf{autoBalance} ne "off") {
-      answer("Cannot force id/team, autoBalance is enabled");
-      return 0;
-    }elsif($conf{autoBlockBalance} && $balanceState) {
-      answer("Cannot force id/team, teams are balanced and autoBlockBalance is enabled");
+  my @forceOrders;
+  if($p_params->[0] eq '*') {
+    my (undef,@balanceParams)=@{$p_params};
+    my $balanceString=join('',@balanceParams);
+    $balanceString=~s/\s+//g;
+    my @teamsStrings;
+    while($balanceString =~ /^\(([^\)]+)\)(.*)$/) {
+      push(@teamsStrings,$1);
+      $balanceString=$2;
+    }
+    if(! @teamsStrings) {
+      invalidSyntax($user,'force');
       return 0;
     }
-  }
-
-  my $p_forcedUsers=[];
-  if($player =~ /^\%(.+)$/) {
-    $player=$1;
+    if($balanceString) {
+      invalidSyntax($user,'force',"invalid parameter \"$balanceString\"");
+      return 0;
+    }
+    if($#teamsStrings > 15) {
+      answer('Unable to force manual balance, too many teams required');
+      return 0;
+    }
+    my $idNb=0;
+    for my $teamNb (0..$#teamsStrings) {
+      my @teamPlayers=split(/,/,$teamsStrings[$teamNb]);
+      foreach my $teamPlayer (@teamPlayers) {
+        my @idPlayers = index($teamPlayer,'+') == -1 ? ($teamPlayer) : (split(/\+/,$teamPlayer));
+        foreach my $idPlayer (@idPlayers) {
+          push(@forceOrders,[$idPlayer,'team',$teamNb+1]);
+          push(@forceOrders,[$idPlayer,'id',$idNb+1]);
+        }
+        $idNb++;
+      }
+    }
+    if($idNb > 16) {
+      answer('Unable to force manual balance, too many ids required');
+      return 0;
+    }
+  }elsif($#{$p_params} > 2) {
+    invalidSyntax($user,'force');
+    return 0;
   }else{
-    my @players=keys(%{$lobby->{battle}->{users}});
-    $p_forcedUsers=cleverSearch($player,\@players);
-    if($#{$p_forcedUsers} > 0) {
-      answer("Ambiguous command, multiple matches found for player \"$player\" in battle lobby");
-      return 0;
-    }
+    push(@forceOrders,$p_params);
   }
-  if(! @{$p_forcedUsers}) {
-    my @bots=keys(%{$lobby->{battle}->{bots}});
-    my $p_forcedBots=cleverSearch($player,\@bots);
-    if(! @{$p_forcedBots}) {
-      answer("Unable to fing matching player for \"$player\" in battle lobby");
-      return 0;
-    }
-    if($#{$p_forcedBots} > 0) {
-      answer("Ambiguous command, multiple matches found for player \"$player\" in battle lobby");
-      return 0;
-    }
-    my $forcedBot=$p_forcedBots->[0];
-    if(lc($type) eq "id") {
-      if(defined $nb && $nb =~ /^\d+$/ && $nb > 0 || $nb < 17) {
-        return "force $forcedBot id $nb" if($checkOnly);
-        my $p_battle=$lobby->getBattle();
-        my $p_battleStatus=$p_battle->{bots}->{$forcedBot}->{battleStatus};
-        $p_battleStatus->{id}=$nb-1;
-        my $p_color=$p_battle->{bots}->{$forcedBot}->{color};
-        queueLobbyCommand(["UPDATEBOT",$forcedBot,$lobby->marshallBattleStatus($p_battleStatus),$lobby->marshallColor($p_color)]);
-        return "force $forcedBot id $nb";
+
+  my @fixedForceOrders;
+  foreach my $p_forceOrder (@forceOrders) {
+    my ($player,$type,$nb)=@{$p_forceOrder};
+    $type=lc($type);
+
+    if($type eq 'id' || $type eq 'team') {
+      if($conf{autoBalance} ne 'off') {
+        answer('Cannot force id/team, autoBalance is enabled');
+        return 0;
+      }elsif($conf{autoBlockBalance} && $balanceState) {
+        answer('Cannot force id/team, teams have been balanced and autoBlockBalance is enabled');
+        return 0;
       }else{
-        invalidSyntax($user,"force");
+        if(! defined $nb || $nb !~ /^\d+$/ || $nb > 16) {
+          invalidSyntax($user,'force');
+          return 0;
+        }
+        $nb+=0;
+      }
+    }elsif($type eq 'spec') {
+      if(defined $nb) {
+        invalidSyntax($user,'force');
         return 0;
       }
-    }elsif(lc($type) eq "team") {
-      if(defined $nb && $nb =~ /^\d+$/ && $nb > 0 || $nb < 17) {
-        return "force $forcedBot team $nb" if($checkOnly);
-        my $p_battle=$lobby->getBattle();
-        my $p_battleStatus=$p_battle->{bots}->{$forcedBot}->{battleStatus};
+    }else{
+      invalidSyntax($user,'force');
+      return 0;
+    }
+
+    my @forcedUsers;
+    if($player =~ /^\%(.+)$/) {
+      $player=$1;
+    }else{
+      my @players=keys(%{$lobby->{battle}->{users}});
+      my $p_forcedUsers=cleverSearch($player,\@players);
+      @forcedUsers=grep {$_ ne $conf{lobbyLogin}} @{$p_forcedUsers};
+      if($#forcedUsers > 0) {
+        answer("Ambiguous command, multiple matches found for player \"$player\" in battle lobby");
+        return 0;
+      }
+    }
+    if(@forcedUsers) {
+      push(@fixedForceOrders,[$forcedUsers[0],$type,$nb]);
+    }else{
+      my @bots=keys(%{$lobby->{battle}->{bots}});
+      my $p_forcedBots=cleverSearch($player,\@bots);
+      if(! @{$p_forcedBots}) {
+        answer("Unable to fing matching player for \"$player\" in battle lobby");
+        return 0;
+      }
+      if($#{$p_forcedBots} > 0) {
+        answer("Ambiguous command, multiple matches found for player \"$player\" in battle lobby");
+        return 0;
+      }
+      if($type eq 'spec') {
+        invalidSyntax($user,'force');
+        return 0;
+      }
+      push(@fixedForceOrders,["\%$p_forcedBots->[0]",$type,$nb]);
+    }
+  }
+
+  my $canonicalCommandForm='force ';
+  if($#fixedForceOrders == 0) {
+    $canonicalCommandForm.="$fixedForceOrders[0][0] $fixedForceOrders[0][1]".($fixedForceOrders[0][1] eq 'spec' ? '' : " $fixedForceOrders[0][2]");
+  }else{
+    $canonicalCommandForm.='* ';
+    my @manualBalance;
+    my ($latestTeam,$latestId)=(-1,-1);
+    for my $playerIdx (0..(($#fixedForceOrders-1)/2)) {
+      my $orderIdx=$playerIdx*2;
+      if($fixedForceOrders[$orderIdx][1] ne 'team' || $fixedForceOrders[$orderIdx+1][1] ne 'id' || $fixedForceOrders[$orderIdx][0] ne $fixedForceOrders[$orderIdx+1][0]) {
+        answer('Unable to call vote for manual balance (internal error)');
+        slog("Unable to process vote call for manual balance (internal error, debug data: $fixedForceOrders[$orderIdx][1],$fixedForceOrders[$orderIdx+1][1],$fixedForceOrders[$orderIdx][0],$fixedForceOrders[$orderIdx+1][0])",1);
+        return 0;
+      }
+      my ($player,$team,$id)=($fixedForceOrders[$orderIdx][0],$fixedForceOrders[$orderIdx][2],$fixedForceOrders[$orderIdx+1][2]);
+      if($team != $latestTeam) {
+        push(@manualBalance,[[$player]]);
+      }elsif($id != $latestId) {
+        push(@{$manualBalance[$#manualBalance]},[$player]);
+      }else{
+        my $p_teamArray=$manualBalance[$#manualBalance];
+        push(@{$p_teamArray->[$#{$p_teamArray}]},$player);
+      }
+      ($latestTeam,$latestId)=($team,$id);
+    }
+    foreach my $p_team (@manualBalance) {
+      $canonicalCommandForm.='('.(join(',',map { join('+',@{$_}) } @{$p_team})).')';
+    }
+  }
+
+  return $canonicalCommandForm if($checkOnly);
+  
+  my $p_battle=$lobby->getBattle();
+  foreach my $p_forceOrder (@fixedForceOrders) {
+    my ($player,$type,$nb)=@{$p_forceOrder};
+    if($player =~ /^\%(.+)$/) {
+      $player=$1;
+      my $p_battleStatus=$p_battle->{bots}->{$player}->{battleStatus};
+      if($type eq 'team') {
         $p_battleStatus->{team}=$nb-1;
-        my $p_color=$p_battle->{bots}->{$forcedBot}->{color};
-        queueLobbyCommand(["UPDATEBOT",$forcedBot,$lobby->marshallBattleStatus($p_battleStatus),$lobby->marshallColor($p_color)]);
-        return "force $forcedBot team $nb";
+      }elsif($type eq 'id') {
+        $p_battleStatus->{id}=$nb-1;
       }else{
-        invalidSyntax($user,"force");
+        answer('Unable to process manual balance command (internal error)');
+        slog("Unable to process manual balance command (invalid type: $type)",1);
         return 0;
       }
+      my $p_color=$p_battle->{bots}->{$player}->{color};
+      queueLobbyCommand(['UPDATEBOT',$player,$lobby->marshallBattleStatus($p_battleStatus),$lobby->marshallColor($p_color)]);
     }else{
-      invalidSyntax($user,"force");
-      return 0;
-    }
-  }else{
-    my $forcedUser=$p_forcedUsers->[0];
-    if(lc($type) eq "spec") {
-      return "force $forcedUser spec" if($checkOnly);
-      queueLobbyCommand(["FORCESPECTATORMODE",$forcedUser]);
-      return "force $forcedUser spec";
-    }elsif(lc($type) eq "id") {
-      if(defined $nb && $nb =~ /^\d+$/ && $nb > 0 || $nb < 17) {
-        return "force $forcedUser id $nb" if($checkOnly);
-        queueLobbyCommand(["FORCETEAMNO",$forcedUser,$nb-1]);
-        return "force $forcedUser id $nb";
+      if($type eq 'spec') {
+        queueLobbyCommand(['FORCESPECTATORMODE',$player]);
+      }elsif($type eq 'id') {
+        queueLobbyCommand(['FORCETEAMNO',$player,$nb-1]);
+      }elsif($type eq 'team') {
+        queueLobbyCommand(['FORCEALLYNO',$player,$nb-1]);
       }else{
-        invalidSyntax($user,"force");
+        answer('Unable to process manual balance command (internal error)');
+        slog("Unable to process manual balance command (invalid type: $type)",1);
         return 0;
       }
-    }elsif(lc($type) eq "team") {
-      if(defined $nb && $nb =~ /^\d+$/ && $nb > 0 || $nb < 17) {
-        return "force $forcedUser team $nb" if($checkOnly);
-        queueLobbyCommand(["FORCEALLYNO",$forcedUser,$nb-1]);
-        return "force $forcedUser team $nb";
-      }else{
-        invalidSyntax($user,"force");
-        return 0;
-      }
-    }else{
-      invalidSyntax($user,"force");
-      return 0;
     }
   }
 
+  return $canonicalCommandForm;
 }
 
 sub hForcePreset {

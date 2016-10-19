@@ -70,6 +70,7 @@ help.dat:
 0.12.2: it is now possible to list aliases with "!list aliases" and to filter settings in "!list settings/hSettings/bSettings/pSettings" output
         remove alias entries (!b,!cv,!n,!spec,!y) as they can be listed with "!list aliases" now
 0.12.3: the !ban/!unban commands now accept skill based bans (new filters: "skill" and "skillUncert")
+0.12.4: the "!force" command can now be used to force full battle balance in one command: "!force * (player1,player2)(player3,player4)..."
 
 helpSettings.dat:
 ================
@@ -731,6 +732,7 @@ spads.pl:
 0.11.39: the "autoStop" preset setting can now contain a delay value to replace the 5 seconds default
 0.11.39a: "step" parameters are now taken into account for number range map/modoptions
           improved handling of float numbers received through unitsync library
+0.11.40: the "!force" command can now be used to force full battle balance in one command: "!force * (player1,player2)(player3,player4)..."
 
 SpadsConf.pm:
 ============
