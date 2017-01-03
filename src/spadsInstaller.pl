@@ -2,7 +2,7 @@
 #
 # This program installs SPADS in current directory from remote repository.
 #
-# Copyright (C) 2008-2015  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2017  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.17d (2016/08/18)
+# Version 0.18 (2017/01/03)
 
 use strict;
 
@@ -39,6 +39,9 @@ sub none (&@) { my $c = shift; return ! defined first {&$c} @_; }
 sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 
 my $win=$^O eq 'MSWin32';
+my $macOs=$^O eq 'darwin';
+
+my $dynLibSuffix=$win?'dll':($macOs?'dylib':'so');
 
 my @packages=(qw'getDefaultModOptions.pl help.dat helpSettings.dat SpringAutoHostInterface.pm SpringLobbyInterface.pm SimpleEvent.pm SimpleLog.pm spads.pl SpadsConf.pm spadsInstaller.pl SpadsUpdater.pm SpadsPluginApi.pm update.pl argparse.py replay_upload.py',$win?'7za.exe':'7za');
 my @packagesWinServer=qw'spring-dedicated.exe spring-headless.exe';
@@ -46,7 +49,8 @@ my $perlUnitsyncModule='PerlUnitSync.pm';
 
 my $isInteractive=-t STDIN;
 my $currentStep=1;
-my ($nbSteps,$pathSep,$perlUnitsyncLibName,$defaultUnitsyncDir)=$win?(12,';','PerlUnitSync.dll'):(14,':','PerlUnitSync.so','/lib');
+my ($nbSteps,$pathSep,$defaultUnitsyncDir)=$win?(12,';'):(14,':','/lib');
+my $perlUnitsyncLibName="PerlUnitSync.$dynLibSuffix";
 my @pathes=splitPaths($ENV{PATH});
 my %conf=(installDir => File::Spec->canonpath(cwd()));
 
@@ -83,7 +87,7 @@ if(@ARGV) {
   }
 }
 
-my %prereqFound=(swig => 0, 'g++' => 0);
+my %prereqFound=(swig => 0, 'g++' => 0, otool => 0, install_name_tool => 0);
 foreach my $prereq (keys %prereqFound) {
   $prereqFound{$prereq}=1 if(any {-f "$_/$prereq".($win?'.exe':'')} @pathes);
 }
@@ -99,7 +103,10 @@ if(! $win || (exists $conf{release} && $conf{release} eq '-g')) {
         unless(exists $ENV{MINGDIR} && -d "$ENV{MINGDIR}/include");
   }
 }
-
+if($macOs) {
+  fatalError("Couldn't find otool, please install otool to generate Perl Unitsync interface module on macOS") unless($prereqFound{otool});
+  fatalError("Couldn't find install_name_tool, please install install_name_tool to generate Perl Unitsync interface module on macOS") unless($prereqFound{install_name_tool});
+}
 sub fatalError { $sLog->log(shift,0); exit 1; }
 
 sub splitPaths { return split(/$pathSep/,shift//''); }
@@ -214,7 +221,7 @@ sub unlinkUnitsyncModuleFiles {
 my $unitsyncDir;
 sub generatePerlUnitSync {
   my $defaultUnitsync='';
-  my ($unitsyncLibName,@libPathes)=$win?('unitsync.dll',@pathes):('libunitsync.so',split(/:/,$ENV{LD_LIBRARY_PATH}//''));
+  my ($unitsyncLibName,@libPathes)=$win?('unitsync.dll',@pathes):("libunitsync.$dynLibSuffix",split(/:/,$ENV{LD_LIBRARY_PATH}//''));
   foreach my $libPath (@libPathes,$defaultUnitsyncDir) {
     if(-f "$libPath/$unitsyncLibName") {
       $defaultUnitsync=File::Spec->catfile($libPath,$unitsyncLibName);
@@ -305,11 +312,32 @@ sub generatePerlUnitSync {
   }else{
     $linkParam=" -Wl,-rpath,\"$1\"" if($unitsync =~ /^(.+)\/[^\/]+$/);
   }
-  system("g++ -shared PerlUnitSync_wrap.o \"$unitsync\"$linkParam -o $perlUnitsyncLibName");
+  my $dynLibFlag=$macOs?'-dynamiclib -flat_namespace -undefined suppress':'-shared';
+  system("g++ $dynLibFlag PerlUnitSync_wrap.o \"$unitsync\"$linkParam -o $perlUnitsyncLibName");
   unlinkUnitsyncTmpFiles();
   if($?) {
     unlinkUnitsyncModuleFiles();
     fatalError('Error during Perl Unitsync interface library compilation');
+  }
+
+  if($macOs) {
+    my @unitsyncIdNameRes=`otool -D $unitsync`;
+    if($?) {
+      unlinkUnitsyncModuleFiles();
+      fatalError('Unable to retrieve Unitsync shared library ID name using "otool -D" command'.($!?" ($!)":''));
+    }
+    if($#unitsyncIdNameRes != 1) {
+      unlinkUnitsyncModuleFiles();
+      fatalError('Unexpected result when retrieving Unitsync shared library ID name');
+    }
+    my $unitsyncIdName=$unitsyncIdNameRes[1];
+    chomp($unitsyncIdName);
+    
+    system("install_name_tool -change $unitsyncIdName $unitsync $perlUnitsyncLibName");
+    if($?) {
+      unlinkUnitsyncModuleFiles();
+      fatalError('Unable to configure Unitsync library path in Perl Unitsync interface library using "install_name_tool -change" command'.($!?" ($!)":''));
+    }
   }
 }
 

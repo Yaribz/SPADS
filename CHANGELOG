@@ -918,6 +918,7 @@ spadsInstaller.pl:
 0.17b: remove the obsolete PerlUnitSync.dll library from the list of auto-updated binary packages (Windows)
 0.17c: check Win32::API module version at start (Windows)
 0.17d: remove obsolete workaround for internal Perl bool type definition (causes problems with new compilers)
+0.18: add macOS compatibility
 
 SpadsPluginApi.pm:
 =================
