@@ -735,6 +735,9 @@ spads.pl:
           improved handling of float numbers received through unitsync library
 0.11.40: the "!force" command can now be used to force full battle balance in one command: "!force * (player1,player2)(player3,player4)..."
 0.11.41: the "!force" command can now be used to give resource bonus
+0.11.42: SPADS no longer fails to start when System Integrity Protection is enabled (macOS)
+         !hostStats command is now fully functional (macOS)
+         fix CPU speed and LAN IP address detection (macOS)
 
 SpadsConf.pm:
 ============

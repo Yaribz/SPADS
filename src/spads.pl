@@ -2,7 +2,7 @@
 #
 # SPADS: Spring Perl Autohost for Dedicated Server
 #
-# Copyright (C) 2008-2016  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2017  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -49,9 +49,10 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.11.41';
+our $spadsVer='0.11.42';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
+my $macOs=$^O eq 'darwin';
 
 my %optionTypes = (
   0 => "error",
@@ -89,6 +90,42 @@ if($win) {
   eval "use Win32::TieRegistry ':KEY_'";
   $regLMachine=new Win32::TieRegistry("LMachine");
   $regLMachine->Delimiter("/") if(defined $regLMachine);
+}
+
+my %macOsData;
+if($macOs) {
+  my $sysctlBin;
+  if(-x '/sbin/sysctl') {
+    $sysctlBin='/sbin/sysctl';
+  }elsif(-x '/usr/sbin/sysctl') {
+    $sysctlBin='/usr/sbin/sysctl';
+  }else{
+    $sysctlBin=can_run('sysctl');
+  }
+  if(defined $sysctlBin) {
+    my @sysctlOut=`$sysctlBin -a 2>/dev/null`;
+    foreach my $line (@sysctlOut) {
+      if($line =~ /^\s*([^:]*[^\s:])\s*:\s*(.*[^\s])\s*$/) {
+        $macOsData{$1}=$2;
+      }
+    }
+  }
+  my $swVersBin;
+  if(-x '/bin/sw_vers') {
+    $swVersBin='/bin/sw_vers';
+  }elsif(-x '/usr/bin/sw_vers') {
+    $swVersBin='/usr/bin/sw_vers';
+  }else{
+    $swVersBin=can_run('sw_vers');
+  }
+  if(defined $swVersBin) {
+    my @swVersOut=`$swVersBin 2>/dev/null`;
+    foreach my $line (@swVersOut) {
+      if($line =~ /^\s*([^:]*[^\s:])\s*:\s*(.*[^\s])\s*$/) {
+        $macOsData{$1}=$2;
+      }
+    }
+  }
 }
 
 our %spadsHandlers = (
@@ -609,6 +646,24 @@ sub setSpringEnv {
 
   if($win) {
     setEnvVarFirstPaths('PATH',$unitSyncPath);
+  }elsif($macOs) {
+    my $wrapperLibName='PerlUnitSync.dylib';
+    my $unitsyncLibName='libunitsync.dylib';
+    my @libPathes=`otool -L "$conf{binDir}/$wrapperLibName"`;
+    fatalError("Unable to retrieve current Unitsync shared library path in $wrapperLibName using \"otool -L\" command".($!?" ($!)":'')) if($?);
+    my $currentUnitsyncPathInWrapper;
+    foreach my $libPath (@libPathes) {
+      if($libPath =~ /^\s*((?:.*\/)?$unitsyncLibName)\s/) {
+        $currentUnitsyncPathInWrapper=$1;
+        last;
+      }
+    }
+    fatalError("Unexpected result when retrieving current Unitsync shared library path in $wrapperLibName using \"otool -L\" command") unless(defined $currentUnitsyncPathInWrapper);
+    my $newUnitsyncPathInWrapper=catfile($unitSyncPath,$unitsyncLibName);
+    if(-f $newUnitsyncPathInWrapper && ! areSamePaths($currentUnitsyncPathInWrapper,$newUnitsyncPathInWrapper)) {
+      system('install_name_tool','-change',$currentUnitsyncPathInWrapper,$newUnitsyncPathInWrapper,"$conf{binDir}/$wrapperLibName");
+      fatalError("Unable to configure Unitsync shared library path in $wrapperLibName using \"install_name_tool -change\" command".($!?" ($!)":'')) if($?);
+    }
   }else{
     portableExec($^X,$0,@ARGV) if(setEnvVarFirstPaths('LD_LIBRARY_PATH',$unitSyncPath));
   }
@@ -1214,8 +1269,17 @@ sub getMapOptions {
   return $p_mapOptions;
 }
 
+sub formatMemSize {
+  my $rawMem=shift;
+  return '' unless(defined $rawMem && $rawMem =~ /^\d+$/);
+  return "$rawMem Bytes" if($rawMem < 1024);
+  return (sprintf('%.2f',$rawMem/1024)+0).' kB' if(sprintf('%.2f',$rawMem/(1024 ** 2)) < 1);
+  return (sprintf('%.2f',$rawMem/(1024 ** 2))+0).' MB' if(sprintf('%.2f',$rawMem/(1024 ** 3)) < 1);
+  return (sprintf('%.2f',$rawMem/(1024 ** 3))+0).' GB';
+}
+
 sub getSysInfo {
-  my ($osVersion,$memAmount,$uptime)=("","",0);
+  my ($osVersion,$memAmount,$uptime)=('','',0);
   my @uname=uname();
   if($win) {
     $osVersion=Win32::GetOSName();
@@ -1246,30 +1310,43 @@ sub getSysInfo {
       $memStatus->{'AvailVirtual'} = 0;
       GlobalMemoryStatus($memStatus);
       if($memStatus->{dwLength} != 0) {
-        $memAmount=int($memStatus->{'TotalPhys'} / (1024 * 1024));
-        $memAmount.=" MB";
+        $memAmount=formatMemSize($memStatus->{'TotalPhys'});
       }else{
-        slog("Unable to retrieve total physical memory through GlobalMemoryStatus function (Win32 API)",2);
+        slog('Unable to retrieve total physical memory through GlobalMemoryStatus function (Win32 API)',2);
       }
     }else{
       slog('Unable to import GlobalMemoryStatus from kernel32.dll ('.getLastWin32Error().')',2);
     }
 
     $uptime=int(Win32::GetTickCount() / 1000);
-  }else{
-    if(-f "/etc/issue.net") {
-      $osVersion=`cat /etc/issue.net`;
-      chomp($osVersion);
-    }
+  }elsif($macOs) {
+    $osVersion.=$macOsData{ProductName}.' ' if(defined $macOsData{ProductName});
+    $osVersion.=$macOsData{ProductVersion}.' ' if(defined $macOsData{ProductVersion});
+    $osVersion.="- Build $macOsData{BuildVersion}" if(defined $macOsData{BuildVersion});
     my $kernelVersion="$uname[0] $uname[2]";
-    if($kernelVersion ne "") {
-      if($osVersion ne "") {
+    if($kernelVersion ne '') {
+      if($osVersion ne '') {
         $osVersion.=" ($kernelVersion)";
       }else{
         $osVersion=$kernelVersion;
       }
     }
-    if(-f "/proc/meminfo") {
+    $memAmount=formatMemSize($macOsData{'hw.memsize'});
+    $uptime=time()-$1 if(defined $macOsData{'kern.boottime'} && $macOsData{'kern.boottime'} =~ /\bsec\s*=\s*(\d+)/);
+  }else{
+    if(-f '/etc/issue.net') {
+      $osVersion=`cat /etc/issue.net`;
+      chomp($osVersion);
+    }
+    my $kernelVersion="$uname[0] $uname[2]";
+    if($kernelVersion ne '') {
+      if($osVersion ne '') {
+        $osVersion.=" ($kernelVersion)";
+      }else{
+        $osVersion=$kernelVersion;
+      }
+    }
+    if(-f '/proc/meminfo') {
       my @memInfo=`cat /proc/meminfo 2>/dev/null`;
       foreach my $line (@memInfo) {
         if($line =~ /^\s*MemTotal\s*:\s*(\d+\s*\w+)$/) {
@@ -1278,7 +1355,7 @@ sub getSysInfo {
         }
       }
     }
-    if(-f "/proc/uptime") {
+    if(-f '/proc/uptime') {
       my $uptimeInfo=`cat /proc/uptime 2>/dev/null`;
       if($uptimeInfo =~ /^\s*(\d+)/) {
         $uptime=$1;
@@ -1302,19 +1379,27 @@ sub getCpuSpeed {
 sub getRealCpuSpeed {
   if($win) {
     my $cpuInfo;
-    $cpuInfo=$regLMachine->Open("Hardware/Description/System/CentralProcessor/0", { Access => KEY_READ() }) if(defined $regLMachine);
+    $cpuInfo=$regLMachine->Open('Hardware/Description/System/CentralProcessor/0', { Access => KEY_READ() }) if(defined $regLMachine);
     if(defined $cpuInfo) {
-      my $procName=$cpuInfo->GetValue("ProcessorNameString");
+      my $procName=$cpuInfo->GetValue('ProcessorNameString');
       if(defined $procName) {
         $cpuModel=$procName;
         return $1 if($cpuModel =~ /(\d+)\+/);
       }
-      my $procMhz=hex($cpuInfo->GetValue("~MHz"));
+      my $procMhz=hex($cpuInfo->GetValue('~MHz'));
       return $procMhz if(defined $procMhz);
     }
-    slog("Unable to retrieve CPU info from Windows registry",2);
+    slog('Unable to retrieve CPU info from Windows registry',2);
     return 0;
-  }elsif(-f "/proc/cpuinfo" && -r "/proc/cpuinfo") {
+  }elsif($macOs) {
+    $cpuModel=$macOsData{'machdep.cpu.brand_string'} if(exists $macOsData{'machdep.cpu.brand_string'});
+    my $cpuSpeed=$macOsData{'hw.cpufrequency_max'} || $macOsData{'hw.cpufrequency'};
+    return int($cpuSpeed/1000000) if($cpuSpeed);
+    if(defined $cpuModel && $cpuModel =~ /\s(\d+(?:\.\d*)?)\s*GHz/) {
+      $cpuSpeed=int($1*1000);
+      return $cpuSpeed;
+    }
+  }elsif(-f '/proc/cpuinfo' && -r '/proc/cpuinfo') {
     my @cpuInfo=`cat /proc/cpuinfo 2>/dev/null`;
     my %cpu;
     foreach my $line (@cpuInfo) {
@@ -1322,22 +1407,21 @@ sub getRealCpuSpeed {
         $cpu{$1}=$2;
       }
     }
-    $cpuModel=$cpu{"model name"} if(exists $cpu{"model name"});
-    if(defined $cpu{"model name"} && $cpu{"model name"} =~ /(\d+)\+/) {
+    $cpuModel=$cpu{'model name'} if(exists $cpu{'model name'});
+    if(defined $cpu{'model name'} && $cpu{'model name'} =~ /(\d+)\+/) {
       return $1;
     }
-    if(defined $cpu{"cpu MHz"} && $cpu{"cpu MHz"} =~ /^(\d+)(?:\.\d*)?$/) {
+    if(defined $cpu{'cpu MHz'} && $cpu{'cpu MHz'} =~ /^(\d+)(?:\.\d*)?$/) {
       return $1;
     }
     if(defined $cpu{bogomips} && $cpu{bogomips} =~ /^(\d+)(?:\.\d*)?$/) {
       return $1;
     }
-    slog("Unable to parse CPU info from /proc/cpuinfo",2);
-    return 0;
-  }else{
-    slog("Unable to retrieve CPU info from /proc/cpuinfo",2);
+    slog('Unable to parse CPU info from /proc/cpuinfo',2);
     return 0;
   }
+  slog('Unable to retrieve CPU info',2);
+  return 0;
 }
 
 sub getLocalLanIp {
@@ -1366,7 +1450,7 @@ sub getLocalLanIp {
       }
     }
   }else{
-    $ENV{LANG}="C";
+    $ENV{LANG}='C';
     my $ifconfigBin;
     if(-x '/sbin/ifconfig') {
       $ifconfigBin='/sbin/ifconfig';
@@ -1384,11 +1468,7 @@ sub getLocalLanIp {
       slog('Unable to find "ifconfig" or "ip" utilities to retrieve LAN IP addresses',2);
     }
     foreach my $line (@ipConfOut) {
-      if(defined $ifconfigBin) {
-        push(@ips,$1) if($line =~ /inet addr:\s*(\d+\.\d+\.\d+\.\d+)\s/);
-      }else{
-        push(@ips,$1) if($line =~ /inet\s+(\d+\.\d+\.\d+\.\d+)/);
-      }
+      push(@ips,$1) if($line =~ /inet\s(?:addr:)?\s*(\d+\.\d+\.\d+\.\d+)/);
     }
   }
   foreach my $ip (@ips) {
