@@ -1380,9 +1380,10 @@ Maximum number of spectators
 When this number of spectators are in the battle lobby, SPADS will auto-kick any additional player who joins as spectator.
 A value of 0 will prevent anyone from spectating.
 -
+<null> (no spectator number limit)
 Integer
 -
-0
+<null>
 
 [set:autoSetVoteMode]
 Default value of "Auto-set vote mode" preference

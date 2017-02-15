@@ -1,5 +1,5 @@
-To install SPADS on Linux/UNIX, you have to:
-============================================
+To install SPADS on Linux/UNIX/macOS, you have to:
+==================================================
 
 1) Ensure Perl, swig and g++ are installed and available in your PATH
 2) Install Spring dedicated, and remember "spring-dedicated" and "Spring data directory" locations (they will be asked during SPADS installation)
