@@ -36,7 +36,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.11.12';
+my $moduleVersion='0.11.13';
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 
 my %globalParameters = (lobbyLogin => ["login"],
@@ -170,7 +170,7 @@ my %spadsSectionParameters = (description => ["notNull"],
                               endGameCommand => [],
                               endGameCommandEnv => ['null','varAssignments'],
                               endGameCommandMsg => ['null','exitMessages'],
-                              endGameAwards => ['bool'],
+                              endGameAwards => ['bool2'],
                               autoLock => ["autoParamType"],
                               autoSpecExtraPlayers => ["bool"],
                               autoBalance => ["autoParamType"],

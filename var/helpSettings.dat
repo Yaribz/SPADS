@@ -1291,7 +1291,8 @@ End game awards
 Specifies if award messages based on team statistics must be printed after each game
 -
 0: award messages disabled
-1: award messages enabled
+1: award messages enabled except for 1v1
+2: award messages enabled for all games
 -
 1
 

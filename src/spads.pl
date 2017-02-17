@@ -49,7 +49,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.11.42';
+our $spadsVer='0.11.43';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -12730,7 +12730,7 @@ sub cbAhServerQuit {
     @teamStatsNames=keys %teamStats;
   }
   my $nbTeamStats=$#teamStatsNames+1;
-  if($nbTeamStats > 2 && $conf{endGameAwards}) {
+  if(($nbTeamStats > 2 && $conf{endGameAwards}) || ($nbTeamStats == 2 && $conf{endGameAwards} > 1)) {
     my %awardStats;
     foreach my $name (@teamStatsNames) {
       $awardStats{$name}={damage => $teamStats{$name}->{damageDealt},
@@ -12740,12 +12740,14 @@ sub cbAhServerQuit {
     my @sortedDamages=sort {$awardStats{$b}->{damage} <=> $awardStats{$a}->{damage}} (keys %awardStats);
     my @sortedEcos=sort {$awardStats{$b}->{eco} <=> $awardStats{$a}->{eco}} (keys %awardStats);
     my @bestDamages;
-    for my $i (0..(int($nbTeamStats/2-0.5))) {
+    for my $i (0..($nbTeamStats == 2 ? 1 : int($nbTeamStats/2-0.5))) {
       push(@bestDamages,$sortedDamages[$i]);
     }
     my @sortedMicros=sort {$awardStats{$b}->{micro} <=> $awardStats{$a}->{micro}} (@bestDamages);
 
     my ($damageWinner,$ecoWinner,$microWinner)=($sortedDamages[0],$sortedEcos[0],$sortedMicros[0]);
+    my ($bestDamage,$bestEco,$bestMicro)=($awardStats{$damageWinner}->{damage},$awardStats{$ecoWinner}->{eco},$awardStats{$microWinner}->{micro});
+    my ($secondBestDamage,$secondBestEco,$secondBestMicro)=($awardStats{$sortedDamages[1]}->{damage},$awardStats{$sortedEcos[1]}->{eco},$awardStats{$sortedMicros[1]}->{micro});
     my $maxLength=length($damageWinner);
     $maxLength=length($ecoWinner) if(length($ecoWinner) > $maxLength);
     $maxLength=length($microWinner) if(length($microWinner) > $maxLength);
@@ -12753,12 +12755,12 @@ sub cbAhServerQuit {
     $ecoWinner=rightPadString($ecoWinner,$maxLength);
     $microWinner=rightPadString($microWinner,$maxLength);
 
-    my $formattedDamage=formatInteger(int($awardStats{$sortedDamages[0]}->{damage}));
-    my $formattedResources=formatInteger(int($awardStats{$sortedEcos[0]}->{eco}));
+    my $formattedDamage=formatInteger(int($bestDamage));
+    my $formattedResources=formatInteger(int($bestEco));
 
     my $damageAwardMsg="  Damage award:  $damageWinner  (total damage: $formattedDamage)";
     my $ecoAwardMsg="  Eco award:     $ecoWinner  (resources produced: $formattedResources)";
-    my $microAwardMsg="  Micro award:   $microWinner  (damage efficiency: ".int($awardStats{$sortedMicros[0]}->{micro}*100).'%)';
+    my $microAwardMsg="  Micro award:   $microWinner  (damage efficiency: ".int($bestMicro*100).'%)';
     
     $maxLength=length($damageAwardMsg);
     $maxLength=length($ecoAwardMsg) if(length($ecoAwardMsg) > $maxLength);
@@ -12766,12 +12768,12 @@ sub cbAhServerQuit {
     $damageAwardMsg=rightPadString($damageAwardMsg,$maxLength);
     $ecoAwardMsg=rightPadString($ecoAwardMsg,$maxLength);
     $microAwardMsg=rightPadString($microAwardMsg,$maxLength);
-    $damageAwardMsg.='  [ OWNAGE! ]' if($awardStats{$sortedDamages[0]}->{damage} >= 2*$awardStats{$sortedDamages[1]}->{damage});
-    $ecoAwardMsg.='  [ OWNAGE! ]' if($awardStats{$sortedEcos[0]}->{eco} >= 2*$awardStats{$sortedEcos[1]}->{eco});
-    $microAwardMsg.='  [ OWNAGE! ]' if($awardStats{$sortedMicros[0]}->{micro} >= $awardStats{$sortedMicros[1]}->{micro}+0.5);
-    sayBattle($damageAwardMsg);
-    sayBattle($ecoAwardMsg);
-    sayBattle($microAwardMsg);
+    $damageAwardMsg.='  [ OWNAGE! ]' if($bestDamage >= 2*$secondBestDamage);
+    $ecoAwardMsg.='  [ OWNAGE! ]' if($bestEco >= 2*$secondBestEco);
+    $microAwardMsg.='  [ OWNAGE! ]' if($bestMicro >= $secondBestMicro+0.5);
+    sayBattle($damageAwardMsg) if($bestDamage > $secondBestDamage);
+    sayBattle($ecoAwardMsg) if($bestEco > $secondBestEco);
+    sayBattle($microAwardMsg) if($bestMicro > $secondBestMicro);
   }
 
   my %teamCounts;
