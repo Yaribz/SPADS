@@ -49,7 +49,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.11.43';
+our $spadsVer='0.11.43a';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -2785,7 +2785,7 @@ sub checkDataDump {
 }
 
 sub checkAutoUpdate {
-  if($conf{autoUpdateRelease} ne "" && $conf{autoUpdateDelay} && time - $timestamps{autoUpdate} > 60 * $conf{autoUpdateDelay}) {
+  if($conf{autoUpdateRelease} ne '' && $conf{autoUpdateDelay} && time - $timestamps{autoUpdate} > 60 * $conf{autoUpdateDelay}) {
     $timestamps{autoUpdate}=time;
     if($updater->isUpdateInProgress()) {
       slog('Skipping auto-update, another updater instance is already running',2);
@@ -2794,17 +2794,17 @@ sub checkAutoUpdate {
              sub {
                my $updateRc=$updater->update();
                if($updateRc < 0) {
-                 slog("Unable to check or apply SPADS update",2);
+                 slog('Unable to check or apply SPADS update',2);
                  exit $updateRc;
                }
                exit 0;
              },
              \&onUpdaterProcessExit)) {
-        slog("Unable to fork to launch SPADS updater",1);
+        slog('Unable to fork to launch SPADS updater',1);
       }
     }
   }
-  if($conf{autoRestartForUpdate} ne "off" && (! $quitAfterGame) && (! $updater->isUpdateInProgress()) && time - $timestamps{autoRestartCheck} > 300) {
+  if($conf{autoRestartForUpdate} ne 'off' && (! $quitAfterGame) && time - $timestamps{autoRestartCheck} > 300 && (! $updater->isUpdateInProgress())) {
     autoRestartForUpdateIfNeeded();
   }
 }
