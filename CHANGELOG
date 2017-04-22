@@ -741,6 +741,7 @@ spads.pl:
          !hostStats command is now fully functional (macOS)
          fix CPU speed and LAN IP address detection (macOS)
 0.11.43: new allowed value for "endGameAwards" preset setting: "2" (enable end game awards for all games)
+0.11.43a: reorder auto-update checks to avoid useless locks
 
 SpadsConf.pm:
 ============
