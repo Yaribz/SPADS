@@ -311,7 +311,7 @@ Message flood auto-kick thresholds
 -
 Specifies the record period and the maximum number of chat messages triggered by a user during this period in the battle lobby before auto-kick for flood protection
 -
-<nbMsg>:<delay>
+<nbMsg>;<delay>
   where <nbMsg> is the maximum number of chat messages before kick (integer)
         <delay> is the record period in seconds (integer)
 -
@@ -322,7 +322,7 @@ Status flood auto-kick thresholds
 -
 Specifies the record period and the maximum number of status changes triggered by a user during this period in the battle lobby before auto-kick for flood protection
 -
-<nbMsg>:<delay>
+<nbMsg>;<delay>
   where <nbMsg> is the maximum number of status changes before kick (integer)
         <delay> is the record period in seconds (integer)
 -
@@ -333,7 +333,7 @@ Kick flood auto-ban thresholds
 -
 Specifies the record period, the maximum number of times someone can be auto-kicked during this period before being auto-banned, and the duration of this automatic ban for battle lobby flood protection
 -
-<nbAutoKick>:<delay>:<banDuration>
+<nbAutoKick>;<delay>;<banDuration>
   where <nbAutoKick> is the maximum number of times someone can be auto-kicked before ban (integer)
         <delay> is the record period in seconds (integer)
         <banDuration> is the duration in minutes of the automatic ban for auto-kick floods (integer)
@@ -345,7 +345,7 @@ Command flood auto-ignore thresholds
 -
 Specifies the record period, the maximum number of commands someone can send to the AutoHost during this period before being auto-ignored, and the duration of this automatic ignore for command flood protection
 -
-<nbCmd>:<delay>:<ignoreDuration>
+<nbCmd>;<delay>;<ignoreDuration>
   where <nbCmd> is the maximum number of commands someone can send to the AutoHost before ignore (integer)
         <delay> is the record period in seconds (integer)
         <ignoreDuration> is the duration in minutes of the automatic ignore for command flood (integer)
@@ -667,10 +667,12 @@ Integer
 Minimum vote participation
 -
 This is the minimum percent of voters that must have voted manually for a poll to be taken into account by SPADS.
+If two values are provided (separated by ";" character), then the first one is used when there is no game in progress and the second one is used when a game is in progress.
 -
-Integer between 0 and 100 included
+<percent>: Integer between 0 and 100 included (a single value is used, no distinction is made whether a game is running or not)
+<percent1>;<percent2>: Integers between 0 and 100 included (<percent1> is used when no game is running, <percent2> is used when a game is running)
 -
-34
+50
 
 [global:pluginsDir]
 SPADS plugins directory
@@ -764,7 +766,7 @@ User data retention
 SPADS can store user data (IP addresses, ranks ...) so that IP bans and anti-smurf are possible.
 The "userDataRetention" global setting contains the number of days during which user data are kept even if the user hasn't been seen online, followed by the maximum number of IPs (useful to deal with dynamic IPs) and the maximum number of names (useful to track renames) that can be bound to an account, separated by ";".
 -
-<retentionPeriod>:<maxIPs>:<maxNames>
+<retentionPeriod>;<maxIPs>;<maxNames>
   where <retentionPeriod> is the delay in days during which user data are stored ("-1" => data are kept forever, "0" => user data retention disabled)
         <maxIPs> is the maximum number of IPs bound to an account ("-1" => all IPs are kept, "0" => IPs aren't stored)
         <maxNames> is the maximum number of names bound to an account ("-1" => all names are kept, "0" => only one name is stored by account, "1" => max 2 names ...)
@@ -1597,7 +1599,7 @@ Unlock-for-spectator delay
 The !unlockSpec command allows players to unlock temporarily a battle so that they can join as spectator: the battle is unlocked and re-locked automatically as soon as they join it.
 The "unlockSpecDelay" preset setting specifies both the maximum delay during which battle is unlocked to allow the spectator to join (if he didn't join during this time, the battle is re-locked anyway to prevent other players to join and think they can play), and the minimum delay before the same user can execute the !unlockSpec command another time.
 -
-<unlockTime>:<delayForRetry>
+<unlockTime>;<delayForRetry>
   where <unlockTime> is the maximum delay in seconds during which battle is unlocked to allow the spectator to join
         <delayForRetry> is the minimum delay in seconds before the same user can execute the !unlockSpec command another time
 -

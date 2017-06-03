@@ -1,6 +1,6 @@
 # Object-oriented Perl module handling SPADS configuration files
 #
-# Copyright (C) 2008-2015  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2017  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -36,7 +36,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.11.13';
+my $moduleVersion='0.11.14';
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 
 my %globalParameters = (lobbyLogin => ["login"],
@@ -80,7 +80,7 @@ my %globalParameters = (lobbyLogin => ["login"],
                         broadcastChannels => ["channelList","null"],
                         opOnMasterChannel => ["bool"],
                         voteTime => ["integer"],
-                        minVoteParticipation => ["integer"],
+                        minVoteParticipation => ['integer','integerCouple'],
                         reCallVoteDelay => ["integer"],
                         promoteDelay => ["integer"],
                         botsRank => ["integer"],

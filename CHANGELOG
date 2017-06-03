@@ -149,6 +149,8 @@ helpSettings.dat:
 0.5.8a: default value for "onBadSpringVersion" global setting changed (multi-engine lobby protocol extension is now used by default when needed)
 0.5.8b: fix wrong default value in "maxSpecs" preset setting documentation
 0.5.9: new allowed value for "endGameAwards" preset setting: "2" (enable end game awards for all games)
+0.5.10: the "minVoteParticipation" setting value can now depend on game runing state
+        fix typos
 
 PerlUnitSync.pm:
 ===============
@@ -742,6 +744,7 @@ spads.pl:
          fix CPU speed and LAN IP address detection (macOS)
 0.11.43: new allowed value for "endGameAwards" preset setting: "2" (enable end game awards for all games)
 0.11.43a: reorder auto-update checks to avoid useless locks
+0.11.44: the "minVoteParticipation" setting value can now depend on game runing state
 
 SpadsConf.pm:
 ============
@@ -867,6 +870,7 @@ SpadsConf.pm:
 0.11.11: local AI bots colors can now be configured
 0.11.12: the "autoStop" preset setting can now contain a delay value to replace the 5 seconds default
 0.11.13: new allowed value for "endGameAwards" preset setting: "2" (enable end game awards for all games)
+0.11.14: the "minVoteParticipation" setting value can now depend on game runing state
 
 spadsInstaller.pl:
 =================

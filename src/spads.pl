@@ -49,7 +49,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.11.43a';
+our $spadsVer='0.11.44';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -2703,7 +2703,16 @@ sub handleVote {
         $nbVotesForVotePart=$currentVote{yesCount}+$currentVote{noCount};
       }
       my $votePart=($nbVotesForVotePart+$currentVote{blankCount}-$nbAwayVoters)/($totalNbVotes+$currentVote{blankCount});
-      my $minVotePart=$conf{minVoteParticipation}/100;
+      my $minVotePart=$conf{minVoteParticipation};
+      if($minVotePart =~ /^(\d+);(\d+)$/) {
+        my ($minVotePartNoGame,$minVotePartRunningGame)=($1,$2);
+        if($autohost->getState()) {
+          $minVotePart=$minVotePartRunningGame;
+        }else{
+          $minVotePart=$minVotePartNoGame;
+        }
+      }
+      $minVotePart/=100;
       if($votePart >= $minVotePart && $currentVote{yesCount} > $totalNbVotes / 2) {
         sayBattleAndGame("Vote for command \"".join(" ",@{$currentVote{command}})."\" passed.");
         my ($voteSource,$voteUser,$voteCommand)=($currentVote{source},$currentVote{user},$currentVote{command});
@@ -2985,7 +2994,16 @@ sub getVoteStateMsg {
   }else{
     $nbVotesForVotePart=$currentVote{yesCount}+$currentVote{noCount};
   }
-  my $nbRequiredManualVotes=ceil($conf{minVoteParticipation} * ($totalNbVotes+$currentVote{blankCount}) / 100);
+  my $minVotePart=$conf{minVoteParticipation};
+  if($minVotePart =~ /^(\d+);(\d+)$/) {
+    my ($minVotePartNoGame,$minVotePartRunningGame)=($1,$2);
+    if($autohost->getState()) {
+      $minVotePart=$minVotePartRunningGame;
+    }else{
+      $minVotePart=$minVotePartNoGame;
+    }
+  }
+  my $nbRequiredManualVotes=ceil($minVotePart * ($totalNbVotes+$currentVote{blankCount}) / 100);
   if($nbVotesForVotePart < $nbRequiredManualVotes || (@remainingVoters && $currentVote{yesCount} < $reqYesVotes && $currentVote{noCount} < $reqNoVotes)) {
     my $nbManualVotes=$currentVote{yesCount}+$currentVote{noCount}+$currentVote{blankCount}-$nbAwayVoters;
     my $requiredVotesString='';
