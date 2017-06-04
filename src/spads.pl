@@ -49,7 +49,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.11.44';
+our $spadsVer='0.11.45';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -424,7 +424,8 @@ my $simpleEventSimpleLog=SimpleLog->new(logFiles => [$conf{logDir}.'/spads.log',
 our $lobby = SpringLobbyInterface->new(serverHost => $conf{lobbyHost},
                                        serverPort => $conf{lobbyPort},
                                        simpleLog => $lobbySimpleLog,
-                                       warnForUnhandledMessages => 0);
+                                       warnForUnhandledMessages => 0,
+                                       inconsistencyHandler => sub { $lobbyBrokenConnection=1; } );
 
 our $autohost = SpringAutoHostInterface->new(autoHostPort => $conf{autoHostPort},
                                              simpleLog => $autohostSimpleLog,

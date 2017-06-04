@@ -745,6 +745,7 @@ spads.pl:
 0.11.43: new allowed value for "endGameAwards" preset setting: "2" (enable end game awards for all games)
 0.11.43a: reorder auto-update checks to avoid useless locks
 0.11.44: the "minVoteParticipation" setting value can now depend on game runing state
+0.11.45: improve resiliency against lobby server bugs
 
 SpadsConf.pm:
 ============
