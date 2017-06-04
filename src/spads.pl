@@ -49,7 +49,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.11.45';
+our $spadsVer='0.11.46';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -271,6 +271,8 @@ our $spads=SpadsConf->new($confFile,$sLog,\%confMacros);
 sub slog {
   $sLog->log(@_);
 }
+
+$SIG{__WARN__} = sub { my $msg=shift; chomp($msg); slog("PERL WARNING: $msg",1); };
 
 sub fatalError {
   my $m=shift;
