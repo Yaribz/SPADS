@@ -747,6 +747,7 @@ spads.pl:
 0.11.44: the "minVoteParticipation" setting value can now depend on game runing state
 0.11.45: improve resiliency against lobby server bugs
 0.11.46: log Perl warnings through SPADS log system
+0.11.46a: fix Perl modules include path (required for Perl releases which don't include current working directory in default include path)
 
 SpadsConf.pm:
 ============

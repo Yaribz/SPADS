@@ -27,6 +27,7 @@ use Digest::MD5 'md5_base64';
 use Fcntl qw':DEFAULT :flock';
 use File::Copy;
 use File::Spec::Functions qw'catfile file_name_is_absolute';
+use FindBin;
 use IPC::Cmd 'can_run';
 use List::Util qw'first shuffle';
 use MIME::Base64;
@@ -34,6 +35,8 @@ use POSIX qw'ceil uname';
 use Storable qw'nfreeze dclone';
 use Text::ParseWords;
 use Time::HiRes;
+
+use lib $FindBin::Bin;
 
 use SimpleEvent;
 use SimpleLog;
@@ -49,7 +52,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.11.46';
+our $spadsVer='0.11.46a';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -291,8 +294,6 @@ fatalError('Unable to import _putenv from msvcrt.dll ('.getLastWin32Error().')')
 
 my $masterChannel=$spads->{conf}->{masterChannel};
 $masterChannel=$1 if($masterChannel =~ /^([^\s]+)\s/);
-
-unshift(@INC,$cwd);
 
 # State variables #############################################################
 
