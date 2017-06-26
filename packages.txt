@@ -51,7 +51,7 @@ SimpleEvent.pm:SimpleEvent_0.1b.pm
 SimpleLog.pm:SimpleLog_0.7.pm
 spads.pl:spads_0.11.46a.pl
 SpadsConf.pm:SpadsConf_0.11.14.pm
-spadsInstaller.pl:spadsInstaller_0.18.pl
+spadsInstaller.pl:spadsInstaller_0.18a.pl
 SpadsPluginApi.pm:SpadsPluginApi_0.22a.pm
 SpadsUpdater.pm:SpadsUpdater_0.12a.pm
 SpringAutoHostInterface.pm:SpringAutoHostInterface_0.11.pm
@@ -76,7 +76,7 @@ spring-headless.exe;100:spring-headless-100.0.exe.zip
 spring-headless.exe;101:spring-headless-101.0.exe.zip
 spring-headless.exe;102:spring-headless-102.0.exe.zip
 spring-headless.exe;103:spring-headless-103.0.exe.zip
-update.pl:update_0.10b.pl
+update.pl:update_0.10c.pl
 
 [unstable]
 7za:7za-9.20
