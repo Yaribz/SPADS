@@ -2,7 +2,7 @@
 #
 # This program update SPADS components in current directory from remote repository.
 #
-# Copyright (C) 2008-2015  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2017  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -18,9 +18,12 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.10b (2015/07/08)
+# Version 0.10c (2017/06/26)
 
 use strict;
+
+use FindBin;
+use lib $FindBin::Bin;
 
 use SimpleLog;
 use SpadsUpdater;

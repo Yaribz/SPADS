@@ -934,6 +934,7 @@ spadsInstaller.pl:
 0.17c: check Win32::API module version at start (Windows)
 0.17d: remove obsolete workaround for internal Perl bool type definition (causes problems with new compilers)
 0.18: add macOS compatibility
+0.18a: fix Perl modules include path (required for Perl releases which don't include current working directory in default include path)
 
 SpadsPluginApi.pm:
 =================
@@ -1034,3 +1035,4 @@ update.pl:
 0.10a: add 7zip binary to the list of packages
 0.10b: remove the obsolete PerlUnitSync.dll library from the list of auto-updated binary packages (Windows)
        remove the -u switch which was used to update the Perl unitsync interface binaries
+0.10c: fix Perl modules include path (required for Perl releases which don't include current working directory in default include path)

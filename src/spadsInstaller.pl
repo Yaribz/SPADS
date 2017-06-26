@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.18 (2017/01/03)
+# Version 0.18a (2017/06/26)
 
 use strict;
 
@@ -27,8 +27,11 @@ use File::Basename 'fileparse';
 use File::Copy;
 use File::Path;
 use File::Spec;
+use FindBin;
 use HTTP::Tiny;
 use List::Util 'first';
+
+use lib $FindBin::Bin;
 
 use SimpleLog;
 use SpadsUpdater;
