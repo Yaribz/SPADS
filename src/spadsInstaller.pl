@@ -53,7 +53,7 @@ my $perlUnitsyncModule='PerlUnitSync.pm';
 my $isInteractive=-t STDIN;
 my $currentStep=1;
 my ($nbSteps,$pathSep,$defaultUnitsyncDir)=$win?(12,';'):(14,':','/lib');
-my $perlUnitsyncLibName="PerlUnitSync.$dynLibSuffix";
+my $perlUnitsyncLibName="PerlUnitSyncInternal.$dynLibSuffix";
 my @pathes=splitPaths($ENV{PATH});
 my %conf=(installDir => File::Spec->canonpath(cwd()));
 
@@ -122,7 +122,7 @@ sub isAbsolutePath {
 }
 
 sub promptChoice {
-  my ($prompt,$p_choices,$default)=@_; 
+  my ($prompt,$p_choices,$default)=@_;
   my @choices=@{$p_choices};
   my $choicesString=join(',',@choices);
   my $choice='';
@@ -240,7 +240,7 @@ sub generatePerlUnitSync {
     unlinkUnitsyncTmpFiles();
     exit 1;
   }
-  
+
   my $exportedFunctions='';
   my $exportedFunctionsFixed='';
   my $usSrc='unitsync.cpp';
@@ -271,7 +271,7 @@ sub generatePerlUnitSync {
   }
 
   if(open(PUS_INT,'>PerlUnitSync.i')) {
-    print PUS_INT "\%module PerlUnitSync\n";
+    print PUS_INT "\%module PerlUnitSyncInternal\n";
     print PUS_INT "\%{\n";
     print PUS_INT "#include \"exportdefines.h\"\n";
     print PUS_INT "#include \"maindefines.h\"\n";
@@ -335,7 +335,7 @@ sub generatePerlUnitSync {
     }
     my $unitsyncIdName=$unitsyncIdNameRes[1];
     chomp($unitsyncIdName);
-    
+
     system("install_name_tool -change $unitsyncIdName $unitsync $perlUnitsyncLibName");
     if($?) {
       unlinkUnitsyncModuleFiles();
@@ -418,7 +418,7 @@ sub checkUnitsync {
 
   eval 'use PerlUnitSync';
   fatalError("Unable to load Perl Unitsync interface module ($@)") if($@);
-  
+
   if(! PerlUnitSync::Init(0,0)) {
     while(my $unitSyncErr=PerlUnitSync::GetNextError()) {
       chomp($unitSyncErr);
@@ -426,7 +426,7 @@ sub checkUnitsync {
     }
     fatalError('Unable to initialize UnitSync library');
   }
-  
+
   my $nbMods = PerlUnitSync::GetPrimaryModCount();
   for my $modNb (0..($nbMods-1)) {
     my $nbInfo = PerlUnitSync::GetPrimaryModInfoCount($modNb);
@@ -475,14 +475,14 @@ if(! exists $conf{release}) {
   print "The installer will ask you $nbSteps questions to customize your installation and pre-configure SPADS.\n";
   print "You can stop this installation at any time by hitting Ctrl-c.\n";
   print "Note: if SPADS is already installed on the system, you don't need to reinstall it to run multiple autohosts. Instead, you can share SPADS binaries and use multiple configuration files and/or configuration macros.\n\n";
-  
+
   $conf{release}=promptChoice("1/$nbSteps - Which SPADS release do you want to install",[qw'stable testing unstable contrib'],'testing');
 }elsif($conf{release} eq '-g') {
   $nbSteps=3;
   print "\nExecuting SPADS installer in Perl Unitsync interface generation mode.\n";
   print "The installer will ask you $nbSteps questions to (re)generate the Perl Unitsync interface module.\n";
   print "You can stop this process at any time by hitting Ctrl-c.\n\n";
-  
+
   generatePerlUnitSync();
 
   checkUnitsync();
@@ -595,7 +595,7 @@ if(! @availableMods) {
 
   my $modFilter=quotemeta($conf{modName});
   $modFilter =~ s/\d+/\\d+/g;
-  
+
   my $isLatestMod=1;
   foreach my $availableMod (@availableMods) {
     next if($availableMod eq $conf{modName});
@@ -617,7 +617,7 @@ if(! @availableMods) {
     }
   }else{
     $sLog->log("Using \"$conf{modName}\" as default AutoHost mod",3);
-  } 
+  }
   $currentStep++;
 }
 

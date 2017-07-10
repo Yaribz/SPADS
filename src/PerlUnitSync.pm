@@ -16,41 +16,186 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 91.0a (2015/07/08)
 
 package PerlUnitSync;
 
 use strict;
 use warnings;
 
-use Win32;
-use Win32::API;
+my @skippedFunctions=qw(GetMapInfo
+                        GetMapInfoEx
+                        GetInfoValue
+                        GetPrimaryModName
+                        GetPrimaryModShortName
+                        GetPrimaryModVersion
+                        GetPrimaryModMutator
+                        GetPrimaryModGame
+                        GetPrimaryModShortGame
+                        GetPrimaryModDescription
+                        OpenArchiveType
+                        GetOptionStyle
+                        ProcessUnitsNoChecksum);
 
-my $dllName='unitsync.dll';
-my @skippedFunctions=qw'GetMapInfo GetMapInfoEx';
+my %wrappedKeyFunctions = ('GetMapDescription'   => 'description',
+                           'GetMapAuthor'        => 'author',
+                           'GetMapTidalStrength' => 'tidalStrength',
+                           'GetMapGravity'       => 'gravity',
+                           'GetMapWindMin'       => 'minWind',
+                           'GetMapWindMax'       => 'maxWind',
+                           'GetMapWidth'         => 'width',
+                           'GetMapHeight'        => 'height');
 
-sub _fixTypesForWin32Api {
-  $_[0]=~s/\bconst\s*//gi;
-  $_[0]=~s/\bbool\b/BOOL/g;
+
+my %wrappedResourceFunctions = ('GetMapResourceName'  => 'resource',
+                                'GetMapResourceMax'   => 'maxMetal',
+                                'GetMapResourceExtractorRadius' => 'extractorRadius');
+
+my @wrappedComplexFunctions = qw(GetMapPosCount
+                                 GetMapPosX
+                                 GetMapPosZ
+                                 GetMapResourceCount
+                                 GetMapInfoCount);
+
+my @wrappedFunctions;
+
+push @wrappedFunctions, keys %wrappedKeyFunctions;
+push @wrappedFunctions, keys %wrappedResourceFunctions;
+push @wrappedFunctions, @wrappedComplexFunctions;
+
+my $win=$^O eq 'MSWin32';
+if ($win) {
+  my $dllName='unitsync.dll';
+  require Win32;
+  require Win32::API;
+
+  sub _fixTypesForWin32Api {
+    $_[0]=~s/\bconst\s*//gi;
+    $_[0]=~s/\bbool\b/BOOL/g;
+  }
+
+  sub _getLastWin32Error {
+    my $errorNb=Win32::GetLastError();
+    return 'unknown error' unless($errorNb);
+    my $errorMsg=Win32::FormatMessage($errorNb);
+    $errorMsg=~s/\cM?\cJ$//;
+    return $errorMsg;
+  }
+
+  while(<DATA>) {
+    next unless(/^\s*EXPORT\(\s*([^\)]*[^\s\)])\s*\)\s*([^\(\s]+)\s*\(\s*((?:.*[^\s])?)\s*\)\s*;/);
+    my ($returnType,$funcName,$signature)=($1,$2,$3);
+    next if(grep {$funcName eq $_} @skippedFunctions);
+    map {_fixTypesForWin32Api($_)} ($returnType,$signature);
+    if (grep {$funcName eq $_} @wrappedFunctions) {
+      Win32::API->Import($dllName,"$returnType $funcName($signature)");
+    } else {
+      die "Unable to import $funcName from $dllName ("._getLastWin32Error().')' unless(Win32::API->Import($dllName,"$returnType $funcName($signature)"));
+    }
+  }
+  close(DATA);
+
+} else {
+  require PerlUnitSyncInternal;
+
+  while(<DATA>) {
+    next unless(/^\s*EXPORT\(\s*([^\)]*[^\s\)])\s*\)\s*([^\(\s]+)\s*\(\s*((?:.*[^\s])?)\s*\)\s*;/);
+    my ($returnType,$funcName,$signature)=($1,$2,$3);
+    next if(grep {$funcName eq $_} @skippedFunctions);
+    if (exists *PerlUnitSyncInternal::->{$funcName}) {
+      no strict 'refs';
+      *PerlUnitSync::->{$funcName} = *PerlUnitSyncInternal::->{$funcName}
+    } else {
+      die "Unable to import $funcName from PerlUnitSyncInternal" unless(grep {$funcName eq $_} @wrappedFunctions);
+    }
+  }
+  close(DATA);
 }
 
-sub _getLastWin32Error {
-  my $errorNb=Win32::GetLastError();
-  return 'unknown error' unless($errorNb);
-  my $errorMsg=Win32::FormatMessage($errorNb);
-  $errorMsg=~s/\cM?\cJ$//;
-  return $errorMsg;
+
+
+for my $funcName (keys %wrappedKeyFunctions) {
+  if (!exists &$funcName) {
+    no strict 'refs';
+    *PerlUnitSync::->{$funcName} = sub {
+      my ($index) = @_;
+      my $infoCount = GetMapInfoCount($index);
+      for my $infoNb (0..($infoCount-1)) {
+        next if (GetInfoKey($infoNb) ne $wrappedKeyFunctions{$funcName});
+        my $infoType = GetInfoType($infoNb);
+        if ($infoType eq 'string') {
+          return GetInfoValueString($infoNb);
+        } elsif ($infoType eq 'integer') {
+          return GetInfoValueInteger($infoNb);
+        } elsif ($infoType eq 'float') {
+          return GetInfoValueFloat($infoNb);
+        } elsif ($infoType eq 'bool') {
+          return GetInfoValueBool($infoNb);
+        }
+      }
+    }
+  }
 }
 
-while(<DATA>) {
-  next unless(/^\s*EXPORT\(\s*([^\)]*[^\s\)])\s*\)\s*([^\(\s]+)\s*\(\s*((?:.*[^\s])?)\s*\)\s*;/);
-  my ($returnType,$funcName,$signature)=($1,$2,$3);
-  next if(grep {$funcName eq $_} @skippedFunctions);
-  map {_fixTypesForWin32Api($_)} ($returnType,$signature);
-  die "Unable to import $funcName from $dllName ("._getLastWin32Error().')' unless(Win32::API->Import($dllName,"$returnType $funcName($signature)"));
+
+for my $funcName (keys %wrappedResourceFunctions) {
+  if (!exists &$funcName) {
+    no strict 'refs';
+    *PerlUnitSync::->{$funcName} = sub {
+      my ($index, $resNum) = @_;
+      my $infoCount = GetMapInfoCount($index);
+      for my $infoNb (0..($infoCount-1)) {
+        next if (GetInfoKey($infoNb) ne $wrappedResourceFunctions{$funcName});
+        my $infoType = GetInfoType($infoNb);
+        if ($infoType eq 'string') {
+          return GetInfoValueString($infoNb);
+        } elsif ($infoType eq 'integer') {
+          return GetInfoValueInteger($infoNb);
+        } elsif ($infoType eq 'float') {
+          return GetInfoValueFloat($infoNb);
+        } elsif ($infoType eq 'bool') {
+          return GetInfoValueBool($infoNb);
+        }
+      }
+    }
+  }
 }
 
-close(DATA);
+if (!exists &GetMapPosCount) {
+  *PerlUnitSync::GetMapPosCount = sub {
+    my ($index) = @_;
+    my $infoCount = GetMapInfoCount($index);
+    for my $infoNb (0..($infoCount-1)) {
+      next if (GetInfoKey($infoNb) ne 'xPos');
+      return ($infoCount - $infoNb) / 2;
+    }
+  }
+}
+
+
+if (!exists &GetMapPosX) {
+  *PerlUnitSync::GetMapPosX = sub {
+    my ($index, $posIndex) = @_;
+    my $infoCount = GetMapInfoCount($index);
+    my $posCount = GetMapPosCount($index);
+    return GetInfoValueFloat($infoCount - $posCount * 2 + $posIndex * 2);
+  }
+}
+
+if (!exists &GetMapPosZ) {
+  *PerlUnitSync::GetMapPosZ = sub {
+    my ($index, $posIndex) = @_;
+    my $infoCount = GetMapInfoCount($index);
+    my $posCount = GetMapPosCount($index);
+    return GetInfoValueFloat($infoCount - $posCount * 2 + $posIndex * 2 + 1);
+  }
+}
+
+if (!exists &GetMapResourceCount) {
+  *PerlUnitSync::GetMapResourceCount = sub {
+    return 1;
+  }
+}
+
 
 1;
 
@@ -327,6 +472,17 @@ EXPORT(const char* ) GetArchivePath(const char* archiveName);
  *		@endcode
  */
 EXPORT(int         ) GetMapCount();
+/**
+ * @brief Retrieves the number of info items available for a given Map
+ * @param index Map index/id
+ * @return negative integer (< 0) on error;
+ *   the number of info items available (>= 0) on success
+ * @see GetMapCount
+ * @see GetInfoKey
+ *
+ * Be sure to call GetMapCount() prior to using this function.
+ */
+EXPORT(int         ) GetMapInfoCount(int index);
 /**
  * @brief Get the name of a map
  * @return NULL on error; the name of the map (e.g. "SmallDivide") on success
@@ -1237,54 +1393,6 @@ EXPORT(void        ) SetSpringConfigInt(const char* name, const int value);
  * @param value float value to set
  */
 EXPORT(void        ) SetSpringConfigFloat(const char* name, const float value);
-
-
-// from LuaParserAPI.cpp:
-
-EXPORT(void       ) lpClose();
-EXPORT(int        ) lpOpenFile(const char* fileName, const char* fileModes, const char* accessModes);
-EXPORT(int        ) lpOpenSource(const char* source, const char* accessModes);
-EXPORT(int        ) lpExecute();
-EXPORT(const char*) lpErrorLog();
-
-EXPORT(void       ) lpAddTableInt(int key, int override);
-EXPORT(void       ) lpAddTableStr(const char* key, int override);
-EXPORT(void       ) lpEndTable();
-EXPORT(void       ) lpAddIntKeyIntVal(int key, int value);
-EXPORT(void       ) lpAddStrKeyIntVal(const char* key, int value);
-EXPORT(void       ) lpAddIntKeyBoolVal(int key, int value);
-EXPORT(void       ) lpAddStrKeyBoolVal(const char* key, int value);
-EXPORT(void       ) lpAddIntKeyFloatVal(int key, float value);
-EXPORT(void       ) lpAddStrKeyFloatVal(const char* key, float value);
-EXPORT(void       ) lpAddIntKeyStrVal(int key, const char* value);
-EXPORT(void       ) lpAddStrKeyStrVal(const char* key, const char* value);
-
-EXPORT(int        ) lpRootTable();
-EXPORT(int        ) lpRootTableExpr(const char* expr);
-EXPORT(int        ) lpSubTableInt(int key);
-EXPORT(int        ) lpSubTableStr(const char* key);
-EXPORT(int        ) lpSubTableExpr(const char* expr);
-EXPORT(void       ) lpPopTable();
-
-EXPORT(int        ) lpGetKeyExistsInt(int key);
-EXPORT(int        ) lpGetKeyExistsStr(const char* key);
-
-EXPORT(int        ) lpGetIntKeyType(int key);
-EXPORT(int        ) lpGetStrKeyType(const char* key);
-
-EXPORT(int        ) lpGetIntKeyListCount();
-EXPORT(int        ) lpGetIntKeyListEntry(int index);
-EXPORT(int        ) lpGetStrKeyListCount();
-EXPORT(const char*) lpGetStrKeyListEntry(int index);
-
-EXPORT(int        ) lpGetIntKeyIntVal(int key, int defValue);
-EXPORT(int        ) lpGetStrKeyIntVal(const char* key, int defValue);
-EXPORT(int        ) lpGetIntKeyBoolVal(int key, int defValue);
-EXPORT(int        ) lpGetStrKeyBoolVal(const char* key, int defValue);
-EXPORT(float      ) lpGetIntKeyFloatVal(int key, float defValue);
-EXPORT(float      ) lpGetStrKeyFloatVal(const char* key, float defValue);
-EXPORT(const char*) lpGetIntKeyStrVal(int key, const char* defValue);
-EXPORT(const char*) lpGetStrKeyStrVal(const char* key, const char* defValue);
 
 /* deprecated functions */
 /**
