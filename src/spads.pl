@@ -52,7 +52,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.11.46a';
+our $spadsVer='0.11.46b';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -12260,9 +12260,9 @@ sub cbBattleClosed {
     %pendingLocalBotManual=();
     %pendingLocalBotAuto=();
     %autoAddedLocalBots=();
-  }
-  foreach my $pluginName (@pluginsOrder) {
-    $plugins{$pluginName}->onBattleClosed() if($plugins{$pluginName}->can('onBattleClosed'));
+    foreach my $pluginName (@pluginsOrder) {
+      $plugins{$pluginName}->onBattleClosed() if($plugins{$pluginName}->can('onBattleClosed'));
+    }
   }
 }
 
