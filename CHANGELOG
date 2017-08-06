@@ -750,6 +750,8 @@ spads.pl:
 0.11.46a: fix Perl modules include path (required for Perl releases which don't include current working directory in default include path)
 0.11.46b: fix onBattleClosed plugin API callback being called too often
 0.11.46c: minor code cleanup (factorize URI escaping code and remove unused variable)
+0.11.46d: defer Spring archives loading to speed up SPADS restarts when auto-updating Spring binaries at start (Windows)
+          minor improvements in startup logs
 
 SpadsConf.pm:
 ============

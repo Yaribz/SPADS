@@ -52,7 +52,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.11.46c';
+our $spadsVer='0.11.46d';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -13570,7 +13570,6 @@ if(! $abortSpadsStartForAutoUpdate) {
   eval "use PerlUnitSync";
   fatalError("Unable to load PerlUnitSync module ($@)") if ($@);
   $syncedSpringVersion=PerlUnitSync::GetSpringVersion();
-  fatalError('Unable to load Spring archives at startup') unless(loadArchives());
 
 # Auto-update (part 2) #################
 
@@ -13601,6 +13600,10 @@ if(! $abortSpadsStartForAutoUpdate) {
 # Init #################################
 
 if(! $abortSpadsStartForAutoUpdate) {
+
+  slog("Loading Spring archives using unitsync library...",3);
+  fatalError('Unable to load Spring archives at startup') unless(loadArchives());
+
   if($springServerType eq '') {
     if($conf{springServer} =~ /spring-dedicated(?:\.exe)?$/i) {
       $springServerType='dedicated';
@@ -13610,7 +13613,7 @@ if(! $abortSpadsStartForAutoUpdate) {
       fatalError("Unable to determine server type (dedicated or headless) automatically from Spring server binary name ($conf{springServer}), please update 'springServerType' setting manually");
     }
   }
-  slog("Using $springServerType Spring server binary",3);
+  slog("Spring server mode: $springServerType",3);
 
   @predefinedColors=(generateColorPanel(1,1),
                      {red => 100, green => 100, blue => 100},
