@@ -52,7 +52,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.11.46b';
+our $spadsVer='0.11.46c';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -5736,6 +5736,12 @@ sub queueGDR {
   }
 }
 
+sub uriEscape {
+  my $uri=shift;
+  $uri =~ s/([^A-Za-z0-9\-\._~])/sprintf("%%%02X", ord($1))/eg;
+  return $uri;
+}
+
 sub endGameProcessing {
 
   if(! %endGameData) {
@@ -5842,13 +5848,11 @@ sub endGameProcessing {
                next unless($match);
              }
 
-             my $escapedMod=$endGameCommandData{mod};
-             $escapedMod=~s/([^A-Za-z0-9])/sprintf("%%%02X", ord($1))/eg;
-             my $escapedMap=$endGameCommandData{map};
-             $escapedMap=~s/([^A-Za-z0-9])/sprintf("%%%02X", ord($1))/eg;
+             my $escapedMod=uriEscape($endGameCommandData{mod});
+             my $escapedMap=uriEscape($endGameCommandData{map});
              my $escapedDemoName=$endGameCommandData{demoFile};
              $escapedDemoName=$1 if($escapedDemoName =~ /[\/\\]([^\/\\]+)$/);
-             $escapedDemoName=~s/([^A-Za-z0-9])/sprintf("%%%02X", ord($1))/eg;
+             $escapedDemoName=uriEscape($escapedDemoName);
 
              $endGameMsg=~s/\%engineVersion/$endGameCommandData{engineVersion}/g;
              $endGameMsg=~s/\%mod/$escapedMod/g;
@@ -13346,7 +13350,6 @@ Settings</FONT>
 EOF
   close(HTML);
 
-  my $escapedString;
   my %listContents = (All => ["All commands and settings","(command|global|set|hset|bset|pset)"],
                       Commands => ["All commands","command"],
                       Settings => ["All settings","(global|set|hset|bset|pset)"],
