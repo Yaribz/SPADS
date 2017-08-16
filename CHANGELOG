@@ -752,6 +752,7 @@ spads.pl:
 0.11.46c: minor code cleanup (factorize URI escaping code and remove unused variable)
 0.11.46d: defer Spring archives loading to speed up SPADS restarts when auto-updating Spring binaries at start (Windows)
           minor improvements in startup logs
+0.11.46e: presence of lobby accounts tagged as bots in battle lobby no longer blocks automatic default preset restoration and automatic preset/map rotation functionalities
 
 SpadsConf.pm:
 ============

@@ -52,7 +52,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.11.46d';
+our $spadsVer='0.11.46e';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -12209,8 +12209,7 @@ sub cbLeftBattle {
     if(exists $currentVote{command} && exists $currentVote{remainingVoters}->{$user}) {
       delete $currentVote{remainingVoters}->{$user};
     }
-    my @players=keys %{$lobby->{battle}->{users}};
-    $timestamps{autoRestore}=time if($#players == 0 && $timestamps{autoRestore});
+    $timestamps{autoRestore}=time if(! $lobby->{users}{$user}{status}{bot} && $timestamps{autoRestore});
     delete $currentPlayers{$user};
     delete $currentSpecs{$user};
     if(exists $pendingFloodKicks{$user}) {
@@ -13744,43 +13743,32 @@ sub manageBattle {
 
   closeBattle() if($lobbyState >= 6 && $closeBattleAfterGame && $autohost->getState() == 0);
 
-  if($lobbyState > 5) {
-    my @players=keys %{$lobby->{battle}->{users}};
-    if($conf{restoreDefaultPresetDelay} && $timestamps{autoRestore} && (! $springPid)) {
-      if($#players == 0 && time-$timestamps{autoRestore} > $conf{restoreDefaultPresetDelay}) {
-        my $restoreDefaultPresetDelayTime=secToTime($conf{restoreDefaultPresetDelay});
-        broadcastMsg("Battle empty for $restoreDefaultPresetDelayTime, restoring default settings");
-        applyPreset($conf{defaultPreset});
-        $timestamps{autoRestore}=0;
-        rehostAfterGame("restoring default hosting settings") if(needRehost());
+  return if($lobbyState < 6 || ! %{$lobby->{battle}});
+
+  if(! $springPid && all {$_ eq $conf{lobbyLogin} || $lobby->{users}{$_}{status}{bot}} (keys %{$lobby->{battle}{users}}) ) {
+    if($conf{restoreDefaultPresetDelay} && $timestamps{autoRestore} && time-$timestamps{autoRestore} > $conf{restoreDefaultPresetDelay}) {
+      my $restoreDefaultPresetDelayTime=secToTime($conf{restoreDefaultPresetDelay});
+      broadcastMsg("Battle empty for $restoreDefaultPresetDelayTime, restoring default settings");
+      applyPreset($conf{defaultPreset});
+      $timestamps{autoRestore}=0;
+      $timestamps{rotationEmpty}=time;
+      rehostAfterGame('restoring default hosting settings') if(needRehost() && ! $closeBattleAfterGame);
+    }
+    if($conf{rotationEmpty} ne 'off' && time - $timestamps{rotationEmpty} > $conf{rotationDelay}) {
+      $timestamps{rotationEmpty}=time;
+      if($conf{rotationType} eq 'preset') {
+        rotatePreset($conf{rotationEmpty},0);
+      }else{
+        rotateMap($conf{rotationEmpty},0);
       }
     }
-    my $isEmpty=1;
-    if($#players > 0) {
-      foreach my $player (@players) {
-        next if($player eq $conf{lobbyLogin});
-        if(! $lobby->{users}->{$player}->{status}->{bot}) {
-          $isEmpty=0;
-          last;
-        }
-      }
+    if(needRehost() && ! $closeBattleAfterGame) {
+      rehostAfterGame('applying pending hosting settings while battle is empty',1);
+      $timestamps{autoRestore}=time if($timestamps{autoRestore});
     }
-    if($isEmpty && ! $springPid) {
-      if($conf{rotationEmpty} ne "off" && time - $timestamps{rotationEmpty} > $conf{rotationDelay}) {
-        $timestamps{rotationEmpty}=time;
-        if($conf{rotationType} eq "preset") {
-          rotatePreset($conf{rotationEmpty},0);
-        }else{
-          rotateMap($conf{rotationEmpty},0);
-        }
-      }
-      if(needRehost()) {
-        rehostAfterGame("applying pending hosting settings while battle is empty",1);
-        $timestamps{autoRestore}=time if($timestamps{autoRestore});
-      }
-    }
-    autoManageBattle();
   }
+
+  autoManageBattle();
 }
 
 sub checkExit {
