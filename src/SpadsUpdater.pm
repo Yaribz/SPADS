@@ -1,6 +1,6 @@
 # Perl module used for Spads auto-updating functionnality
 #
-# Copyright (C) 2008-2015  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2017  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -38,7 +38,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $archName=$win?'win32':($Config{ptrsize} > 4 ? 'linux64' : 'linux32');
 
-my $moduleVersion='0.12a';
+my $moduleVersion='0.12b';
 
 my @constructorParams = qw'sLog localDir repository release packages';
 my @optionalConstructorParams = qw'syncedSpringVersion springDir';
@@ -78,7 +78,7 @@ sub new {
       return 0;
     }
   }
-  
+
   foreach my $param (keys %params) {
     if(grep {$_ eq $param} (@constructorParams,@optionalConstructorParams)) {
       $self->{$param}=$params{$param};
@@ -203,11 +203,12 @@ sub _getSpringRequiredFiles {
 sub checkSpringDir {
   my ($self,$springVersion)=@_;
   my $springDir=$self->getSpringDir($springVersion);
-  return undef unless(defined $springDir);
-  return undef unless(-d "$springDir/base");
+  return wantarray ? (undef,[]) : undef unless(defined $springDir);
+  return wantarray ? (undef,['base']) : undef unless(-d "$springDir/base");
   my $p_requiredFiles=_getSpringRequiredFiles($springVersion);
-  return undef unless(all {-f "$springDir/$_"} @{$p_requiredFiles});
-  return $springDir;
+  my @missingFiles=grep {! -f "$springDir/$_"} @{$p_requiredFiles};
+  return wantarray ? (undef,[@missingFiles]) : undef if(@missingFiles);
+  return wantarray ? ($springDir,[]) : $springDir;
 }
 
 sub isUpdateInProgress {
@@ -653,12 +654,13 @@ sub setupSpringUnlocked {
     }
   }
 
-  if($self->checkSpringDir($version)) {
+  my ($installResult,$r_missingFiles)=$self->checkSpringDir($version);
+  if($installResult) {
     $sl->log("Spring $version installation complete.",3);
     return 1;
   }
 
-  $sl->log("Unable to install Spring version $version (incomplete archives)",1);
+  $sl->log("Unable to install Spring version $version (incomplete archives, missing files: ".join(',',@{$r_missingFiles}).')',1);
   return -14;
 }
 
