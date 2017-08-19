@@ -879,6 +879,8 @@ SpadsConf.pm:
 0.11.12: the "autoStop" preset setting can now contain a delay value to replace the 5 seconds default
 0.11.13: new allowed value for "endGameAwards" preset setting: "2" (enable end game awards for all games)
 0.11.14: the "minVoteParticipation" setting value can now depend on game runing state
+0.11.15: force directory settings to use absolute directory format
+         code simplifications (homogeneous quotes, chained dereferencing...)
 
 spadsInstaller.pl:
 =================
