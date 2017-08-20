@@ -97,7 +97,7 @@ SPADS installation directory
 -
 Location of SPADS binary files
 -
-Any existing directory
+Any existing directory (absolute path)
 -
 %installDir% (set during installation, examples: "/var/home/spring/spads/", "C:\Program files\Spads")
 
@@ -106,7 +106,7 @@ SPADS configuration directory
 -
 Location of SPADS configuration files
 -
-Any existing directory
+Any existing directory (absolute path)
 -
 %etcDir% (set during installation, examples: "/var/home/spring/spads/etc", "C:\Program files\Spads\etc")
 
@@ -115,7 +115,7 @@ SPADS dynamic data directory
 -
 Location of SPADS dynamic data
 -
-Any writable directory
+Any writable directory (absolute path)
 -
 %varDir% (set during installation, examples: "/var/home/spring/spads/var", "C:\Program files\Spads\var")
 
@@ -124,7 +124,7 @@ SPADS log directory
 -
 Location of SPADS log files
 -
-Any writable directory
+Any writable directory (absolute path)
 -
 %logDir% (set during installation, examples: "/var/home/spring/spads/var/log", "C:\Program files\Spads\var\log")
 
@@ -224,7 +224,7 @@ Spring data directories
 Absolute pathes of the directories containing Spring maps, mods, base files...
 Directories must be separated by colons (":") on Linux, and by semicolons (";") on Windows.
 -
-Any readable directories
+Any readable directories (absolute pathes)
 -
 %dataDir% (set during installation, examples: "/share/games/spring", "C:\Program files\Spring")
 

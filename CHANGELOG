@@ -151,6 +151,7 @@ helpSettings.dat:
 0.5.9: new allowed value for "endGameAwards" preset setting: "2" (enable end game awards for all games)
 0.5.10: the "minVoteParticipation" setting value can now depend on game runing state
         fix typos
+0.5.11: add information concerning required absolute form of directory settings
 
 PerlUnitSync.pm:
 ===============
