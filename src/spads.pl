@@ -52,7 +52,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.11.46e';
+our $spadsVer='0.11.46f';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -13270,6 +13270,8 @@ h1 { font-size: 145% }
 
 .NavBarCell2    { font-family: Arial, Helvetica, sans-serif; background-color:#FFFFFF;}
 .NavBarCell3    { font-family: Arial, Helvetica, sans-serif; background-color:#FFFFFF;}
+
+.FormattedText  { font-family: monospace;}
 EOF
   close(CSS);
 
@@ -13436,7 +13438,7 @@ EOF
             print HTML2 "$lineHtml<BR>";
           }
           print HTML2 "</TD></TR>\n";
-          print HTML2 "<TR BGCOLOR=\"white\" CLASS=\"TableRowColor\"><TD WIDTH=\"15%\"><B>Format / Allowed values</B></TD><TD>";
+          print HTML2 "<TR BGCOLOR=\"white\" CLASS=\"TableRowColor\"><TD WIDTH=\"15%\"><B>Format / Allowed values</B></TD><TD CLASS=\"FormattedText\">";
           foreach my $helpLine (@{$allHelp{$item}->{$itemType}->{format}}) {
             my $lineHtml=encodeHtmlHelp($helpLine);
             print HTML2 "$lineHtml<BR>";
@@ -13493,6 +13495,7 @@ sub encodeHtmlHelp {
                bset => ["battle setting","FrameBattleSettingFont","FEFE9C"],
                pset => ["preference","FramePreferenceFont","FFDD88"]);
   $line=encodeHtmlEntities($line);
+  $line=~s/^( +)/'&nbsp' x length $1/e;
   $line=~s/\[global:(\w+)\]/<FONT CLASS=\"FrameGlobalSettingFont\"><A HREF=\"spadsDoc_GlobalSettings.html\#global:$1\" target=\"mainFrame\">$1<\/A><\/FONT>/g;
   $line=~s/\[set:(\w+)\]/<FONT CLASS=\"FrameSettingFont\"><A HREF=\"spadsDoc_PresetSettings.html\#set:$1\" target=\"mainFrame\">$1<\/A><\/FONT>/g;
   $line=~s/\[hSet:(\w+)\]/<FONT CLASS=\"FrameHostingSettingFont\"><A HREF=\"spadsDoc_HostingSettings.html\#hset:$1\" target=\"mainFrame\">$1<\/A><\/FONT>/g;
