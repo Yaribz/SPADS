@@ -755,6 +755,8 @@ spads.pl:
           minor improvements in startup logs
 0.11.46e: presence of lobby accounts tagged as bots in battle lobby no longer blocks automatic default preset restoration and automatic preset/map rotation functionalities
 0.11.46f: fix settings help formatting in HTML documentation
+0.11.46g: refactor quit/restart handling code to fix minor issue with concurrent pending orders (an auto-restart for update no longer cancels a quit order for example)
+          presence of lobby accounts tagged as bots in battle lobby no longer blocks automatic restart for update
 
 SpadsConf.pm:
 ============

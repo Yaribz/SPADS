@@ -52,7 +52,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.11.46f';
+our $spadsVer='0.11.46g';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -299,7 +299,10 @@ $masterChannel=$1 if($masterChannel =~ /^([^\s]+)\s/);
 
 our %conf=%{$spads->{conf}};
 my $abortSpadsStartForAutoUpdate=0;
-my ($quitAfterGame,$closeBattleAfterGame)=(0,0);
+my %quitAfterGame=(action => undef, condition => undef);
+  # action 0: shutdown, 1: restart
+  # condition 0: no game is running, 1: no game is running and only spectators in battle lobby, 2: no game is running and battle lobby is empty
+my $closeBattleAfterGame=0;
 our %timestamps=(connectAttempt => 0,
                  ping => 0,
                  promote => 0,
@@ -543,7 +546,7 @@ sub onUpdaterProcessExit {
   }else{
     delete @pendingAlerts{('UPD-001','UPD-002','UPD-003')};
   }
-  if($conf{autoRestartForUpdate} ne "off" && (! $quitAfterGame) && (! $updater->isUpdateInProgress())) {
+  if(isRestartForUpdateApplicable() && (! $updater->isUpdateInProgress())) {
     autoRestartForUpdateIfNeeded();
   }
 }
@@ -1507,66 +1510,38 @@ sub getArchivesChangeTime {
   return $archivesChangeTs;
 }
 
-sub quitAfterGame {
-  my $reason=shift;
-  $quitAfterGame=1;
-  my $msg="AutoHost shutdown scheduled (reason: $reason)";
-  broadcastMsg($msg);
-  slog($msg,3);
+sub isQuitActionApplicable {
+  my ($action,$condition)=@_;
+  return 1 if(defined $quitAfterGame{action} != defined $action);
+  return 0 if(! defined $action);
+  return $action < $quitAfterGame{action} || $condition < $quitAfterGame{condition};
 }
 
-sub restartAfterGame {
-  my $reason=shift;
-  $quitAfterGame=2;
-  my $msg="AutoHost restart scheduled (reason: $reason)";
-  broadcastMsg($msg);
-  slog($msg,3);
+sub isRestartForUpdateApplicable {
+  return 0 if($conf{autoRestartForUpdate} eq 'off');
+  return isQuitActionApplicable(1,{on => 0, whenOnlySpec => 1, whenEmpty => 2}->{$conf{autoRestartForUpdate}});
 }
 
-sub quitWhenEmpty {
-  my $reason=shift;
-  $quitAfterGame=3;
-  my $msg="AutoHost shutdown scheduled when battle is empty (reason: $reason)";
-  broadcastMsg($msg);
-  slog($msg,3);
-}
-
-sub restartWhenEmpty {
-  my $reason=shift;
-  $quitAfterGame=4;
-  my $msg="AutoHost restart scheduled when battle is empty (reason: $reason)";
-  broadcastMsg($msg);
-  slog($msg,3);
-}
-
-sub quitWhenOnlySpec {
-  my $reason=shift;
-  $quitAfterGame=5;
-  my $msg="AutoHost shutdown scheduled when battle only contains spectators (reason: $reason)";
-  broadcastMsg($msg);
-  slog($msg,3);
-}
-
-sub restartWhenOnlySpec {
-  my $reason=shift;
-  $quitAfterGame=6;
-  my $msg="AutoHost restart scheduled when battle only contains spectators (reason: $reason)";
-  broadcastMsg($msg);
-  slog($msg,3);
-}
-
-sub cancelQuitAfterGame {
-  my $reason=shift;
-  my $msg;
-  if($quitAfterGame == 1 || $quitAfterGame == 3 || $quitAfterGame == 5) {
-    $msg="AutoHost shutdown cancelled (reason: $reason)";
-  }else{
-    $msg="AutoHost restart cancelled (reason: $reason)";
+sub applyQuitAction {
+  my ($action,$condition,$reason)=@_;
+  return 0 unless(isQuitActionApplicable($action,$condition));
+  if(defined $action) {
+    $quitAfterGame{action}=$action if(! defined $quitAfterGame{action} || $action<$quitAfterGame{action});
+    $quitAfterGame{condition}=$condition if(! defined $quitAfterGame{condition} || $condition<$quitAfterGame{condition});
   }
-  $quitAfterGame=0;
+  my $msg='AutoHost '.('shutdown','restart')[$quitAfterGame{action}].' '.(defined $action?'scheduled'.('',' when battle only contains spectators',' when battle is empty')[$quitAfterGame{condition}]:'cancelled')." (reason: $reason)";
+  %quitAfterGame=(action => undef, condition => undef) unless(defined $action);
   broadcastMsg($msg);
   slog($msg,3);
+  return 1;
 }
+
+sub quitAfterGame { applyQuitAction(0,0,shift); }
+sub quitWhenOnlySpec { applyQuitAction(0,1,shift); }
+sub quitWhenEmpty { applyQuitAction(0,2,shift); }
+sub restartAfterGame { applyQuitAction(1,0,shift); }
+sub restartWhenOnlySpec { applyQuitAction(1,1,shift); }
+sub restartWhenEmpty { applyQuitAction(1,2,shift); }
 
 sub closeBattleAfterGame {
   my $reason=shift;
@@ -2817,7 +2792,7 @@ sub checkAutoUpdate {
       }
     }
   }
-  if($conf{autoRestartForUpdate} ne 'off' && (! $quitAfterGame) && time - $timestamps{autoRestartCheck} > 300 && (! $updater->isUpdateInProgress())) {
+  if(isRestartForUpdateApplicable() && time - $timestamps{autoRestartCheck} > 300 && (! $updater->isUpdateInProgress())) {
     autoRestartForUpdateIfNeeded();
   }
 }
@@ -5333,7 +5308,7 @@ sub getDefaultAndMaxAllowedValues {
   foreach my $allowedValue (@allowedValues) {
     if($allowedValue =~ /^\d+\-(\d+)$/) {
       $maxAllowedValue=$1 if($1 > $maxAllowedValue);
-    }elsif($allowedValue =~ /^\d+$/){
+    }elsif($allowedValue =~ /^\d+$/) {
       $maxAllowedValue=$allowedValue if($allowedValue > $maxAllowedValue);
     }
   }
@@ -6688,7 +6663,7 @@ sub hBSet {
 
 sub hCancelQuit {
   my ($source,$user,$p_params,$checkOnly)=@_;
-  if(! $quitAfterGame) {
+  if(! defined $quitAfterGame{action}) {
     answer("No quit or restart has been scheduled, nothing to cancel");
     return 0;
   }
@@ -6699,7 +6674,7 @@ sub hCancelQuit {
                       game => "game",
                       battle => "battle lobby" );
 
-  cancelQuitAfterGame("requested by $user in $sourceNames{$source}");
+  applyQuitAction(undef,undef,"requested by $user in $sourceNames{$source}");
 }
 
 sub hCheat {
@@ -10767,20 +10742,10 @@ sub hStatus {
   my ($voteString)=getVoteStateMsg();
   sayPrivate($user,$voteString) if(defined $voteString);
   sayPrivate($user,"Some pending settings need rehosting to be applied") if(needRehost());
-  if($quitAfterGame) {
-    if($quitAfterGame == 1) {
-      sayPrivate($user,"SPADS will quit after this game");
-    }elsif($quitAfterGame == 2) {
-      sayPrivate($user,"SPADS will restart after this game");
-    }elsif($quitAfterGame == 3) {
-      sayPrivate($user,"SPADS will quit as soon as the battle is empty and no game is running");
-    }elsif($quitAfterGame == 4) {
-      sayPrivate($user,"SPADS will restart as soon as the battle is empty and no game is running");
-    }elsif($quitAfterGame == 5) {
-      sayPrivate($user,"SPADS will quit as soon as the battle only contains spectators and no game is running");
-    }elsif($quitAfterGame == 6) {
-      sayPrivate($user,"SPADS will restart as soon as the battle only contains spectators and no game is running");
-    }
+  if(defined $quitAfterGame{action}) {
+    my $quitAction=('quit','restart')[$quitAfterGame{action}];
+    my $quitCondition=('after this game','as soon as the battle only contains spectators and no game is running','as soon as the battle is empty and no game is running')[$quitAfterGame{condition}];
+    sayPrivate($user,"SPADS will $quitAction $quitCondition");
   }elsif($closeBattleAfterGame) {
     if($closeBattleAfterGame == 1) {
       sayPrivate($user,"The battle will be closed after this game");
@@ -13673,7 +13638,7 @@ sub mainLoop {
 }
 
 sub checkLobbyConnection {
-  if(! $lobbyState && ! $quitAfterGame) {
+  if(! $lobbyState && ! defined $quitAfterGame{action}) {
     if($timestamps{connectAttempt} != 0 && $conf{lobbyReconnectDelay} == 0) {
       quitAfterGame('disconnected from lobby server, no reconnection delay configured');
     }elsif(time-$timestamps{connectAttempt} > $conf{lobbyReconnectDelay}) {
@@ -13775,33 +13740,24 @@ sub manageBattle {
 }
 
 sub checkExit {
-  if($autohost->getState() == 0 && $springPid == 0) {
-    if($quitAfterGame == 1 || $quitAfterGame == 2) {
+  if($autohost->getState() == 0 && $springPid == 0 && defined $quitAfterGame{action}) {
+    if($quitAfterGame{condition} == 0) {
       slog("Game is not running, exiting",3);
       SimpleEvent::stopLoop();
-    }elsif($quitAfterGame) {
-      if($lobbyState > 5) {
-        my @players=keys %{$lobby->{battle}->{users}};
-        if($#players == 0) {
-          slog("Game is not running and battle is empty, exiting",3);
-          SimpleEvent::stopLoop();
-        }elsif($quitAfterGame > 4) {
-          my $containsPlayer=0;
-          foreach my $p (@players) {
-            if(defined $lobby->{battle}->{users}->{$p}->{battleStatus} && $lobby->{battle}->{users}->{$p}->{battleStatus}->{mode}) {
-              $containsPlayer=1;
-              last;
-            }
-          }
-          if(! $containsPlayer) {
-            slog("Game is not running and battle only contains spectators, exiting",3);
-            SimpleEvent::stopLoop();
-          }
-        }
-      }else{
-        slog("Game is not running and battle is closed, exiting",3);
+    }elsif($lobbyState > 5) {
+      my @players=grep {$_ ne $conf{lobbyLogin} && ! $lobby->{users}{$_}{status}{bot}} (keys %{$lobby->{battle}{users}});
+      if(! @players) {
+        slog("Game is not running and battle is empty, exiting",3);
         SimpleEvent::stopLoop();
+      }elsif($quitAfterGame{condition} == 1) {
+        if(none {defined $lobby->{battle}{users}{$_}{battleStatus} && $lobby->{battle}{users}{$_}{battleStatus}{mode}} @players) {
+          slog("Game is not running and battle only contains spectators, exiting",3);
+          SimpleEvent::stopLoop();
+        }
       }
+    }else{
+      slog("Game is not running and battle is closed, exiting",3);
+      SimpleEvent::stopLoop();
     }
   }
 }
@@ -13819,7 +13775,7 @@ sub postMainLoop {
     }
     logMsg("battle","=== $conf{lobbyLogin} left ===") if($lobbyState > 5 && $conf{logBattleJoinLeave});
     $lobbyState=0;
-    if($quitAfterGame == 2 || $quitAfterGame == 4 || $quitAfterGame == 6) {
+    if($quitAfterGame{action} == 1) {
       sendLobbyCommand([['EXIT','AutoHost restarting']]);
     }else{
       sendLobbyCommand([['EXIT','AutoHost shutting down']]);
@@ -13836,7 +13792,7 @@ sub postMainLoop {
 $spads->dumpDynamicData();
 unlink($pidFile) if(defined $pidFile);
 close($lockFh) if(defined $lockFh);
-if($quitAfterGame == 2 || $quitAfterGame == 4 || $quitAfterGame == 6) {
+if($quitAfterGame{action} == 1) {
   portableExec($^X,$0,$confFile,map {"$_=$confMacros{$_}"} (keys %confMacros));
   execError("Unable to restart SPADS ($!)",0);
 }
