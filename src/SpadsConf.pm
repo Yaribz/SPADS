@@ -37,7 +37,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.11.15';
+my $moduleVersion='0.11.15a';
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 
 my %globalParameters = (lobbyLogin => ['login'],
@@ -2162,7 +2162,8 @@ sub learnUserData {
 }
 
 sub learnAccountIp {
-  my ($self,$id,$ip,$userIpRetention)=@_;
+  my ($self,$id,$ip,$userIpRetention,$bot)=@_;
+  $self->{accountData}{$id}{ips}={} if($bot);
   my $isNewIp=0;
   $isNewIp=1 unless(exists $self->{accountData}{$id}{ips}{$ip});
   $self->{accountData}{$id}{ips}{$ip}=time;

@@ -52,7 +52,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.11.46g';
+our $spadsVer='0.11.46h';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -5372,7 +5372,7 @@ sub getBSettingAllowedValues {
 }
 
 sub seenUserIp {
-  my ($user,$ip)=@_;
+  my ($user,$ip,$bot)=@_;
   if($conf{userDataRetention} !~ /^0;/ && ! $lanMode) {
     my $userIpRetention=-1;
     $userIpRetention=$1 if($conf{userDataRetention} =~ /;(\d+);/);
@@ -5382,7 +5382,7 @@ sub seenUserIp {
         return;
       }
       my $id=getLatestUserAccountId($user);
-      $spads->learnAccountIp($id,$ip,$userIpRetention);
+      $spads->learnAccountIp($id,$ip,$userIpRetention,$bot);
     }
   }
 }
@@ -12360,7 +12360,7 @@ sub cbChannelTopic {
 sub cbBattleOpened {
   my ($bId,$type,$founder,$ip,$mapHash)=($_[1],$_[2],$_[4],$_[5],$_[10]);
   my $mapName=$lobby->{battles}->{$bId}->{map};
-  seenUserIp($founder,$ip);
+  seenUserIp($founder,$ip,$lobby->{users}{$founder}{status}{bot});
   return if($type || ! $conf{autoLearnMaps} || getMapHash($mapName) || !$mapHash);
   my ($engineName,$engineVersion)=($lobby->{battles}->{$bId}->{engineName},$lobby->{battles}->{$bId}->{engineVersion});
   my $quotedVer=quotemeta($syncedSpringVersion);

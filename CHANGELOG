@@ -757,7 +757,8 @@ spads.pl:
 0.11.46f: fix settings help formatting in HTML documentation
 0.11.46g: refactor quit/restart handling code to fix minor issue with concurrent pending orders (an auto-restart for update no longer cancels a quit order for example)
           presence of lobby accounts tagged as bots in battle lobby no longer blocks automatic restart for update
-
+0.11.46h: ignore bots for smurf detection
+          
 SpadsConf.pm:
 ============
 0.0.3: first public version (beta)
@@ -885,6 +886,7 @@ SpadsConf.pm:
 0.11.14: the "minVoteParticipation" setting value can now depend on game runing state
 0.11.15: force directory settings to use absolute directory format
          code simplifications (homogeneous quotes, chained dereferencing...)
+0.11.15a: ignore bots for smurf detection
 
 spadsInstaller.pl:
 =================
