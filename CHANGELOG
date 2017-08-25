@@ -758,6 +758,9 @@ spads.pl:
 0.11.46g: refactor quit/restart handling code to fix minor issue with concurrent pending orders (an auto-restart for update no longer cancels a quit order for example)
           presence of lobby accounts tagged as bots in battle lobby no longer blocks automatic restart for update
 0.11.46h: ignore bots for smurf detection
+0.11.47: ignore "binDir" global setting and use SPADS script location directly (the binDir setting will be removed in next major SPADS release)
+         do not retrieve the 7za binary on macOS
+         refactor initialization code to prepare for Spring version auto-management
           
 SpadsConf.pm:
 ============

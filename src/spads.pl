@@ -52,7 +52,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.11.46h';
+our $spadsVer='0.11.47';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -76,9 +76,14 @@ my @ircStyle=(\%ircColors,'');
 my @noIrcStyle=(\%noColor,'');
 my @readOnlySettings=qw'description commandsfile battlepreset hostingpreset welcomemsg welcomemsgingame maplink ghostmaplink preset battlename advertmsg endgamecommand endgamecommandenv endgamecommandmsg';
 
-my @packagesSpads=(qw'help.dat helpSettings.dat SpringAutoHostInterface.pm SpringLobbyInterface.pm SimpleEvent.pm SimpleLog.pm spads.pl SpadsConf.pm SpadsUpdater.pm SpadsPluginApi.pm argparse.py replay_upload.py',$win?'7za.exe':'7za');
-push(@packagesSpads,'PerlUnitSync.pm') if($win);
+my @packagesSpads=qw'help.dat helpSettings.dat SpringAutoHostInterface.pm SpringLobbyInterface.pm SimpleEvent.pm SimpleLog.pm spads.pl SpadsConf.pm SpadsUpdater.pm SpadsPluginApi.pm argparse.py replay_upload.py';
+if($win) {
+  push(@packagesSpads,'7za.exe','PerlUnitSync.pm');
+}elsif(! $macOs) {
+  push(@packagesSpads,'7za');
+}
 my @packagesWinServer=qw'spring-dedicated.exe spring-headless.exe';
+
 my ($lockFh,$pidFile,$lockAcquired);
 
 eval "use HTML::Entities";
@@ -132,87 +137,86 @@ if($macOs) {
 }
 
 our %spadsHandlers = (
-                     addbot => \&hAddBot,
-                     addbox => \&hAddBox,
-                     advert => \&hAdvert,
-                     auth => \&hAuth,
-                     balance => \&hBalance,
-                     ban => \&hBan,
-                     banip => \&hBanIp,
-                     banips => \&hBanIps,
-                     bkick => \&hBKick,
-                     bpreset => \&hBPreset,
-                     boss => \&hBoss,
-                     bset => \&hBSet,
-                     callvote => \&hCallVote,
-                     cancelquit => \&hCancelQuit,
-                     cheat => \&hCheat,
-                     chpasswd => \&hChpasswd,
-                     chrank => \&hChrank,
-                     chskill => \&hChskill,
-                     ckick => \&hCKick,
-                     clearbox => \&hClearBox,
-                     closebattle => \&hCloseBattle,
-                     endvote => \&hEndVote,
-                     fixcolors => \&hFixColors,
-                     force => \&hForce,
-                     forcepreset => \&hForcePreset,
-                     forcestart => \&hForceStart,
-                     gkick => \&hGKick,
-                     help => \&hHelp,
-                     helpall => \&hHelpAll,
-                     hoststats => \&hHostStats,
-                     hpreset => \&hHPreset,
-                     hset => \&hHSet,
-                     joinas => \&hJoinAs,
-                     kick => \&hKick,
-                     kickban => \&hKickBan,
-                     learnmaps => \&hLearnMaps,
-                     list => \&hList,
-                     loadboxes => \&hLoadBoxes,
-                     lock => \&hLock,
-                     maplink => \&hMapLink,
-                     nextmap => \&hNextMap,
-                     nextpreset => \&hNextPreset,
-                     notify => \&hNotify,
-                     openbattle => \&hOpenBattle,
-                     pass => \&hPass,
-                     plugin => \&hPlugin,
-                     preset => \&hPreset,
-                     promote => \&hPromote,
-                     pset => \&hPSet,
-                     quit => \&hQuit,
-                     rebalance => \&hRebalance,
-                     reloadarchives => \&hReloadArchives,
-                     reloadconf => \&hReloadConf,
-                     removebot => \&hRemoveBot,
-                     rehost => \&hRehost,
-                     restart => \&hRestart,
-                     ring => \&hRing,
-                     saveboxes => \&hSaveBoxes,
-                     say => \&hSay,
-                     searchuser => \&hSearchUser,
-                     send => \&hSend,
-                     sendlobby => \&hSendLobby,
-                     set => \&hSet,
-                     smurfs => \&hSmurfs,
-                     specafk => \&hSpecAfk,
-                     split => \&hSplit,
-                     start => \&hStart,
-                     stats => \&hStats,
-                     status => \&hStatus,
-                     stop => \&hStop,
-                     unban => \&hUnban,
-                     unbanip => \&hUnbanIp,
-                     unbanips => \&hUnbanIps,
-                     unlock => \&hUnlock,
-                     unlockspec => \&hUnlockSpec,
-                     update => \&hUpdate,
-                     version => \&hVersion,
-                     vote => \&hVote,
-                     whois => \&hWhois,
-                     '#skill' => \&hSkill
-                     );
+  addbot => \&hAddBot,
+  addbox => \&hAddBox,
+  advert => \&hAdvert,
+  auth => \&hAuth,
+  balance => \&hBalance,
+  ban => \&hBan,
+  banip => \&hBanIp,
+  banips => \&hBanIps,
+  bkick => \&hBKick,
+  bpreset => \&hBPreset,
+  boss => \&hBoss,
+  bset => \&hBSet,
+  callvote => \&hCallVote,
+  cancelquit => \&hCancelQuit,
+  cheat => \&hCheat,
+  chpasswd => \&hChpasswd,
+  chrank => \&hChrank,
+  chskill => \&hChskill,
+  ckick => \&hCKick,
+  clearbox => \&hClearBox,
+  closebattle => \&hCloseBattle,
+  endvote => \&hEndVote,
+  fixcolors => \&hFixColors,
+  force => \&hForce,
+  forcepreset => \&hForcePreset,
+  forcestart => \&hForceStart,
+  gkick => \&hGKick,
+  help => \&hHelp,
+  helpall => \&hHelpAll,
+  hoststats => \&hHostStats,
+  hpreset => \&hHPreset,
+  hset => \&hHSet,
+  joinas => \&hJoinAs,
+  kick => \&hKick,
+  kickban => \&hKickBan,
+  learnmaps => \&hLearnMaps,
+  list => \&hList,
+  loadboxes => \&hLoadBoxes,
+  lock => \&hLock,
+  maplink => \&hMapLink,
+  nextmap => \&hNextMap,
+  nextpreset => \&hNextPreset,
+  notify => \&hNotify,
+  openbattle => \&hOpenBattle,
+  pass => \&hPass,
+  plugin => \&hPlugin,
+  preset => \&hPreset,
+  promote => \&hPromote,
+  pset => \&hPSet,
+  quit => \&hQuit,
+  rebalance => \&hRebalance,
+  reloadarchives => \&hReloadArchives,
+  reloadconf => \&hReloadConf,
+  removebot => \&hRemoveBot,
+  rehost => \&hRehost,
+  restart => \&hRestart,
+  ring => \&hRing,
+  saveboxes => \&hSaveBoxes,
+  say => \&hSay,
+  searchuser => \&hSearchUser,
+  send => \&hSend,
+  sendlobby => \&hSendLobby,
+  set => \&hSet,
+  smurfs => \&hSmurfs,
+  specafk => \&hSpecAfk,
+  split => \&hSplit,
+  start => \&hStart,
+  stats => \&hStats,
+  status => \&hStatus,
+  stop => \&hStop,
+  unban => \&hUnban,
+  unbanip => \&hUnbanIp,
+  unbanips => \&hUnbanIps,
+  unlock => \&hUnlock,
+  unlockspec => \&hUnlockSpec,
+  update => \&hUpdate,
+  version => \&hVersion,
+  vote => \&hVote,
+  whois => \&hWhois,
+  '#skill' => \&hSkill );
 
 my %alerts=('UPD-001' => 'Unable to check for SPADS update',
             'UPD-002' => 'Major SPADS update available',
@@ -297,6 +301,7 @@ $masterChannel=$1 if($masterChannel =~ /^([^\s]+)\s/);
 
 # State variables #############################################################
 
+my $spadsDir=$FindBin::Bin;
 our %conf=%{$spads->{conf}};
 my $abortSpadsStartForAutoUpdate=0;
 my %quitAfterGame=(action => undef, condition => undef);
@@ -439,7 +444,7 @@ our $autohost = SpringAutoHostInterface->new(autoHostPort => $conf{autoHostPort}
 
 my @packages=@packagesSpads;
 my $updater = SpadsUpdater->new(sLog => $updaterSimpleLog,
-                                localDir => $conf{binDir},
+                                localDir => $spadsDir,
                                 repository => "http://planetspads.free.fr/spads/repository",
                                 release => $conf{autoUpdateRelease},
                                 packages => \@packages);
@@ -459,26 +464,26 @@ sub renameToBeDeleted {
 }
 
 if($win) {
-  if(opendir(BINDIR,$conf{binDir})) {
+  if(opendir(BINDIR,$spadsDir)) {
     my @toBeDeletedFiles = grep {/\.toBeDeleted$/} readdir(BINDIR);
     closedir(BINDIR);
-    my @toBeDelAbsNames=map("$conf{binDir}/$_",@toBeDeletedFiles);
+    my @toBeDelAbsNames=map("$spadsDir/$_",@toBeDeletedFiles);
     unlink @toBeDelAbsNames;
   }
   my %updatedPackages;
-  if(-f "$conf{binDir}/updateInfo.txt") {
-    if(open(UPDATE_INFO,"<$conf{binDir}/updateInfo.txt")) {
+  if(-f "$spadsDir/updateInfo.txt") {
+    if(open(UPDATE_INFO,"<$spadsDir/updateInfo.txt")) {
       while(<UPDATE_INFO>) {
         $updatedPackages{$1}=$2 if(/^([^:]+):(.+)$/);
       }
       close(UPDATE_INFO);
     }else{
-      fatalError("Unable to read \"$conf{binDir}/updateInfo.txt\" file");
+      fatalError("Unable to read \"$spadsDir/updateInfo.txt\" file");
     }
   }
   foreach my $updatedPackage (keys %updatedPackages) {
-    my $updatedPackagePath=catfile($conf{binDir},$updatedPackage);
-    my $versionedUpdatedPackagePath=catfile($conf{binDir},$updatedPackages{$updatedPackage});
+    my $updatedPackagePath=catfile($spadsDir,$updatedPackage);
+    my $versionedUpdatedPackagePath=catfile($spadsDir,$updatedPackages{$updatedPackage});
     next unless($updatedPackage =~ /\.(exe|dll)$/ && -f $versionedUpdatedPackagePath);
     if(-f $updatedPackagePath) {
       my @origStat=stat($versionedUpdatedPackagePath);
@@ -656,7 +661,7 @@ sub setSpringEnv {
   }elsif($macOs) {
     my $wrapperLibName='PerlUnitSync.dylib';
     my $unitsyncLibName='libunitsync.dylib';
-    my @libPathes=`otool -L "$conf{binDir}/$wrapperLibName"`;
+    my @libPathes=`otool -L "$spadsDir/$wrapperLibName"`;
     fatalError("Unable to retrieve current Unitsync shared library path in $wrapperLibName using \"otool -L\" command".($!?" ($!)":'')) if($?);
     my $currentUnitsyncPathInWrapper;
     foreach my $libPath (@libPathes) {
@@ -668,11 +673,11 @@ sub setSpringEnv {
     fatalError("Unexpected result when retrieving current Unitsync shared library path in $wrapperLibName using \"otool -L\" command") unless(defined $currentUnitsyncPathInWrapper);
     my $newUnitsyncPathInWrapper=catfile($unitSyncPath,$unitsyncLibName);
     if(-f $newUnitsyncPathInWrapper && ! areSamePaths($currentUnitsyncPathInWrapper,$newUnitsyncPathInWrapper)) {
-      system('install_name_tool','-change',$currentUnitsyncPathInWrapper,$newUnitsyncPathInWrapper,"$conf{binDir}/$wrapperLibName");
+      system('install_name_tool','-change',$currentUnitsyncPathInWrapper,$newUnitsyncPathInWrapper,"$spadsDir/$wrapperLibName");
       fatalError("Unable to configure Unitsync shared library path in $wrapperLibName using \"install_name_tool -change\" command".($!?" ($!)":'')) if($?);
     }
   }else{
-    portableExec($^X,$0,@ARGV) if(setEnvVarFirstPaths('LD_LIBRARY_PATH',$unitSyncPath));
+    portableExec($^X,$0,@ARGV,'restartedForSpringEnv=1') if(setEnvVarFirstPaths('LD_LIBRARY_PATH',$unitSyncPath));
   }
 }
 
@@ -2926,8 +2931,8 @@ sub checkPendingGetSkills {
 sub autoRestartForUpdateIfNeeded {
   $timestamps{autoRestartCheck}=time;
   my $updateTimestamp=0;
-  if(-f "$conf{binDir}/updateInfo.txt") {
-    if(open(UPDATE_INFO,"<$conf{binDir}/updateInfo.txt")) {
+  if(-f "$spadsDir/updateInfo.txt") {
+    if(open(UPDATE_INFO,"<$spadsDir/updateInfo.txt")) {
       while(<UPDATE_INFO>) {
         if(/^(\d+)$/) {
           $updateTimestamp=$1 if($1 > $updateTimestamp);
@@ -2935,7 +2940,7 @@ sub autoRestartForUpdateIfNeeded {
       }
       close(UPDATE_INFO);
     }else{
-      slog("Unable to read \"$conf{binDir}/updateInfo.txt\" file",1);
+      slog("Unable to read \"$spadsDir/updateInfo.txt\" file",1);
     }
   }
   if($updateTimestamp > $timestamps{autoHostStart}) {
@@ -11115,7 +11120,7 @@ sub hUpdate {
   push(@updatePackages,@packagesWinServer) if($conf{autoUpdateBinaries} eq "yes" || $conf{autoUpdateBinaries} eq "server");
 
   $updater = SpadsUpdater->new(sLog => $updaterSimpleLog,
-                               localDir => $conf{binDir},
+                               localDir => $spadsDir,
                                repository => "http://planetspads.free.fr/spads/repository",
                                release => $release,
                                packages => \@updatePackages,
@@ -11521,7 +11526,7 @@ sub cbLobbyConnect {
       }elsif(-x '/bin/file') {
         $fileBin='/bin/file';
       }
-      $buggedUnitsync=1 if(! defined $fileBin || `$fileBin $conf{binDir}/PerlUnitSync.so` !~ /64\-bit/);
+      $buggedUnitsync=1 if(! defined $fileBin || `$fileBin $spadsDir/PerlUnitSync.so` !~ /64\-bit/);
     }
     my $isSpringReleaseVersion;
     if($buggedUnitsync) {
@@ -13469,41 +13474,43 @@ sub encodeHtmlHelp {
   return $line;
 }
 
-# Environment setup ####################
-
-setSpringEnv((splitPaths($conf{springDataDir}))[0],$conf{varDir},splitPaths($conf{springDataDir}));
-
-slog("Initializing SPADS $spadsVer",3);
-slog('SPADS process is currently running as root!',2) unless($win || $>);
-
 # Auto-update (part 1) #################
 
-if($conf{autoUpdateRelease} ne "") {
-  $timestamps{autoUpdate}=time;
-  if($updater->isUpdateInProgress()) {
-    slog('Skipping auto-update at start, another updater instance is already running',2);
-  }else{
-    my $updateRc=$updater->update();
-    if($updateRc < 0) {
-      slog("Unable to check or apply SPADS update",2);
-      if($updateRc > -7) {
-        addAlert("UPD-001");
-      }elsif($updateRc == -7) {
-        addAlert("UPD-002");
-      }else{
-        addAlert("UPD-003");
+$timestamps{autoUpdate}=time if($conf{autoUpdateRelease} ne '');
+
+my $restartedForSpringEnv=delete $confMacros{restartedForSpringEnv};
+if(! $restartedForSpringEnv) {
+
+  slog("Initializing SPADS $spadsVer",3);
+  slog('SPADS process is currently running as root!',2) unless($win || $>);
+
+  if($conf{autoUpdateRelease} ne "") {
+    if($updater->isUpdateInProgress()) {
+      slog('Skipping auto-update at start, another updater instance is already running',2);
+    }else{
+      my $updateRc=$updater->update();
+      if($updateRc < 0) {
+        slog("Unable to check or apply SPADS update",2);
+        if($updateRc > -7) {
+          addAlert("UPD-001");
+        }elsif($updateRc == -7) {
+          addAlert("UPD-002");
+        }else{
+          addAlert("UPD-003");
+        }
+      }elsif($updateRc > 0) {
+        sleep(2); # Avoid CPU eating loop in case auto-update is broken (fork bomb protection)
+        restartAfterGame("auto-update");
+        $abortSpadsStartForAutoUpdate=1;
       }
-    }elsif($updateRc > 0) {
-      sleep(2); # Avoid CPU eating loop in case auto-update is broken (fork bomb protection)
-      restartAfterGame("auto-update");
-      $abortSpadsStartForAutoUpdate=1;
     }
   }
+
 }
 
-# Unitsync loading #####################
-
 if(! $abortSpadsStartForAutoUpdate) {
+
+# Concurrent instances check ###########
 
   my $lockFile="$conf{varDir}/spads.lock";
   if(open($lockFh,'>',$lockFile)) {
@@ -13534,6 +13541,12 @@ if(! $abortSpadsStartForAutoUpdate) {
     fatalError("Unable to write SPADS lock file \"$lockFile\" ($!)");
   }
 
+# Environment setup ####################
+
+  setSpringEnv((splitPaths($conf{springDataDir}))[0],$conf{varDir},splitPaths($conf{springDataDir}));
+
+# Unitsync loading #####################
+
   eval "use PerlUnitSync";
   fatalError("Unable to load PerlUnitSync module ($@)") if ($@);
   $syncedSpringVersion=PerlUnitSync::GetSpringVersion();
@@ -13542,7 +13555,7 @@ if(! $abortSpadsStartForAutoUpdate) {
 
   push(@packages,@packagesWinServer) if($conf{autoUpdateBinaries} eq 'yes' || $conf{autoUpdateBinaries} eq 'server');
   $updater = SpadsUpdater->new(sLog => $updaterSimpleLog,
-                               localDir => $conf{binDir},
+                               localDir => $spadsDir,
                                repository => "http://planetspads.free.fr/spads/repository",
                                release => $conf{autoUpdateRelease},
                                packages => \@packages,
