@@ -90,7 +90,7 @@ replay_upload.py:replay_upload_0.5.py
 SimpleEvent.pm:SimpleEvent_0.1b.pm
 SimpleLog.pm:SimpleLog_0.7.pm
 spads.pl:spads_0.11.47.pl
-SpadsConf.pm:SpadsConf_0.11.15a.pm
+SpadsConf.pm:SpadsConf_0.11.16.pm
 spadsInstaller.pl:spadsInstaller_0.18a.pl
 SpadsPluginApi.pm:SpadsPluginApi_0.22a.pm
 SpadsUpdater.pm:SpadsUpdater_0.12b.pm

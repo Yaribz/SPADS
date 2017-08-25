@@ -890,6 +890,7 @@ SpadsConf.pm:
 0.11.15: force directory settings to use absolute directory format
          code simplifications (homogeneous quotes, chained dereferencing...)
 0.11.15a: ignore bots for smurf detection
+0.11.16: ignore "binDir" global setting and use SPADS script location directly (the binDir setting will be removed in next major SPADS release)
 
 spadsInstaller.pl:
 =================

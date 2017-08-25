@@ -25,6 +25,7 @@ use FileHandle;
 use File::Basename;
 use File::Copy;
 use File::Spec;
+use FindBin;
 use List::Util 'first';
 use Storable qw'nstore retrieve dclone';
 
@@ -37,8 +38,9 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.11.15a';
+my $moduleVersion='0.11.16';
 my $win=$^O eq 'MSWin32' ? 1 : 0;
+my $spadsDir=$FindBin::Bin;
 
 my %globalParameters = (lobbyLogin => ['login'],
                         lobbyPassword => ['password'],
@@ -57,7 +59,7 @@ my %globalParameters = (lobbyLogin => ['login'],
                         autoRestartForUpdate => ['autoRestartType'],
                         autoUpdateBinaries => ['binUpdateType'],
                         onBadSpringVersion => ['onBadSpringVersionType','null'],
-                        binDir => ['absoluteWritableDir'],
+                        binDir => [],
                         etcDir => ['absoluteReadableDir'],
                         varDir => ['absoluteWritableDir'],
                         logDir => ['absoluteWritableDir'],
@@ -322,8 +324,8 @@ sub new {
   my $p_users=loadTableFile($sLog,$p_conf->{''}{etcDir}.'/users.conf',\@usersFields,$p_macros);
   my $p_levels=loadTableFile($sLog,$p_conf->{''}{etcDir}.'/levels.conf',\@levelsFields,$p_macros);
   my $p_commands=loadTableFile($sLog,$p_conf->{''}{etcDir}."/$commandsFile",\@commandsFields,$p_macros,1);
-  my $p_help=loadSimpleTableFile($sLog,$p_conf->{''}{binDir}.'/help.dat',$p_macros,1);
-  my $p_helpSettings=loadHelpSettingsFile($sLog,$p_conf->{''}{binDir}.'/helpSettings.dat',$p_macros,1);
+  my $p_help=loadSimpleTableFile($sLog,"$spadsDir/help.dat",$p_macros,1);
+  my $p_helpSettings=loadHelpSettingsFile($sLog,"$spadsDir/helpSettings.dat",$p_macros,1);
   
   touch($p_conf->{''}{varDir}.'/bans.dat') unless(-f $p_conf->{''}{varDir}.'/bans.dat');
   my $p_bans=loadTableFile($sLog,$p_conf->{''}{varDir}.'/bans.dat',\@banListsFields,$p_macros);
@@ -1680,7 +1682,7 @@ sub applySubMapList {
 
 sub getFullCommandsHelp {
   my $self=shift;
-  my $p_fullHelp=loadSimpleTableFile($self->{log},$self->{conf}{binDir}.'/help.dat',$self->{macros});
+  my $p_fullHelp=loadSimpleTableFile($self->{log},"$spadsDir/help.dat",$self->{macros});
   return $p_fullHelp;
 }
 
