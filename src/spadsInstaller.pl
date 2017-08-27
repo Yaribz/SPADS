@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.18a (2017/06/26)
+# Version 0.19 (2017/08/27)
 
 use strict;
 
@@ -240,7 +240,8 @@ sub generatePerlUnitSync {
     unlinkUnitsyncTmpFiles();
     exit 1;
   }
-  
+
+  my @skippedFunctions=qw'ProcessUnitsNoChecksum GetMapInfoEx GetMapInfo GetMapDescription GetMapAuthor GetMapWidth GetMapHeight GetMapTidalStrength GetMapWindMin GetMapWindMax GetMapGravity GetMapResourceCount GetMapResourceName GetMapResourceMax GetMapResourceExtractorRadius GetMapPosCount GetMapPosX GetMapPosZ GetInfoValue GetPrimaryModName GetPrimaryModShortName GetPrimaryModVersion GetPrimaryModMutator GetPrimaryModGame GetPrimaryModShortGame GetPrimaryModDescription OpenArchiveType GetOptionStyle';
   my $exportedFunctions='';
   my $exportedFunctionsFixed='';
   my $usSrc='unitsync.cpp';
@@ -248,6 +249,14 @@ sub generatePerlUnitSync {
     if(open(US_CPP,"<$usSrc")) {
       while(<US_CPP>) {
         if(/^\s*DLL_EXPORT/ || /^\s*EXPORT\(/) {
+          my $functionIsSkipped=0;
+          foreach my $skippedFunction (@skippedFunctions) {
+            if(/[ \)]$skippedFunction[ \(]/) {
+              $functionIsSkipped=1;
+              last;
+            }
+          }
+          next if($functionIsSkipped);
           if(! /;$/) {
             chomp();
             $_.=";\n";

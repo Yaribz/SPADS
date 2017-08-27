@@ -1,6 +1,6 @@
 # Perl UnitSync interface module for Win32 system
 #
-# Copyright (C) 2008-2015  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2017  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -16,7 +16,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 91.0a (2015/07/08)
+# Version 91.0b (2017/08/27)
 
 package PerlUnitSync;
 
@@ -27,7 +27,7 @@ use Win32;
 use Win32::API;
 
 my $dllName='unitsync.dll';
-my @skippedFunctions=qw'GetMapInfo GetMapInfoEx';
+my @skippedFunctions=qw'ProcessUnitsNoChecksum GetMapInfoEx GetMapInfo GetMapDescription GetMapAuthor GetMapWidth GetMapHeight GetMapTidalStrength GetMapWindMin GetMapWindMax GetMapGravity GetMapResourceCount GetMapResourceName GetMapResourceMax GetMapResourceExtractorRadius GetMapPosCount GetMapPosX GetMapPosZ GetInfoValue GetPrimaryModName GetPrimaryModShortName GetPrimaryModVersion GetPrimaryModMutator GetPrimaryModGame GetPrimaryModShortGame GetPrimaryModDescription OpenArchiveType GetOptionStyle';
 
 sub _fixTypesForWin32Api {
   $_[0]=~s/\bconst\s*//gi;

@@ -156,6 +156,7 @@ helpSettings.dat:
 PerlUnitSync.pm:
 ===============
 91.0a: first public version, based on Spring 91 unitsync API header file (Windows)
+91.0b: remove functions obsolete in Spring 104+
 
 spads.pl:
 ========
@@ -761,7 +762,11 @@ spads.pl:
 0.11.47: ignore "binDir" global setting and use SPADS script location directly (the binDir setting will be removed in next major SPADS release)
          do not retrieve the 7za binary on macOS
          refactor initialization code to prepare for Spring version auto-management
-          
+0.11.48: removed some SPADS functionalities due to unitsync backward compatibility breakage in Spring 104+ to restore compatibility
+         number of start positions in map is no longer checked before launching a game with start position type set to fixed or random
+         map width and height are no longer available for map filtering for example
+         factorize some quit/restart code
+
 SpadsConf.pm:
 ============
 0.0.3: first public version (beta)
@@ -952,6 +957,7 @@ spadsInstaller.pl:
 0.17d: remove obsolete workaround for internal Perl bool type definition (causes problems with new compilers)
 0.18: add macOS compatibility
 0.18a: fix Perl modules include path (required for Perl releases which don't include current working directory in default include path)
+0.19: remove functions obsolete in Spring 104+ when generating PerlUnitSync interface module
 
 SpadsPluginApi.pm:
 =================
