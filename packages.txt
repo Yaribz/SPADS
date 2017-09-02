@@ -89,7 +89,7 @@ PerlUnitSync.pm:PerlUnitSync-91.0b.pm
 replay_upload.py:replay_upload_0.5.py
 SimpleEvent.pm:SimpleEvent_0.1b.pm
 SimpleLog.pm:SimpleLog_0.7.pm
-spads.pl:spads_0.11.48.pl
+spads.pl:spads_0.11.49.pl
 SpadsConf.pm:SpadsConf_0.11.16.pm
 spadsInstaller.pl:spadsInstaller_0.19.pl
 SpadsPluginApi.pm:SpadsPluginApi_0.22a.pm

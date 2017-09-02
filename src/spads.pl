@@ -52,7 +52,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.11.48';
+our $spadsVer='0.11.49';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -2054,6 +2054,19 @@ sub isUserAuthenticated {
     return 1;
   }
   return 2;
+}
+
+sub isUserAllowedToSpeakInGame {
+  my $user=shift;
+  return 0 unless($autohost->getState());
+  return 1 unless($conf{noSpecChat});
+  return 0 unless( exists $inGameAddedPlayers{$user}
+                   || ( exists $p_runningBattle->{users}{$user}
+                        && defined $p_runningBattle->{users}{$user}{battleStatus}
+                        && $p_runningBattle->{users}{$user}{battleStatus}{mode} ) );
+  my $r_ahPlayer=$autohost->getPlayer($user);
+  return 1 if(! %{$r_ahPlayer} || $r_ahPlayer->{lost} == 0);
+  return 0;
 }
 
 sub addAlert {
@@ -9616,6 +9629,17 @@ sub hSay {
     return 0;
   }
 
+  if(! isUserAllowedToSpeakInGame($user)) {
+    my $userLevel=getUserAccessLevel($user);
+    my $p_stopLevels=$spads->getCommandLevels('stop','battle','player','running');
+    my $p_sendLevels=$spads->getCommandLevels('send','battle','player','running');
+    if( (! exists $p_stopLevels->{directLevel} || $userLevel < $p_stopLevels->{directLevel})
+        && (! exists $p_sendLevels->{directLevel} || $userLevel < $p_sendLevels->{directLevel}) ) {
+      answer('Unable to send message in game from lobby, spectator chat is currently disabled');
+      return 0;
+    }
+  }
+
   return 1 if($checkOnly);
 
   my $msg=join(" ",@{$p_params});
@@ -12302,7 +12326,7 @@ sub cbSaidBattle {
   return if(checkUserMsgFlood($user));
   if($msg =~ /^!(\w.*)$/) {
     handleRequest("battle",$user,$1);
-  }elsif($autohost->{state} && $conf{forwardLobbyToGame} && $user ne $conf{lobbyLogin}) {
+  }elsif($autohost->{state} && $conf{forwardLobbyToGame} && $user ne $conf{lobbyLogin} && isUserAllowedToSpeakInGame($user)) {
     my $prompt="<$user> ";
     my $p_messages=splitMsg($msg,$conf{maxAutoHostMsgLength}-length($prompt)-1);
     foreach my $mes (@{$p_messages}) {
@@ -12330,7 +12354,7 @@ sub cbSaidBattleEx {
   }elsif($msg =~ /^suggests (.+)$/) {
     my $mapSuggestion=$1;
     handleRequest("battle",$user,"map $mapSuggestion") if(getUserPref($user,"handleSuggestions"));
-  }elsif($autohost->{state} && $conf{forwardLobbyToGame} && $user ne $conf{lobbyLogin}) {
+  }elsif($autohost->{state} && $conf{forwardLobbyToGame} && $user ne $conf{lobbyLogin} && isUserAllowedToSpeakInGame($user)) {
     my $prompt="* $user ";
     my $p_messages=splitMsg($msg,$conf{maxAutoHostMsgLength}-length($prompt)-1);
     foreach my $mes (@{$p_messages}) {
@@ -12498,8 +12522,7 @@ sub cbAhPlayerChat {
   $dest="(to $dest) " if($dest ne "");
   logMsg("game","$dest<$player> $msg") if($conf{logGameChat});
   if($dest eq "") {
-    if((! $conf{noSpecChat}) || (exists $p_runningBattle->{users}->{$player} && defined $p_runningBattle->{users}->{$player}->{battleStatus}
-                                 && $p_runningBattle->{users}->{$player}->{battleStatus}->{mode})) {
+    if(isUserAllowedToSpeakInGame($player)) {
       my $p_messages=splitMsg($msg,$conf{maxChatMessageLength}-13-length($player));
       foreach my $mes (@{$p_messages}) {
         queueLobbyCommand(["SAYBATTLE","<$player> $mes"]);

@@ -766,6 +766,7 @@ spads.pl:
          number of start positions in map is no longer checked before launching a game with start position type set to fixed or random
          map width and height are no longer available for map filtering for example
          factorize some quit/restart code
+0.11.49: the noSpecChat setting is now also honored for messages relayed between lobby and game
 
 SpadsConf.pm:
 ============
