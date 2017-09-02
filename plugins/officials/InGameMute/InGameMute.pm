@@ -8,7 +8,7 @@ use SpadsPluginApi;
 
 no warnings 'redefine';
 
-my $pluginVersion='0.1';
+my $pluginVersion='0.2';
 my $requiredSpadsVersion='0.11.5';
 
 my %globalPluginParams = ( commandsFile => ['notNull'],
@@ -23,7 +23,8 @@ sub getParams { return [\%globalPluginParams,\%presetPluginParams]; }
 sub new {
   my $class=shift;
   my $self = { mutes => {},
-               storeMutesTs => time };
+               storeMutesTs => time,
+               restoreForwardLobbyToGame => 0};
   bless($self,$class);
   my $mutesFile=getSpadsConf()->{varDir}.'/InGameMute.dat';
   if(-f $mutesFile) {
@@ -38,6 +39,10 @@ sub new {
                           mutes => \&hSpadsMutes,
                           unmute => \&hSpadsUnmute});
   addSpringCommandHandler({PLAYER_JOINED => \&hSpringPlayerJoined});
+  addLobbyCommandHandler({SAIDBATTLE => \&hLobbyPreSaidBattle,
+                          SAIDBATTLEEX => \&hLobbyPreSaidBattle},950);
+  addLobbyCommandHandler({SAIDBATTLE => \&hLobbyPostSaidBattle,
+                          SAIDBATTLEEX => \&hLobbyPostSaidBattle},1050);
   slog("Plugin loaded (version $pluginVersion)",3);
   return $self;
 }
@@ -58,10 +63,19 @@ sub eventLoop {
   }
 }
 
+sub onLobbyConnected {
+  addLobbyCommandHandler({SAIDBATTLE => \&hLobbyPreSaidBattle,
+                          SAIDBATTLEEX => \&hLobbyPreSaidBattle},950);
+  addLobbyCommandHandler({SAIDBATTLE => \&hLobbyPostSaidBattle,
+                          SAIDBATTLEEX => \&hLobbyPostSaidBattle},1050);
+}
+
 sub onUnload {
   my $self=shift;
   removeSpadsCommandHandler(['mute','mutes','unmute']);
   removeSpringCommandHandler(['PLAYER_JOINED']);
+  removeLobbyCommandHandler(['SAIDBATTLE','SAIDBATTLEEX'],950);
+  removeLobbyCommandHandler(['SAIDBATTLE','SAIDBATTLEEX'],1050);
   my $mutesFile=getSpadsConf()->{varDir}.'/InGameMute.dat';
   slog("Unable to store mute data into file $mutesFile",1) unless(nstore($self->{mutes},$mutesFile));
   $self->{storeMutesTs}=time;
@@ -281,26 +295,62 @@ sub applyUnmuteInGame {
   }
 }
 
+sub getUserMuteData {
+  my ($self,$user)=@_;
+  my $accountId=::getLatestUserAccountId($user);
+  my $r_muteData;
+  if($accountId =~ /^\d+$/ && exists $self->{mutes}{"\#$accountId"}) {
+    $r_muteData=$self->{mutes}{"\#$accountId"};
+  }elsif(exists $self->{mutes}{$user}) {
+    $r_muteData=$self->{mutes}{$user};
+  }
+  return $r_muteData;
+}
+
+sub hLobbyPreSaidBattle {
+  my (undef,$user,$msg)=@_;
+  return if($msg =~ /^!\w/);
+  my $r_conf=getSpadsConf();
+  return unless($r_conf->{forwardLobbyToGame});
+  my $self=getPlugin();
+  my $r_muteData=$self->getUserMuteData($user);
+  if(defined $r_muteData && $r_muteData->{chat}) {
+    $self->{restoreForwardLobbyToGame}=$r_conf->{forwardLobbyToGame};
+    $r_conf->{forwardLobbyToGame}=0;
+  }
+}
+
+sub hLobbyPostSaidBattle {
+  my (undef,$user)=@_;
+  my $self=getPlugin();
+  return unless($self->{restoreForwardLobbyToGame});
+  my $r_conf=getSpadsConf();
+  $r_conf->{forwardLobbyToGame}=$self->{restoreForwardLobbyToGame};
+  $self->{restoreForwardLobbyToGame}=0;
+}
+
+sub preSpadsCommand {
+  my ($self,$command,undef,$user)=@_;
+  return 1 unless($command eq 'say');
+  my $r_muteData=$self->getUserMuteData($user);
+  return 0 if(defined $r_muteData && $r_muteData->{chat});
+  return 1;
+}
+
 sub hSpringPlayerJoined {
   my (undef,undef,$name)=@_;
   my $self=getPlugin();
-  my $accountId=::getLatestUserAccountId($name);
-  my $p_muteData;
-  if($accountId =~ /^\d+$/ && exists $self->{mutes}->{"\#$accountId"}) {
-    $p_muteData=$self->{mutes}->{"\#$accountId"};
-  }elsif(exists $self->{mutes}->{$name}) {
-    $p_muteData=$self->{mutes}->{$name};
-  }
-  if(defined $p_muteData) {
+  my $r_muteData=$self->getUserMuteData($name);
+  if(defined $r_muteData) {
     my $autohost=getSpringInterface();
     my $muteDetailString='chat messages and drawing ignored';
-    if($p_muteData->{chat} && ! $p_muteData->{draw}) {
+    if($r_muteData->{chat} && ! $r_muteData->{draw}) {
       $muteDetailString='chat messages ignored';
-    }elsif(! $p_muteData->{chat} && $p_muteData->{draw}) {
+    }elsif(! $r_muteData->{chat} && $r_muteData->{draw}) {
       $muteDetailString='drawing ignored';
     }
     $autohost->sendChatMessage(getSpadsConf()->{lobbyLogin}." * $name is muted ($muteDetailString)");
-    $autohost->sendChatMessage("/mute $name $p_muteData->{chat} $p_muteData->{draw}");
+    $autohost->sendChatMessage("/mute $name $r_muteData->{chat} $r_muteData->{draw}");
   }
 }
 
