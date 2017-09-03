@@ -48,7 +48,7 @@ Name of the AutoHost in Spring lobby
 -
 Any valid lobby login
 -
-%login% (set during installation, example: "Spads")
+%lobbyLogin% (set during installation, example: "Spads")
 
 [global:lobbyPassword]
 AutoHost lobby password
@@ -57,7 +57,7 @@ Spring lobby password for the AutoHost account
 -
 Any valid lobby password
 -
-%password% (set during installation, example: "abcdefgh")
+%lobbyPassword% (set during installation, example: "abcdefgh")
 
 [global:localLanIp]
 LAN IP of the AutoHost
@@ -92,41 +92,44 @@ Any valid IP address: the provided IP address is used for hosting
 -
 <null>
 
-[global:binDir]
-SPADS installation directory
--
-Location of SPADS binary files
--
-Any existing directory (absolute path)
--
-%installDir% (set during installation, examples: "/var/home/spring/spads/", "C:\Program files\Spads")
-
 [global:etcDir]
 SPADS configuration directory
 -
-Location of SPADS configuration files
+Location of SPADS configuration files. This directory path can be an absolute path or a path relative to SPADS installation directory.
 -
-Any existing directory (absolute path)
+Any readable directory
 -
-%etcDir% (set during installation, examples: "/var/home/spring/spads/etc", "C:\Program files\Spads\etc")
+%etcDir% (set during installation, examples: "etc", "/var/home/spring/spads/etc", "C:\Program files\Spads\etc")
 
 [global:varDir]
 SPADS dynamic data directory
 -
-Location of SPADS dynamic data
+Location of SPADS dynamic data. This directory path can be an absolute path or a path relative to SPADS installation directory.
 -
-Any writable directory (absolute path)
+Any writable directory
 -
-%varDir% (set during installation, examples: "/var/home/spring/spads/var", "C:\Program files\Spads\var")
+%varDir% (set during installation, examples: "var", "/var/home/spring/spads/var", "C:\Program files\Spads\var")
+
+[global:instanceDir]
+SPADS instance-specific dynamic data directory
+-
+Location of SPADS instance-specific dynamic data (all SPADS instances running simultaneously on a system must use a different instance-specific directory). This directory path can be an absolute path or a path relative to [global:varDir] directory.
+If you run multiple SPADS instances simultaneously from a single SPADS installation, then you need to configure this setting so that each one of these instances uses a distinct instance-specific directory (for example you can use the lobby login to distinguish them, or numbers...).
+If you run only one SPADS instance from this SPADS installation, then you can leave this setting empty.
+-
+<null>: no instance-specific directory configured ([global:varDir] directory is used instead), so only one SPADS instance can be launched from this SPADS installation
+Any writable directory: this directory is used for instance-specific data, it must be distinct for each SPADS instance launched from the same SPADS installation
+-
+<null>
 
 [global:logDir]
 SPADS log directory
 -
-Location of SPADS log files
+Location of SPADS log files. This directory path can be an absolute path or a path relative to [global:instanceDir] directory.
 -
-Any writable directory (absolute path)
+Any writable directory
 -
-%logDir% (set during installation, examples: "/var/home/spring/spads/var/log", "C:\Program files\Spads\var\log")
+%logDir% (set during installation, examples: "log", "/var/home/spring/spads/var/log", "C:\Program files\Spads\var\log")
 
 [global:autoUpdateRelease]
 Auto-update release
@@ -163,29 +166,32 @@ on: SPADS auto-restarts for update when no game is running
 -
 whenEmpty
 
-[global:autoUpdateBinaries]
-Auto-update Spring server binaries
--
-Specifies if the Spring server binary files located in SPADS installation directory must be automatically updated according to the version of the unitsync library in use.
--
-no: Spring server binary files aren't auto-updated
-yes: Spring server binary files are auto-updated (allowed on Windows platform only)
-unitsync: deprecated value, same as "no" (allowed on Windows platform only)
-server: deprecated value, same as "yes" (allowed on Windows platform only)
--
-yes (windows)
-no (other OS)
 
-[global:onBadSpringVersion]
-Action for bad Spring version
+[global:autoManagedSpringVersion]
+Auto-managed Spring version
 -
-Action to be performed when the Spring version used by the AutoHost doesn't match the default one broadcasted by the lobby server.
+If this setting is defined, then Spring version auto-management is enabled: SPADS automatically downloads and uses official Spring binaries matching the version/release specified (Spring binaries downloaded automatically are stored in the directory indicated by [global:autoManagedSpringDir]).
+The Spring version can be specified as a version number directly (for example: "103.0.1-1272-g170516f", "103.0" ...), or as a release name ("stable", "testing" or "unstable"). When a version number is used, SPADS will stick to this version until the setting is changed manually. When a release name is used, SPADS will stay up to date with the corresponding official Spring release by automatically downloading and using new Spring binary files when needed (the "stable" release is the current recommended Spring version, the "testing" release is the next Spring release candidate, and the "unstable" release is the latest develop version). A check delay and an auto-restart mode can optionnaly be provided to alter default behaviour (see below).
+When Spring version auto-management is enabled, [global:springServerType] must be defined to specify which type of Spring server must be used (dedicated or headless). The auto-managed Spring version setting and the custom Spring installation settings are mutually exclusive: either Spring version auto-management is enabled and the custom Spring installation settings ([global:unitsyncDir] and [global:springServer]) must not be defined, or Spring version auto-management is disabled and the custom Spring installation settings ([global:unitsyncDir] and [global:springServer]) must be defined.
+Spring version auto-management isn't available on macOS.
 -
-<null>: run normally (use multi-engine lobby protocol extension to open battle lobby)
-closeBattle: battle lobby is automatically closed
-quit: SPADS exits automatically
+<null>: Spring version auto-management is disabled (the custom Spring installation specified by [global:unitsyncDir] and [global:springServer] is used instead)
+<springVersionNumber>: SPADS auto-downloads Spring binaries for this specific version if needed, and sticks to this version
+<springRelease>: SPADS stays up to date with the selected Spring release ("stable", "testing" or "unstable")
+<springRelease>;<checkDelay>;<autoRestartMode>: same, with customization of check delay and auto-restart mode
+    <checkDelay> is the delay in minutes between Spring version checks for selected release (integer). Default is "60" for "stable" Spring release, "30" for "testing" and "15" for "unstable"
+    <autoRestartMode> specifies if and when SPADS must auto-restart after Spring release updates, allowed values: "off", "whenEmpty", "whenOnlySpec", "on". Default is "whenEmpty"
 -
-<null>
+%autoManagedSpringVersion% (set during installation)
+
+[global:autoManagedSpringDir]
+Auto-managed Spring directory
+-
+Location of the Spring binary files downloaded automatically by SPADS when Spring version auto-management is enabled (cf [global:autoManagedSpringVersion]). This directory path can be an absolute path or a path relative to [global:varDir] directory.
+-
+Any writable directory
+-
+spring
 
 [global:springConfig]
 Spring config file path
@@ -201,28 +207,41 @@ Absolute path to a correct Spring configuration file: configuration file used by
 [global:springServer]
 Spring server path
 -
-Absolute path of the Spring server binary file
+Absolute path of the Spring server binary file. This setting must only be defined when a custom Spring installation is used with SPADS, i.e. when Spring version auto-management is disabled (cf [global:autoManagedSpringVersion]).
 -
+<null>
 Any executable file absolute path
 -
-%dedicated% (set during installation, examples: "/var/home/spring/bin/spring-dedicated", "C:\Program files\Spads\spring-headless.exe")
+%springServer% (set during installation, examples: "/var/home/spring/bin/spring-dedicated", "C:\Program files\Spads\spring-headless.exe")
 
 [global:springServerType]
 Spring server type
 -
 Type of Spring server binary used with SPADS.
+This setting must be defined if Spring version auto-management is enabled (cf [global:autoManagedSpringVersion]).
 -
 <null>: the server type is auto-detected from spring server binary name (see [global:springServer])
 dedicated
 headless
 -
+%springServerType% (set during installation, example: "dedicated")
+
+[global:unitsyncDir]
+Unitsync library directory
+-
+Absolute path of the unitsync library directory. This setting must only be defined when a custom Spring installation is used with SPADS, i.e. when Spring version auto-management is disabled (cf [global:autoManagedSpringVersion]).
+-
 <null>
+Any readable directory containing a unitsync library (absolute path)
+-
+%unitsyncDir% (set during installation, examples: "/usr/local/lib", "C:\Program files\Spring")
 
 [global:springDataDir]
 Spring data directories
 -
-Absolute pathes of the directories containing Spring maps, mods, base files...
+Absolute pathes of the directories containing Spring base files, games or maps.
 Directories must be separated by colons (":") on Linux, and by semicolons (";") on Windows.
+When Spring version auto-management is enabled (cf [global:autoManagedSpringVersion]), Spring base files are automatically loaded, so only Spring data directories containing games or mods need to be declared here in this case.
 -
 Any readable directories (absolute pathes)
 -
@@ -425,6 +444,20 @@ Log level of the Updater module
 SPADS main log level
 -
 Log level of the core SPADS component
+-
+0: critical
+1: errors
+2: warnings
+3: notices
+4: information
+5: debug
+-
+4
+
+[global:simpleEventLogLevel]
+SimpleEvent log level
+-
+Log level of the SimpleEvent module
 -
 0: critical
 1: errors
@@ -677,11 +710,11 @@ If two values are provided (separated by ";" character), then the first one is u
 [global:pluginsDir]
 SPADS plugins directory
 -
-Location of SPADS plugins
+Location of SPADS plugins. This directory path can be an absolute path or a path relative to [global:varDir] directory.
 -
-Any directory
+Any readable directory
 -
-%varDir%/plugins (set during installation, examples: "/var/home/spring/spads/var/plugins", "C:\Program files\Spads\var\plugins")
+plugins
 
 [global:autoLoadPlugins]
 Auto-loaded plugins
@@ -750,11 +783,10 @@ Duration of the ban applied when using !kickBan command (expressed in seconds, o
 -
 300
 
-[global:minLevelForIpAddr]
-Minimum access level to see IP addresses
+[global:privacyTrustLevel]
+Privacy trust level
 -
-Players IP addresses can be shown in some command outputs (!list bans, !searchUser, !smurfs, !status and !whois).
-The "minLevelForIpAddr" global setting specifies the AutoHost access level requirement to be able to see these IP addresses.
+Specifies the minimum access level required to see personal information about players (IP addresses, non-rounded skill values...) in the output of some commands (!list bans, !searchUser, !smurfs, !status and !whois).
 -
 Integer
 -
@@ -782,6 +814,27 @@ Specifies if SPADS must use the native process spawning method to launch Spring 
 1: Win32 process is used to spawn Spring server process (allowed on Windows platform only)
 -
 0
+
+[global:eventModel]
+Event model
+-
+SPADS is based on the asynchronous programming paradigm, with events, event handlers, callbacks etc. It can use either its own internal event model, or the AnyEvent module if available on the system.
+AnyEvent is more efficient and makes it possible to integrate a lot of high-performance Perl modules such as web servers directly in the plugins.
+-
+auto: AnyEvent is used if available, otherwise the internal event model is used 
+internal: internal event model is used
+AnyEvent: AnyEvent is used
+-
+auto
+
+[global:maxChildProcesses]
+Maximum number of child processes
+-
+Specifies how many child processes can be spawned by SPADS simultaneously (other processes are queued). 
+-
+Integer
+-
+16
 
 ###############################################################################
 #           Preset settings (defined in sections of spads.conf file)          #
@@ -906,9 +959,10 @@ Map name
 Current map name (default is first map of current map list if not set)
 This special preset setting can be changed by using the classic "!set map" command, but also the "!map" alias.
 -
+<null>
 Any map of current map list (defined in mapLists.conf).
 -
-DeltaSiegeDry
+<null>
 
 [set:autoLoadMapPreset]
 Auto-load map preset
@@ -1088,12 +1142,12 @@ Balance mode
 This is the balance mode used during both automatic (refer to [set:autoBalance]) and manual (refer to "!balance" command) team balancing operations.
 Four balance modes are currently available:
 The "random" balance mode simply balances players randomly.
-The "clan" balance mode ensures players of the same clans (refer to [set:clanMode]) are in the same teams. Other players are balanced randomly.
+The "clan;random" balance mode ensures players of the same clans (refer to [set:clanMode]) are in the same teams. Other players are balanced randomly.
 The "skill" balance mode tries to balance teams according to player skills (refer to [pSet:skillMode] and [pSet:rankMode]), without respecting clans.
 The "clan;skill" balance mode tries to balance teams according to player skills (refer to [pSet:skillMode] and [pSet:rankMode]), respecting clans (refer to [set:clanMode]).
 -
 random: balance players randomly, without respecting clans
-clan: balance players randomly, respecting clans
+clan;random: balance players randomly, respecting clans
 skill: balance players according to their skill, without respecting clans
 clan;skill: balance players according to their skill, respecting clans
 -
@@ -1514,32 +1568,6 @@ Any string
 -
 <null>
 
-[set:minRankForPasswd]
-Minimum rank for password
--
-When the battle lobby is passworded, players can obtain the password by using the !pass command if they meet all the requirements.
-The "minRankForPasswd" preset setting specifies the rank requirement.
--
-0: Newbie (no rank requirement)
-1: Beginner
-2: Average
-3: Above average
-4: Experienced
-5: Highly experienced
-6: Veteran
--
-0
-
-[set:minLevelForPasswd]
-Minimum access level for password
--
-When the battle lobby is passworded, players can obtain the password by using the !pass command if they meet all the requirements.
-The "minLevelForPasswd" preset setting specifies the AutoHost access level (as defined in the levels.conf file) requirement.
--
-Integer
--
-0
-
 [set:banList]
 Ban list
 -
@@ -1811,10 +1839,8 @@ NAT traversal method used by the host.
 Battle password
 -
 This hosting setting specifies if the AutoHost must open a public battle, or a private passworded battle.
-When using passworded battles, SPADS can generate a random password itself (this can be useful in combination with !pass command, [set:minRankForPasswd], and [set:minLevelForPasswd]).
 -
 *: No password (public battle)
-_RANDOM_: Random password (private battle)
 Any other string: String used as password (private battle)
 -
 *
@@ -1874,7 +1900,7 @@ Determines how start positions are affected to players
 -
 0: Fixed (Fixed start positions of the map are used in ascending order)
 1: Random (Fixed start positions of the map are used in random order)
-2: Choose in game (Start positions are choosen by players in game)
+2: Choose in game (Start positions are chosen by players in game)
 -
 2
 

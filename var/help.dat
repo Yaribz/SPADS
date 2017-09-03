@@ -226,9 +226,6 @@
 [openBattle]
 !openBattle - reopens the battle (battle is open by default)
 
-[pass]
-!pass - requests password
-
 [plugin]
 !plugin <pluginName> load|unload|reload|reloadConf [keepSettings]|set <param> [<value>] - performs various operations on a plugin
 "!plugin AdvancedNotify load" loads plugin "AdvancedNotify"

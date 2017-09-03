@@ -52,7 +52,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.11.49';
+our $spadsVer='0.12.0';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -82,7 +82,6 @@ if($win) {
 }elsif(! $macOs) {
   push(@packagesSpads,'7za');
 }
-my @packagesWinServer=qw'spring-dedicated.exe spring-headless.exe';
 
 my ($lockFh,$pidFile,$lockAcquired);
 
@@ -181,7 +180,6 @@ our %spadsHandlers = (
   nextpreset => \&hNextPreset,
   notify => \&hNotify,
   openbattle => \&hOpenBattle,
-  pass => \&hPass,
   plugin => \&hPlugin,
   preset => \&hPreset,
   promote => \&hPromote,
@@ -301,7 +299,7 @@ $masterChannel=$1 if($masterChannel =~ /^([^\s]+)\s/);
 
 # State variables #############################################################
 
-my $spadsDir=$FindBin::Bin;
+my $spadsDir=File::Spec->canonpath($FindBin::Bin);
 our %conf=%{$spads->{conf}};
 my $abortSpadsStartForAutoUpdate=0;
 my %quitAfterGame=(action => undef, condition => undef);
@@ -407,6 +405,9 @@ our %battleSkillsCache;
 my %pendingGetSkills;
 my $currentGameType='Duel';
 our $springServerType=$conf{springServerType};
+my $springServerBin=$conf{springServer};
+my %autoManagedSpringData=(mode => 'off');
+my $failedSpringInstallVersion;
 
 my $lobbySimpleLog=SimpleLog->new(logFiles => [$conf{logDir}."/spads.log"],
                                   logLevels => [$conf{lobbyInterfaceLogLevel}],
@@ -427,7 +428,7 @@ my $updaterSimpleLog=SimpleLog->new(logFiles => [$conf{logDir}."/spads.log",""],
                                     prefix => "[SpadsUpdater] ");
 
 my $simpleEventSimpleLog=SimpleLog->new(logFiles => [$conf{logDir}.'/spads.log',''],
-                                        logLevels => [$conf{spadsLogLevel},3],
+                                        logLevels => [$conf{simpleEventLogLevel},3],
                                         useANSICodes => [0,-t STDOUT ? 1 : 0],
                                         useTimestamps => [1,-t STDOUT ? 0 : 1],
                                         prefix => "[SimpleEvent] ");
@@ -442,12 +443,11 @@ our $autohost = SpringAutoHostInterface->new(autoHostPort => $conf{autoHostPort}
                                              simpleLog => $autohostSimpleLog,
                                              warnForUnhandledMessages => 0);
 
-my @packages=@packagesSpads;
 my $updater = SpadsUpdater->new(sLog => $updaterSimpleLog,
-                                localDir => $spadsDir,
                                 repository => "http://planetspads.free.fr/spads/repository",
                                 release => $conf{autoUpdateRelease},
-                                packages => \@packages);
+                                packages => \@packagesSpads,
+                                springDir => $conf{autoManagedSpringDir});
 
 
 # Binaries update (Windows only) ##############################################
@@ -679,6 +679,11 @@ sub setSpringEnv {
   }else{
     portableExec($^X,$0,@ARGV,'restartedForSpringEnv=1') if(setEnvVarFirstPaths('LD_LIBRARY_PATH',$unitSyncPath));
   }
+}
+
+sub setSpringServerBin {
+  my $baseDir=shift;
+  $springServerBin=catfile($baseDir,"spring-$springServerType".($win?'.exe':''));
 }
 
 sub generateGameId {
@@ -1074,7 +1079,7 @@ sub loadArchives {
       $newCachedMaps{$mapName}={};
       PerlUnitSync::RemoveAllArchives();
 
-# This functionality is disabled since Spring 104 because of unitsync backward compatibility breakage...
+# This functionality is disabled since SPADS 0.11.48 because of unitsync backward compatibility breakage in Spring 104...
 #      $newCachedMaps{$mapName}->{width}=PerlUnitSync::GetMapWidth($mapNb);
 #      $newCachedMaps{$mapName}->{height}=PerlUnitSync::GetMapHeight($mapNb);
 #      my $nbStartPos=PerlUnitSync::GetMapPosCount($mapNb);
@@ -1650,7 +1655,6 @@ sub checkQueuedLobbyCommands {
 sub openBattle {
   my %hSettings=%{$spads->{hSettings}};
   my $password=$hSettings{password};
-  $password=generatePassword(8) if($password eq "_RANDOM_");
   my $mapHash=getMapHash($conf{map});
   if(! $mapHash) {
     slog("Unable to retrieve hashcode of map \"$conf{map}\"",1);
@@ -2812,6 +2816,44 @@ sub checkAutoUpdate {
   if(isRestartForUpdateApplicable() && time - $timestamps{autoRestartCheck} > 300 && (! $updater->isUpdateInProgress())) {
     autoRestartForUpdateIfNeeded();
   }
+}
+
+sub springVersionAutoManagement {
+  my $autoManagedSpringVersion=$updater->resolveSpringReleaseNameToVersion($autoManagedSpringData{release});
+  if(! defined $autoManagedSpringVersion) {
+    slog("Unable to identify current Spring version of auto-managed Spring $autoManagedSpringData{release} release, skipping Spring version auto-management",2);
+    return;
+  }
+  return if($autoManagedSpringVersion eq $autoManagedSpringData{version});
+  if(defined $failedSpringInstallVersion && $failedSpringInstallVersion eq $autoManagedSpringVersion) {
+    slog("Installation failed previously for Spring version $failedSpringInstallVersion, skipping Spring version auto-management",5);
+    return;
+  }
+  slog("New version detected for Spring $autoManagedSpringData{release} release: $autoManagedSpringVersion",3);
+  if($updater->isSpringSetupInProgress($autoManagedSpringVersion)) {
+    slog("Skipping installation of Spring $autoManagedSpringVersion, another process is already installing this version",2);
+    return;
+  }
+  my $setupResult=$updater->setupSpring($autoManagedSpringVersion);
+  if($setupResult < 0) {
+    my $setupFailedMsg="Unable to install Spring $autoManagedSpringVersion for Spring version auto-management";
+    if($setupResult < -9) {
+      $failedSpringInstallVersion=$autoManagedSpringVersion;
+      $setupFailedMsg.=", keeping current version ($autoManagedSpringData{version})";
+    }
+    slog($setupFailedMsg,2);
+    return;
+  }
+  broadcastMsg("Installed new version for Spring $autoManagedSpringData{release} release: $autoManagedSpringVersion") if($setupResult > 0);
+  $autoManagedSpringData{version}=$autoManagedSpringVersion;
+  my $autoManagedSpringFile="$conf{instanceDir}/autoManagedSpringVersion.dat";
+  if(open(my $springVersionFh,'>',$autoManagedSpringFile)) {
+    print $springVersionFh $autoManagedSpringVersion;
+    close($springVersionFh);
+  }else{
+    slog("Unable to write auto-managed Spring version file \"$autoManagedSpringFile\" ($!)",2);
+  }
+  applyQuitAction(1,{on => 0, whenOnlySpec => 1, whenEmpty => 2}->{$autoManagedSpringData{restart}},'Spring version auto-management') unless($autoManagedSpringData{restart} eq 'off');
 }
 
 sub checkAutoForceStart {
@@ -4307,7 +4349,7 @@ sub launchGame {
   }
   my %reversedTeamsMap=reverse %{$p_teamsMap};
   my %reversedAllyTeamsMap=reverse %{$p_allyTeamsMap};
-  open(SCRIPT,">$conf{varDir}/startscript.txt");
+  open(SCRIPT,">$conf{instanceDir}/startscript.txt");
   for my $i (0..$#{$p_startData}) {
     print SCRIPT $p_startData->[$i]."\n";
   }
@@ -4332,14 +4374,14 @@ sub launchGame {
     $gdrEnabled=0;
   }
 
-  my @springServerCmdParams = ( catfile($conf{varDir},'startscript.txt') );
+  my @springServerCmdParams = ( catfile($conf{instanceDir},'startscript.txt') );
   push(@springServerCmdParams,'--config',$conf{springConfig}) unless($conf{springConfig} eq '');
   my $logFile=catfile($conf{logDir},"spring-$springServerType.log");
 
   if($conf{useWin32Process}) {
-    $springWin32Process=SimpleEvent::createWin32Process($conf{springServer},
+    $springWin32Process=SimpleEvent::createWin32Process($springServerBin,
                                                         \@springServerCmdParams,
-                                                        $conf{varDir},
+                                                        $conf{instanceDir},
                                                         \&onSpringProcessExit,
                                                         [[STDOUT => ">>$logFile"],[STDERR => '>>&STDOUT']],
                                                         1);
@@ -4352,15 +4394,15 @@ sub launchGame {
   }else{
     $springPid=SimpleEvent::forkProcess(
       sub {
-        chdir($conf{varDir});
+        chdir($conf{instanceDir});
         if($win) {
-          exec(join(' ',(map {escapeWin32Parameter($_)} ($conf{springServer},@springServerCmdParams)),'>>'.escapeWin32Parameter($logFile),'2>&1')) || execError("Unable to launch Spring ($!)",1);
+          exec(join(' ',(map {escapeWin32Parameter($_)} ($springServerBin,@springServerCmdParams)),'>>'.escapeWin32Parameter($logFile),'2>&1')) || execError("Unable to launch Spring ($!)",1);
         }else{
           open(my $previousStdout,'>&',\*STDOUT);
           open(my $previousStderr,'>&',\*STDERR);
           open(STDOUT,'>>',$logFile);
           open(STDERR,'>>&',\*STDOUT);
-          portableExec($conf{springServer},@springServerCmdParams);
+          portableExec($springServerBin,@springServerCmdParams);
           my $execErrorString=$!;
           open(STDOUT,'>&',$previousStdout);
           open(STDERR,'>&',$previousStderr);
@@ -4628,7 +4670,7 @@ sub needRehost {
     return 1 if($spads->{hSettings}->{$p} ne $lobby->{battles}->{$lobby->{battle}->{battleId}}->{$params{$p}});
   }
   return 1 if($targetMod ne $lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod});
-  return 1 if($spads->{hSettings}->{password} ne $lobby->{battle}->{password} && $spads->{hSettings}->{password} ne "_RANDOM_");
+  return 1 if($spads->{hSettings}->{password} ne $lobby->{battle}->{password});
   return 0;
 }
 
@@ -5672,7 +5714,7 @@ sub translateSideIfNeeded {
 }
 
 sub getGameDataFromLog {
-  my $logFile="$conf{varDir}/infolog.txt";
+  my $logFile="$conf{instanceDir}/infolog.txt";
   my ($demoFile,$gameId);
   if(open(SPRINGLOG,"<$logFile")) {
     while(<SPRINGLOG>) {
@@ -5758,7 +5800,7 @@ sub endGameProcessing {
   }
 
   if(defined $demoFile) {
-    $demoFile=catfile($conf{varDir},$demoFile) unless(file_name_is_absolute($demoFile));
+    $demoFile=catfile($conf{instanceDir},$demoFile) unless(file_name_is_absolute($demoFile));
   }else{
     $demoFile='UNKNOWN';
   }
@@ -8436,7 +8478,7 @@ sub hList {
       sayPrivate($user,"There is no ban entry currently");
     }else{
       my $userLevel=getUserAccessLevel($user);
-      my $showIPs = $userLevel >= $conf{minLevelForIpAddr};
+      my $showIPs = $userLevel >= $conf{privacyTrustLevel};
       if(@{$p_globalBans}) {
         sayPrivate($user,"$B********** Global bans **********");
         my $p_banEntries=listBans($p_globalBans,$showIPs,$user);
@@ -8985,42 +9027,6 @@ sub hPlugin {
   }
 }
 
-sub hPass {
-  my ($source,$user,$p_params,$checkOnly)=@_;
-
-  return 0 if($checkOnly);
-
-  if($#{$p_params} != -1) {
-    invalidSyntax($user,"pass");
-    return 0;
-  }
-
-  if(! exists $lobby->{users}->{$user}) {
-    answer("You must be connected to lobby server to receive the password in private message");
-    return 0;
-  }
-
-  if($conf{minRankForPasswd} && $lobby->{users}->{$user}->{status}->{rank} < $conf{minRankForPasswd}) {
-    answer("Sorry, your rank is below the rank limit for password");
-    return 0;
-  }
-  if($conf{minLevelForPasswd}) {
-    my $level=getUserAccessLevel($user);
-    if($level < $conf{minLevelForPasswd}) {
-      answer("Sorry, your access level is below the limit for password");
-      return 0;
-    }
-  }
-  my $p_ban=$spads->getUserBan($user,$lobby->{users}->{$user},isUserAuthenticated($user),undef,getPlayerSkillForBanCheck($user));
-  if($p_ban->{banType} < 2) {
-    answer("Sorry, you are banned");
-    return 0;
-  }
-
-  sayPrivate($user,"Battle pasword: \"$spads->{hSettings}->{password}\"");
-
-}
-
 sub hPreset {
   my ($source,$user,$p_params,$checkOnly)=@_;
 
@@ -9226,7 +9232,6 @@ sub hQuit {
                       chan => "channel #$masterChannel",
                       game => 'game',
                       battle => 'battle lobby' );
-
   applyQuitAction(0,{game => 0, spec => 1, empty => 2}->{$waitMode},"requested by $user in $sourceNames{$source}");
 }
 
@@ -9462,9 +9467,7 @@ sub hRestart {
                       chan => "channel #$masterChannel",
                       game => 'game',
                       battle => 'battle lobby' );
-
   applyQuitAction(1,{game => 0, spec => 1, empty => 2}->{$waitMode},"requested by $user in $sourceNames{$source}");
-
 }
 
 sub hRing {
@@ -9679,7 +9682,7 @@ sub hSearchUser {
   my @ranks=("Newbie","$C{3}Beginner","$C{3}Average","$C{10}Above average","$C{12}Experienced","$C{7}Highly experienced","$C{4}Veteran","$C{13}Ghost");
   if($search =~ /^\@([\d\.\*]+)$/) {
     $search=$1;
-    if(getUserAccessLevel($user) < $conf{minLevelForIpAddr}) {
+    if(getUserAccessLevel($user) < $conf{privacyTrustLevel}) {
       answer("Unable to search for user accounts by IP (insufficient privileges)");
       return 0;
     }
@@ -9812,7 +9815,7 @@ sub hSearchUser {
       }
     }
     @resultFields=("$C{5}ID$C{1}","$C{5}Matching name(s)$C{1}","$C{5}Online$C{1}","$C{5}Country$C{1}","$C{5}CPU$C{1}","$C{5}Rank$C{1}","$C{5}LastUpdate$C{1}");
-    push(@resultFields,"$C{5}IP(s)$C{1}") if(getUserAccessLevel($user) >= $conf{minLevelForIpAddr});
+    push(@resultFields,"$C{5}IP(s)$C{1}") if(getUserAccessLevel($user) >= $conf{privacyTrustLevel});
   }
   if(! @matchingAccounts) {
     sayPrivate($user,"Unable to find any user matching \"$search\" filter");
@@ -9999,7 +10002,7 @@ sub hSmurfs {
     
     if(@{$p_smurfsData}) {
       my @resultFields=("$C{5}ID$C{1}","$C{5}Name(s)$C{1}","$C{5}Online$C{1}","$C{5}Country$C{1}","$C{5}CPU$C{1}","$C{5}Rank$C{1}","$C{5}LastUpdate$C{1}","$C{5}Confidence$C{1}");
-      push(@resultFields,"$C{5}IP(s)$C{1}") if(getUserAccessLevel($user) >= $conf{minLevelForIpAddr});
+      push(@resultFields,"$C{5}IP(s)$C{1}") if(getUserAccessLevel($user) >= $conf{privacyTrustLevel});
       my $p_resultLines=formatArray(\@resultFields,$p_smurfsData);
       foreach my $resultLine (@{$p_resultLines}) {
         sayPrivate($user,$resultLine);
@@ -10452,7 +10455,7 @@ sub hStatus {
     }
     my @statusFields;
     foreach my $statusField (@defaultStatusColumns,@newPluginStatusColumns,'IP') {
-      next if($statusField eq 'IP' && $userLevel < $conf{minLevelForIpAddr});
+      next if($statusField eq 'IP' && $userLevel < $conf{privacyTrustLevel});
       if(exists $pluginStatusInfo{$statusField}) {
         push(@statusFields,"$C{6}$statusField$C{1}");
       }else{
@@ -10567,7 +10570,7 @@ sub hStatus {
                 }elsif($battleSkills{$player}->{skillOrigin} eq 'TrueSkill') {
                   if(exists $battleSkills{$player}->{skillPrivacy}
                      && ($battleSkills{$player}->{skillPrivacy} == 0
-                         || ($battleSkills{$player}->{skillPrivacy} == 1 && $userLevel >= $conf{minLevelForIpAddr}))) {
+                         || ($battleSkills{$player}->{skillPrivacy} == 1 && $userLevel >= $conf{privacyTrustLevel}))) {
                     $skill=$battleSkills{$player}->{skill};
                   }else{
                     $skill=getRoundedSkill($battleSkills{$player}->{skill});
@@ -10656,7 +10659,7 @@ sub hStatus {
           }elsif($battleSkills{$spec}->{skillOrigin} eq 'TrueSkill') {
             if(exists $battleSkills{$spec}->{skillPrivacy}
                && ($battleSkills{$spec}->{skillPrivacy} == 0
-                   || ($battleSkills{$spec}->{skillPrivacy} == 1 && $userLevel >= $conf{minLevelForIpAddr}))) {
+                   || ($battleSkills{$spec}->{skillPrivacy} == 1 && $userLevel >= $conf{privacyTrustLevel}))) {
               $skill=$battleSkills{$spec}->{skill};
             }else{
               $skill=getRoundedSkill($battleSkills{$spec}->{skill});
@@ -10720,7 +10723,7 @@ sub hStatus {
       }
       my @statusFields;
       foreach my $statusField (@defaultStatusColumns,@newPluginStatusColumns,'IP') {
-        next if($statusField eq 'IP' && $userLevel < $conf{minLevelForIpAddr});
+        next if($statusField eq 'IP' && $userLevel < $conf{privacyTrustLevel});
         if(exists $pluginStatusInfo{$statusField}) {
           push(@statusFields,"$C{6}$statusField$C{1}");
         }else{
@@ -10819,7 +10822,7 @@ sub hUnban {
     if($res) {
       return 1 if($checkOnly);
       sayPrivate($user,"Following dynamic ban entry has been removed:");
-      my $p_banEntries=listBans([$res],getUserAccessLevel($user) >= $conf{minLevelForIpAddr},$user);
+      my $p_banEntries=listBans([$res],getUserAccessLevel($user) >= $conf{privacyTrustLevel},$user);
       foreach my $banEntry (@{$p_banEntries}) {
         sayPrivate($user,$banEntry);
       }
@@ -11123,15 +11126,11 @@ sub hUpdate {
     return 0;
   }
   
-  my @updatePackages=@packagesSpads;
-  push(@updatePackages,@packagesWinServer) if($conf{autoUpdateBinaries} eq "yes" || $conf{autoUpdateBinaries} eq "server");
-
   $updater = SpadsUpdater->new(sLog => $updaterSimpleLog,
-                               localDir => $spadsDir,
                                repository => "http://planetspads.free.fr/spads/repository",
                                release => $release,
-                               packages => \@updatePackages,
-                               syncedSpringVersion => $syncedSpringVersion);
+                               packages => \@packagesSpads,
+                               springDir => $conf{autoManagedSpringDir});
   if(! SimpleEvent::forkProcess(
          sub {
            my $updateRc=$updater->update();
@@ -11190,9 +11189,15 @@ sub hVersion {
     $autoUpdateString="auto-update: $autoUpdateRelease";
   }
 
+  my $springVersion=$syncedSpringVersion;
+  if($autoManagedSpringData{mode} eq 'version') {
+    $springVersion.=' (auto-downloaded)';
+  }elsif($autoManagedSpringData{mode} eq 'release') {
+    $springVersion.=" (auto-download: $autoManagedSpringData{release})";
+  }
   sayPrivate($user,"$C{12}$conf{lobbyLogin}$C{1} is running ${B}$C{5}SPADS $C{10}v$spadsVer$B$C{1} ($autoUpdateString), with following components:");
   my %versionedComponents=(Perl => $^V."$C{1} ($Config{archname})",
-                           Spring => 'v'.$syncedSpringVersion,
+                           Spring => 'v'.$springVersion,
                            SimpleEvent => 'v'.SimpleEvent::getVersion());
   my %components = (SpringLobbyInterface => $lobby,
                     SpringAutoHostInterface => $autohost,
@@ -11295,7 +11300,7 @@ sub hWhois {
   my $id;
   if($search =~ /^\@((?:\d+\.){3}\d+)$/) {
     my $ip=$1;
-    if($userLevel < $conf{minLevelForIpAddr}) {
+    if($userLevel < $conf{privacyTrustLevel}) {
       answer("Unable to search for user accounts by IP (insufficient privileges)");
       return 0;
     }
@@ -11418,7 +11423,7 @@ sub hWhois {
   }
   
   $p_resultLines=[];
-  sayPrivate($user,'.') if(@names || (@ips && $userLevel >= $conf{minLevelForIpAddr}));
+  sayPrivate($user,'.') if(@names || (@ips && $userLevel >= $conf{privacyTrustLevel}));
   
   my $firstArrayWidth=0;
   if(@names) {
@@ -11426,7 +11431,7 @@ sub hWhois {
     $firstArrayWidth=realLength($p_resultLines->[1]);
   }
   
-  if(@ips && $userLevel >= $conf{minLevelForIpAddr}) {
+  if(@ips && $userLevel >= $conf{privacyTrustLevel}) {
     my $p_resultLines2=formatArray(["$C{5}IP$C{1}","$C{5}LastUpdate$C{1}"],\@ips,"$C{2}IPs$C{1}");
     foreach my $i (0..$#{$p_resultLines2}) {
       $p_resultLines->[$i]=' ' x $firstArrayWidth unless(defined $p_resultLines->[$i]);
@@ -11554,11 +11559,6 @@ sub cbLobbyConnect {
       slog("Lobby server has no default engine set, UnitSync is using Spring $syncedSpringVersion",3);
     }else{
       slog("Lobby server default engine is Spring $lobbySyncedSpringVersion, UnitSync is using Spring $syncedSpringVersion",3);
-      if($conf{onBadSpringVersion} eq 'closeBattle') {
-        closeBattleAfterGame("Lobby server default engine is Spring $lobbySyncedSpringVersion, UnitSync is using Spring $syncedSpringVersion");
-      }elsif($conf{onBadSpringVersion} eq 'quit') {
-        quitAfterGame("Lobby server default engine is Spring $lobbySyncedSpringVersion, UnitSync is using Spring $syncedSpringVersion");
-      }
     }
   }
 
@@ -13112,6 +13112,18 @@ sub loadPluginModule {
     }
   }
 
+  my %requiredPluginVersions=(FirstWelcomeMsg => '0.4',
+                              InGameMute => '0.3',
+                              ReverseLookup => '0.2');
+  if(exists $requiredPluginVersions{$pluginName}) {
+    my $pluginVersion;
+    eval "\$pluginVersion=$pluginName->getVersion()";
+    if(compareVersions($pluginVersion,$requiredPluginVersions{$pluginName}) < 0) {
+      slog("Unable to load plugin \"$pluginName\", version $pluginVersion is obsolete (version $requiredPluginVersions{$pluginName} or greater is required)",1);
+      return 0;
+    }
+  }
+
   my $requiredSpadsVersion;
   eval "\$requiredSpadsVersion=$pluginName->getRequiredSpadsVersion()";
   if(compareVersions($spadsVer,$requiredSpadsVersion) < 0) {
@@ -13212,7 +13224,7 @@ if($genDoc) {
   }
 
   my $genTime=gmtime();
-  open(CSS,">$conf{varDir}/spadsDoc.css");
+  open(CSS,">$conf{instanceDir}/spadsDoc.css");
   print CSS <<EOF;
 /* SPADS doc style sheet */
 
@@ -13251,7 +13263,7 @@ h1 { font-size: 145% }
 EOF
   close(CSS);
 
-  open(HTML,">$conf{varDir}/spadsDoc.html");
+  open(HTML,">$conf{instanceDir}/spadsDoc.html");
   print HTML <<EOF;
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Frameset//EN" "http://www.w3.org/TR/html4/frameset.dtd">
 <!--NewPage-->
@@ -13277,7 +13289,7 @@ This document is designed to be viewed using the frames feature. If you see this
 EOF
   close(HTML);
 
-  open(HTML,">$conf{varDir}/spadsDoc_index.html");
+  open(HTML,">$conf{instanceDir}/spadsDoc_index.html");
   print HTML <<EOF;
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
 <!--NewPage-->
@@ -13343,7 +13355,7 @@ EOF
                pset => ["preference","FramePreferenceFont","FFDD88"]);
 
   foreach my $listType (keys %listContents) {
-    open(HTML,">$conf{varDir}/spadsDoc_list$listType.html");
+    open(HTML,">$conf{instanceDir}/spadsDoc_list$listType.html");
     print HTML <<EOF;
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
 <!--NewPage-->
@@ -13365,7 +13377,7 @@ EOF
 <TD NOWRAP>
 EOF
 
-    open(HTML2,">$conf{varDir}/spadsDoc_$listType.html");
+    open(HTML2,">$conf{instanceDir}/spadsDoc_$listType.html");
     print HTML2 <<EOF;
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
 <!--NewPage-->
@@ -13480,7 +13492,27 @@ sub encodeHtmlHelp {
   return $line;
 }
 
-# Auto-update (part 1) #################
+sub useFallbackSpringVersion {
+  my $reason=shift;
+  my $autoManagedSpringFile="$conf{instanceDir}/autoManagedSpringVersion.dat";
+  fatalError("$reason, and couldn't find the previous auto-installed version as fallback solution") unless(-f $autoManagedSpringFile);
+  if(open(my $springVersionFh,'<',$autoManagedSpringFile)) {
+    my $autoManagedSpringVersion=<$springVersionFh>;
+    close($springVersionFh);
+    fatalError("$reason, and couldn't read the previous auto-installed version file \"$autoManagedSpringFile\" as fallback solution") unless(defined $autoManagedSpringVersion);
+    chomp($autoManagedSpringVersion);
+    fatalError("$reason, and couldn't use the previous auto-installed version ($autoManagedSpringVersion) as fallback solution") if($updater->setupSpring($autoManagedSpringVersion) < 0);
+    $autoManagedSpringData{version}=$autoManagedSpringVersion;
+    my $springDir=$updater->getSpringDir($autoManagedSpringVersion);
+    setSpringEnv($springDir,$conf{instanceDir},$springDir,splitPaths($conf{springDataDir}));
+    setSpringServerBin($springDir);
+    slog("$reason, using previous auto-installed version ($autoManagedSpringVersion) as fallback solution",2);
+  }else{
+    fatalError("$reason, and couldn't read the previous auto-installed version file \"$autoManagedSpringFile\" as fallback solution ($!)");
+  }  
+}
+
+# Auto-update ##########################
 
 $timestamps{autoUpdate}=time if($conf{autoUpdateRelease} ne '');
 
@@ -13518,9 +13550,9 @@ if(! $abortSpadsStartForAutoUpdate) {
 
 # Concurrent instances check ###########
 
-  my $lockFile="$conf{varDir}/spads.lock";
+  my $lockFile="$conf{instanceDir}/spads.lock";
   if(open($lockFh,'>',$lockFile)) {
-    $pidFile="$conf{varDir}/spads.pid";
+    $pidFile="$conf{instanceDir}/spads.pid";
     if(autoRetry(sub {flock($lockFh, LOCK_EX|LOCK_NB)})) {
       $lockAcquired=1;
       if(open(my $pidFh,'>',$pidFile)) {
@@ -13541,7 +13573,7 @@ if(! $abortSpadsStartForAutoUpdate) {
           slog("Unable to read SPADS PID file \"$pidFile\" ($!)",2);
         }
       }
-      fatalError("Another SPADS instance (PID $spadsPid) is already running using same varDir ($conf{varDir}), please use a different varDir for every SPADS instance");
+      fatalError("Another SPADS instance (PID $spadsPid) is already running using same instanceDir ($conf{instanceDir}), please use a different instanceDir for every SPADS instance");
     }
   }else{
     fatalError("Unable to write SPADS lock file \"$lockFile\" ($!)");
@@ -13549,46 +13581,53 @@ if(! $abortSpadsStartForAutoUpdate) {
 
 # Environment setup ####################
 
-  setSpringEnv((splitPaths($conf{springDataDir}))[0],$conf{varDir},splitPaths($conf{springDataDir}));
+  if($conf{autoManagedSpringVersion} ne '') {
+    if($conf{autoManagedSpringVersion} =~ /^\d+(?:\.\d+){1,3}(?:-\d+-g[0-9a-f]+)?$/) {
+      %autoManagedSpringData=(mode => 'version', version => $conf{autoManagedSpringVersion});
+      fatalError("Unable to auto-install Spring version \"$autoManagedSpringData{version}\"") if($updater->setupSpring($autoManagedSpringData{version}) < 0);
+      my $springDir=$updater->getSpringDir($autoManagedSpringData{version});
+      setSpringEnv($springDir,$conf{instanceDir},$springDir,splitPaths($conf{springDataDir}));
+      setSpringServerBin($springDir);
+    }elsif($conf{autoManagedSpringVersion} =~ /^(stable|testing|unstable)(?:;(\d*)(?:;(on|off|whenEmpty|whenOnlySpec))?)?$/) {
+      %autoManagedSpringData=(mode => 'release', release => $1, delay => $2//{stable => 60, testing => 30, unstable => 15}->{$1}, restart => $3//'whenEmpty');
+      my $autoManagedSpringVersion=$updater->resolveSpringReleaseNameToVersion($autoManagedSpringData{release});
+      if(! defined $autoManagedSpringVersion) {
+        useFallbackSpringVersion('Unable to identify the auto-managed Spring release');
+      }else{
+        my $setupResult=$updater->setupSpring($autoManagedSpringVersion);
+        if($setupResult < 0) {
+          $failedSpringInstallVersion=$autoManagedSpringVersion if($setupResult < -9);
+          useFallbackSpringVersion("Unable to auto-install Spring $autoManagedSpringData{release} release (version $autoManagedSpringVersion)");
+        }else{
+          $autoManagedSpringData{version}=$autoManagedSpringVersion;
+          my $springDir=$updater->getSpringDir($autoManagedSpringVersion);
+          setSpringEnv($springDir,$conf{instanceDir},$springDir,splitPaths($conf{springDataDir}));
+          setSpringServerBin($springDir);
+          my $autoManagedSpringFile="$conf{instanceDir}/autoManagedSpringVersion.dat";
+          if(open(my $springVersionFh,'>',$autoManagedSpringFile)) {
+            print $springVersionFh $autoManagedSpringVersion;
+            close($springVersionFh);
+          }else{
+            slog("Unable to write auto-managed Spring version file \"$autoManagedSpringFile\" ($!)",2);
+          }
+        }
+      }
+    }else{
+      fatalError("Invalid value of \"autoManagedSpringVersion\" setting: $conf{autoManagedSpringVersion}");
+    }
+  }else{
+    setSpringEnv($conf{unitsyncDir},$conf{instanceDir},splitPaths($conf{springDataDir}));
+  }
 
 # Unitsync loading #####################
 
   eval "use PerlUnitSync";
   fatalError("Unable to load PerlUnitSync module ($@)") if ($@);
   $syncedSpringVersion=PerlUnitSync::GetSpringVersion();
-
-# Auto-update (part 2) #################
-
-  push(@packages,@packagesWinServer) if($conf{autoUpdateBinaries} eq 'yes' || $conf{autoUpdateBinaries} eq 'server');
-  $updater = SpadsUpdater->new(sLog => $updaterSimpleLog,
-                               localDir => $spadsDir,
-                               repository => "http://planetspads.free.fr/spads/repository",
-                               release => $conf{autoUpdateRelease},
-                               packages => \@packages,
-                               syncedSpringVersion => $syncedSpringVersion);
-
-  if($conf{autoUpdateBinaries} eq 'yes' || $conf{autoUpdateBinaries} eq 'server') {
-    if($updater->isUpdateInProgress()) {
-      slog('Skipping Spring server binaries auto-update at start, another updater instance is already running',2);
-    }else{
-      my $updateRc=$updater->update();
-      if($updateRc < 0) {
-        slog("Unable to check or apply Spring server binaries update",2);
-      }elsif($updateRc > 0) {
-        sleep(2); # Avoid CPU eating loop in case auto-update is broken (fork bomb protection)
-        restartAfterGame("auto-update");
-        $abortSpadsStartForAutoUpdate=1;
-      }
-    }
-  }
-}
+  slog("Loading Spring archives using unitsync library version $syncedSpringVersion ...",3);
+  fatalError('Unable to load Spring archives at startup') unless(loadArchives());
 
 # Init #################################
-
-if(! $abortSpadsStartForAutoUpdate) {
-
-  slog("Loading Spring archives using unitsync library...",3);
-  fatalError('Unable to load Spring archives at startup') unless(loadArchives());
 
   if($springServerType eq '') {
     if($conf{springServer} =~ /spring-dedicated(?:\.exe)?$/i) {
@@ -13624,13 +13663,7 @@ if(! $abortSpadsStartForAutoUpdate) {
                            SERVER_MESSAGE => \&cbAhServerMessage,
                            GAME_TEAMSTAT => \&cbAhGameTeamStat});
 
-  my $simpleEventMode='internal';
-  if(exists $confMacros{eventModel}) {
-    fatalError("Invalid event model \"$confMacros{eventModel}\" specified in SPADS command line") unless(any {$confMacros{eventModel} eq $_} (qw'auto internal AnyEvent'));
-    $simpleEventMode=$confMacros{eventModel};
-    $simpleEventMode=undef if($simpleEventMode eq 'auto');
-  }
-  fatalError('Unable to initialize SimpleEvent module') unless(SimpleEvent::init(mode => $simpleEventMode, sLog => $simpleEventSimpleLog));
+  fatalError('Unable to initialize SimpleEvent module') unless(SimpleEvent::init(mode => ($conf{eventModel} eq 'auto' ? undef : $conf{eventModel}), sLog => $simpleEventSimpleLog, maxChildProcesses => $conf{maxChildProcesses}));
   fatalError('Unable to register SIGTERM') unless($win || SimpleEvent::registerSignal('TERM', sub { quitAfterGame('SIGTERM signal received'); } ));
   fatalError('Unable to create socket for Spring AutoHost interface') unless($autohost->open());
   fatalError('Unable to register Spring AutoHost interface socket') unless(SimpleEvent::registerSocket($autohost->{autoHostSock},sub { $autohost->receiveCommand() }));
@@ -13643,6 +13676,7 @@ if(! $abortSpadsStartForAutoUpdate) {
   }
 
   SimpleEvent::addTimer('SpadsMainLoop',0,1,\&mainLoop);
+  SimpleEvent::addTimer('SpringVersionAutoManagement',$autoManagedSpringData{delay}*60,$autoManagedSpringData{delay}*60,\&springVersionAutoManagement) if($autoManagedSpringData{mode} eq 'release');
   SimpleEvent::startLoop(\&postMainLoop);
 }
 
@@ -13806,6 +13840,7 @@ sub postMainLoop {
   SimpleEvent::unregisterSocket($autohost->{autoHostSock});
   $autohost->close();
   SimpleEvent::removeTimer('SpadsMainLoop');
+  SimpleEvent::removeTimer('SpringVersionAutoManagement') if($autoManagedSpringData{mode} eq 'release');
 }
 
 $spads->dumpDynamicData();

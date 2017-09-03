@@ -25,6 +25,7 @@ use Fcntl qw':DEFAULT :flock';
 use File::Copy;
 use File::Path 'mkpath';
 use File::Spec::Functions qw'catdir catfile devnull';
+use FindBin;
 use HTTP::Tiny;
 use IO::Uncompress::Unzip qw'unzip $UnzipError';
 use List::Util qw'first max';
@@ -38,10 +39,10 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $archName=$win?'win32':($Config{ptrsize} > 4 ? 'linux64' : 'linux32');
 
-my $moduleVersion='0.12b';
+my $moduleVersion='0.13';
 
-my @constructorParams = qw'sLog localDir repository release packages';
-my @optionalConstructorParams = qw'syncedSpringVersion springDir';
+my @constructorParams = qw'sLog repository release packages';
+my @optionalConstructorParams = qw'localDir springDir';
 
 my $springBuildbotUrl='http://springrts.com/dl/buildbot/default';
 my $springVersionUrl='http://planetspads.free.fr/spring/SpringVersion';
@@ -88,7 +89,7 @@ sub new {
   }
 
   $self->{repository}=~s/\/$//;
-  $self->{syncedSpringVersion}='UNKNOWN' unless(exists $self->{syncedSpringVersion});
+  $self->{localDir}//=File::Spec->canonpath($FindBin::Bin);
   return $self;
 }
 
@@ -376,16 +377,11 @@ sub updateUnlocked {
     return -6;
   }
 
-  my $perlMajorVer='';
-  $perlMajorVer=$1 if($^V =~ /^v(\d+\.\d+)/);
-
   my %availablePackages=%{$allAvailablePackages{$self->{release}}};
   my @updatedPackages;
   foreach my $packageName (@{$self->{packages}}) {
-    $availablePackages{$packageName}=$availablePackages{"$packageName;$perlMajorVer"} if(exists $availablePackages{"$packageName;$perlMajorVer"});
-    $availablePackages{$packageName}=$availablePackages{"$packageName;$self->{syncedSpringVersion}"} if(exists $availablePackages{"$packageName;$self->{syncedSpringVersion}"});
     if(! exists $availablePackages{$packageName}) {
-      $sl->log("No \"$packageName\" package available in $self->{release} SPADS release for Spring $self->{syncedSpringVersion} and Perl $perlMajorVer",2);
+      $sl->log("No \"$packageName\" package available for $self->{release} SPADS release",2);
       next;
     }
     my $currentVersion="_UNKNOWN_";

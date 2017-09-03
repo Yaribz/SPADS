@@ -19,6 +19,9 @@ getDefaultModOptions.pl:
 0.5: "step" parameters are now taken into account for number range modoptions
      improved handling of float numbers received through unitsync library
      show unitsync error messages when unitsync library initialization fails
+0.6: revamped command line parameters management using GetOpt
+     it is now possible to specify unitsync library path as command line parameter (compatibility with new PerlUnitSync interface module)
+     several Spring data directories can now be specified
 
 help.dat:
 ========
@@ -72,6 +75,7 @@ help.dat:
 0.12.3: the !ban/!unban commands now accept skill based bans (new filters: "skill" and "skillUncert")
 0.12.4: the "!force" command can now be used to force full battle balance in one command: "!force * (player1,player2)(player3,player4)..."
 0.12.5: the "!force" command can now be used to give resource bonus
+0.13.0: removed obsolete !pass command
 
 helpSettings.dat:
 ================
@@ -152,6 +156,17 @@ helpSettings.dat:
 0.5.10: the "minVoteParticipation" setting value can now depend on game runing state
         fix typos
 0.5.11: add information concerning required absolute form of directory settings
+0.6.0: removed obsolete global settings: binDir, autoUpdateBinaries, onBadSpringVersion
+       removed obsolete preset settings: minRankForPasswd, minLevelForPasswd
+       new global settings: instanceDir, autoManagedSpringVersion, autoManagedSpringDir, unitsyncDir, simpleEventLogLevel, eventModel, maxChildProcesses
+       following global settings can now contain relative paths: etcDir, varDir, logDir, pluginsDir
+       when Spring version auto-management is enabled, the "springServer" global setting must now be empty and the "springServerType" global setting must now be defined
+       the "springDataDir" global setting does not need to contain the Spring data directory containing Spring base files when Spring version auto-management is enabled
+       the "minLevelForIpAddr" global setting has been renamed to "privacyTrustLevel" as it is used for privacy data in general, not only IP addresses
+       the default value for "map" preset setting is now empty (use first allowed map available)
+       the "clan" value for "balanceMode" preset setting has been renamed to "clan;random", to better reflect the fact that the balance is random appart from clans being honored
+       the "password" hosting setting can no longer be set to special value "_RANDOM_" to use a random password
+       some config macros used as default setting values and valuated during installation have been renamed to better reflect setting names
 
 PerlUnitSync.pm:
 ===============
@@ -767,6 +782,14 @@ spads.pl:
          map width and height are no longer available for map filtering for example
          factorize some quit/restart code
 0.11.49: the noSpecChat setting is now also honored for messages relayed between lobby and game
+0.12.0: new functionality: Spring version auto-management (all Spring binaries can now be automatically downloaded and/or updated)
+        Spring server binaries auto-update through SPADS packages manager is no longer possible on Windows (the new Spring version auto-management functionality must be used instead)
+        SPADS event model now uses "AnyEvent" if available (it can be changed using the new global setting "eventModel" instead of the config macro hack)
+        "instanceDir" global setting is now used instead of "varDir" to store all instance-specific dynamic data
+        "minLevelForIpAddr" global setting renamed to "privacyTrustLevel" as it is used for privacy data in general, not only IP addresses
+        SimpleEvent module now has its own log level ("simpleEventLogLevel" global setting)
+        removed obsolete "onBadSpringVersion" functionality
+        removed random password functionality (using "_RANDOM_" as value for "password" hosting setting) and !pass command
 
 SpadsConf.pm:
 ============
@@ -897,6 +920,15 @@ SpadsConf.pm:
          code simplifications (homogeneous quotes, chained dereferencing...)
 0.11.15a: ignore bots for smurf detection
 0.11.16: ignore "binDir" global setting and use SPADS script location directly (the binDir setting will be removed in next major SPADS release)
+0.12.0: removed obsolete global settings: binDir, autoUpdateBinaries, onBadSpringVersion
+        removed obsolete preset settings: minRankForPasswd, minLevelForPasswd
+        new global settings: instanceDir, autoManagedSpringVersion, autoManagedSpringDir, unitsyncDir, simpleEventLogLevel, eventModel, maxChildProcesses
+        following global settings can now contain relative paths: etcDir, varDir, logDir, pluginsDir
+        when Spring version auto-management is enabled, the "springServer" global setting must now be empty and the "springServerType" global setting must now be defined
+        the "minLevelForIpAddr" global setting has been renamed to "privacyTrustLevel" as it is used for privacy data in general, not only IP addresses
+        the "clan" value for "balanceMode" preset setting has been renamed to "clan;random", to better reflect the fact that the balance is random appart from clans being honored
+        the "instanceDir" global setting is now used instead of "varDir" to store all dynamic data which are instance-specific
+        the "pluginsDir" global setting can no longer be empty
 
 spadsInstaller.pl:
 =================
@@ -959,6 +991,12 @@ spadsInstaller.pl:
 0.18: add macOS compatibility
 0.18a: fix Perl modules include path (required for Perl releases which don't include current working directory in default include path)
 0.19: remove functions obsolete in Spring 104+ when generating PerlUnitSync interface module
+0.20: major revamp for Spring version auto-management
+      the Perl unitsync library interface module is no longer linked to a specific unitsync library (no need to re-generated this module anymore when changing unitsync library path)
+      Spring engine is now automatically downloaded during installation when Spring version auto-management is enabled (no need to have Spring installed on the system before installing SPADS anymore)
+      games and maps can now be automatically downloaded when initializing a new Spring data directory (no need to have Spring games and maps available on the system before installing SPADS anymore)
+      improve algorithms for guessing paths of unitsync library, spring binaries and data directories automatically
+      renamed config macros used during installation to better reflect target setting names
 
 SpadsPluginApi.pm:
 =================
@@ -1037,6 +1075,9 @@ SpadsUpdater.pm:
       prevent SSL downloads if Perl SSL modules aren't available to avoid fatal error
 0.12a: update automatic Spring installation code to comply with Spring buildbot output files changes
 0.12b: improve verbosity of Spring installation failure error message
+0.13: the "localDir" constructor parameter is no longer mandatory (main Perl script directory is used by default)
+      the "syncedSpringVersion" constructor parameter is no longer supported
+      Spring version dependant and Perl version dependant packages are no longer supported
 
 update.pl:
 =========
@@ -1061,3 +1102,6 @@ update.pl:
 0.10b: remove the obsolete PerlUnitSync.dll library from the list of auto-updated binary packages (Windows)
        remove the -u switch which was used to update the Perl unitsync interface binaries
 0.10c: fix Perl modules include path (required for Perl releases which don't include current working directory in default include path)
+0.11: script usage is now identical on Linux, Windows an macOS ("springVersion" parameter and "-s" and "-A" flags are no longer supported)
+      Spring binaries cannot be downloaded anymore using update.pl, Spring version auto-management functionality of SPADS must be used for that (Windows)
+      the 7za binary is no longer downloaded on macOS

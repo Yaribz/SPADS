@@ -38,9 +38,18 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.11.16';
-my $win=$^O eq 'MSWin32' ? 1 : 0;
+my $moduleVersion='0.12.0';
+my $win=$^O eq 'MSWin32';
+my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
+my $unitsyncLibName;
+if($win) {
+  $unitsyncLibName='unitsync.dll';
+}elsif($macOs) {
+  $unitsyncLibName='libunitsync.dylib';
+}else{
+  $unitsyncLibName='libunitsync.so';
+}
 
 my %globalParameters = (lobbyLogin => ['login'],
                         lobbyPassword => ['password'],
@@ -52,17 +61,19 @@ my %globalParameters = (lobbyLogin => ['login'],
                         autoHostPort => ['port'],
                         forceHostIp => ['ipAddr','null'],
                         springConfig => ['readableFile','null'],
-                        springServer => ['absoluteExecutableFile'],
+                        springServer => ['absoluteExecutableFile','null'],
                         springServerType => ['springServerType','null'],
                         autoUpdateRelease => ['autoUpdateType','null'],
                         autoUpdateDelay => ['integer'],
                         autoRestartForUpdate => ['autoRestartType'],
-                        autoUpdateBinaries => ['binUpdateType'],
-                        onBadSpringVersion => ['onBadSpringVersionType','null'],
-                        binDir => [],
-                        etcDir => ['absoluteReadableDir'],
-                        varDir => ['absoluteWritableDir'],
-                        logDir => ['absoluteWritableDir'],
+                        etcDir => ['notNull'],
+                        varDir => ['notNull'],
+                        instanceDir => [],
+                        logDir => ['notNull'],
+                        pluginsDir => ['notNull'],
+                        autoManagedSpringVersion => ['autoManagedSpringVersionType','null'],
+                        autoManagedSpringDir => ['notNull'],
+                        unitsyncDir => ['unitsyncDirType','null'],
                         springDataDir => ['absoluteReadableDirs'],
                         autoReloadArchivesMinDelay => ['integer'],
                         sendRecordPeriod => ['integer'],
@@ -93,6 +104,7 @@ my %globalParameters = (lobbyLogin => ['login'],
                         autoHostInterfaceLogLevel => ['integer'],
                         updaterLogLevel => ['integer'],
                         spadsLogLevel => ['integer'],
+                        simpleEventLogLevel => ['integer'],
                         logChanChat => ['bool'],
                         logChanJoinLeave => ['bool'],
                         logBattleChat => ['bool'],
@@ -111,11 +123,12 @@ my %globalParameters = (lobbyLogin => ['login'],
                         dataDumpDelay => ['integer'],
                         allowSettingsShortcut => ['bool'],
                         kickBanDuration => ['kickBanDurationType'],
-                        minLevelForIpAddr => ['integer'],
+                        privacyTrustLevel => ['integer'],
                         userDataRetention => ['dataRetention'],
                         useWin32Process => ['useWin32ProcessType'],
-                        pluginsDir => [],
-                        autoLoadPlugins => []);
+                        autoLoadPlugins => [],
+                        eventModel => ['eventModelType'],
+                        maxChildProcesses => ['integer']);
 
 my %spadsSectionParameters = (description => ['notNull'],
                               commandsFile => ['notNull'],
@@ -130,8 +143,6 @@ my %spadsSectionParameters = (description => ['notNull'],
                               rotationEmpty => ['rotationMode'],
                               rotationManual => ['manualRotationMode'],
                               rotationDelay => ['integer','integerRange'],
-                              minRankForPasswd => ['integer','integerRange'],
-                              minLevelForPasswd => ['integer','integerRange'],
                               midGameSpecLevel => ['integer','integerRange'],
                               autoAddBotNb => ['integer','integerRange'],
                               maxBots => ['integer','integerRange','null'],
@@ -216,12 +227,11 @@ my %paramTypes = (login => '[\w\[\]]{2,20}',
                   star => '\*',
                   null => '',
                   absoluteExecutableFile => sub { return (-f $_[0] && -x $_[0] && isAbsolutePath($_[0])) },
+                  unitsyncDirType => sub { return (-f "$_[0]/$unitsyncLibName" && -r "$_[0]/$unitsyncLibName") },
                   autoUpdateType => '(stable|testing|unstable|contrib)',
+                  autoManagedSpringVersionType => sub { return $_[0] =~ /^(stable|testing|unstable)(?:;\d*(?:;(on|off|whenEmpty|whenOnlySpec))?)?$/ || $_[0] =~ /^\d+(?:\.\d+){1,3}(?:-\d+-g[0-9a-f]+)?$/},
                   autoRestartType => '(on|off|whenEmpty|whenOnlySpec)',
-                  onBadSpringVersionType => '(closeBattle|quit)',
-                  absoluteReadableDir => sub { return (-d $_[0] && -x $_[0] && -r $_[0] && isAbsolutePath($_[0])) },
                   absoluteReadableDirs => sub { return $_[0] ne '' && (all {-d $_ && -x $_ && -r $_ && isAbsolutePath($_)} split($win?';':':',$_[0])) },
-                  absoluteWritableDir => sub { return (-d $_[0] && -x $_[0] && -r $_[0] && -w $_[0] && isAbsolutePath($_[0])) },
                   integerCouple => '\d+;\d+',
                   integerTriplet => '\d+;\d+;\d+',
                   bool => '[01]',
@@ -241,7 +251,7 @@ my %paramTypes = (login => '[\w\[\]]{2,20}',
                   nonNullIntegerRange => '[1-9]\d*\-\d+',
                   float => '\d+(\.\d*)?',
                   floatRange => '\d+\.\d+\-\d+\.\d+',
-                  balanceModeType => '(clan|clan;skill|skill|random)',
+                  balanceModeType => '(clan;random|clan;skill|skill|random)',
                   clanModeType => '(tag(\(\d*\))?(;pref(\(\d*\))?)?|pref(\(\d*\))?(;tag(\(\d*\))?)?)',
                   idShareModeType => '(all|auto|manual|clan|off)',
                   deathMode => '(killall|com|comcontrol)',
@@ -256,12 +266,6 @@ my %paramTypes = (login => '[\w\[\]]{2,20}',
                   dataRetention => '(-1|\d+);(-1|\d+);(-1|\d+)',
                   useWin32ProcessType => sub { return (($win && $_[0] =~ /^[01]$/) || $_[0] eq '0') },
                   springServerType => '(dedicated|headless)',
-                  binUpdateType => sub {
-                                     return 1 if($_[0] eq 'no');
-                                     return 0 unless($win);
-                                     return 1 if($_[0] eq 'yes' || $_[0] eq 'unitsync' || $_[0] eq 'server');
-                                     return 0;
-                                   },
                   settingList => sub {
                                    my @sets=split(/;/,$_[0]);
                                    foreach my $set (@sets) {
@@ -271,7 +275,8 @@ my %paramTypes = (login => '[\w\[\]]{2,20}',
                                    return 1;
                                  },
                   botList => '[\w\[\]]{2,20} \w+(#[\da-fA-F]{6})? [^ \;][^\;]*(;[\w\[\]]{2,20} \w+(#[\da-fA-F]{6})? [^ \;][^\;]*)*',
-                  db => '[^\/]+\/[^\@]+\@(?i:dbi)\:\w+\:\w.*');
+                  db => '[^\/]+\/[^\@]+\@(?i:dbi)\:\w+\:\w.*',
+                  eventModelType => '(auto|internal|AnyEvent)');
 
 my @banListsFields=(['accountId','name','country','cpu','rank','access','bot','level','ip','skill','skillUncert'],['banType','startDate','endDate','remainingGames','reason']);
 my @preferencesListsFields=(['accountId'],['autoSetVoteMode','voteMode','votePvMsgDelay','voteRingDelay','minRingDelay','handleSuggestions','password','rankMode','skillMode','shareId','spoofProtection','ircColors','clan']);
@@ -327,16 +332,16 @@ sub new {
   my $p_help=loadSimpleTableFile($sLog,"$spadsDir/help.dat",$p_macros,1);
   my $p_helpSettings=loadHelpSettingsFile($sLog,"$spadsDir/helpSettings.dat",$p_macros,1);
   
-  touch($p_conf->{''}{varDir}.'/bans.dat') unless(-f $p_conf->{''}{varDir}.'/bans.dat');
-  my $p_bans=loadTableFile($sLog,$p_conf->{''}{varDir}.'/bans.dat',\@banListsFields,$p_macros);
+  touch($p_conf->{''}{instanceDir}.'/bans.dat') unless(-f $p_conf->{''}{instanceDir}.'/bans.dat');
+  my $p_bans=loadTableFile($sLog,$p_conf->{''}{instanceDir}.'/bans.dat',\@banListsFields,$p_macros);
 
   if(! checkNonEmptyHash($p_users,$p_levels,$p_commands,$p_help,$p_helpSettings,$p_bans)) {
     $sLog->log('Unable to load commands, help and permission system',1);
     return 0;
   }
 
-  touch($p_conf->{''}{varDir}.'/preferences.dat') unless(-f $p_conf->{''}{varDir}.'/preferences.dat');
-  my $p_preferences=loadFastTableFile($sLog,$p_conf->{''}{varDir}.'/preferences.dat',\@preferencesListsFields,{});
+  touch($p_conf->{''}{instanceDir}.'/preferences.dat') unless(-f $p_conf->{''}{instanceDir}.'/preferences.dat');
+  my $p_preferences=loadFastTableFile($sLog,$p_conf->{''}{instanceDir}.'/preferences.dat',\@preferencesListsFields,{});
   if(! %{$p_preferences}) {
     $sLog->log('Unable to load preferences',1);
     return 0;
@@ -350,31 +355,31 @@ sub new {
     return 0;
   }
 
-  touch($p_conf->{''}{varDir}.'/savedBoxes.dat') unless(-f $p_conf->{''}{varDir}.'/savedBoxes.dat');
-  my $p_savedBoxes=loadFastTableFile($sLog,$p_conf->{''}{varDir}.'/savedBoxes.dat',\@mapBoxesFields,{});
+  touch($p_conf->{''}{instanceDir}.'/savedBoxes.dat') unless(-f $p_conf->{''}{instanceDir}.'/savedBoxes.dat');
+  my $p_savedBoxes=loadFastTableFile($sLog,$p_conf->{''}{instanceDir}.'/savedBoxes.dat',\@mapBoxesFields,{});
   if(! %{$p_savedBoxes}) {
     $sLog->log('Unable to load saved map boxes',1);
     return 0;
   }
 
-  touch($p_conf->{''}{varDir}.'/mapHashes.dat') unless(-f $p_conf->{''}{varDir}.'/mapHashes.dat');
-  my $p_mapHashes=loadFastTableFile($sLog,$p_conf->{''}{varDir}.'/mapHashes.dat',\@mapHashesFields,{});
+  touch($p_conf->{''}{instanceDir}.'/mapHashes.dat') unless(-f $p_conf->{''}{instanceDir}.'/mapHashes.dat');
+  my $p_mapHashes=loadFastTableFile($sLog,$p_conf->{''}{instanceDir}.'/mapHashes.dat',\@mapHashesFields,{});
   if(! %{$p_mapHashes}) {
     $sLog->log('Unable to load map hashes',1);
     return 0;
   }
 
-  touch($p_conf->{''}{varDir}.'/userData.dat') unless(-f $p_conf->{''}{varDir}.'/userData.dat');
-  my $p_userData=loadFastTableFile($sLog,$p_conf->{''}{varDir}.'/userData.dat',\@userDataFields,{});
+  touch($p_conf->{''}{instanceDir}.'/userData.dat') unless(-f $p_conf->{''}{instanceDir}.'/userData.dat');
+  my $p_userData=loadFastTableFile($sLog,$p_conf->{''}{instanceDir}.'/userData.dat',\@userDataFields,{});
   if(! %{$p_userData}) {
     my $savExtension=1;
-    while(-f $p_conf->{''}{varDir}."/userData.dat.sav$savExtension" && $savExtension < 100) {
+    while(-f $p_conf->{''}{instanceDir}."/userData.dat.sav$savExtension" && $savExtension < 100) {
       ++$savExtension;
     }
-    move($p_conf->{''}{varDir}.'/userData.dat',$p_conf->{''}{varDir}."/userData.dat.sav$savExtension");
-    touch($p_conf->{''}{varDir}.'/userData.dat');
+    move($p_conf->{''}{instanceDir}.'/userData.dat',$p_conf->{''}{instanceDir}."/userData.dat.sav$savExtension");
+    touch($p_conf->{''}{instanceDir}.'/userData.dat');
     $sLog->log("Unable to load user data, user data file reinitialized (old file renamed to \"userData.dat.sav.$savExtension\")",2);
-    $p_userData=loadFastTableFile($sLog,$p_conf->{''}{varDir}.'/userData.dat',\@userDataFields,{});
+    $p_userData=loadFastTableFile($sLog,$p_conf->{''}{instanceDir}.'/userData.dat',\@userDataFields,{});
     if(! %{$p_userData}) {
       $sLog->log('Unable to load user data after file reinitialization, giving up!',1);
       return 0;
@@ -383,8 +388,8 @@ sub new {
   my ($p_accountData,$p_countryCpuIds,$p_ipIds,$p_nameIds)=buildUserDataCaches($p_userData->{''});
 
   my $p_mapInfoCache={};
-  if(-f $p_conf->{''}{varDir}.'/mapInfoCache.dat') {
-    $p_mapInfoCache=retrieve($p_conf->{''}{varDir}.'/mapInfoCache.dat');
+  if(-f $p_conf->{''}{instanceDir}.'/mapInfoCache.dat') {
+    $p_mapInfoCache=retrieve($p_conf->{''}{instanceDir}.'/mapInfoCache.dat');
     if(! defined $p_mapInfoCache) {
       $sLog->log('Unable to load map info cache',1);
       return 0;
@@ -947,9 +952,7 @@ sub loadHelpSettingsFile {
 sub loadPluginConf {
   my ($self,$pluginName)=@_;
   if(! exists $self->{pluginsConf}{$pluginName}) {
-    if($self->{conf}{pluginsDir} ne '') {
-      unshift(@INC,$self->{conf}{pluginsDir}) unless(any {$self->{conf}{pluginsDir} eq $_} @INC);
-    }
+    unshift(@INC,$self->{conf}{pluginsDir}) unless(any {$self->{conf}{pluginsDir} eq $_} @INC);
     eval "use $pluginName";
     if($@) {
       $self->{log}->log("Unable to load plugin module \"$pluginName\": $@",1);
@@ -1070,6 +1073,55 @@ sub checkSpadsConfig {
     next if($preset eq '');
     if(exists $p_conf->{$preset}{preset} && $p_conf->{$preset}{preset}[0] ne $preset) {
       $sLog->log("The default value of parameter \"preset\" ($p_conf->{$preset}{preset}[0]) must be the name of the preset ($preset)",1);
+      return 0;
+    }
+  }
+
+  my @relDirParams=(['etcDir'],
+                    ['varDir'],
+                    ['instanceDir','varDir'],
+                    ['logDir','instanceDir'],
+                    ['pluginsDir','varDir'],
+                    ['autoManagedSpringDir','varDir']);
+  foreach my $r_relDirParam (@relDirParams) {
+    my ($paramName,$baseParam)=@{$r_relDirParam};
+    my $baseDir = defined $baseParam ? $p_conf->{''}{$baseParam} : $spadsDir;
+    my $realValue=$p_conf->{''}{$paramName};
+    my $fixedValue = isAbsolutePath($realValue) ? $realValue : File::Spec->catdir($baseDir,$realValue);
+    my $errorMsg;
+    if(! -d $fixedValue) {
+      $errorMsg='not a directory';
+    }elsif(! -x $fixedValue) {
+      $errorMsg='not a traversable directory';
+    }elsif(! -r $fixedValue) {
+      $errorMsg='not a readable directory';
+    }elsif((none {$paramName eq $_} (qw'etcDir pluginsDir')) && ! -w $fixedValue) {
+      $errorMsg='not a writable directory';
+    }
+    if($errorMsg) {
+      $sLog->log("Invalid value \"$realValue\" for $paramName global setting: $errorMsg",1);
+      return 0;
+    }
+    $p_conf->{''}{$paramName}=$fixedValue;
+  }
+
+  { # special checks for autoManagedSpringVersion setting
+    my $springIsAutomanaged=$p_conf->{''}{autoManagedSpringVersion} ne '';
+    if($springIsAutomanaged && $macOs) {
+      $sLog->log('Spring version auto-management isn\'t available on macOS, the "autoManagedSpringVersion" setting must be empty',1);
+      return 0;
+    }
+    my @badParams;
+    foreach my $dependantParam (qw'unitsyncDir springServer') {
+      push(@badParams,$dependantParam) if(($p_conf->{''}{$dependantParam} ne '') == $springIsAutomanaged);
+    }
+    if(@badParams) {
+      my $badParamsString=join('" and "',@badParams);
+      $sLog->log("The \"$badParamsString\" setting".($#badParams>0?'s':'').' must '.($springIsAutomanaged?'not ':'').'be defined when Spring version auto-management is '.($springIsAutomanaged?'enabled':'disabled'),1);
+      return 0;
+    }
+    if($springIsAutomanaged && $p_conf->{''}{springServerType} eq '') {
+      $sLog->log('The "springServerType" setting must be defined when Spring version auto-management is enabled',1);
       return 0;
     }
   }
@@ -1434,7 +1486,7 @@ sub removeExpiredBans {
   if($nbRemovedBans) {
     $self->{bans}=\@newBans;
     $self->{log}->log("$nbRemovedBans expired ban(s) removed from file \"bans.dat\"",3);
-    $self->dumpTable($self->{bans},$self->{conf}{varDir}.'/bans.dat',\@banListsFields);
+    $self->dumpTable($self->{bans},$self->{conf}{instanceDir}.'/bans.dat',\@banListsFields);
   }
 }
 
@@ -1804,10 +1856,10 @@ sub dumpDynamicData {
   my $self=shift;
   my $startDumpTs=time;
   my $p_prunedPrefs=$self->getPrunedRawPreferences();
-  $self->dumpFastTable($p_prunedPrefs,$self->{conf}{varDir}.'/preferences.dat',\@preferencesListsFields);
-  $self->dumpFastTable($self->{mapHashes},$self->{conf}{varDir}.'/mapHashes.dat',\@mapHashesFields);
+  $self->dumpFastTable($p_prunedPrefs,$self->{conf}{instanceDir}.'/preferences.dat',\@preferencesListsFields);
+  $self->dumpFastTable($self->{mapHashes},$self->{conf}{instanceDir}.'/mapHashes.dat',\@mapHashesFields);
   my $p_userData=flushUserDataCache($self);
-  $self->dumpFastTable($p_userData,$self->{conf}{varDir}.'/userData.dat',\@userDataFields);
+  $self->dumpFastTable($p_userData,$self->{conf}{instanceDir}.'/userData.dat',\@userDataFields);
   my $dumpDuration=time-$startDumpTs;
   $self->{log}->log("Dynamic data dump process took $dumpDuration seconds",2) if($dumpDuration > 15);
 }
@@ -1834,7 +1886,7 @@ sub cacheMapsInfo {
   foreach my $map (keys %{$p_mapsInfo}) {
     $self->{mapInfo}{$map}=$p_mapsInfo->{$map};
   }
-  $self->{log}->log('Unable to store map info cache',1) unless(nstore($self->{mapInfo},$self->{conf}{varDir}.'/mapInfoCache.dat'));
+  $self->{log}->log('Unable to store map info cache',1) unless(nstore($self->{mapInfo},$self->{conf}{instanceDir}.'/mapInfoCache.dat'));
 }
 
 # Business functions - Dynamic data - Map boxes ###############################
@@ -1891,7 +1943,7 @@ sub saveMapBoxes {
   }
   return if(exists $self->{savedBoxes}{$map}{$nbTeams}{boxes} && $self->{savedBoxes}{$map}{$nbTeams}{boxes} eq $boxesString);
   $self->{savedBoxes}{$map}{$nbTeams}{boxes}=$boxesString;
-  $self->dumpFastTable($self->{savedBoxes},$self->{conf}{varDir}.'/savedBoxes.dat',\@mapBoxesFields);
+  $self->dumpFastTable($self->{savedBoxes},$self->{conf}{instanceDir}.'/savedBoxes.dat',\@mapBoxesFields);
   $self->{log}->log("File \"savedBoxes.dat\" updated for \"$map\" (nbTeams=$nbTeams)",3);
   return 1;
 }
@@ -2207,7 +2259,7 @@ sub removeBanByHash {
     if($self->getBanHash($self->{bans}[$banIndex]) eq $hash) {
       return 1 if($checkOnly);
       my $res=splice(@{$self->{bans}},$banIndex,1);
-      $self->dumpTable($self->{bans},$self->{conf}{varDir}.'/bans.dat',\@banListsFields);
+      $self->dumpTable($self->{bans},$self->{conf}{instanceDir}.'/bans.dat',\@banListsFields);
       return $res;
     }
   }
@@ -2280,13 +2332,13 @@ sub getUserBan {
 sub banUser {
   my ($self,$p_user,$p_ban)=@_;
   push(@{$self->{bans}},[$p_user,$p_ban]);
-  $self->dumpTable($self->{bans},$self->{conf}{varDir}.'/bans.dat',\@banListsFields);
+  $self->dumpTable($self->{bans},$self->{conf}{instanceDir}.'/bans.dat',\@banListsFields);
 }
 
 sub unban {
   my ($self,$p_filters)=@_;
   $self->{bans}=removeMatchingData($p_filters,$self->{bans});
-  $self->dumpTable($self->{bans},$self->{conf}{varDir}.'/bans.dat',\@banListsFields);
+  $self->dumpTable($self->{bans},$self->{conf}{instanceDir}.'/bans.dat',\@banListsFields);
 }
 
 sub decreaseGameBasedBans {
@@ -2307,7 +2359,7 @@ sub decreaseGameBasedBans {
   if($nbRemovedBans || $nbModifiedBans) {
     $self->{bans}=\@newBans;
     $self->{log}->log("$nbRemovedBans expired ban(s) removed from file \"bans.dat\"",3) if($nbRemovedBans);
-    $self->dumpTable($self->{bans},$self->{conf}{varDir}.'/bans.dat',\@banListsFields);
+    $self->dumpTable($self->{bans},$self->{conf}{instanceDir}.'/bans.dat',\@banListsFields);
   }
 }
 

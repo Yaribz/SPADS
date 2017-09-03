@@ -29,21 +29,56 @@ changelog available here:
 ==============================================================================
 
 #######################################
-# help.dat: 0.11.* --> 0.12.*         #
-# helpSettings.dat: 0.4.* --> 0.5.*   #
-# spads.pl: 0.10.* --> 0.11.*         #
-# SpadsConf.pm: 0.10.* --> 0.11.*     #
+# help.dat: 0.12.* --> 0.13.*         #
+# helpSettings.dat: 0.5.* --> 0.6.*   #
+# spads.pl: 0.11.* --> 0.12.*         #
+# SpadsConf.pm: 0.11.* --> 0.12.*     #
 #######################################
-- add following global setting definitions in spads.conf:
-"pluginsDir:", "autoLoadPlugins:"
-- add following preset setting definitions in spads.conf:
-"speedControl:0|1", "skillMode:rank"
-- update the "balanceMode" preset setting values by replacing "rank" by "skill" ("clan;rank" --> "clan;skill", "rank" --> "skill")
-- declare new commands in commands.conf by adding following lines:
-[chskill]
-::|120:
-[plugin]
-::|130:
-- remove obsolete definitions in commands.conf for following command aliases:
-"coop","cv","map","spec"
 
+  1) Actions in spads.conf
+  ------------------------
+- remove following global setting definitions:
+  binDir, autoUpdateBinaries, onBadSpringVersion
+- remove following preset setting definitions:
+  minRankForPasswd, minLevelForPasswd
+- add following global setting definitions:
+  instanceDir:
+  autoManagedSpringVersion:
+  autoManagedSpringDir:spring
+  unitsyncDir:<absolute_path_of_the_directory_containing_the_unitsync_library>
+  simpleEventLogLevel:4
+  eventModel:auto
+  maxChildProcesses:16
+- rename the "minLevelForIpAddr" global setting to "privacyTrustLevel"
+- check the value of the "springieEmulation" global setting:
+  if it is set to "on" (old default value), change it to "warn"
+- check the value of the "kickBanDuration" global setting:
+  if it is set to "120" (old default value), change it to 300
+- check the value of the "pluginsDir" global setting:
+  if it is empty (old default value), set it to "plugins" and create the subdirectory "plugins" in the directory pointed by the "varDir" global setting
+  if it is not empty, ensure the corresponding directory exists
+- check the allowed values for the "balanceMode" preset setting:
+  if one of the values is "clan" (second value in default configuration), change it to "clan;random"
+
+  2) Other actions
+  ----------------
+- create the subdirectory "spring" in the directory pointed by the "varDir" global setting
+- remove the "!pass" command declaration in commands.conf:
+  remove the line "[pass]" and the non-empty line(s) just after, such as "::|0:"
+- following plugins must be updated to latest version if you plan to use them: FirstWelcomeMsg, InGameMute, ReverseLookup
+
+  3) Optional actions
+  -------------------
+- if you are hosting several SPADS instances running from same SPADS installation, then you need to adjust your "varDir" and "instanceDir" global settings in spads.conf:
+  the "varDir" global setting no longer needs to be different for each SPADS instance (and it can be an absolute path or a path relative to SPADS installation directory), so you can set it back to default value: "var"
+  the "instanceDir" global setting is the directory which must be different for each SPADS instance, so you can set it to your old "varDir" value
+- if you want to use the new "Spring version auto-management" functionality of SPADS (recommended), in spads.conf:
+  set the "autoManagedSpringVersion" global setting to the desired Spring version (example: "103.0")
+  set the "springServer" and "unitsyncDir" global settings to empty values
+  set the "springServerType" global setting to "dedicated" (or "headless" if you want to use headless server)
+  remove any Spring data directory containing Spring base files (content specific to a given Spring version) from "springDataDir" global setting value
+
+  4) Post-update action
+  ---------------------
+- finally, after the "./update.pl <release> -f -a" command has been executed, the Perl unitsync library interface module must be re-generated (on Linux system only):
+  "./spadsInstaller.pl -g"

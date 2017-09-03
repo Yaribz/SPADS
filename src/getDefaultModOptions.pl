@@ -3,7 +3,7 @@
 # This program prints the default mod options of each Spring mod installed,
 # using the unitsync library.
 #
-# Copyright (C) 2008-2016  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2017  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -19,58 +19,216 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.5 (2016/09/30)
-
 use strict;
 
 use Cwd;
+use File::Basename 'fileparse';
+use File::Spec;
 use FileHandle;
+use FindBin;
+use Getopt::Long qw':config auto_version';
+use List::Util 'first';
+
+use lib $FindBin::Bin;
+
+sub any (&@) { my $c = shift; return defined first {&$c} @_; }
+sub all (&@) { my $c = shift; return ! defined first {! &$c} @_; }
+sub none (&@) { my $c = shift; return ! defined first {&$c} @_; }
+sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
+
+our $VERSION=0.6;
 
 my %optionTypes = (
-  0 => "error",
-  1 => "bool",
-  2 => "list",
-  3 => "number",
-  4 => "string",
-  5 => "section"
+  0 => 'error',
+  1 => 'bool',
+  2 => 'list',
+  3 => 'number',
+  4 => 'string',
+  5 => 'section'
 );
 
-my $generateComments=0;
-my $spadsFormat=0;
-my $dataDir="";
-my $outputFile="";
+my $win=$^O eq 'MSWin32';
+my $macOs=$^O eq 'darwin';
+my $dynLibSuffix=$win?'dll':($macOs?'dylib':'so');
+my $unitsyncLibName=($win?'':'lib')."unitsync.$dynLibSuffix";
+my $pathSep=$win?';':':';
+my $cwd=cwd();
+my @originalArgv=@ARGV;
+
+if($win) {
+  eval 'use Win32';
+  die "\nWin32::API module version 0.73 or superior is required.\nPlease update your Perl installation (Perl 5.16.2 or superior is recommended)\n"
+      unless(eval { require Win32::API; Win32::API->VERSION(0.73); 1; });
+  die 'Unable to import _putenv from msvcrt.dll ('.Win32::FormatMessage(Win32::GetLastError()).")\n"
+      unless(Win32::API->Import('msvcrt', 'int __cdecl _putenv (char* envstring)'));
+}
+
+sub printUsageAndExit {
+
+  my $unitsyncPart1=$macOs?'':' [-u <unitsyncPath>|--unitsync=<unitsyncPath>]';
+  my $unitsyncPart2=$macOs?'':"\n      -u <unitsyncPath>|--unitsync=<unitsyncPath> : unitsync library path";
+
+  print <<EOM;
+Usage:
+
+  $0 -h|--help
+    Prints help and exits
+
+  $0 [-c|--comments] [-s|--spads] [-o <file>|--output=<file>]$unitsyncPart1 [-d <springDataDir>|--datadir=<springDataDir>]
+    Generates the modoptions list for the games found in the Spring data directories.
+    Optional command line parameters:
+      -c|--comments             : includes comments explaining each mod option in the output
+      -s|--spads                : generates output in SPADS format (ready to be copy-pasted in the battlePresets.conf file)
+      -o <file>|--output=<file> : writes output into <file> instead of stdout$unitsyncPart2
+      -d <springDataDir>|--datadir=<springDataDir> : Spring data directory (this option can be provided multiple times to load several Spring data directories)
+
+EOM
+  exit;
+}
+
+sub printHelpAndExit {
+
+  print <<EOM;
+
+getDefaultModOptions is an application bundled with SPADS which retrieves and prints the list of modoptions for all installed Spring games.
+The output can be optionnaly generated in SPADS format, ready to be directly copy-pasted in the battlePresets.conf configuration file.
+
+EOM
+
+  printUsageAndExit();
+}
+
+sub isAbsolutePath {
+  my $fileName=shift;
+  my $fileSpecRes=File::Spec->file_name_is_absolute($fileName);
+  return $fileSpecRes == 2 if($win);
+  return $fileSpecRes;
+}
+
+sub isAbsoluteFilePath {
+  my ($path,$fileName)=@_;
+  return '' unless(isAbsolutePath($path));
+  if(! -f $path) {
+    $path=File::Spec->catfile($path,$fileName);
+    return '' unless(-f $path);
+  }
+  return '' unless((File::Spec->splitpath($path))[2] eq $fileName);
+  return $path;
+}
+
+sub areSamePaths {
+  my ($p1,$p2)=map {File::Spec->canonpath($_)} @_;
+  ($p1,$p2)=map {lc($_)} ($p1,$p2) if($win);
+  return $p1 eq $p2;
+}
+
+sub setEnvVarFirstPaths {
+  my ($varName,@firstPaths)=@_;
+  my $needRestart=0;
+  die "Unable to handle path containing \"$pathSep\" character!\n" if(any {index($_,$pathSep) != -1} @firstPaths);
+  $ENV{"SPADS_$varName"}=$ENV{$varName}//'_UNDEF_' unless(exists $ENV{"SPADS_$varName"});
+  my @currentPaths=split(/$pathSep/,$ENV{$varName}//'');
+  $needRestart=1 if($#currentPaths < $#firstPaths);
+  if(! $needRestart) {
+    for my $i (0..$#firstPaths) {
+      if(! areSamePaths($currentPaths[$i],$firstPaths[$i])) {
+        $needRestart=1;
+        last;
+      }
+    }
+  }
+  if($needRestart) {
+    my @origPaths=$ENV{"SPADS_$varName"} eq '_UNDEF_' ? () : split(/$pathSep/,$ENV{"SPADS_$varName"});
+    my @newPaths;
+    foreach my $path (@origPaths) {
+      push(@newPaths,$path) unless(any {areSamePaths($path,$_)} @firstPaths);
+    }
+    $ENV{$varName}=join($pathSep,@firstPaths,@newPaths);
+  }
+  return $needRestart;
+}
+
+sub exportWin32EnvVar {
+  my $envVar=shift;
+  my $envVarDef="$envVar=".($ENV{$envVar}//'');
+  die "Unable to export environment variable definition \"$envVarDef\"" unless(_putenv($envVarDef) == 0);
+}
+
+sub escapeWin32Parameter {
+  my $arg = shift;
+  $arg =~ s/(\\*)"/$1$1\\"/g;
+  if($arg =~ /[ \t]/) {
+    $arg =~ s/(\\*)$/$1$1/;
+    $arg = "\"$arg\"";
+  }
+  return $arg;
+}
+
+sub portableExec {
+  my ($program,@params)=@_;
+  my @args=($program,@params);
+  @args=map {escapeWin32Parameter($_)} @args if($win);
+  return exec {$program} @args;
+}
+
+my $generateComments;
+my $spadsFormat;
+my $outputFile;
+my $unitsyncPath;
+my @dataDirs;
 my $outputHandle;
 
-if($#ARGV >= 0) {
-  my $nextArgIsOutputFile=0;
-  foreach my $arg (@ARGV) {
-    if($nextArgIsOutputFile) {
-      $nextArgIsOutputFile=0;
-      $outputFile=$arg;
-      next;
-    }
-    if($arg eq "-c" || $arg eq "--comments") {
-      $generateComments=1;
-    }elsif($arg eq "-s" || $arg eq "--spads") {
-      $spadsFormat=1;
-    }elsif($arg eq '-o') {
-      $nextArgIsOutputFile=1;
-    }elsif($arg =~ /^--output=(.+)$/) {
-      $outputFile=$1;
-    }elsif(-d $arg) {
-      $dataDir=$arg;
-    }else{
-      print "Usage: $0 [-c|--comments] [-s|--spads] [-o <file>|--output=<file>] [<springDataDir>]\n";
-      print "  -c|--comments             : generates comments explaining each mod option\n";
-      print "  -s|--spads                : generates output in SPADS format (ready to copy-paste in battlePresets.conf file\n";
-      print "  -o <file>|--output=<file> : writes result into <file> instead of stdout\n";
-      print "  <springDataDir> : Spring data directory containing the \"games\" or \"packages\" folders\n";
-      exit;
-    }
+my %optionsHash=('help' => sub { printHelpAndExit() },
+                 'comments!' => \$generateComments,
+                 'spads!' => \$spadsFormat,
+                 'output=s' => \$outputFile,
+                 'datadir=s' => \@dataDirs);
+$optionsHash{'unitsync=s'}=\$unitsyncPath unless($macOs);
+printUsageAndExit() unless(GetOptions(%optionsHash));
+
+my @unrecognizedParams;
+foreach my $arg (@ARGV) {
+  $arg=File::Spec->rel2abs($arg) if(-e $arg);
+  $unitsyncPath//=$arg if(! $macOs && isAbsoluteFilePath($arg,$unitsyncLibName));
+  if(-d $arg) {
+    push(@dataDirs,$arg);
+  }else{
+    push(@unrecognizedParams,$arg);
+  }
+}
+if(@unrecognizedParams) {
+  print 'Invalid parameter: "'.join('", "',@unrecognizedParams)."\"\n";
+  printUsageAndExit();
+}
+@dataDirs=split(/$pathSep/,join($pathSep,@dataDirs));
+foreach my $dataDir (@dataDirs) {
+  if(-d $dataDir) {
+    $dataDir=File::Spec->rel2abs($dataDir);
+  }else{
+    push(@unrecognizedParams,$dataDir);
+  }
+}
+if(@unrecognizedParams) {
+  print 'Invalid Spring data directory: "'.join('", "',@unrecognizedParams)."\"\n";
+  printUsageAndExit();
+}
+
+if(defined $unitsyncPath) {
+  $unitsyncPath=File::Spec->rel2abs($unitsyncPath) if(-e $unitsyncPath);
+  my $fullUnitsyncPath=isAbsoluteFilePath($unitsyncPath,$unitsyncLibName);
+  if(! $fullUnitsyncPath) {
+    print "Invalid unitsync path\n";
+    printUsageAndExit();
+  }
+  my $unitsyncDir=File::Spec->canonpath((fileparse($fullUnitsyncPath))[1]);
+  if($win) {
+    setEnvVarFirstPaths('PATH',$unitsyncDir);
+  }else{
+    portableExec($^X,$0,@originalArgv) if(setEnvVarFirstPaths('LD_LIBRARY_PATH',$unitsyncDir));
   }
 }
 
-if($outputFile ne "") {
+if($outputFile) {
   $outputHandle=new FileHandle;
   if(! $outputHandle->open("> $outputFile")) {
     print("ERROR - Unable to open \"$outputFile\" for writing\n");
@@ -78,6 +236,14 @@ if($outputFile ne "") {
   }
   $outputHandle->autoflush(1);
 }
+
+if(@dataDirs) {
+  setEnvVarFirstPaths('SPRING_DATADIR',@dataDirs);
+  exportWin32EnvVar('SPRING_DATADIR') if($win);
+}
+
+$ENV{SPRING_WRITEDIR}=$cwd unless(areSamePaths($cwd,$ENV{SPRING_WRITEDIR}//''));
+exportWin32EnvVar('SPRING_WRITEDIR') if($win);
 
 sub printRes {
   my $s=shift;
@@ -88,24 +254,12 @@ sub printRes {
   }
 }
 
-if($dataDir ne "") {
-  $ENV{SPRING_DATADIR}=$dataDir;
-  $ENV{SPRING_WRITEDIR}=$dataDir;
-  if($^O eq 'MSWin32') {
-    my $pwd=cwd();
-    $ENV{PATH}="$ENV{PATH};$pwd;$dataDir";
-    push(@INC,$pwd);
-    chdir($dataDir);
-  }
-} 
-
 eval "use PerlUnitSync";
 if ($@) {
   print "ERROR - Unable to load PerlUnitSync module ($@)\n";
-  if($dataDir eq '') {
-    print "ERROR - Try specifying the Spring data directory as command line parameter\n";
-  }else{
-    print "ERROR - The unitsync library must be available in your path or in the Sring data directory specified as parameter\n";
+  if(! $macOs && ! $unitsyncPath) {
+    print "ERROR - Try specifying the unitsync library path as command line parameter\n";
+    printUsageAndExit();
   }
   exit 1;
 }
@@ -115,7 +269,9 @@ if(! PerlUnitSync::Init(0,0)) {
     chomp($unitSyncErr);
     print("ERROR - UnitSync error: $unitSyncErr\n");
   }
-  print("ERROR - Unable to initialize UnitSync library (try specifying the Spring data directory as command line parameter)\n");
+  my $errorMsg='ERROR - Unable to initialize UnitSync library';
+  $errorMsg.=' (try specifying the Spring data directory as command line parameter)' unless(@dataDirs);
+  print $errorMsg."\n";
   exit 0;
 }
 
