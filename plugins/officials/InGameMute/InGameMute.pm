@@ -8,7 +8,7 @@ use SpadsPluginApi;
 
 no warnings 'redefine';
 
-my $pluginVersion='0.3';
+my $pluginVersion='0.4';
 my $requiredSpadsVersion='0.11.5';
 
 my %globalPluginParams = ( commandsFile => ['notNull'],
@@ -43,12 +43,21 @@ sub new {
                           mutes => \&hSpadsMutes,
                           unmute => \&hSpadsUnmute});
   addSpringCommandHandler({PLAYER_JOINED => \&hSpringPlayerJoined});
+  if(getLobbyState() > 3) {
+    addLobbyCommandHandler({SAIDBATTLE => \&hLobbyPreSaidBattle,
+                            SAIDBATTLEEX => \&hLobbyPreSaidBattle},950);
+    addLobbyCommandHandler({SAIDBATTLE => \&hLobbyPostSaidBattle,
+                            SAIDBATTLEEX => \&hLobbyPostSaidBattle},1050);
+  }
+  slog("Plugin loaded (version $pluginVersion)",3);
+  return $self;
+}
+
+sub onLobbyConnected {
   addLobbyCommandHandler({SAIDBATTLE => \&hLobbyPreSaidBattle,
                           SAIDBATTLEEX => \&hLobbyPreSaidBattle},950);
   addLobbyCommandHandler({SAIDBATTLE => \&hLobbyPostSaidBattle,
                           SAIDBATTLEEX => \&hLobbyPostSaidBattle},1050);
-  slog("Plugin loaded (version $pluginVersion)",3);
-  return $self;
 }
 
 sub eventLoop {
@@ -65,13 +74,6 @@ sub eventLoop {
       applyUnmuteInGame($filter,'mute expired');
     }
   }
-}
-
-sub onLobbyConnected {
-  addLobbyCommandHandler({SAIDBATTLE => \&hLobbyPreSaidBattle,
-                          SAIDBATTLEEX => \&hLobbyPreSaidBattle},950);
-  addLobbyCommandHandler({SAIDBATTLE => \&hLobbyPostSaidBattle,
-                          SAIDBATTLEEX => \&hLobbyPostSaidBattle},1050);
 }
 
 sub onUnload {
