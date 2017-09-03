@@ -8,7 +8,7 @@ use SpadsPluginApi;
 
 no warnings 'redefine';
 
-my $pluginVersion='0.2';
+my $pluginVersion='0.3';
 my $requiredSpadsVersion='0.11.5';
 
 my %globalPluginParams = ( commandsFile => ['notNull'],
@@ -20,13 +20,17 @@ sub getVersion { return $pluginVersion; }
 sub getRequiredSpadsVersion { return $requiredSpadsVersion; }
 sub getParams { return [\%globalPluginParams,\%presetPluginParams]; }
 
+sub getInstanceDir {
+  return getSpadsConf()->{instanceDir} // getSpadsConf()->{varDir};
+}
+
 sub new {
   my $class=shift;
   my $self = { mutes => {},
                storeMutesTs => time,
                restoreForwardLobbyToGame => 0};
   bless($self,$class);
-  my $mutesFile=getSpadsConf()->{varDir}.'/InGameMute.dat';
+  my $mutesFile=getInstanceDir().'/InGameMute.dat';
   if(-f $mutesFile) {
     my $p_mutes=retrieve($mutesFile);
     if(! defined $p_mutes) {
@@ -51,7 +55,7 @@ sub eventLoop {
   my $self=shift;
   my $p_spadsConf=getSpadsConf();
   if($p_spadsConf->{dataDumpDelay} && time-$self->{storeMutesTs} > 60 * $p_spadsConf->{dataDumpDelay}) {
-    my $mutesFile=$p_spadsConf->{varDir}.'/InGameMute.dat';
+    my $mutesFile=getInstanceDir().'/InGameMute.dat';
     slog("Unable to store mute data into file $mutesFile",1) unless(nstore($self->{mutes},$mutesFile));
     $self->{storeMutesTs}=time;
   }
@@ -76,7 +80,7 @@ sub onUnload {
   removeSpringCommandHandler(['PLAYER_JOINED']);
   removeLobbyCommandHandler(['SAIDBATTLE','SAIDBATTLEEX'],950);
   removeLobbyCommandHandler(['SAIDBATTLE','SAIDBATTLEEX'],1050);
-  my $mutesFile=getSpadsConf()->{varDir}.'/InGameMute.dat';
+  my $mutesFile=getInstanceDir().'/InGameMute.dat';
   slog("Unable to store mute data into file $mutesFile",1) unless(nstore($self->{mutes},$mutesFile));
   $self->{storeMutesTs}=time;
   slog("Plugin unloaded",3);

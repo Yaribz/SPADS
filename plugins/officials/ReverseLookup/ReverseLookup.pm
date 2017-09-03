@@ -16,7 +16,7 @@ sub any (&@) {
   return defined first {&{$code}} @_;
 }
 
-my $pluginVersion='0.1';
+my $pluginVersion='0.2';
 my $requiredSpadsVersion='0.11.31';
 
 my %globalPluginParams = ( dnsCacheTime => ['integer'],
@@ -27,6 +27,10 @@ sub getVersion { return $pluginVersion; }
 sub getRequiredSpadsVersion { return $requiredSpadsVersion; }
 sub getParams { return [\%globalPluginParams,{}]; }
 
+sub getInstanceDir {
+  return getSpadsConf()->{instanceDir} // getSpadsConf()->{varDir};
+}
+
 sub new {
   my $class=shift;
   my $self = {dnsCache => {},
@@ -34,7 +38,7 @@ sub new {
               nbLookupProcesses => 0,
               lookupQueue => [] };
   bless($self,$class);
-  my $dnsCacheFile=getSpadsConf()->{varDir}.'/ReverseLookup.dat';
+  my $dnsCacheFile=getInstanceDir().'/ReverseLookup.dat';
   if(-f $dnsCacheFile) {
     my $p_dnsCache=retrieve($dnsCacheFile);
     if(! defined $p_dnsCache) {
@@ -96,7 +100,7 @@ sub storeDnsCacheIfNeeded {
   return unless($force || ($p_spadsConf->{dataDumpDelay} && time-$self->{dnsCacheFlushTs} > 60 * $p_spadsConf->{dataDumpDelay}));
   $self->removeExpiredDnsEntries();
   $self->{dnsCacheFlushTs}=time;
-  my $dnsCacheFile=$p_spadsConf->{varDir}.'/ReverseLookup.dat';
+  my $dnsCacheFile=getInstanceDir().'/ReverseLookup.dat';
   slog("Unable to store DNS cache data in file $dnsCacheFile",1) unless(store($self->{dnsCache},$dnsCacheFile));
 }
 

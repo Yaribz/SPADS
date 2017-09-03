@@ -8,7 +8,7 @@ use SpadsPluginApi;
 
 no warnings 'redefine';
 
-my $pluginVersion='0.3';
+my $pluginVersion='0.4';
 my $requiredSpadsVersion='0.11.2';
 
 my %globalPluginParams = ( commandsFile => ['notNull'],
@@ -18,6 +18,10 @@ sub getVersion { return $pluginVersion; }
 sub getRequiredSpadsVersion { return $requiredSpadsVersion; }
 sub getParams { return [\%globalPluginParams,{}]; }
 
+sub getInstanceDir {
+  return getSpadsConf()->{instanceDir} // getSpadsConf()->{varDir};
+}
+
 sub new {
   my $class=shift;
   my $self = {welcomeMsg => [],
@@ -26,7 +30,7 @@ sub new {
               alreadySentTs => 0};
   bless($self,$class);
   $self->updateWelcomeMsgIfNeeded();
-  my $alreadySentFile=getSpadsConf()->{varDir}.'/FirstWelcomeMsg.dat';
+  my $alreadySentFile=getInstanceDir().'/FirstWelcomeMsg.dat';
   if(-f $alreadySentFile) {
     my $p_alreadySent=retrieve($alreadySentFile);
     if(! defined $p_alreadySent) {
@@ -79,7 +83,7 @@ sub storeAlreadySentDataIfNeeded {
   my $p_spadsConf=getSpadsConf();
   return unless($force || ($p_spadsConf->{dataDumpDelay} && time-$self->{alreadySentTs} > 60 * $p_spadsConf->{dataDumpDelay}));
   $self->{alreadySentTs}=time;
-  my $alreadySentFile=$p_spadsConf->{varDir}.'/FirstWelcomeMsg.dat';
+  my $alreadySentFile=getInstanceDir().'/FirstWelcomeMsg.dat';
   slog("Unable to store welcome message persistent data in file $alreadySentFile",1) unless(store($self->{alreadySent},$alreadySentFile));
 }
 
@@ -116,7 +120,7 @@ sub hSpadsResendFirstWelcomeMsg {
   return 1 if($checkOnly);
   my $self=getPlugin();
   $self->{alreadySent}={};
-  unlink(getSpadsConf()->{varDir}.'/FirstWelcomeMsg.dat');
+  unlink(getInstanceDir().'/FirstWelcomeMsg.dat');
   $self->{alreadySentTs}=time;
   answer("Plugin persistent data reset (all players will receive the \"first welcome message\" another time)");
 }
