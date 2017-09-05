@@ -25,6 +25,8 @@ Components
   retrieve the list of modoptions for all installed mods, and convert them
   optionnaly in SPADS format to copy-paste in the battlePresets.conf
   configuration file.
+* [src/PerlUnitSync.pm](src/PerlUnitSync.pm): Perl module for unitsync library
+  interface on Windows
 * [SPADS configuration templates](etc): Templates for SPADS configuration
   files.
 * [var/help.dat](var/help.dat): Data file for SPADS commands help.
@@ -50,6 +52,7 @@ Dependencies
 ------------
 The SPADS application depends on following projects:
 * [SimpleLog](https://github.com/Yaribz/SimpleLog)
+* [SimpleEvent](https://github.com/Yaribz/SimpleEvent)
 * [SpringLobbyInterface](https://github.com/Yaribz/SpringLobbyInterface)
 * [SpringAutoHostInterface](https://github.com/Yaribz/SpringAutoHostInterface)
 * [Spring](https://github.com/spring/spring)
