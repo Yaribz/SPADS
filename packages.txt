@@ -75,7 +75,7 @@ spadsInstaller.pl:spadsInstaller_0.20.pl
 SpadsPluginApi.pm:SpadsPluginApi_0.22a.pm
 SpadsUpdater.pm:SpadsUpdater_0.13.pm
 SpringAutoHostInterface.pm:SpringAutoHostInterface_0.11.pm
-SpringLobbyInterface.pm:SpringLobbyInterface_0.22.pm
+SpringLobbyInterface.pm:SpringLobbyInterface_0.23.pm
 update.pl:update_0.11.pl
 
 [contrib]
