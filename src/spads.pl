@@ -52,7 +52,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.0a';
+our $spadsVer='0.12.1';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -323,7 +323,7 @@ our %timestamps=(connectAttempt => 0,
                  autoUpdate => 0,
                  autoRestartCheck => 0,
                  autoForcePossible => 0,
-                 archivesChange => 0,
+                 archivesLoad => 0,
                  archivesCheck => 0,
                  mapLearned => 0,
                  autoStop => -1,
@@ -335,6 +335,7 @@ my $fullSpringVersion='';
 our $lobbyState=0; # (0:not_connected, 1:connecting, 2: connected, 3:logged_in, 4:start_data_received, 5:opening_battle, 6:battle_opened)
 my %pendingRedirect;
 my $lobbyBrokenConnection=0;
+my $loadArchivesInProgress=0;
 my @availableMaps;
 my @availableMods;
 my ($currentNbNonPlayer,$currentLockedStatus)=(0,0);
@@ -1024,18 +1025,14 @@ sub pingIfNeeded {
   }
 }
 
-sub loadArchives {
-  my $verbose=shift;
-  $verbose//=0;
-  pingIfNeeded();
+sub loadArchivesBlocking {
   if(! PerlUnitSync::Init(0,0)) {
     while(my $unitSyncErr=PerlUnitSync::GetNextError()) {
       chomp($unitSyncErr);
       slog("UnitSync error: $unitSyncErr",1);
     }
     slog("Unable to initialize UnitSync library",1);
-    chdir($cwd);
-    return 0;
+    return ([],[],{});
   }
   my $nbMaps = PerlUnitSync::GetMapCount();
   slog("No Spring map found",2) unless($nbMaps);
@@ -1043,10 +1040,9 @@ sub loadArchives {
   if(! $nbMods) {
     slog("No Spring mod found",1);
     PerlUnitSync::UnInit();
-    chdir($cwd);
-    return 0;
+    return ([],[],{});
   }
-  @availableMaps=();
+  my @newAvailableMaps=();
   my %availableMapsByNames=();
   for my $mapNb (0..($nbMaps-1)) {
     my $mapName = PerlUnitSync::GetMapName($mapNb);
@@ -1054,9 +1050,9 @@ sub loadArchives {
     PerlUnitSync::GetMapArchiveCount($mapName);
     my $mapArchive = PerlUnitSync::GetMapArchiveName(0);
     $mapArchive=$1 if($mapArchive =~ /([^\\\/]+)$/);
-    $availableMaps[$mapNb]={name=>$mapName,hash=>$mapChecksum,archive=>$mapArchive,options=>{}};
+    $newAvailableMaps[$mapNb]={name=>$mapName,hash=>$mapChecksum,archive=>$mapArchive,options=>{}};
     if(exists $availableMapsByNames{$mapName}) {
-      slog("Duplicate archives found for map \"$mapName\" ($mapArchive)",2)
+      slog("Duplicate archives found for map \"$mapName\" ($mapArchive)",2);
     }else{
       $availableMapsByNames{$mapName}=$mapNb;
     }
@@ -1064,12 +1060,11 @@ sub loadArchives {
 
   my @availableMapsNames=sort keys %availableMapsByNames;
   my $p_uncachedMapsNames = $spads->getUncachedMaps(\@availableMapsNames);
+  my %newCachedMaps;
   if(@{$p_uncachedMapsNames}) {
-    my %newCachedMaps;
     my $nbUncachedMaps=$#{$p_uncachedMapsNames}+1;
     my $latestProgressReportTs=0;
     for my $uncachedMapNb (0..($#{$p_uncachedMapsNames})) {
-      pingIfNeeded();
       if(time - $latestProgressReportTs > 60 && $nbUncachedMaps > 4) {
         $latestProgressReportTs=time;
         slog("Caching Spring map info... $uncachedMapNb/$nbUncachedMaps (".(int(100*$uncachedMapNb/$nbUncachedMaps)).'%)',3);
@@ -1090,7 +1085,7 @@ sub loadArchives {
 #      }
 
       $newCachedMaps{$mapName}->{options}={};
-      PerlUnitSync::AddAllArchives($availableMaps[$mapNb]->{archive});
+      PerlUnitSync::AddAllArchives($newAvailableMaps[$mapNb]->{archive});
       my $nbMapOptions = PerlUnitSync::GetMapOptionCount($mapName);
       for my $optionIdx (0..($nbMapOptions-1)) {
         my %option=(name => PerlUnitSync::GetOptionName($optionIdx),
@@ -1130,7 +1125,6 @@ sub loadArchives {
         $newCachedMaps{$mapName}->{options}->{$option{key}}=\%option;
       }
     }
-    $spads->cacheMapsInfo(\%newCachedMaps);
     slog("Caching Spring map info... $nbUncachedMaps/$nbUncachedMaps (100%)",3) if($nbUncachedMaps > 4);
   }
 
@@ -1155,7 +1149,6 @@ sub loadArchives {
   
   for my $modNb (0..($nbMods-1)) {
     next if(@{$newAvailableMods[$modNb]->{sides}});
-    pingIfNeeded();
     PerlUnitSync::RemoveAllArchives();
     PerlUnitSync::AddAllArchives($newAvailableMods[$modNb]->{archive});
     my $nbModOptions = PerlUnitSync::GetModOptionCount();
@@ -1204,17 +1197,56 @@ sub loadArchives {
   }
 
   PerlUnitSync::UnInit();
+  return (\@newAvailableMaps,\@newAvailableMods,\%newCachedMaps);
+}
 
-  @availableMods=@newAvailableMods;
+sub loadArchivesPostActions {
+  my ($r_availableMaps,$r_availableMods,$r_newCachedMaps,$verbose)=@_;
 
-  $timestamps{archivesChange}=time;
-  $timestamps{archivesCheck}=time;
+  chdir($cwd);
+
+  $loadArchivesInProgress=0;
+
+  my $loadArchivesDurationInSeconds=time-$timestamps{archivesLoad};
+  my $loadArchivesDuration=secToTime($loadArchivesDurationInSeconds);
+  my $loadArchivesMsgLogLevel=5;
+  if($loadArchivesDurationInSeconds > 30) {
+    $loadArchivesMsgLogLevel=2;
+  }elsif($loadArchivesDurationInSeconds > 15) {
+    $loadArchivesMsgLogLevel=3;
+  }elsif($loadArchivesDurationInSeconds > 5) {
+    $loadArchivesMsgLogLevel=4;
+  }
+  slog("Spring archives loading process took $loadArchivesDuration",$loadArchivesMsgLogLevel);
+
+  return 0 unless @{$r_availableMods};
+  
+  @availableMaps=@{$r_availableMaps};
+  @availableMods=@{$r_availableMods};
+  $spads->cacheMapsInfo($r_newCachedMaps) if(%{$r_newCachedMaps});
+
   updateTargetMod($verbose);
 
   $timestamps{mapLearned}=0;
   $spads->applyMapList(\@availableMaps,$syncedSpringVersion);
-  chdir($cwd);
-  return $nbMaps+$nbMods;
+
+  return @availableMaps+@availableMods;
+}
+
+sub loadArchives {
+  my ($r_callback,$verbose)=@_;
+  $loadArchivesInProgress=1;
+  $timestamps{archivesLoad}=time;
+  $timestamps{archivesCheck}=time;
+  if(defined $r_callback) {
+    if(! SimpleEvent::forkCall(\&loadArchivesBlocking,sub { $r_callback->(loadArchivesPostActions(@_,$verbose)); })) {
+      slog('Failed to fork for asynchronous Spring archives reload!',1);
+      loadArchivesPostActions([],[],{},$verbose);
+    }
+  }else{
+    my @loadArchivesBlockingResults=loadArchivesBlocking();
+    return loadArchivesPostActions(@loadArchivesBlockingResults,$verbose);
+  }
 }
 
 sub setDefaultMapOfMaplist {
@@ -2885,15 +2917,14 @@ sub checkAutoStopTimestamp {
 }
 
 sub checkAutoReloadArchives {
-  if($conf{autoReloadArchivesMinDelay} && time - $timestamps{archivesCheck} > 60) {
+  if($conf{autoReloadArchivesMinDelay} && time - $timestamps{archivesCheck} > 60 && ! $loadArchivesInProgress) {
     slog("Checking Spring archives for auto-reload",5);
     $timestamps{archivesCheck}=time;
     my $archivesChangeTs=getArchivesChangeTime();
-    if($archivesChangeTs > $timestamps{archivesChange} && time - $archivesChangeTs > $conf{autoReloadArchivesMinDelay}) {
+    if($archivesChangeTs > $timestamps{archivesLoad} && time - $archivesChangeTs > $conf{autoReloadArchivesMinDelay}) {
       my $archivesChangeDelay=secToTime(time - $archivesChangeTs);
       slog("Spring archives have been modified $archivesChangeDelay ago, auto-reloading archives...",3);
-      my $nbArchives=loadArchives(1);
-      quitAfterGame("Unable to auto-reload Spring archives") unless($nbArchives);
+      loadArchives(sub {quitAfterGame('Unable to auto-reload Spring archives') unless(shift)},1);
     }
   }
 }
@@ -9272,12 +9303,20 @@ sub hReloadArchives {
     return 0;
   }
 
+  if($loadArchivesInProgress) {
+    answer('Spring archives are already being reloaded...');
+    return 0;
+  }
+
   return 1 if($checkOnly);
 
-  my $nbArchives=loadArchives(1);
-  quitAfterGame("Unable to reload Spring archives") unless($nbArchives);
-
-  answer("$nbArchives Spring archives loaded");
+  my $r_asyncAnswerFunction=$p_answerFunction;
+  loadArchives(
+    sub {
+      my $nbArchives=shift;
+      quitAfterGame('Unable to reload Spring archives') unless($nbArchives);
+      $r_asyncAnswerFunction->("$nbArchives Spring archives loaded");
+    }, 1);
 }
 
 sub hReloadConf {
@@ -9321,6 +9360,11 @@ sub hReloadConf {
     }
   }
 
+  if($loadArchivesInProgress && ! $keepSettings) {
+    answer('Unable to reload SPADS configuration and apply new settings while Spring archives are being reloaded, please wait for reload process to finish or use "keepSettings" parameter');
+    return 0;
+  }
+
   return 1 if($checkOnly);
 
   pingIfNeeded();
@@ -9344,8 +9388,14 @@ sub hReloadConf {
 
   $spads=$newSpads;
 
-  if(! $keepSettings) {
+  if($keepSettings) {
+    postReloadConfActions($p_answerFunction,$keepSettings);
+  }else{
+    $spads->applyMapList(\@availableMaps,$syncedSpringVersion);
+
+    my $previousMap=$conf{map};
     %conf=%{$spads->{conf}};
+    $conf{map}=$previousMap if($conf{map} eq '');
 
     $lobbySimpleLog->setLevels([$conf{lobbyInterfaceLogLevel}]);
     $autohostSimpleLog->setLevels([$conf{autoHostInterfaceLogLevel}]);
@@ -9353,22 +9403,31 @@ sub hReloadConf {
     $sLog->setLevels([$conf{spadsLogLevel},3]);
     $simpleEventSimpleLog->setLevels([$conf{spadsLogLevel},3]);
 
-    quitAfterGame("Unable to reload Spring archives") unless(loadArchives());
-    setDefaultMapOfMaplist() if($spads->{conf}->{map} eq '');
-
-    applyAllSettings();
+    my $r_asyncAnswerFunction=$p_answerFunction;
+    loadArchives(
+      sub {
+        my $nbArchives=shift;
+        quitAfterGame('Unable to reload Spring archives') unless($nbArchives);
+        setDefaultMapOfMaplist() if($spads->{conf}->{map} eq '');
+        applyAllSettings();
+        postReloadConfActions($r_asyncAnswerFunction,$keepSettings);
+      } );
   }
+}
+
+sub postReloadConfActions {
+  my ($r_answerFunction,$keepSettings)=@_;
 
   foreach my $pluginName (@pluginsOrder) {
     if($plugins{$pluginName}->can('onReloadConf')) {
       my $reloadConfRes=$plugins{$pluginName}->onReloadConf($keepSettings);
-      answer("Unable to reload $pluginName plugin configuration.") if(defined $reloadConfRes && ! $reloadConfRes);
+      $r_answerFunction->("Unable to reload $pluginName plugin configuration.") if(defined $reloadConfRes && ! $reloadConfRes);
     }
   }
 
   my $msg="Spads configuration reloaded";
   $msg.=" (some pending settings need rehosting to be applied)" if(needRehost());
-  answer($msg);
+  $r_answerFunction->($msg);
 }
 
 sub hRehost {
@@ -10757,6 +10816,7 @@ sub hStatus {
   my ($voteString)=getVoteStateMsg();
   sayPrivate($user,$voteString) if(defined $voteString);
   sayPrivate($user,"Some pending settings need rehosting to be applied") if(needRehost());
+  sayPrivate($user,'Spring archives are being reloaded since '.(secToTime(time-$timestamps{archivesLoad}))) if($loadArchivesInProgress);
   if(defined $quitAfterGame{action}) {
     my $quitAction=('quit','restart')[$quitAfterGame{action}];
     my $quitCondition=('after this game','as soon as the battle only contains spectators and no game is running','as soon as the battle is empty and no game is running')[$quitAfterGame{condition}];
@@ -13793,7 +13853,7 @@ sub manageBattle {
 }
 
 sub checkExit {
-  if($autohost->getState() == 0 && $springPid == 0 && defined $quitAfterGame{action}) {
+  if($autohost->getState() == 0 && $springPid == 0 && defined $quitAfterGame{action} && ! $loadArchivesInProgress) {
     if($quitAfterGame{condition} == 0) {
       slog("Game is not running, exiting",3);
       SimpleEvent::stopLoop();

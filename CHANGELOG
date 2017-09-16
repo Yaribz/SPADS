@@ -792,6 +792,9 @@ spads.pl:
         removed obsolete "onBadSpringVersion" functionality
         removed random password functionality (using "_RANDOM_" as value for "password" hosting setting) and !pass command
 0.12.0a: localize variable $_ (improve AnyEvent stability)
+0.12.1: SPADS is no longer unresponsive during Spring archives reload (unitsync calls are performed asynchronously)
+        Spring archives reload time is now monitored and logged
+        !status output now shows if Spring archives are being reloaded
 
 SpadsConf.pm:
 ============
