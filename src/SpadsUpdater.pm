@@ -39,7 +39,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $archName=$win?'win32':($Config{ptrsize} > 4 ? 'linux64' : 'linux32');
 
-my $moduleVersion='0.13';
+my $moduleVersion='0.13a';
 
 my @constructorParams = qw'sLog repository release packages';
 my @optionalConstructorParams = qw'localDir springDir';
@@ -339,7 +339,7 @@ sub updateUnlocked {
   my $updateInfoFile=catfile($self->{localDir},'updateInfo.txt');
   if(-f $updateInfoFile) {
     if(open(UPDATE_INFO,'<',$updateInfoFile)) {
-      while(<UPDATE_INFO>) {
+      while(local $_ = <UPDATE_INFO>) {
         $currentPackages{$1}=$2 if(/^([^:]+):(.+)$/);
       }
       close(UPDATE_INFO);
@@ -356,7 +356,7 @@ sub updateUnlocked {
   }
   if(open(PACKAGES,"<packages.txt")) {
     my $currentSection="";
-    while(<PACKAGES>) {
+    while(local $_ = <PACKAGES>) {
       if(/^\s*\[([^\]]+)\]/) {
         $currentSection=$1;
         $allAvailablePackages{$currentSection}={} unless(exists $allAvailablePackages{$currentSection});

@@ -38,7 +38,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.12.0';
+my $moduleVersion='0.12.0a';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -615,7 +615,7 @@ sub preProcessConfFile {
     $sLog->log("Unable to read configuration file ($file: $!)",1);
     return 0;
   }
-  while(<$fh>) {
+  while(local $_ = <$fh>) {
     foreach my $macroName (keys %{$p_macros}) {
       s/\%$macroName\%/$p_macros->{$macroName}/g;
     }
@@ -655,7 +655,7 @@ sub loadSettingsFile {
 
   my @invalidGlobalParams;
   my @invalidSectionParams;
-  while($_=shift(@confData)) {
+  while(local $_ = shift(@confData)) {
     next if(/^\s*(\#.*)?$/);
     if(/^\s*\[([^\]]+)\]\s*$/) {
       $currentSection=$1;
@@ -728,7 +728,7 @@ sub loadTableFile {
   my $section='';
   my %newConf=('' => []);
 
-  while($_=shift(@confData)) {
+  while(local $_ = shift(@confData)) {
     my $line=$_;
     chomp($line);
     if(/^\s*\#\?\s*([^\s]+)\s*$/) {
@@ -823,7 +823,7 @@ sub loadSimpleTableFile {
   my $section='';
   my %newConf=('' => []);
 
-  while($_=shift(@confData)) {
+  while(local $_ = shift(@confData)) {
     my $line=$_;
     next if(/^\s*(\#.*)?$/);
     if(/^\s*\[([^\]]+)\]\s*$/) {
@@ -853,7 +853,7 @@ sub loadFastTableFile {
   my @pattern;
   my %newConf;
 
-  while($_=shift(@confData)) {
+  while(local $_ = shift(@confData)) {
     my $line=$_;
     chomp($line);
     if(/^\s*\#\?\s*([^\s]+)\s*$/) {

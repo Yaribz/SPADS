@@ -16,7 +16,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 91.0b (2017/08/27)
+# Version 91.0c (2017/09/16)
 
 package PerlUnitSync;
 
@@ -42,7 +42,7 @@ sub _getLastWin32Error {
   return $errorMsg;
 }
 
-while(<DATA>) {
+while(local $_ = <DATA>) {
   next unless(/^\s*EXPORT\(\s*([^\)]*[^\s\)])\s*\)\s*([^\(\s]+)\s*\(\s*((?:.*[^\s])?)\s*\)\s*;/);
   my ($returnType,$funcName,$signature)=($1,$2,$3);
   next if(grep {$funcName eq $_} @skippedFunctions);

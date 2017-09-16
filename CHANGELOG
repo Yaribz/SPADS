@@ -172,6 +172,7 @@ PerlUnitSync.pm:
 ===============
 91.0a: first public version, based on Spring 91 unitsync API header file (Windows)
 91.0b: remove functions obsolete in Spring 104+
+91.0c: localize variable $_ (improve AnyEvent stability)
 
 spads.pl:
 ========
@@ -790,6 +791,7 @@ spads.pl:
         SimpleEvent module now has its own log level ("simpleEventLogLevel" global setting)
         removed obsolete "onBadSpringVersion" functionality
         removed random password functionality (using "_RANDOM_" as value for "password" hosting setting) and !pass command
+0.12.0a: localize variable $_ (improve AnyEvent stability)
 
 SpadsConf.pm:
 ============
@@ -929,6 +931,7 @@ SpadsConf.pm:
         the "clan" value for "balanceMode" preset setting has been renamed to "clan;random", to better reflect the fact that the balance is random appart from clans being honored
         the "instanceDir" global setting is now used instead of "varDir" to store all dynamic data which are instance-specific
         the "pluginsDir" global setting can no longer be empty
+0.12.0a: localize variable $_ (improve AnyEvent stability)
 
 spadsInstaller.pl:
 =================
@@ -1078,6 +1081,7 @@ SpadsUpdater.pm:
 0.13: the "localDir" constructor parameter is no longer mandatory (main Perl script directory is used by default)
       the "syncedSpringVersion" constructor parameter is no longer supported
       Spring version dependant and Perl version dependant packages are no longer supported
+0.13a: localize variable $_ (improve AnyEvent stability)
 
 update.pl:
 =========

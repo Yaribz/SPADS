@@ -52,7 +52,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.0';
+our $spadsVer='0.12.0a';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -473,7 +473,7 @@ if($win) {
   my %updatedPackages;
   if(-f "$spadsDir/updateInfo.txt") {
     if(open(UPDATE_INFO,"<$spadsDir/updateInfo.txt")) {
-      while(<UPDATE_INFO>) {
+      while(local $_ = <UPDATE_INFO>) {
         $updatedPackages{$1}=$2 if(/^([^:]+):(.+)$/);
       }
       close(UPDATE_INFO);
@@ -2987,7 +2987,7 @@ sub autoRestartForUpdateIfNeeded {
   my $updateTimestamp=0;
   if(-f "$spadsDir/updateInfo.txt") {
     if(open(UPDATE_INFO,"<$spadsDir/updateInfo.txt")) {
-      while(<UPDATE_INFO>) {
+      while(local $_ = <UPDATE_INFO>) {
         if(/^(\d+)$/) {
           $updateTimestamp=$1 if($1 > $updateTimestamp);
         }
@@ -5717,7 +5717,7 @@ sub getGameDataFromLog {
   my $logFile="$conf{instanceDir}/infolog.txt";
   my ($demoFile,$gameId);
   if(open(SPRINGLOG,"<$logFile")) {
-    while(<SPRINGLOG>) {
+    while(local $_ = <SPRINGLOG>) {
       $demoFile=$1 if(/recording demo: (.+)$/);
       $gameId=$1 if(/GameID: ([0-9a-f]+)$/);
       last if(defined $demoFile && defined $gameId);
