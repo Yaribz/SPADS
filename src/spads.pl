@@ -52,7 +52,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.1';
+our $spadsVer='0.12.2';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -336,7 +336,9 @@ our $lobbyState=0; # (0:not_connected, 1:connecting, 2: connected, 3:logged_in, 
 my %pendingRedirect;
 my $lobbyBrokenConnection=0;
 my $loadArchivesInProgress=0;
+my %availableMapsNameToNb;
 my @availableMaps;
+my %availableModsNameToNb;
 my @availableMods;
 my ($currentNbNonPlayer,$currentLockedStatus)=(0,0);
 my $currentMap=$conf{map};
@@ -1026,6 +1028,7 @@ sub pingIfNeeded {
 }
 
 sub loadArchivesBlocking {
+  my $full=shift;
   if(! PerlUnitSync::Init(0,0)) {
     while(my $unitSyncErr=PerlUnitSync::GetNextError()) {
       chomp($unitSyncErr);
@@ -1046,6 +1049,11 @@ sub loadArchivesBlocking {
   my %availableMapsByNames=();
   for my $mapNb (0..($nbMaps-1)) {
     my $mapName = PerlUnitSync::GetMapName($mapNb);
+    if(! $full && exists $availableMapsNameToNb{$mapName}) {
+      $newAvailableMaps[$mapNb]=$availableMaps[$availableMapsNameToNb{$mapName}];
+      $availableMapsByNames{$mapName}=$mapNb unless(exists $availableMapsByNames{$mapName});
+      next;
+    }
     my $mapChecksum = int32(PerlUnitSync::GetMapChecksum($mapNb));
     PerlUnitSync::GetMapArchiveCount($mapName);
     my $mapArchive = PerlUnitSync::GetMapArchiveName(0);
@@ -1137,9 +1145,13 @@ sub loadArchivesBlocking {
       $modName=PerlUnitSync::GetInfoValueString($infoNb);
       last;
     }
+    my $cachedMod=getMod($modName);
+    if(! $full && defined $cachedMod) {
+      $newAvailableMods[$modNb]=$cachedMod;
+      next;
+    }
     my $modArchive = PerlUnitSync::GetPrimaryModArchive($modNb);
     my $modChecksum = int32(PerlUnitSync::GetPrimaryModChecksum($modNb));
-    my $cachedMod=getMod($modName);
     if(defined $cachedMod && $modChecksum && $modChecksum == $cachedMod->{hash}) {
       $newAvailableMods[$modNb]=$cachedMod;
     }else{
@@ -1222,7 +1234,15 @@ sub loadArchivesPostActions {
   return 0 unless @{$r_availableMods};
   
   @availableMaps=@{$r_availableMaps};
+  %availableMapsNameToNb=();
+  for my $mapNb (0..$#availableMaps) {
+    $availableMapsNameToNb{$availableMaps[$mapNb]->{name}}=$mapNb unless(exists $availableMapsNameToNb{$availableMaps[$mapNb]->{name}});
+  }
   @availableMods=@{$r_availableMods};
+  %availableModsNameToNb=();
+  for my $modNb (0..$#availableMods) {
+    $availableModsNameToNb{$availableMods[$modNb]->{name}}=$modNb unless(exists $availableModsNameToNb{$availableMods[$modNb]->{name}});
+  }
   $spads->cacheMapsInfo($r_newCachedMaps) if(%{$r_newCachedMaps});
 
   updateTargetMod($verbose);
@@ -1234,17 +1254,24 @@ sub loadArchivesPostActions {
 }
 
 sub loadArchives {
-  my ($r_callback,$verbose)=@_;
+  my ($r_callback,$verbose,$full)=@_;
   $loadArchivesInProgress=1;
   $timestamps{archivesLoad}=time;
   $timestamps{archivesCheck}=time;
   if(defined $r_callback) {
-    if(! SimpleEvent::forkCall(\&loadArchivesBlocking,sub { $r_callback->(loadArchivesPostActions(@_,$verbose)); })) {
+    if(! SimpleEvent::forkCall(
+           sub {
+             my @loadArchivesBlockingResults=loadArchivesBlocking($full);
+             return @loadArchivesBlockingResults;
+           },
+           sub { 
+             $r_callback->(loadArchivesPostActions(@_,$verbose));
+           } ) ) {
       slog('Failed to fork for asynchronous Spring archives reload!',1);
       loadArchivesPostActions([],[],{},$verbose);
     }
   }else{
-    my @loadArchivesBlockingResults=loadArchivesBlocking();
+    my @loadArchivesBlockingResults=loadArchivesBlocking($full);
     return loadArchivesPostActions(@loadArchivesBlockingResults,$verbose);
   }
 }
@@ -1259,57 +1286,46 @@ sub setDefaultMapOfMaplist {
 
 sub getMapHash {
   my $mapName=shift;
-  for my $mapNb (0..$#availableMaps) {
-    return $availableMaps[$mapNb]->{hash} if($availableMaps[$mapNb]->{name} eq $mapName);
-  }
+  return $availableMaps[$availableMapsNameToNb{$mapName}]{hash} if(exists $availableMapsNameToNb{$mapName});
   return $spads->getMapHash($mapName,$syncedSpringVersion);
 }
 
 sub getMapHashAndArchive {
   my $mapName=shift;
-  for my $mapNb (0..$#availableMaps) {
-    return (uint32($availableMaps[$mapNb]->{hash}),$availableMaps[$mapNb]->{archive}) if($availableMaps[$mapNb]->{name} eq $mapName);
+  if(exists $availableMapsNameToNb{$mapName}) {
+    my $mapNb=$availableMapsNameToNb{$mapName};
+    return (uint32($availableMaps[$mapNb]{hash}),$availableMaps[$mapNb]{archive});
   }
   return (uint32($spads->getMapHash($mapName,$syncedSpringVersion)),'');
 }
 
 sub getMod {
   my $modName=shift;
-  for my $modNb (0..$#availableMods) {
-    return $availableMods[$modNb] if($availableMods[$modNb]->{name} eq $modName);
-  }
+  return $availableMods[$availableModsNameToNb{$modName}] if(exists $availableModsNameToNb{$modName});
   return undef;
 }
 
 sub getModHash {
   my $modName=shift;
-  for my $modNb (0..$#availableMods) {
-    return $availableMods[$modNb]->{hash} if($availableMods[$modNb]->{name} eq $modName);
-  }
+  return $availableMods[$availableModsNameToNb{$modName}]{hash} if(exists $availableModsNameToNb{$modName});
   return 0;
 }
 
 sub getModArchive {
   my $modName=shift;
-  for my $modNb (0..$#availableMods) {
-    return $availableMods[$modNb]->{archive} if($availableMods[$modNb]->{name} eq $modName);
-  }
+  return $availableMods[$availableModsNameToNb{$modName}]{archive} if(exists $availableModsNameToNb{$modName});
   return 0;
 }
 
 sub getModOptions {
   my $modName=shift;
-  for my $modNb (0..$#availableMods) {
-    return $availableMods[$modNb]->{options} if($availableMods[$modNb]->{name} eq $modName);
-  }
+  return $availableMods[$availableModsNameToNb{$modName}]{options} if(exists $availableModsNameToNb{$modName});
   return {};
 }
 
 sub getModSides {
   my $modName=shift;
-  for my $modNb (0..$#availableMods) {
-    return $availableMods[$modNb]->{sides} if($availableMods[$modNb]->{name} eq $modName);
-  }
+  return $availableMods[$availableModsNameToNb{$modName}]{sides} if(exists $availableModsNameToNb{$modName});
   return [];
 }
 
@@ -4297,13 +4313,7 @@ sub launchGame {
     $additionalData{playerData}->{$lobby->{users}->{$bUser}->{accountId}}={skillclass => $battleSkills{$bUser}->{class}};
   }
 
-  my $mapAvailableLocally=0;
-  for my $mapNb (0..$#availableMaps) {
-    if($availableMaps[$mapNb]->{name} eq $currentMap) {
-      $mapAvailableLocally=1;
-      last;
-    }
-  }
+  my $mapAvailableLocally = exists $availableMapsNameToNb{$currentMap} ? 1 : 0;
 
   if($spads->{bSettings}->{startpostype} == 2) {
     if(! $force && ! %{$lobby->{battle}->{startRects}}) {
@@ -9298,9 +9308,13 @@ sub hRebalance {
 sub hReloadArchives {
   my ($source,$user,$p_params,$checkOnly)=@_;
 
-  if($#{$p_params} != -1) {
-    invalidSyntax($user,"reloadarchives");
-    return 0;
+  my $full;
+  if(@{$p_params}) {
+    if($#{$p_params} > 0 || lc($p_params->[0]) ne 'full') {
+      invalidSyntax($user,"reloadarchives");
+      return 0;
+    }
+    $full=1;
   }
 
   if($loadArchivesInProgress) {
@@ -9316,7 +9330,7 @@ sub hReloadArchives {
       my $nbArchives=shift;
       quitAfterGame('Unable to reload Spring archives') unless($nbArchives);
       $r_asyncAnswerFunction->("$nbArchives Spring archives loaded");
-    }, 1);
+    }, 1, $full);
 }
 
 sub hReloadConf {

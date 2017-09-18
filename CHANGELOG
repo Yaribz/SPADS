@@ -76,6 +76,7 @@ help.dat:
 0.12.4: the "!force" command can now be used to force full battle balance in one command: "!force * (player1,player2)(player3,player4)..."
 0.12.5: the "!force" command can now be used to give resource bonus
 0.13.0: removed obsolete !pass command
+0.13.1: added fast mode for !reload command (detects archives addition/removal, but not archives modifications)
 
 helpSettings.dat:
 ================
@@ -795,6 +796,8 @@ spads.pl:
 0.12.1: SPADS is no longer unresponsive during Spring archives reload (unitsync calls are performed asynchronously)
         Spring archives reload time is now monitored and logged
         !status output now shows if Spring archives are being reloaded
+0.12.2: improved Spring archives handling
+        added fast mode for Spring archives reloading (detects archives addition/removal, but not archives modifications)
 
 SpadsConf.pm:
 ============

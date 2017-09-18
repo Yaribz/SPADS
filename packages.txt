@@ -63,13 +63,13 @@ update.pl:update_0.11.pl
 7za.exe:7za-9.20.exe
 argparse.py:argparse-1.2.1.py
 getDefaultModOptions.pl:getDefaultModOptions_0.6.pl
-help.dat:help_0.13.0.dat
+help.dat:help_0.13.1.dat
 helpSettings.dat:helpSettings_0.6.0.dat
 PerlUnitSync.pm:PerlUnitSync-91.0c.pm
 replay_upload.py:replay_upload_0.5.py
 SimpleEvent.pm:SimpleEvent_0.1c.pm
 SimpleLog.pm:SimpleLog_0.7.pm
-spads.pl:spads_0.12.1.pl
+spads.pl:spads_0.12.2.pl
 SpadsConf.pm:SpadsConf_0.12.0a.pm
 spadsInstaller.pl:spadsInstaller_0.20.pl
 SpadsPluginApi.pm:SpadsPluginApi_0.22a.pm

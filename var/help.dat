@@ -254,7 +254,9 @@
 !rebalance - rebalances teams (try to change them if they were already balanced)
 
 [reloadArchives]
-!reloadArchives - reloads Spring archive files (Mods and maps)
+!reloadArchives [full] - reloads Spring archive files (Mods and maps)
+"!reloadArchives" reloads Spring archive files in fast mode (only detects archives additions and removals)
+"!reloadArchives full" reloads Spring archive files in full mode (detects all archives modifications)
 
 [reloadConf]
 !reloadConf [keepSettings] [keepMacros] [<macro>=<value> [..]] - reloads all configuration files
