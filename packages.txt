@@ -15,7 +15,7 @@ spadsInstaller.pl:spadsInstaller_0.19.pl
 SpadsPluginApi.pm:SpadsPluginApi_0.22a.pm
 SpadsUpdater.pm:SpadsUpdater_0.12b.pm
 SpringAutoHostInterface.pm:SpringAutoHostInterface_0.11.pm
-SpringLobbyInterface.pm:SpringLobbyInterface_0.22.pm
+SpringLobbyInterface.pm:SpringLobbyInterface_0.23.pm
 spring-dedicated.exe;91:spring-dedicated-91.0.exe
 spring-dedicated.exe;94:spring-dedicated-94.0.exe
 spring-dedicated.exe;95:spring-dedicated-95.0.exe
