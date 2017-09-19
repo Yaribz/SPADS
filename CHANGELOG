@@ -1006,6 +1006,7 @@ spadsInstaller.pl:
       games and maps can now be automatically downloaded when initializing a new Spring data directory (no need to have Spring games and maps available on the system before installing SPADS anymore)
       improve algorithms for guessing paths of unitsync library, spring binaries and data directories automatically
       renamed config macros used during installation to better reflect target setting names
+0.21: fix mod name regular expression for test mods
 
 SpadsPluginApi.pm:
 =================

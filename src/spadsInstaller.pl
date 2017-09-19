@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.20 (2017/08/27)
+# Version 0.21 (2017/09/19)
 
 use strict;
 
@@ -872,8 +872,13 @@ if(! @availableMods) {
   }
   $conf{modName}=$availableMods[$chosenModNb];
 
-  my $modFilter=quotemeta($conf{modName});
-  $modFilter =~ s/\d+/\\d+/g;
+  my $modFilter;
+  if($conf{modName} =~ /^(.+ )test\-\d+\-[\da-f]+$/) {
+    $modFilter=quotemeta($1).'test\-\d+\-[\da-f]+';
+  }else{
+    $modFilter=quotemeta($conf{modName});
+    $modFilter =~ s/\d+/\\d+/g;
+  }
 
   my $isLatestMod=1;
   foreach my $availableMod (@availableMods) {
