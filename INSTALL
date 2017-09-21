@@ -1,7 +1,7 @@
 To install SPADS on Linux/UNIX, you have to:
 ============================================
 
-1) Ensure Perl, swig and g++ are installed and available in your PATH
+1) Ensure Perl, swig and g++ are installed and available in your PATH (all standard Perl core modules must be available, on some systems such as RedHat/Fedora/CentOS this requires installing a metapackage usually named "perl-core")
 2) Run "./spadsInstaller.pl" (SPADS will be installed in current directory)
 3) Check your configuration files, in particular "spads.conf", "hostingPresets.conf" and "battlePresets.conf"
 
