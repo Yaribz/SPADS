@@ -66,7 +66,7 @@ getDefaultModOptions.pl:getDefaultModOptions_0.6.pl
 help.dat:help_0.13.1.dat
 helpSettings.dat:helpSettings_0.6.0.dat
 PerlUnitSync.pm:PerlUnitSync-91.0c.pm
-replay_upload.py:replay_upload_0.5.py
+replay_upload.py:replay_upload_0.6.py
 SimpleEvent.pm:SimpleEvent_0.1c.pm
 SimpleLog.pm:SimpleLog_0.7.pm
 spads.pl:spads_0.12.2.pl
