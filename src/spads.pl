@@ -52,7 +52,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.2';
+our $spadsVer='0.12.2a';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -1976,6 +1976,15 @@ sub getNbSpec {
     $nbSpec++ if(defined $battleUsers{$user}->{battleStatus} && (! $battleUsers{$user}->{battleStatus}->{mode}));
   }
   return $nbSpec;
+}
+
+sub getNbHumanPlayersInBattle {
+  my $nbHumanPlayer=0;
+  my %battleUsers=%{$lobby->{battle}{users}};
+  foreach my $user (keys %battleUsers) {
+    $nbHumanPlayer++ if(defined $battleUsers{$user}{battleStatus} && $battleUsers{$user}{battleStatus}{mode});
+  }
+  return $nbHumanPlayer;
 }
 
 sub getNbNonPlayer {
@@ -9120,6 +9129,21 @@ sub hPromote {
     return 0;
   }
 
+  if($currentLockedStatus) {
+    answer('Unable to promote battle, battle lobby is locked');
+    return 0;
+  }
+  my $nbHumanPlayers=getNbHumanPlayersInBattle();
+  if($nbHumanPlayers >= $lobby->{battles}{$lobby->{battle}{battleId}}{maxPlayers}) {
+    answer('Unable to promote battle, battle lobby is full');
+    return 0;
+  }
+  my $targetNbPlayers=$conf{nbPlayerById}*$conf{teamSize}*$conf{nbTeams};
+  if($conf{autoSpecExtraPlayers} && $nbHumanPlayers >= $targetNbPlayers) {
+    answer('Unable to promote battle, target number of players already reached');
+    return 0;
+  }
+
   return 1 if($checkOnly);
 
   $timestamps{promote}=time;
@@ -9127,7 +9151,6 @@ sub hPromote {
   my %hSettings=%{$spads->{hSettings}};
   my $neededPlayer="";
   if($conf{autoLock} ne "off" || $conf{autoSpecExtraPlayers} || $conf{autoStart} ne "off") {
-    my $targetNbPlayers=$conf{nbPlayerById}*$conf{teamSize}*$conf{nbTeams};
     my $nbPlayers=0;
     foreach my $player (keys %{$lobby->{battle}->{users}}) {
       $nbPlayers++ if(defined $lobby->{battle}->{users}->{$player}->{battleStatus} && $lobby->{battle}->{users}->{$player}->{battleStatus}->{mode});

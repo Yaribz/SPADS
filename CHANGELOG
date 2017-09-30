@@ -798,6 +798,7 @@ spads.pl:
         !status output now shows if Spring archives are being reloaded
 0.12.2: improved Spring archives handling
         added fast mode for Spring archives reloading (detects archives addition/removal, but not archives modifications)
+0.12.2a: prevent using !promote command when battle is locked or full
 
 SpadsConf.pm:
 ============
