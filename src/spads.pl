@@ -52,7 +52,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.2a';
+our $spadsVer='0.12.3';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -1231,6 +1231,10 @@ sub loadArchivesPostActions {
   }
   slog("Spring archives loading process took $loadArchivesDuration",$loadArchivesMsgLogLevel);
 
+  if(! defined $r_availableMods) {
+    slog('Failed to load archives, undefined mods data (unitsync library crash ?)',1);
+    return 0;
+  }
   return 0 unless @{$r_availableMods};
   
   @availableMaps=@{$r_availableMaps};
@@ -4710,12 +4714,17 @@ sub logMsg {
 sub needRehost {
   return 0 unless($lobbyState >= 6);
   my %params = (
-    battleName => "title",
-    port => "port",
-    natType => "natType",
-    maxPlayers => "maxPlayers",
-    minRank => "rank"
+    battleName => 'title',
+    port => 'port',
+    natType => 'natType',
+    minRank => 'rank'
   );
+  if(exists $lobby->{users}{$conf{lobbyLogin}} && $lobby->{users}{$conf{lobbyLogin}}{status}{bot}) {
+    $params{maxPlayers}='maxPlayers';
+  }else{
+    return 1 if($spads->{hSettings}{maxPlayers} != $lobby->{battles}{$lobby->{battle}{battleId}}{maxPlayers}
+                && ($spads->{hSettings}{maxPlayers} < 11 || $lobby->{battles}{$lobby->{battle}{battleId}}{maxPlayers} != 10));
+  }
   foreach my $p (keys %params) {
     return 1 if($spads->{hSettings}->{$p} ne $lobby->{battles}->{$lobby->{battle}->{battleId}}->{$params{$p}});
   }
@@ -12346,7 +12355,7 @@ sub cbBattleClosed {
 sub cbAddUser {
   my (undef,$user,$country,$cpu,$id)=@_;
   if($conf{userDataRetention} !~ /^0;/ && ! $lanMode) {
-    $id//=0;
+    $id=0 unless(defined $id && $id ne 'None');
     $id.="($user)" unless($id);
     if(! defined $country) {
       slog("Received an invalid ADDUSER command from server (country field not provided for user $user)",2);

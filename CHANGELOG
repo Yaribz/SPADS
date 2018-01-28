@@ -799,6 +799,9 @@ spads.pl:
 0.12.2: improved Spring archives handling
         added fast mode for Spring archives reloading (detects archives addition/removal, but not archives modifications)
 0.12.2a: prevent using !promote command when battle is locked or full
+0.12.3: workaround for uberserver sending "None" instead of proper integer value as account ID
+        try to improve resiliency regarding unitsync library crashes
+        fix rehost loop when trying to host for more than 10 players without bot flag (new lobby server limitation)
 
 SpadsConf.pm:
 ============
