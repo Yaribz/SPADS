@@ -52,7 +52,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.3';
+our $spadsVer='0.12.4';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -2895,7 +2895,8 @@ sub springVersionAutoManagement {
     slog("Skipping installation of Spring $autoManagedSpringVersion, another process is already installing this version",2);
     return;
   }
-  my $setupResult=$updater->setupSpring($autoManagedSpringVersion);
+  my $autoManagedSpringBranch=(any {$autoManagedSpringData{release} eq $_} (qw'stable testing unstable')) ? undef : $autoManagedSpringData{release};
+  my $setupResult=$updater->setupSpring($autoManagedSpringVersion,$autoManagedSpringBranch);
   if($setupResult < 0) {
     my $setupFailedMsg="Unable to install Spring $autoManagedSpringVersion for Spring version auto-management";
     if($setupResult < -9) {
@@ -13694,13 +13695,14 @@ if(! $abortSpadsStartForAutoUpdate) {
       my $springDir=$updater->getSpringDir($autoManagedSpringData{version});
       setSpringEnv($springDir,$conf{instanceDir},$springDir,splitPaths($conf{springDataDir}));
       setSpringServerBin($springDir);
-    }elsif($conf{autoManagedSpringVersion} =~ /^(stable|testing|unstable)(?:;(\d*)(?:;(on|off|whenEmpty|whenOnlySpec))?)?$/) {
-      %autoManagedSpringData=(mode => 'release', release => $1, delay => $2//{stable => 60, testing => 30, unstable => 15}->{$1}, restart => $3//'whenEmpty');
+    }elsif($conf{autoManagedSpringVersion} =~ /^(stable|testing|unstable|maintenance)(?:;(\d*)(?:;(on|off|whenEmpty|whenOnlySpec))?)?$/) {
+      %autoManagedSpringData=(mode => 'release', release => $1, delay => $2//{stable => 60, testing => 30, unstable => 15}->{$1}//30, restart => $3//'whenEmpty');
       my $autoManagedSpringVersion=$updater->resolveSpringReleaseNameToVersion($autoManagedSpringData{release});
       if(! defined $autoManagedSpringVersion) {
         useFallbackSpringVersion('Unable to identify the auto-managed Spring release');
       }else{
-        my $setupResult=$updater->setupSpring($autoManagedSpringVersion);
+        my $autoManagedSpringBranch=(any {$autoManagedSpringData{release} eq $_} (qw'stable testing unstable')) ? undef : $autoManagedSpringData{release};
+        my $setupResult=$updater->setupSpring($autoManagedSpringVersion,$autoManagedSpringBranch);
         if($setupResult < 0) {
           $failedSpringInstallVersion=$autoManagedSpringVersion if($setupResult < -9);
           useFallbackSpringVersion("Unable to auto-install Spring $autoManagedSpringData{release} release (version $autoManagedSpringVersion)");

@@ -39,7 +39,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $archName=$win?'win32':($Config{ptrsize} > 4 ? 'linux64' : 'linux32');
 
-my $moduleVersion='0.13a';
+my $moduleVersion='0.14';
 
 my @constructorParams = qw'sLog repository release packages';
 my @optionalConstructorParams = qw'localDir springDir';
@@ -132,19 +132,21 @@ sub resolveSpringReleaseNameToVersion {
       return undef;
     }
   }else{
-    $sl->log("Unable to retrieve Spring version number for release \"$release\" (unknown release)",1);
-    return undef;
+    my $httpRes=$httpTiny->request('GET',"$springBuildbotUrl/$release/LATEST_$archName");
+    my $quotedRelease=quotemeta($release);
+    if($httpRes->{success} && $httpRes->{content} =~ /^{$quotedRelease}(.+)$/) {
+      return $1;
+    }else{
+      $sl->log("Unable to retrieve latest Spring version number on $release branch!",2);
+      return undef;
+    }
   }
 }
 
 sub getAvailableSpringVersions {
-  my ($self,$type)=@_;
+  my ($self,$typeOrBranch)=@_;
   my $sl=$self->{sLog};
-  if(! exists $springBranches{$type}) {
-    $sl->log("Unable to get available Spring versions, invalid version type \"$type\"",1);
-    return [];
-  }
-  my $branch=$springBranches{$type};
+  my $branch = $springBranches{$typeOrBranch} // $typeOrBranch;
   my $httpRes=HTTP::Tiny->new(timeout => 10)->request('GET',"$springBuildbotUrl/$branch/");
   my @versions;
   @versions=$httpRes->{content} =~ /href="([^"]+)\/">\1\//g if($httpRes->{success});
@@ -477,10 +479,8 @@ sub _getSpringVersionType {
 }
 
 sub _getSpringVersionDownloadInfo {
-  my $version=shift;
-  my $versionType = _getSpringVersionType($version);
-  my $branch = $springBranches{$versionType};
-  my $versionInArchives = $versionType eq 'release' ? $version : "{$branch}$version";
+  my ($version,$branch)=@_;
+  my $versionInArchives = $branch eq 'master' ? $version : "{$branch}$version";
   my ($requiredArchive,@optionalArchives);
   if($win) {
     $requiredArchive="spring_${versionInArchives}_".(_compareSpringVersions($version,102)<0?'':'win32-').'minimal-portable.7z';
@@ -495,10 +495,11 @@ sub _getSpringVersionDownloadInfo {
 }
 
 sub checkSpringVersionAvailability {
-  my ($self,$version)=@_;
-  my $p_availableVersions = $self->getAvailableSpringVersions(_getSpringVersionType($version));
+  my ($self,$version,$branch)=@_;
+  $branch//=$springBranches{_getSpringVersionType($version)};
+  my $p_availableVersions = $self->getAvailableSpringVersions($branch);
   return (0,'version unavailable for download') unless(any {$version eq $_} @{$p_availableVersions});
-  my ($baseUrlRequired,undef,$requiredArchive)=_getSpringVersionDownloadInfo($version);
+  my ($baseUrlRequired,undef,$requiredArchive)=_getSpringVersionDownloadInfo($version,$branch);
   my $httpRes=HTTP::Tiny->new(timeout => 10)->request('GET',$baseUrlRequired);
   if($httpRes->{success}) {
     return (1) if(index($httpRes->{content},">$requiredArchive<") != -1);
@@ -511,7 +512,8 @@ sub checkSpringVersionAvailability {
 }
 
 sub setupSpring {
-  my ($self,$version)=@_;
+  my ($self,$version,$branch)=@_;
+  $branch//=$springBranches{_getSpringVersionType($version)};
   my $sl=$self->{sLog};
 
   if($version !~ /^\d/) {
@@ -523,7 +525,7 @@ sub setupSpring {
   return -1 unless(defined $springDir);
   return 0 if($self->checkSpringDir($version));
 
-  my (undef,$unavailabilityMsg)=$self->checkSpringVersionAvailability($version);
+  my (undef,$unavailabilityMsg)=$self->checkSpringVersionAvailability($version,$branch);
   if(defined $unavailabilityMsg) {
     $sl->log("Spring $version installation cancelled ($unavailabilityMsg)",1);
     return -10;
@@ -548,7 +550,7 @@ sub setupSpring {
     close($lockFh);
     return -3;
   }
-  my $res=$self->setupSpringUnlocked($version);
+  my $res=$self->setupSpringUnlocked($version,$branch);
   flock($lockFh, LOCK_UN);
   close($lockFh);
   return $res;
@@ -607,7 +609,8 @@ sub uncompress7zipFile {
 }
 
 sub setupSpringUnlocked {
-  my ($self,$version)=@_;
+  my ($self,$version,$branch)=@_;
+  $branch//=$springBranches{_getSpringVersionType($version)};
   return 0 if($self->checkSpringDir($version));
 
   my $sl=$self->{sLog};
@@ -615,7 +618,7 @@ sub setupSpringUnlocked {
   my $springDir=$self->getSpringDir($version);
   $sl->log("Installing Spring $version into \"$springDir\"...",3);
 
-  my ($baseUrlRequired,$baseUrlOptional,$requiredArchive,@optionalArchives)=_getSpringVersionDownloadInfo($version);
+  my ($baseUrlRequired,$baseUrlOptional,$requiredArchive,@optionalArchives)=_getSpringVersionDownloadInfo($version,$branch);
 
   my $tmpArchive=catfile($springDir,$requiredArchive);
   if(! $self->downloadFile($baseUrlRequired.$requiredArchive,$tmpArchive,my $httpStatus)) {

@@ -38,7 +38,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.12.0a';
+my $moduleVersion='0.12.1';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -229,7 +229,7 @@ my %paramTypes = (login => '[\w\[\]]{2,20}',
                   absoluteExecutableFile => sub { return (-f $_[0] && -x $_[0] && isAbsolutePath($_[0])) },
                   unitsyncDirType => sub { return (-f "$_[0]/$unitsyncLibName" && -r "$_[0]/$unitsyncLibName") },
                   autoUpdateType => '(stable|testing|unstable|contrib)',
-                  autoManagedSpringVersionType => sub { return $_[0] =~ /^(stable|testing|unstable)(?:;\d*(?:;(on|off|whenEmpty|whenOnlySpec))?)?$/ || $_[0] =~ /^\d+(?:\.\d+){1,3}(?:-\d+-g[0-9a-f]+)?$/},
+                  autoManagedSpringVersionType => sub { return $_[0] =~ /^(stable|testing|unstable|maintenance)(?:;\d*(?:;(on|off|whenEmpty|whenOnlySpec))?)?$/ || $_[0] =~ /^\d+(?:\.\d+){1,3}(?:-\d+-g[0-9a-f]+)?$/},
                   autoRestartType => '(on|off|whenEmpty|whenOnlySpec)',
                   absoluteReadableDirs => sub { return $_[0] ne '' && (all {-d $_ && -x $_ && -r $_ && isAbsolutePath($_)} split($win?';':':',$_[0])) },
                   integerCouple => '\d+;\d+',

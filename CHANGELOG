@@ -168,6 +168,7 @@ helpSettings.dat:
        the "clan" value for "balanceMode" preset setting has been renamed to "clan;random", to better reflect the fact that the balance is random appart from clans being honored
        the "password" hosting setting can no longer be set to special value "_RANDOM_" to use a random password
        some config macros used as default setting values and valuated during installation have been renamed to better reflect setting names
+0.6.1: the "autoManagedSpringVersion" global setting now accepts "maintenance" value in springRelease field (to stay up to date with Spring maintenance builds)
 
 PerlUnitSync.pm:
 ===============
@@ -802,6 +803,7 @@ spads.pl:
 0.12.3: workaround for uberserver sending "None" instead of proper integer value as account ID
         try to improve resiliency regarding unitsync library crashes
         fix rehost loop when trying to host for more than 10 players without bot flag (new lobby server limitation)
+0.12.4: Spring version auto-management can now be used to auto-update to maintenance builds of Spring
 
 SpadsConf.pm:
 ============
@@ -942,6 +944,7 @@ SpadsConf.pm:
         the "instanceDir" global setting is now used instead of "varDir" to store all dynamic data which are instance-specific
         the "pluginsDir" global setting can no longer be empty
 0.12.0a: localize variable $_ (improve AnyEvent stability)
+0.12.1: the "autoManagedSpringVersion" global setting now accepts "maintenance" value in springRelease field (to stay up to date with Spring maintenance builds)
 
 spadsInstaller.pl:
 =================
@@ -1093,6 +1096,7 @@ SpadsUpdater.pm:
       the "syncedSpringVersion" constructor parameter is no longer supported
       Spring version dependant and Perl version dependant packages are no longer supported
 0.13a: localize variable $_ (improve AnyEvent stability)
+0.14: automatic Spring installation functionality is now compatible with all Spring branches
 
 update.pl:
 =========
