@@ -35,7 +35,7 @@ spadsInstaller.pl:spadsInstaller_0.21.pl
 SpadsPluginApi.pm:SpadsPluginApi_0.22a.pm
 SpadsUpdater.pm:SpadsUpdater_0.14.pm
 SpringAutoHostInterface.pm:SpringAutoHostInterface_0.11.pm
-SpringLobbyInterface.pm:SpringLobbyInterface_0.24.pm
+SpringLobbyInterface.pm:SpringLobbyInterface_0.25.pm
 update.pl:update_0.11.pl
 
 [unstable]
