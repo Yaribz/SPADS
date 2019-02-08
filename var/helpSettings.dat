@@ -652,14 +652,15 @@ Integer
 [global:autoLockClients]
 Number of clients for auto-lock
 -
-When this number of clients (players or spectators) is in the battle lobby, SPADS auto-locks the battle.
+When this number of clients (players and spectators) is in the battle lobby, SPADS auto-locks the battle.
 This is useful when you know your network connection cannot support more than x clients, should they be players or spectators.
-This is different from [hSet:maxPlayers], which limits the number of players only.
+This is different from [hSet:maxPlayers], which configures the hosting room capacity regarding number of players only.
+This is also different from [set:autoLock], which configures auto-locking based on number of players only.
 When set to 0, it disables the auto-lock on client count functionality.
 -
 Integer
 -
-31
+64
 
 [global:autoSaveBoxes]
 Auto-save start boxes
@@ -1022,14 +1023,14 @@ When enabled, the battle lobby is automatically locked when a game is running (p
 [set:autoLock]
 Auto-lock mode
 -
-Specifies if and when battle lobby must be automatically locked/unlocked, based on the number of players.
+Specifies if and when battle lobby must be automatically locked/unlocked based on the number of players (this setting is totally independant from [global:autoLockClients], which configures auto-locking based on total number of clients, i.e. players and spectators).
 When autoLock is set to "on", the battle lobby is automatically locked when target number of players (1) is reached.
 The "advanced" auto-lock mode works in the same way, except that if there are more players than the target number of players (2) and teams cannot be made even (3), then battle lobby is automatically unlocked until enough players join for teams to be made even again.
 (1) The target number of players is computed from [set:nbTeams], [set:teamSize], and [set:nbPlayerById] (target number of players = nbTeams * teamSize * nbPlayerById)
 (2) This can happen when a spectator unspecs after battle has been automatically locked for instance
 (3) i.e. current number of players in battle lobby isn't a multiple of [set:nbTeams]
 -
-off: auto-lock disabled
+off: auto-lock based on number of players in battle lobby is disabled
 on: auto-lock battle lobby when there are enough players
 advanced: auto-lock battle lobby when there are enough players and teams can be made even
 -

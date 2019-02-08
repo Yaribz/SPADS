@@ -169,6 +169,8 @@ helpSettings.dat:
        the "password" hosting setting can no longer be set to special value "_RANDOM_" to use a random password
        some config macros used as default setting values and valuated during installation have been renamed to better reflect setting names
 0.6.1: the "autoManagedSpringVersion" global setting now accepts "maintenance" value in springRelease field (to stay up to date with Spring maintenance builds)
+0.6.2: default value for "autoLockClients" global setting is now "64"
+       clarify "autoLockClients" and "autoLock" settings differences
 
 PerlUnitSync.pm:
 ===============
