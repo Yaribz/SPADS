@@ -52,7 +52,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.4';
+our $spadsVer='0.12.4a';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -1359,7 +1359,7 @@ sub getSysInfo {
     
     Win32::API::Struct->typedef(
       MEMORYSTATUS => qw{
-        DWORD dwLength;
+        DWORD Length;
         DWORD MemLoad;
         DWORD TotalPhys;
         DWORD AvailPhys;
@@ -1369,10 +1369,41 @@ sub getSysInfo {
         DWORD AvailVirtual;
       }
     );
-    if(Win32::API->Import( 'kernel32', 'VOID GlobalMemoryStatus(LPMEMORYSTATUS lpMemoryStatus)' )) {
+    Win32::API::Struct->typedef(
+      MEMORYSTATUSEX => qw{
+        DWORD Length;
+        DWORD MemLoad;
+        DWORD64 TotalPhys;
+        DWORD64 AvailPhys;
+        DWORD64 TotalPage;
+        DWORD64 AvailPage;
+        DWORD64 TotalVirtual;
+        DWORD64 AvailVirtual;
+        DWORD64 AvailExtendedVirtual;
+      }
+    );
+    if(Win32::API->Import( 'kernel32', 'BOOL GlobalMemoryStatusEx(LPMEMORYSTATUSEX lpMemoryStatus)' )) {
+      my $memStatus = Win32::API::Struct->new('MEMORYSTATUSEX');
+      $memStatus->align('auto');
+      $memStatus->{'Length'}     = $memStatus->sizeof();
+      $memStatus->{'MemLoad'}      = 0;
+      $memStatus->{'TotalPhys'}    = 0;
+      $memStatus->{'AvailPhys'}    = 0;
+      $memStatus->{'TotalPage'}    = 0;
+      $memStatus->{'AvailPage'}    = 0;
+      $memStatus->{'TotalVirtual'} = 0;
+      $memStatus->{'AvailVirtual'} = 0;
+      $memStatus->{'AvailExtendedVirtual'} = 0;
+      my $callResult=GlobalMemoryStatusEx($memStatus);
+      if($callResult) {
+        $memAmount=formatMemSize($memStatus->{'TotalPhys'});
+      }else{
+        slog('Unable to retrieve total physical memory through GlobalMemoryStatusEx function (Win32 API error: '.(getLastWin32Error()).')',2);
+      }
+    }elsif(Win32::API->Import( 'kernel32', 'VOID GlobalMemoryStatus(LPMEMORYSTATUS lpMemoryStatus)' )) {
       my $memStatus = Win32::API::Struct->new('MEMORYSTATUS');
       $memStatus->align('auto');
-      $memStatus->{'dwLength'}     = 0;
+      $memStatus->{'Length'}     = 0;
       $memStatus->{'MemLoad'}      = 0;
       $memStatus->{'TotalPhys'}    = 0;
       $memStatus->{'AvailPhys'}    = 0;
@@ -1381,13 +1412,13 @@ sub getSysInfo {
       $memStatus->{'TotalVirtual'} = 0;
       $memStatus->{'AvailVirtual'} = 0;
       GlobalMemoryStatus($memStatus);
-      if($memStatus->{dwLength} != 0) {
+      if($memStatus->{Length} != 0) {
         $memAmount=formatMemSize($memStatus->{'TotalPhys'});
       }else{
         slog('Unable to retrieve total physical memory through GlobalMemoryStatus function (Win32 API)',2);
       }
     }else{
-      slog('Unable to import GlobalMemoryStatus from kernel32.dll ('.getLastWin32Error().')',2);
+      slog('Unable to import GlobalMemoryStatusEx and GlobalMemoryStatus from kernel32.dll ('.getLastWin32Error().')',2);
     }
 
     $uptime=int(Win32::GetTickCount() / 1000);
@@ -13955,6 +13986,7 @@ $spads->dumpDynamicData();
 unlink($pidFile) if(defined $pidFile);
 close($lockFh) if(defined $lockFh);
 if($quitAfterGame{action} == 1) {
+  close(STDIN) if($win);
   portableExec($^X,$0,$confFile,map {"$_=$confMacros{$_}"} (keys %confMacros));
   execError("Unable to restart SPADS ($!)",0);
 }

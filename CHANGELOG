@@ -806,6 +806,8 @@ spads.pl:
         try to improve resiliency regarding unitsync library crashes
         fix rehost loop when trying to host for more than 10 players without bot flag (new lobby server limitation)
 0.12.4: Spring version auto-management can now be used to auto-update to maintenance builds of Spring
+0.12.4a: fix SPADS restart not working properly in CMD shell on Windows 10
+         fix memory detection on Windows systems with > 4GB RAM
 
 SpadsConf.pm:
 ============
