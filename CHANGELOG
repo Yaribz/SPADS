@@ -77,6 +77,8 @@ help.dat:
 0.12.5: the "!force" command can now be used to give resource bonus
 0.13.0: removed obsolete !pass command
 0.13.1: added fast mode for !reload command (detects archives addition/removal, but not archives modifications)
+0.13.2: removed "cpu" filter parameter from !ban and !unban commands
+        removed "all" parameter from !smurfs command
 
 helpSettings.dat:
 ================
@@ -808,6 +810,17 @@ spads.pl:
 0.12.4: Spring version auto-management can now be used to auto-update to maintenance builds of Spring
 0.12.4a: fix SPADS restart not working properly in CMD shell on Windows 10
          fix memory detection on Windows systems with > 4GB RAM
+0.12.5: use new lobby compat flags "l" and "t" instead of the obsolete one "a"
+        show lobby clients versions in !searchUser command output
+        add support for server side KICKFROMBATTLE command
+        remove obsolete single-engine mode code (multi-engine lobby protocol is now always used)
+        remove obsolete code to find CPU speed (this field is ignored by lobby server)
+        remove usage of CPU speed values to determine possible smurf accounts (this field is no longer provided by lobby server)
+        remove "cpu" filter for !ban/!unban commands
+        fix duplicate log lines when SPADS joins a channel (workaround for lobby server sending both JOIN and JOINED commands when joining a channel)
+        store lobby clients versions data when user data retention is enabled
+        improve channel topic handling
+        retrieve full Spring version only once (when unitsync library is loaded), instead of retrieving it each time a (re)connection to lobby server is performed
 
 SpadsConf.pm:
 ============
@@ -949,6 +962,11 @@ SpadsConf.pm:
         the "pluginsDir" global setting can no longer be empty
 0.12.0a: localize variable $_ (improve AnyEvent stability)
 0.12.1: the "autoManagedSpringVersion" global setting now accepts "maintenance" value in springRelease field (to stay up to date with Spring maintenance builds)
+0.12.2: added "lobbyClient" to the list of allowed filters for ban lists declaration
+        added lobby client data to user data retention
+        removed obsolete CPU data from user data retention
+        ignore obsolete CPU data when retrieving user access level
+        remove "similar accounts" detection which was based on deprecated CPU speed values
 
 spadsInstaller.pl:
 =================
@@ -1059,6 +1077,7 @@ SpadsPluginApi.pm:
 0.21a: fix missing parameter in "sayChan" function documentation
 0.22: new plugin event callback: preGameCheck
 0.22a: the "preGameCheck" callback can now return a special value "1" which prevents game start without generating any message in battle lobby
+0.22b: remove documentation for the deprecated plugin customization callback "forceCpuSpeedValue"
 
 SpadsUpdater.pm:
 ===============

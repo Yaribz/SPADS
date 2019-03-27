@@ -1,6 +1,6 @@
 # Object-oriented Perl module handling SPADS configuration files
 #
-# Copyright (C) 2008-2017  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2019  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -38,7 +38,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.12.1';
+my $moduleVersion='0.12.2';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -278,14 +278,15 @@ my %paramTypes = (login => '[\w\[\]]{2,20}',
                   db => '[^\/]+\/[^\@]+\@(?i:dbi)\:\w+\:\w.*',
                   eventModelType => '(auto|internal|AnyEvent)');
 
-my @banListsFields=(['accountId','name','country','cpu','rank','access','bot','level','ip','skill','skillUncert'],['banType','startDate','endDate','remainingGames','reason']);
+my @banListsFields=(['accountId','name','country','cpu','lobbyClient','rank','access','bot','level','ip','skill','skillUncert'],['banType','startDate','endDate','remainingGames','reason']);
 my @preferencesListsFields=(['accountId'],['autoSetVoteMode','voteMode','votePvMsgDelay','voteRingDelay','minRingDelay','handleSuggestions','password','rankMode','skillMode','shareId','spoofProtection','ircColors','clan']);
 my @usersFields=(['accountId','name','country','cpu','rank','access','bot','auth'],['level']);
 my @levelsFields=(['level'],['description']);
 my @commandsFields=(['source','status','gameState'],['directLevel','voteLevel']);
 my @mapBoxesFields=(['mapName','nbTeams'],['boxes']);
 my @mapHashesFields=(['springMajorVersion','mapName'],['mapHash']);
-my @userDataFields=(['accountId'],['country','cpu','rank','timestamp','ips','names']);
+my @userDataFieldsOld=(['accountId'],['country','cpu','lobbyClient','rank','timestamp','ips','names']);
+my @userDataFields=(['accountId'],['country','lobbyClient','rank','timestamp','ips','names']);
 
 # Constructor #################################################################
 
@@ -370,7 +371,7 @@ sub new {
   }
 
   touch($p_conf->{''}{instanceDir}.'/userData.dat') unless(-f $p_conf->{''}{instanceDir}.'/userData.dat');
-  my $p_userData=loadFastTableFile($sLog,$p_conf->{''}{instanceDir}.'/userData.dat',\@userDataFields,{});
+  my $p_userData=loadFastTableFile($sLog,$p_conf->{''}{instanceDir}.'/userData.dat',\@userDataFieldsOld,{});
   if(! %{$p_userData}) {
     my $savExtension=1;
     while(-f $p_conf->{''}{instanceDir}."/userData.dat.sav$savExtension" && $savExtension < 100) {
@@ -379,13 +380,13 @@ sub new {
     move($p_conf->{''}{instanceDir}.'/userData.dat',$p_conf->{''}{instanceDir}."/userData.dat.sav$savExtension");
     touch($p_conf->{''}{instanceDir}.'/userData.dat');
     $sLog->log("Unable to load user data, user data file reinitialized (old file renamed to \"userData.dat.sav.$savExtension\")",2);
-    $p_userData=loadFastTableFile($sLog,$p_conf->{''}{instanceDir}.'/userData.dat',\@userDataFields,{});
+    $p_userData=loadFastTableFile($sLog,$p_conf->{''}{instanceDir}.'/userData.dat',\@userDataFieldsOld,{});
     if(! %{$p_userData}) {
       $sLog->log('Unable to load user data after file reinitialization, giving up!',1);
       return 0;
     }
   }
-  my ($p_accountData,$p_countryCpuIds,$p_ipIds,$p_nameIds)=buildUserDataCaches($p_userData->{''});
+  my ($p_accountData,$p_ipIds,$p_nameIds)=buildUserDataCaches($p_userData->{''});
 
   my $p_mapInfoCache={};
   if(-f $p_conf->{''}{instanceDir}.'/mapInfoCache.dat') {
@@ -420,7 +421,6 @@ sub new {
     bans => $p_bans->{''},
     preferences => $p_preferences,
     accountData => $p_accountData,
-    countryCpuIds => $p_countryCpuIds,
     ipIds => $p_ipIds,
     nameIds => $p_nameIds,
     mapInfo => $p_mapInfoCache,
@@ -902,7 +902,10 @@ sub loadFastTableFile {
       }else{
         $sLog->log("Duplicate entry in file \"$cFile\" ($line)",2) if(%{$p_nextKeyData});
         foreach my $fieldIndex (0..$#{$pattern[$index]}) {
-          $p_nextKeyData->{$pattern[$index][$fieldIndex]}=$fields[$fieldIndex];
+          my $dataVal=$fields[$fieldIndex];
+          $dataVal =~ s/\t<COLON>/:/g;
+          $dataVal =~ s/\t<PIPE>/\|/g;
+          $p_nextKeyData->{$pattern[$index][$fieldIndex]}=$dataVal;
         }
       }
     }
@@ -1272,6 +1275,8 @@ sub printFastTable {
     my @dataFieldsValues=map {$p_data->{$_}} @dataFields;
     for my $i (0..$#dataFieldsValues) {
       $dataFieldsValues[$i]//='';
+      $dataFieldsValues[$i] =~ s/:/\t<COLON>/g;
+      $dataFieldsValues[$i] =~ s/\|/\t<PIPE>/g;
     }
     my $result=join(':',@dataFieldsValues);
     return ["|$result"];
@@ -1323,18 +1328,12 @@ sub getPrunedRawPreferences {
 
 sub buildUserDataCaches {
   my $p_userData=shift;
-  my (%accountData,%countryCpuIds,%ipIds,%nameIds);
+  my (%accountData,%ipIds,%nameIds);
   foreach my $id (keys %{$p_userData}) {
     $accountData{$id}={};
-    my $idCountry=$p_userData->{$id}{country};
-    my $idCpu=$p_userData->{$id}{cpu};
-    my $idTs=$p_userData->{$id}{timestamp};
-    $countryCpuIds{$idCountry}={} unless(exists $countryCpuIds{$idCountry});
-    $countryCpuIds{$idCountry}{$idCpu}={} unless(exists $countryCpuIds{$idCountry}{$idCpu});
-    $countryCpuIds{$idCountry}{$idCpu}{$id}=$idTs;
-    $accountData{$id}{country}=$idCountry;
-    $accountData{$id}{cpu}=$idCpu;
-    $accountData{$id}{timestamp}=$idTs;
+    $accountData{$id}{country}=$p_userData->{$id}{country};
+    $accountData{$id}{lobbyClient}=$p_userData->{$id}{lobbyClient}//'';
+    $accountData{$id}{timestamp}=$p_userData->{$id}{timestamp};
     $accountData{$id}{rank}=$p_userData->{$id}{rank};
     $accountData{$id}{ips}={};
     my @idIps=split(' ',$p_userData->{$id}{ips});
@@ -1361,14 +1360,13 @@ sub buildUserDataCaches {
       }
     }
   }
-  return (\%accountData,\%countryCpuIds,\%ipIds,\%nameIds);
+  return (\%accountData,\%ipIds,\%nameIds);
 }
 
 sub flushUserDataCache {
   my $self=shift;
   my %userData;
   my $p_accountData=$self->{accountData};
-  $self->{countryCpuIds}={};
   $self->{ipIds}={};
   $self->{nameIds}={};
   my ($userDataRetentionPeriod,$userIpRetention,$userNameRetention)=(-1,-1,-1);
@@ -1381,13 +1379,8 @@ sub flushUserDataCache {
       delete $p_accountData->{$id};
       next;
     }
-    my $country=$p_accountData->{$id}{country};
-    my $cpu=$p_accountData->{$id}{cpu};
-    $self->{countryCpuIds}{$country}={} unless(exists $self->{countryCpuIds}{$country});
-    $self->{countryCpuIds}{$country}{$cpu}={} unless(exists $self->{countryCpuIds}{$country}{$cpu});
-    $self->{countryCpuIds}{$country}{$cpu}{$id}=$ts;
-    $userData{$id}{country}=$country;
-    $userData{$id}{cpu}=$cpu;
+    $userData{$id}{country}=$p_accountData->{$id}{country};
+    $userData{$id}{lobbyClient}=$p_accountData->{$id}{lobbyClient};
     $userData{$id}{timestamp}=$ts;
     $userData{$id}{rank}=$p_accountData->{$id}{rank};
     my @ipData;
@@ -1743,7 +1736,6 @@ sub getUserAccessLevel {
   my $p_userData={name => $name,
                   accountId => $p_user->{accountId},
                   country => $p_user->{country},
-                  cpu => $p_user->{cpu},
                   rank => $p_user->{status}{rank},
                   access => $p_user->{status}{access},
                   bot => $p_user->{status}{bot},
@@ -2028,11 +2020,6 @@ sub getIpIdsTs {
   return $self->{ipIds}{$ip};
 }
 
-sub getSimilarAccounts {
-  my ($self,$country,$cpu)=@_;
-  return $self->{countryCpuIds}{$country}{$cpu};
-}
-
 sub getAccountIps {
   my ($self,$id,$p_ignoredIps)=@_;
   $p_ignoredIps//={};
@@ -2185,10 +2172,10 @@ sub getSmurfs {
 }
 
 sub learnUserData {
-  my ($self,$user,$country,$cpu,$id)=@_;
+  my ($self,$user,$country,$id,$lobbyClient)=@_;
   if(! exists $self->{accountData}{$id}) {
     $self->{accountData}{$id}={country => $country,
-                               cpu => $cpu,
+                               lobbyClient => $lobbyClient,
                                rank => 0,
                                timestamp => time,
                                ips => {},
@@ -2197,7 +2184,7 @@ sub learnUserData {
     my $userNameRetention=-1;
     $userNameRetention=$1 if($self->{conf}{userDataRetention} =~ /;(\d+)$/);
     $self->{accountData}{$id}{country}=$country;
-    $self->{accountData}{$id}{cpu}=$cpu;
+    $self->{accountData}{$id}{lobbyClient}=$lobbyClient;
     $self->{accountData}{$id}{timestamp}=time;
     my $isNewName=0;
     $isNewName=1 unless(exists $self->{accountData}{$id}{names}{$user});
@@ -2208,9 +2195,6 @@ sub learnUserData {
       delete $self->{accountData}{$id}{names}{$accountNames[0]} if($#accountNames > $userNameRetention);
     }
   }
-  $self->{countryCpuIds}{$country}={} unless(exists $self->{countryCpuIds}{$country});
-  $self->{countryCpuIds}{$country}{$cpu}={} unless(exists $self->{countryCpuIds}{$country}{$cpu});
-  $self->{countryCpuIds}{$country}{$cpu}{$id}=time;
   $self->{nameIds}{$user}={} unless($self->isStoredUser($user));
   $self->{nameIds}{$user}{$id}=time;
 }
@@ -2296,7 +2280,7 @@ sub getUserBan {
   my $p_userData={name => $name,
                   accountId => $p_user->{accountId},
                   country => $p_user->{country},
-                  cpu => $p_user->{cpu},
+                  lobbyClient => $p_user->{lobbyClient},
                   rank => $p_user->{status}{rank},
                   access => $p_user->{status}{access},
                   bot => $p_user->{status}{bot},

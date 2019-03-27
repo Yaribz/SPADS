@@ -26,7 +26,7 @@
 "!ban badBoy battle 10" bans badBoy for 10 minutes from AutoHost battle
 "!ban badBoy spec 1h dguned an ally" forces badBoy to spectate for 1 hour with reason "dguned an ally"
 "!ban ~.*aaa.*" bans anyone who has the string "aaa" in his name for ever from AutoHost channel and battle
-"!ban name=~.*bad.*;cpu=0-2000 battle" bans anyone whose CPU speed is < 2001 and also has "bad" in his name for ever from AutoHost battle
+"!ban name=~.*bad.* battle" bans anyone who has the string "bad" in his name for ever from AutoHost battle
 "!ban ip=192.168.0.1 batt 2d" bans IP 192.168.0.1 for 2 days from AutoHost battle
 "!ban accountId=1234 ba 3w" bans account number "1234" for 3 weeks from AutoHost channel and battle
 "!ban #1234 b 3g" same as above except it bans for the 3 next games instead of for 3 weeks
@@ -310,10 +310,9 @@
 "!set map 5" sets map to the 5th map returned by "!list maps" command
 
 [smurfs]
-!smurfs [<username>|#<accountId> [all]] - finds smurf accounts of players in battle, or those of <name> if specified (requires user data retention)
+!smurfs [<username>|#<accountId>] - finds smurf accounts of players in battle, or those of <name> if specified (requires user data retention)
 "!smurfs" lists smurf names of players currently in AutoHost battle
 "!smurfs FakeNoob" lists FakeNoob's smurf accounts
-"!smurfs FakeNoob all" lists all accounts identified as possibly FakeNoob's smurf
 "!smurfs #1234" lists smurf accounts of account ID "1234"
 
 [specAfk]
@@ -346,7 +345,7 @@
 [unban]
 !unban <usernameOrFilters>|(<banEntryHash>) - removes <usernameOrFilters> or <banEntryHash> from banlist (refer to ban command for filters syntax)
 "!unban badBoy" unbans badBoy (removes all ban entries matching user badBoy)
-"!unban name=~.*bad.*;cpu=0-2000" removes all ban entries matching the filter "name=~.*bad.*;cpu=0-2000"
+"!unban name=~.*bad.*;accountId>900000" removes all ban entries matching the filter "name=~.*bad.*;accountId>900000"
 "!unban (BnV8v)" removes the ban entry whose hash is "BnV8v" (ban entry hashes are shown in "!list bans" output)
 
 [unbanIp]

@@ -1,6 +1,6 @@
 # SpadsPluginApi: SPADS plugin API
 #
-# Copyright (C) 2013-2015  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2013-2019  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -21,7 +21,7 @@ package SpadsPluginApi;
 use Exporter 'import';
 @EXPORT=qw/$spadsVersion $spadsDir getLobbyState getSpringPid getSpringServerType getTimestamps getRunningBattle getCurrentVote getPlugin addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess forkCall addTimer removeTimer addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives/;
 
-my $apiVersion='0.22a';
+my $apiVersion='0.22b';
 
 our $spadsVersion=$::spadsVer;
 our $spadsDir=$::cwd;
@@ -655,11 +655,6 @@ currently allowed for rotation.
 
 The callback must return a reference to a new array containing the filtered map
 names.
-
-=item C<forceCpuSpeedValue()>
-
-This callback allows plugins to force the CPU speed value declared by SPADS in
-lobby. The callback must return the CPU speed value or undef if not forced.
 
 =item C<setMapStartBoxes(\@boxes,$mapName,$nbTeams,$nbExtraBox)>
 

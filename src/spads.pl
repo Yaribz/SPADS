@@ -2,7 +2,7 @@
 #
 # SPADS: Spring Perl Autohost for Dedicated Server
 #
-# Copyright (C) 2008-2017  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2019  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -52,7 +52,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.4a';
+our $spadsVer='0.12.5';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -391,8 +391,7 @@ my %lastRungUsers;
 my $triedGhostWorkaround=0;
 my $inGameTime=0;
 my $accountInGameTime;
-my $cpuModel;
-my ($os,$mem,$sysUptime)=getSysInfo();
+my ($os,$mem,$sysUptime,$cpuModel)=getSysInfo();
 my %pendingAlerts;
 my %alertedUsers;
 my %springPrematureEndData=();
@@ -1465,66 +1464,29 @@ sub getSysInfo {
       }
     }
   }
-  return ($osVersion,$memAmount,$uptime);
-}
-
-sub getCpuSpeed {
-  my $realCpuSpeed=getRealCpuSpeed();
-  foreach my $pluginName (@pluginsOrder) {
-    if($plugins{$pluginName}->can('forceCpuSpeedValue')) {
-      my $cpuPlugin=$plugins{$pluginName}->forceCpuSpeedValue();
-      return $cpuPlugin if(defined $cpuPlugin);
-    }
-  }
-  return $realCpuSpeed;
-}
-
-sub getRealCpuSpeed {
+  my ($procName,$origin);
   if($win) {
-    my $cpuInfo;
-    $cpuInfo=$regLMachine->Open('Hardware/Description/System/CentralProcessor/0', { Access => KEY_READ() }) if(defined $regLMachine);
-    if(defined $cpuInfo) {
-      my $procName=$cpuInfo->GetValue('ProcessorNameString');
-      if(defined $procName) {
-        $cpuModel=$procName;
-        return $1 if($cpuModel =~ /(\d+)\+/);
-      }
-      my $procMhz=hex($cpuInfo->GetValue('~MHz'));
-      return $procMhz if(defined $procMhz);
+    $origin='from Windows registry';
+    if(defined $regLMachine) {
+      my $cpuInfo=$regLMachine->Open('Hardware/Description/System/CentralProcessor/0', { Access => KEY_READ() });
+      $procName=$cpuInfo->GetValue('ProcessorNameString') if(defined $cpuInfo);
     }
-    slog('Unable to retrieve CPU info from Windows registry',2);
-    return 0;
   }elsif($macOs) {
-    $cpuModel=$macOsData{'machdep.cpu.brand_string'} if(exists $macOsData{'machdep.cpu.brand_string'});
-    my $cpuSpeed=$macOsData{'hw.cpufrequency_max'} || $macOsData{'hw.cpufrequency'};
-    return int($cpuSpeed/1000000) if($cpuSpeed);
-    if(defined $cpuModel && $cpuModel =~ /\s(\d+(?:\.\d*)?)\s*GHz/) {
-      $cpuSpeed=int($1*1000);
-      return $cpuSpeed;
-    }
+    $origin='using sysctl command';
+    $procName=$macOsData{'machdep.cpu.brand_string'} if(exists $macOsData{'machdep.cpu.brand_string'});
   }elsif(-f '/proc/cpuinfo' && -r '/proc/cpuinfo') {
+    $origin='from /proc/cpuinfo';
     my @cpuInfo=`cat /proc/cpuinfo 2>/dev/null`;
     my %cpu;
     foreach my $line (@cpuInfo) {
-      if($line =~ /^([\w\s]*\w)\s*:\s*(.*)$/) {
-        $cpu{$1}=$2;
-      }
+      $cpu{$1}=$2 if($line =~ /^([\w\s]*\w)\s*:\s*(.*)$/);
     }
-    $cpuModel=$cpu{'model name'} if(exists $cpu{'model name'});
-    if(defined $cpu{'model name'} && $cpu{'model name'} =~ /(\d+)\+/) {
-      return $1;
-    }
-    if(defined $cpu{'cpu MHz'} && $cpu{'cpu MHz'} =~ /^(\d+)(?:\.\d*)?$/) {
-      return $1;
-    }
-    if(defined $cpu{bogomips} && $cpu{bogomips} =~ /^(\d+)(?:\.\d*)?$/) {
-      return $1;
-    }
-    slog('Unable to parse CPU info from /proc/cpuinfo',2);
-    return 0;
+    $procName=$cpu{'model name'} if(exists $cpu{'model name'});
+  }else{
+    $origin='(unknown system)';
   }
-  slog('Unable to retrieve CPU info',2);
-  return 0;
+  slog("Unable to retrieve CPU info $origin",2) unless(defined $procName);
+  return ($osVersion,$memAmount,$uptime,$procName);
 }
 
 sub getLocalLanIp {
@@ -1751,41 +1713,23 @@ sub openBattle {
     return 0;
   }
   $lobbyState=5;
-  if($fullSpringVersion eq '') {
-    queueLobbyCommand(['OPENBATTLE',
-                       0,
-                       $hSettings{natType},
-                       $password,
-                       $hSettings{port},
-                       $hSettings{maxPlayers},
-                       $modHash,
-                       $hSettings{minRank},
-                       $mapHash,
-                       $conf{map},
-                       $hSettings{battleName},
-                       $targetMod],
-                      {OPENBATTLE => \&cbOpenBattle,
-                       OPENBATTLEFAILED => \&cbOpenBattleFailed},
-                      \&cbOpenBattleTimeout);
-  }else{
-    queueLobbyCommand(['OPENBATTLE',
-                       0,
-                       $hSettings{natType},
-                       $password,
-                       $hSettings{port},
-                       $hSettings{maxPlayers},
-                       $modHash,
-                       $hSettings{minRank},
-                       $mapHash,
-                       'spring',
-                       $fullSpringVersion,
-                       $conf{map},
-                       $hSettings{battleName},
-                       $targetMod],
-                      {OPENBATTLE => \&cbOpenBattle,
-                       OPENBATTLEFAILED => \&cbOpenBattleFailed},
-                      \&cbOpenBattleTimeout);
-  }
+  queueLobbyCommand(['OPENBATTLE',
+                     0,
+                     $hSettings{natType},
+                     $password,
+                     $hSettings{port},
+                     $hSettings{maxPlayers},
+                     $modHash,
+                     $hSettings{minRank},
+                     $mapHash,
+                     'spring',
+                     $fullSpringVersion,
+                     $conf{map},
+                     $hSettings{battleName},
+                     $targetMod],
+                    {OPENBATTLE => \&cbOpenBattle,
+                     OPENBATTLEFAILED => \&cbOpenBattleFailed},
+                    \&cbOpenBattleTimeout);
   $timestamps{autoRestore}=time if($timestamps{autoRestore});
   %bosses=();
   $currentNbNonPlayer=0;
@@ -5534,39 +5478,28 @@ sub seenUserIp {
 }
 
 sub getSmurfsData {
-  my ($smurfUser,$full,$p_C)=@_;
-  return (0,[],[],[]) if($conf{userDataRetention} =~ /^0;/);
+  my ($smurfUser,$p_C)=@_;
+  return ([],[]) if($conf{userDataRetention} =~ /^0;/);
 
   my $smurfId;
   if($smurfUser =~ /^\#([1-9]\d*)$/) {
     $smurfId=$1;
-    return (0,[],[],[]) unless($spads->isStoredAccount($smurfId));
+    return ([],[]) unless($spads->isStoredAccount($smurfId));
   }else{
-    return (0,[],[],[]) unless($spads->isStoredUser($smurfUser));
+    return ([],[]) unless($spads->isStoredUser($smurfUser));
     $smurfId=$spads->getLatestUserAccountId($smurfUser);
   }
 
   my %C=%{$p_C};
   my @ranks=("Newbie","$C{3}Beginner","$C{3}Average","$C{10}Above average","$C{12}Experienced","$C{7}Highly experienced","$C{4}Veteran","$C{13}Ghost");
 
-  my $p_accountMainData=$spads->getAccountMainData($smurfId);
-  my $smurfCountry=$p_accountMainData->{country};
-  my $smurfCpu=$p_accountMainData->{cpu};
-
-  my $p_similarAccounts=$spads->getSimilarAccounts($smurfCountry,$smurfCpu);
-  my @similarAccounts=sort {$p_similarAccounts->{$b} <=> $p_similarAccounts->{$a}} (keys %{$p_similarAccounts});
   my $nbResults=0;
   my @smurfsData;
   my @probableSmurfs;
-  my @otherCandidates;
-  my %processedSmurfs;
-  my $rc=2;
 
   my ($p_smurfs)=$spads->getSmurfs($smurfId);
   if(@{$p_smurfs}) {
-    $rc=1;
     foreach my $smurf (@{$p_smurfs->[0]}) {
-      $processedSmurfs{$smurf}=1;
       my $p_smurfMainData=$spads->getAccountMainData($smurf);
       my $p_smurfNames=$spads->getAccountNamesTs($smurf);
       my $p_smurfIps=$spads->getAccountIpsTs($smurf);
@@ -5580,7 +5513,6 @@ sub getSmurfsData {
         my @idIps=sort {$p_smurfIps->{$b} <=> $p_smurfIps->{$a}} (keys %{$p_smurfIps});
         my $ips=formatList(\@idIps,40);
         my $confidence=90;
-        $confidence=95 if($p_smurfMainData->{cpu} == $smurfCpu);
         $confidence=100 if($smurf eq $smurfId);
         my $online;
         if($id) {
@@ -5592,7 +5524,7 @@ sub getSmurfsData {
                           "$C{5}Name(s)$C{1}" => $names,
                           "$C{5}Online$C{1}" => $online,
                           "$C{5}Country$C{1}" => $p_smurfMainData->{country},
-                          "$C{5}CPU$C{1}" => $p_smurfMainData->{cpu},
+                          "$C{5}LobbyClient$C{1}" => $p_smurfMainData->{lobbyClient},
                           "$C{5}Rank$C{1}" => $ranks[abs($p_smurfMainData->{rank})].$C{1},
                           "$C{5}LastUpdate$C{1}" => secToDayAge(time-$p_smurfMainData->{timestamp}),
                           "$C{5}Confidence$C{1}" => "$confidence\%",
@@ -5602,7 +5534,6 @@ sub getSmurfsData {
     }
     if($#{$p_smurfs} > 0 && @{$p_smurfs->[1]}) {
       foreach my $smurf (@{$p_smurfs->[1]}) {
-        $processedSmurfs{$smurf}=1;
         my $p_smurfMainData=$spads->getAccountMainData($smurf);
         my $p_smurfNames=$spads->getAccountNamesTs($smurf);
         my $p_smurfIps=$spads->getAccountIpsTs($smurf);
@@ -5615,8 +5546,6 @@ sub getSmurfsData {
         }else{
           my @idIps=sort {$p_smurfIps->{$b} <=> $p_smurfIps->{$a}} (keys %{$p_smurfIps});
           my $ips=formatList(\@idIps,40);
-          my $confidence=80;
-          $confidence=85 if($p_smurfMainData->{cpu} == $smurfCpu);
           my $online;
           if($id) {
             $online=exists $lobby->{accounts}->{$smurf} ? "$C{3}Yes$C{1}" : "$C{4}No$C{1}";
@@ -5627,10 +5556,10 @@ sub getSmurfsData {
                             "$C{5}Name(s)$C{1}" => $names,
                             "$C{5}Online$C{1}" => $online,
                             "$C{5}Country$C{1}" => $p_smurfMainData->{country},
-                            "$C{5}CPU$C{1}" => $p_smurfMainData->{cpu},
+                            "$C{5}LobbyClient$C{1}" => $p_smurfMainData->{lobbyClient},
                             "$C{5}Rank$C{1}" => $ranks[abs($p_smurfMainData->{rank})].$C{1},
                             "$C{5}LastUpdate$C{1}" => secToDayAge(time-$p_smurfMainData->{timestamp}),
-                            "$C{5}Confidence$C{1}" => "$confidence\%",
+                            "$C{5}Confidence$C{1}" => "80\%",
                             "$C{5}IP(s)$C{1}" => $ips});
           $nbResults++;
         }
@@ -5639,7 +5568,6 @@ sub getSmurfsData {
     if($#{$p_smurfs} > 1) {
       for my $smurfLevel (2..$#{$p_smurfs}) {
         foreach my $smurf (@{$p_smurfs->[$smurfLevel]}) {
-          $processedSmurfs{$smurf}=1;
           my $p_smurfMainData=$spads->getAccountMainData($smurf);
           my $p_smurfNames=$spads->getAccountNamesTs($smurf);
           my $p_smurfIps=$spads->getAccountIpsTs($smurf);
@@ -5652,8 +5580,6 @@ sub getSmurfsData {
           }else{
             my @idIps=sort {$p_smurfIps->{$b} <=> $p_smurfIps->{$a}} (keys %{$p_smurfIps});
             my $ips=formatList(\@idIps,40);
-            my $confidence=60;
-            $confidence=70 if($p_smurfMainData->{cpu} == $smurfCpu);
             my $online;
             if($id) {
               $online=exists $lobby->{accounts}->{$smurf} ? "$C{3}Yes$C{1}" : "$C{4}No$C{1}";
@@ -5664,10 +5590,10 @@ sub getSmurfsData {
                               "$C{5}Name(s)$C{1}" => $names,
                               "$C{5}Online$C{1}" => $online,
                               "$C{5}Country$C{1}" => $p_smurfMainData->{country},
-                              "$C{5}CPU$C{1}" => $p_smurfMainData->{cpu},
+                              "$C{5}LobbyClient$C{1}" => $p_smurfMainData->{lobbyClient},
                               "$C{5}Rank$C{1}" => $ranks[abs($p_smurfMainData->{rank})].$C{1},
                               "$C{5}LastUpdate$C{1}" => secToDayAge(time-$p_smurfMainData->{timestamp}),
-                              "$C{5}Confidence$C{1}" => "$confidence\%",
+                              "$C{5}Confidence$C{1}" => "60\%",
                               "$C{5}IP(s)$C{1}" => $ips});
             $nbResults++;
           }
@@ -5675,51 +5601,8 @@ sub getSmurfsData {
       }
     }
   }
-     
-  if($full) {
-    foreach my $smurf (@similarAccounts) {
-      next if(exists $processedSmurfs{$smurf});
-      my $p_smurfMainData=$spads->getAccountMainData($smurf);
-      my $p_smurfNames=$spads->getAccountNamesTs($smurf);
-      my $p_smurfIps=$spads->getAccountIpsTs($smurf);
-      my @idNames=sort {$p_smurfNames->{$b} <=> $p_smurfNames->{$a}} (keys %{$p_smurfNames});
-      my $names=formatList(\@idNames,40);
-      my ($id,$smurfName)=($smurf,undef);
-      ($id,$smurfName)=(0,$1) if($smurf =~ /^0\(([^\)]+)\)$/);
-      if($nbResults > 39) {
-        push(@otherCandidates,"$id($names)");
-      }else{
-        my $confidence=10;
-        my $D=$C{14};
-        if($smurf eq $smurfId) {
-          $confidence=100;
-          $D=$C{1};
-        }elsif(@{$p_smurfs} && %{$p_smurfIps}) {
-          $confidence=5;
-        }
-        my $online;
-        if($id) {
-          $online=exists $lobby->{accounts}->{$smurf} ? "$C{3}Yes$D" : "$C{4}No$D";
-        }else{
-          $online=exists $lobby->{users}->{$smurfName} ? "$C{3}Yes$D" : "$C{4}No$D";
-        }
-        my @idIps=sort {$p_smurfIps->{$b} <=> $p_smurfIps->{$a}} (keys %{$p_smurfIps});
-        my $ips=formatList(\@idIps,40);
-        push(@smurfsData,{"$C{5}ID$C{1}" => $D.$id,
-                          "$C{5}Name(s)$C{1}" => $names,
-                          "$C{5}Online$C{1}" => $online,
-                          "$C{5}Country$C{1}" => $p_smurfMainData->{country},
-                          "$C{5}CPU$C{1}" => $p_smurfMainData->{cpu},
-                          "$C{5}Rank$C{1}" => $ranks[abs($p_smurfMainData->{rank})].$D,
-                          "$C{5}LastUpdate$C{1}" => secToDayAge(time-$p_smurfMainData->{timestamp}),
-                          "$C{5}Confidence$C{1}" => "$confidence\%",
-                          "$C{5}IP(s)$C{1}" => $ips});
-        $nbResults++;
-      }
-    }
-  }
 
-  return ($rc,\@smurfsData,\@probableSmurfs,\@otherCandidates);
+  return (\@smurfsData,\@probableSmurfs);
 }
 
 sub checkAutoStop {
@@ -6274,7 +6157,7 @@ sub hBan {
   my $id;
   my @banFilters=split(/;/,$bannedUser);
   my $p_user={};
-  my @banListsFields=qw'accountId name country cpu rank access bot level ip skill skillUncert';
+  my @banListsFields=qw'accountId name country rank access bot level ip skill skillUncert';
   foreach my $banFilter (@banFilters) {
     my ($filterName,$filterValue)=("name",$banFilter);
     if($banFilter =~ /^\#([1-9]\d*)$/) {
@@ -7143,7 +7026,7 @@ sub hCKick {
     return 0;
   }
 
-  my @players=keys(%{$lobby->{channels}->{$masterChannel}});
+  my @players=keys(%{$lobby->{channels}->{$masterChannel}{users}});
   my $p_kickedUsers=cleverSearch($p_params->[0],\@players);
   if(! @{$p_kickedUsers}) {
     answer("Unable to find matching user for \"$p_params->[0]\" in channel");
@@ -9845,7 +9728,7 @@ sub hSearchUser {
                                 "$C{5}Name(s)$C{1}" => $names,
                                 "$C{5}Online$C{1}" => $online.$D,
                                 "$C{5}Country$C{1}" => $p_accountMainData->{country},
-                                "$C{5}CPU$C{1}" => $p_accountMainData->{cpu},
+                                "$C{5}LobbyClient$C{1}" => $p_accountMainData->{lobbyClient},
                                 "$C{5}Rank$C{1}" => $ranks[abs($p_accountMainData->{rank})].$D,
                                 "$C{5}LastUpdate$C{1}" => secToDayAge(time-$p_accountMainData->{timestamp}),
                                 "$C{5}Matching IP(s)$C{1}" => $search});
@@ -9879,13 +9762,13 @@ sub hSearchUser {
                                 "$C{5}Name(s)$C{1}" => $names,
                                 "$C{5}Online$C{1}" => $online.$D,
                                 "$C{5}Country$C{1}" => $p_accountMainData->{country},
-                                "$C{5}CPU$C{1}" => $p_accountMainData->{cpu},
+                                "$C{5}LobbyClient$C{1}" => $p_accountMainData->{lobbyClient},
                                 "$C{5}Rank$C{1}" => $ranks[abs($p_accountMainData->{rank})].$D,
                                 "$C{5}LastUpdate$C{1}" => secToDayAge(time-$p_accountMainData->{timestamp}),
                                 "$C{5}Matching IP(s)$C{1}" => $ips});
       }
     }
-    @resultFields=("$C{5}ID$C{1}","$C{5}Name(s)$C{1}","$C{5}Online$C{1}","$C{5}Country$C{1}","$C{5}CPU$C{1}","$C{5}Rank$C{1}","$C{5}LastUpdate$C{1}","$C{5}Matching IP(s)$C{1}");
+    @resultFields=("$C{5}ID$C{1}","$C{5}Name(s)$C{1}","$C{5}Online$C{1}","$C{5}Country$C{1}","$C{5}LobbyClient$C{1}","$C{5}Rank$C{1}","$C{5}LastUpdate$C{1}","$C{5}Matching IP(s)$C{1}");
   }else{
     my $p_matchingIds;
     ($p_matchingIds,$nbMatchingId)=$spads->searchUserIds($search);
@@ -9912,7 +9795,7 @@ sub hSearchUser {
                                 "$C{5}Matching name(s)$C{1}" => $names,
                                 "$C{5}Online$C{1}" => $online.$D,
                                 "$C{5}Country$C{1}" => $p_accountMainData->{country},
-                                "$C{5}CPU$C{1}" => $p_accountMainData->{cpu},
+                                "$C{5}LobbyClient$C{1}" => $p_accountMainData->{lobbyClient},
                                 "$C{5}Rank$C{1}" => $ranks[abs($p_accountMainData->{rank})].$D,
                                 "$C{5}LastUpdate$C{1}" => secToDayAge(time-$p_accountMainData->{timestamp}),
                                 "$C{5}IP(s)$C{1}" => $ips});
@@ -9945,13 +9828,13 @@ sub hSearchUser {
                                 "$C{5}Matching name(s)$C{1}" => $names,
                                 "$C{5}Online$C{1}" => $online.$D,
                                 "$C{5}Country$C{1}" => $p_accountMainData->{country},
-                                "$C{5}CPU$C{1}" => $p_accountMainData->{cpu},
+                                "$C{5}LobbyClient$C{1}" => $p_accountMainData->{lobbyClient},
                                 "$C{5}Rank$C{1}" => $ranks[abs($p_accountMainData->{rank})].$D,
                                 "$C{5}LastUpdate$C{1}" => secToDayAge(time-$p_accountMainData->{timestamp}),
                                 "$C{5}IP(s)$C{1}" => $ips});
       }
     }
-    @resultFields=("$C{5}ID$C{1}","$C{5}Matching name(s)$C{1}","$C{5}Online$C{1}","$C{5}Country$C{1}","$C{5}CPU$C{1}","$C{5}Rank$C{1}","$C{5}LastUpdate$C{1}");
+    @resultFields=("$C{5}ID$C{1}","$C{5}Matching name(s)$C{1}","$C{5}Online$C{1}","$C{5}Country$C{1}","$C{5}LobbyClient$C{1}","$C{5}Rank$C{1}","$C{5}LastUpdate$C{1}");
     push(@resultFields,"$C{5}IP(s)$C{1}") if(getUserAccessLevel($user) >= $conf{privacyTrustLevel});
   }
   if(! @matchingAccounts) {
@@ -10101,7 +9984,7 @@ sub hSet {
 sub hSmurfs {
   my ($source,$user,$p_params,$checkOnly)=@_;
   
-  if($#{$p_params} > 1 || ($#{$p_params} == 1 && $p_params->[1] !~ /^all$/i)) {
+  if($#{$p_params} > 0) {
     invalidSyntax($user,"smurfs");
     return 0;
   }
@@ -10132,32 +10015,25 @@ sub hSmurfs {
 
     return 1 if($checkOnly);
 
-    my $full=0;
-    $full=1 if($#{$p_params} == 1);
-    
-    my ($rc,$p_smurfsData,$p_probableSmurfs,$p_otherCandidates)=getSmurfsData($smurfUser,$full,$p_C);
+    my ($p_smurfsData,$p_probableSmurfs)=getSmurfsData($smurfUser,$p_C);
     
     if(@{$p_smurfsData}) {
-      my @resultFields=("$C{5}ID$C{1}","$C{5}Name(s)$C{1}","$C{5}Online$C{1}","$C{5}Country$C{1}","$C{5}CPU$C{1}","$C{5}Rank$C{1}","$C{5}LastUpdate$C{1}","$C{5}Confidence$C{1}");
+      my @resultFields=("$C{5}ID$C{1}","$C{5}Name(s)$C{1}","$C{5}Online$C{1}","$C{5}Country$C{1}","$C{5}LobbyClient$C{1}","$C{5}Rank$C{1}","$C{5}LastUpdate$C{1}","$C{5}Confidence$C{1}");
       push(@resultFields,"$C{5}IP(s)$C{1}") if(getUserAccessLevel($user) >= $conf{privacyTrustLevel});
       my $p_resultLines=formatArray(\@resultFields,$p_smurfsData);
       foreach my $resultLine (@{$p_resultLines}) {
         sayPrivate($user,$resultLine);
       }
-      if(@{$p_probableSmurfs} || @{$p_otherCandidates}) {
+      if(@{$p_probableSmurfs}) {
         sayPrivate($user,"Too many results (only the 40 first accounts are shown above)");
         if(@{$p_probableSmurfs}) {
           sayPrivate($user,"Other probable smurfs:");
           sayPrivate($user,"  ".join(' ',@{$p_probableSmurfs}));
         }
-        if(@{$p_otherCandidates}) {
-          sayPrivate($user,"Other smurf candidates:");
-          sayPrivate($user,"  $C{14}".join(' ',@{$p_otherCandidates}));
-        }
       }
+    }else{
+      sayPrivate($user,"Unable to perform IP-based smurf detection for $C{12}$smurfUser$C{1} (IP unknown)");
     }
-
-    sayPrivate($user,"Unable to perform IP-based smurf detection for $C{12}$smurfUser$C{1} (IP unknown)") if($rc == 2);
 
   }else{
 
@@ -10175,7 +10051,7 @@ sub hSmurfs {
     foreach my $smurfUser (@smurfUsers) {
       next if($smurfUser eq $conf{lobbyLogin});
       my %result=("$C{5}Player$C{1}" => $C{10}.$smurfUser.$C{1}, "$C{5}Smurfs$C{1}" => '');
-      my (undef,$p_smurfsData)=getSmurfsData($smurfUser,0,\%noColor);
+      my ($p_smurfsData)=getSmurfsData($smurfUser,\%noColor);
       if($#{$p_smurfsData} < 1) {
         push(@results,\%result);
         next;
@@ -10973,7 +10849,7 @@ sub hUnban {
 
   my @banFilters=split(/;/,$bannedUser);
   my $p_filters={};
-  my @banListsFields=qw'accountId name country cpu rank access bot level ip skill skillUncert nameOrAccountId';
+  my @banListsFields=qw'accountId name country rank access bot level ip skill skillUncert nameOrAccountId';
   foreach my $banFilter (@banFilters) {
     my ($filterName,$filterValue)=('nameOrAccountId',$banFilter);
     if($banFilter =~ /^\#([1-9]\d*)$/) {
@@ -11511,7 +11387,7 @@ sub hWhois {
                 "$C{5}Name$C{1}" => $currentName,
                 "$C{5}Online$C{1}" => $online,
                 "$C{5}Country$C{1}" => $p_accountMainData->{country},
-                "$C{5}CPU$C{1}" => $p_accountMainData->{cpu},
+                "$C{5}LobbyClient$C{1}" => $p_accountMainData->{lobbyClient},
                 "$C{5}Rank$C{1}" => $rank,
                 "$C{5}LastUpdate$C{1}" => secToDayAge(time-$p_accountMainData->{timestamp}));
 
@@ -11555,7 +11431,7 @@ sub hWhois {
   
   sayPrivate($user,'.');
 
-  my $p_resultLines=formatArray(["$C{5}AccountId$C{1}","$C{5}Name$C{1}","$C{5}Online$C{1}","$C{5}Country$C{1}","$C{5}CPU$C{1}","$C{5}Rank$C{1}","$C{5}LastUpdate$C{1}"],[\%mainData],"$C{2}Account information$C{1}");
+  my $p_resultLines=formatArray(["$C{5}AccountId$C{1}","$C{5}Name$C{1}","$C{5}Online$C{1}","$C{5}Country$C{1}","$C{5}LobbyClient$C{1}","$C{5}Rank$C{1}","$C{5}LastUpdate$C{1}"],[\%mainData],"$C{2}Account information$C{1}");
   foreach my $resultLine (@{$p_resultLines}) {
     sayPrivate($user,$resultLine);
   }
@@ -11661,43 +11537,10 @@ sub cbLobbyConnect {
     slog("It is highly recommended to use internal SPADS user authentication for privileged accounts",3);
   }
 
-  $timestamps{mapLearned}=0;
-  $spads->applyMapList(\@availableMaps,$syncedSpringVersion);
-  setDefaultMapOfMaplist() if($conf{map} eq '');
-
-  my $multiEngineFlag='';
-  if($syncedSpringVersion ne $lobbySyncedSpringVersion) {
-    $fullSpringVersion=$syncedSpringVersion;
-    my $buggedUnitsync=0;
-    if(! $win) {
-      my $fileBin;
-      if(-x '/usr/bin/file') {
-        $fileBin='/usr/bin/file';
-      }elsif(-x '/bin/file') {
-        $fileBin='/bin/file';
-      }
-      $buggedUnitsync=1 if(! defined $fileBin || `$fileBin $spadsDir/PerlUnitSync.so` !~ /64\-bit/);
-    }
-    my $isSpringReleaseVersion;
-    if($buggedUnitsync) {
-      if($syncedSpringVersion =~ /^\d+$/) {
-        $isSpringReleaseVersion=1;
-      }else{
-        $isSpringReleaseVersion=0;
-      }
-    }else{
-      $isSpringReleaseVersion=PerlUnitSync::IsSpringReleaseVersion();
-    }
-    if($isSpringReleaseVersion) {
-      my $springVersionPatchset=PerlUnitSync::GetSpringVersionPatchset();
-      $fullSpringVersion.='.'.$springVersionPatchset;
-    }
-    $multiEngineFlag=' cl';
-    if($lobbySyncedSpringVersion eq '*') {
-      slog("Lobby server has no default engine set, UnitSync is using Spring $syncedSpringVersion",3);
-    }else{
-      slog("Lobby server default engine is Spring $lobbySyncedSpringVersion, UnitSync is using Spring $syncedSpringVersion",3);
-    }
+  if($lobbySyncedSpringVersion eq '*') {
+    slog("Lobby server has no default engine set, UnitSync is using Spring $syncedSpringVersion",3);
+  }else{
+    slog("Lobby server default engine is Spring $lobbySyncedSpringVersion, UnitSync is using Spring $syncedSpringVersion",3);
   }
 
   $lobby->addCallbacks({CHANNELTOPIC => \&cbChannelTopic,
@@ -11722,6 +11565,7 @@ sub cbLobbyConnect {
                         JOINEDBATTLE => \&cbJoinedBattle,
                         ADDBOT => \&cbAddBot,
                         LEFTBATTLE => \&cbLeftBattle,
+                        KICKFROMBATTLE => \&cbKickFromBattle,
                         REMOVEBOT => \&cbRemoveBot,
                         BROADCAST => \&cbBroadcast,
                         BATTLECLOSED => \&cbBattleClosed,
@@ -11732,7 +11576,7 @@ sub cbLobbyConnect {
 
   my $localLanIp=$conf{localLanIp};
   $localLanIp=getLocalLanIp() unless($localLanIp);
-  queueLobbyCommand(["LOGIN",$conf{lobbyLogin},$lobby->marshallPasswd($conf{lobbyPassword}),getCpuSpeed(),$localLanIp,"SPADS v$spadsVer",0,"a b sp$multiEngineFlag"],
+  queueLobbyCommand(["LOGIN",$conf{lobbyLogin},$lobby->marshallPasswd($conf{lobbyPassword}),0,$localLanIp,"SPADS v$spadsVer",0,'l b t sp cl'],
                     {ACCEPTED => \&cbLoginAccepted,
                      DENIED => \&cbLoginDenied,
                      AGREEMENTEND => \&cbAgreementEnd},
@@ -11881,7 +11725,7 @@ sub cbJoinFailed {
 
 sub cbJoined {
   my (undef,$chan,$user)=@_;
-  logMsg("channel_$chan","=== $user joined ===") if($conf{logChanJoinLeave});
+  logMsg("channel_$chan","=== $user joined ===") if($conf{logChanJoinLeave} && $user ne $conf{lobbyLogin});
 }
 
 sub cbLeft {
@@ -12354,6 +12198,29 @@ sub cbLeftBattle {
   }
 }
 
+sub cbKickFromBattle {
+  my $bannedUser=$_[2];
+  return unless($autohost->getState());
+  return unless(exists $p_runningBattle->{users}{$bannedUser} || exists $inGameAddedUsers{$bannedUser});
+  return if($bannedUser eq $conf{lobbyLogin});
+
+  my $bannedUserLevel=getUserAccessLevel($bannedUser);
+  my $p_endVoteLevels=$spads->getCommandLevels('endvote','battle','player','stopped');
+  return if(exists $p_endVoteLevels->{directLevel} && $bannedUserLevel >= $p_endVoteLevels->{directLevel});
+
+  my $p_ahPlayers=$autohost->getPlayersByNames();
+  if(exists $p_ahPlayers->{$bannedUser} && %{$p_ahPlayers->{$bannedUser}} && $p_ahPlayers->{$bannedUser}{disconnectCause} == -1) {
+    $autohost->sendChatMessage("/kickbynum $p_ahPlayers->{$bannedUser}{playerNb}");
+  }
+
+  my $p_ban={banType => 1,
+             startDate => time,
+             reason => 'kicked from lobby server',
+             remainingGames => 1};
+  $spads->banUser({name => $bannedUser},$p_ban);
+  broadcastMsg("Battle ban added for user \"$bannedUser\" (duration: 1 game, reason: kicked from lobby server)");
+}
+
 sub cbRemoveBot {
   my (undef,undef,$bot)=@_;
   $timestamps{battleChange}=time;
@@ -12385,7 +12252,7 @@ sub cbBattleClosed {
 }
 
 sub cbAddUser {
-  my (undef,$user,$country,$cpu,$id)=@_;
+  my (undef,$user,$country,$id,$lobbyClient)=@_;
   if($conf{userDataRetention} !~ /^0;/ && ! $lanMode) {
     $id=0 unless(defined $id && $id ne 'None');
     $id.="($user)" unless($id);
@@ -12393,11 +12260,7 @@ sub cbAddUser {
       slog("Received an invalid ADDUSER command from server (country field not provided for user $user)",2);
       $country='??';
     }
-    if(! defined $cpu) {
-      slog("Received an invalid ADDUSER command from server (cpu field not provided for user $user)",2);
-      $cpu=0;
-    }
-    $spads->learnUserData($user,$country,$cpu,$id);
+    $spads->learnUserData($user,$country,$id,$lobbyClient);
   }
   my $joinedUserLevel=getUserAccessLevel($user);
   if($joinedUserLevel >= $conf{alertLevel}) {
@@ -12503,8 +12366,14 @@ sub cbSaidBattleEx {
 }
 
 sub cbChannelTopic {
-  my (undef,$chan,$user,$time,$topic)=@_;
-  logMsg("channel_$chan","* Topic is '$topic' (set by $user)") if($conf{logChanChat});
+  my (undef,$chan,$user,$topic)=@_;
+  if($conf{logChanChat}) {
+    if(defined $topic && $topic ne '') {
+      logMsg("channel_$chan","* Topic is '$topic' (set by $user)");
+    }else{
+      logMsg("channel_$chan","* No topic is set");
+    }
+  }
 }
 
 sub cbBattleOpened {
@@ -13763,8 +13632,34 @@ if(! $abortSpadsStartForAutoUpdate) {
   eval "use PerlUnitSync";
   fatalError("Unable to load PerlUnitSync module ($@)") if ($@);
   $syncedSpringVersion=PerlUnitSync::GetSpringVersion();
+  $fullSpringVersion=$syncedSpringVersion;
+  my $buggedUnitsync=0;
+  if(! $win) {
+    my $fileBin;
+    if(-x '/usr/bin/file') {
+      $fileBin='/usr/bin/file';
+    }elsif(-x '/bin/file') {
+      $fileBin='/bin/file';
+    }
+    $buggedUnitsync=1 if(! defined $fileBin || `$fileBin $spadsDir/PerlUnitSync.so` !~ /64\-bit/);
+  }
+  my $isSpringReleaseVersion;
+  if($buggedUnitsync) {
+    if($syncedSpringVersion =~ /^\d+$/) {
+      $isSpringReleaseVersion=1;
+    }else{
+      $isSpringReleaseVersion=0;
+    }
+  }else{
+    $isSpringReleaseVersion=PerlUnitSync::IsSpringReleaseVersion();
+  }
+  if($isSpringReleaseVersion) {
+    my $springVersionPatchset=PerlUnitSync::GetSpringVersionPatchset();
+    $fullSpringVersion.='.'.$springVersionPatchset;
+  }
   slog("Loading Spring archives using unitsync library version $syncedSpringVersion ...",3);
   fatalError('Unable to load Spring archives at startup') unless(loadArchives());
+  setDefaultMapOfMaplist() if($conf{map} eq '');
 
 # Init #################################
 
