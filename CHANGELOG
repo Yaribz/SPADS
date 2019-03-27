@@ -813,6 +813,7 @@ spads.pl:
 0.12.5: use new lobby compat flags "l" and "t" instead of the obsolete one "a"
         show lobby clients versions in !searchUser command output
         add support for server side KICKFROMBATTLE command
+        fix total account in-game time no longer shown in !hostStats output due to lobby server message syntax change
         remove obsolete single-engine mode code (multi-engine lobby protocol is now always used)
         remove obsolete code to find CPU speed (this field is ignored by lobby server)
         remove usage of CPU speed values to determine possible smurf accounts (this field is no longer provided by lobby server)

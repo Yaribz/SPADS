@@ -3309,7 +3309,7 @@ sub setAsOutOfGame {
     my %clientStatus = %{$lobby->{users}->{$conf{lobbyLogin}}->{status}};
     $clientStatus{inGame}=0;
     queueLobbyCommand(["MYSTATUS",$lobby->marshallClientStatus(\%clientStatus)]);
-    queueLobbyCommand(["GETINGAMETIME"]);
+    queueLobbyCommand(["GETUSERINFO"]);
   }
   queueGDR();
   foreach my $pluginName (@pluginsOrder) {
@@ -11668,7 +11668,7 @@ sub cbLoginInfoEnd {
     $clientStatus{inGame}=1;
     queueLobbyCommand(["MYSTATUS",$lobby->marshallClientStatus(\%clientStatus)]);
   }
-  queueLobbyCommand(["GETINGAMETIME"]);
+  queueLobbyCommand(["GETUSERINFO"]);
   if(exists $lobby->{users}->{$conf{lobbyLogin}} && ! $lobby->{users}->{$conf{lobbyLogin}}->{status}->{bot}) {
     slog('The lobby account currently used by SPADS is not tagged as bot. It is recommended to ask a lobby administrator for bot flag on accounts used by SPADS',2);
   }
@@ -12302,6 +12302,8 @@ sub cbServerMsg {
   my (undef,$msg)=@_;
   if($msg =~ /^Your in-?game time is (\d+) minutes/) {
     $accountInGameTime=secToTime($1*60);
+  }elsif($msg =~ /^Ingame time: (.+)$/) {
+    $accountInGameTime=$1;
   }
 }
 
