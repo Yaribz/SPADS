@@ -2,7 +2,7 @@
 #
 # This program installs SPADS in current directory from remote repository.
 #
-# Copyright (C) 2008-2017  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2019  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.21 (2017/09/19)
+# Version 0.22 (2019/04/14)
 
 use strict;
 
@@ -49,7 +49,7 @@ my $unitsyncLibName=($win?'':'lib')."unitsync.$dynLibSuffix";
 my $perlUnitsyncLibName="PerlUnitSync.$dynLibSuffix";
 
 my $spadsUrl='http://planetspads.free.fr/spads';
-my @packages=(qw'getDefaultModOptions.pl help.dat helpSettings.dat SpringAutoHostInterface.pm SpringLobbyInterface.pm SimpleEvent.pm SimpleLog.pm spads.pl SpadsConf.pm spadsInstaller.pl SpadsUpdater.pm SpadsPluginApi.pm update.pl argparse.py replay_upload.py',$win?'7za.exe':'7za');
+my @packages=(qw'getDefaultModOptions.pl help.dat helpSettings.dat springLobbyCertificates.dat SpringAutoHostInterface.pm SpringLobbyInterface.pm SimpleEvent.pm SimpleLog.pm spads.pl SpadsConf.pm spadsInstaller.pl SpadsUpdater.pm SpadsPluginApi.pm update.pl argparse.py replay_upload.py',$win?'7za.exe':'7za');
 my $perlUnitsyncModule='PerlUnitSync.pm';
 
 my $nbSteps=$macOs?14:15;

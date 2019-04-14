@@ -822,6 +822,8 @@ spads.pl:
         store lobby clients versions data when user data retention is enabled
         improve channel topic handling
         retrieve full Spring version only once (when unitsync library is loaded), instead of retrieving it each time a (re)connection to lobby server is performed
+0.12.6: experimental support for TLS on lobby connection
+        SpringLobbyInterface module logs are now also printed on standard output
 
 SpadsConf.pm:
 ============
@@ -968,6 +970,7 @@ SpadsConf.pm:
         removed obsolete CPU data from user data retention
         ignore obsolete CPU data when retrieving user access level
         remove "similar accounts" detection which was based on deprecated CPU speed values
+0.12.3: add lobby certificates management for TLS support
 
 spadsInstaller.pl:
 =================
@@ -1037,6 +1040,7 @@ spadsInstaller.pl:
       improve algorithms for guessing paths of unitsync library, spring binaries and data directories automatically
       renamed config macros used during installation to better reflect target setting names
 0.21: fix mod name regular expression for test mods
+0.22: add "springLobbyCertificates.dat" to the list of auto-updated modules
 
 SpadsPluginApi.pm:
 =================
@@ -1122,6 +1126,10 @@ SpadsUpdater.pm:
 0.13a: localize variable $_ (improve AnyEvent stability)
 0.14: automatic Spring installation functionality is now compatible with all Spring branches
 
+springLobbyCertificates.dat:
+===========================
+0.1: initialization with official Spring lobby certificates
+
 update.pl:
 =========
 0.1: first public version (beta)
@@ -1148,3 +1156,4 @@ update.pl:
 0.11: script usage is now identical on Linux, Windows an macOS ("springVersion" parameter and "-s" and "-A" flags are no longer supported)
       Spring binaries cannot be downloaded anymore using update.pl, Spring version auto-management functionality of SPADS must be used for that (Windows)
       the 7za binary is no longer downloaded on macOS
+0.12: add "springLobbyCertificates.dat" to the list of auto-updated modules

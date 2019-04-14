@@ -52,7 +52,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.5';
+our $spadsVer='0.12.6';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -76,7 +76,7 @@ my @ircStyle=(\%ircColors,'');
 my @noIrcStyle=(\%noColor,'');
 my @readOnlySettings=qw'description commandsfile battlepreset hostingpreset welcomemsg welcomemsgingame maplink ghostmaplink preset battlename advertmsg endgamecommand endgamecommandenv endgamecommandmsg';
 
-my @packagesSpads=qw'help.dat helpSettings.dat SpringAutoHostInterface.pm SpringLobbyInterface.pm SimpleEvent.pm SimpleLog.pm spads.pl SpadsConf.pm SpadsUpdater.pm SpadsPluginApi.pm argparse.py replay_upload.py';
+my @packagesSpads=qw'help.dat helpSettings.dat springLobbyCertificates.dat SpringAutoHostInterface.pm SpringLobbyInterface.pm SimpleEvent.pm SimpleLog.pm spads.pl SpadsConf.pm SpadsUpdater.pm SpadsPluginApi.pm argparse.py replay_upload.py';
 if($win) {
   push(@packagesSpads,'7za.exe','PerlUnitSync.pm');
 }elsif(! $macOs) {
@@ -242,17 +242,45 @@ my %rankTrueSkill=(0 => 20,
 
 sub invalidUsage {
   print "usage: perl $0 <configurationFile> [--doc] [<macroName>=<macroValue> [...]]\n";
+  print <<EOH;
+       perl $0 <configurationFile> --tls-cert-trust
+       perl $0 <configurationFile> --tls-cert-trust=<certificateHash>
+       perl $0 <configurationFile> --tls-cert-trust=<hostName>:<certificateHash>
+       perl $0 <configurationFile> --tls-cert-revoke=<certificateHash>
+       perl $0 <configurationFile> --tls-cert-revoke=<hostName>:<certificateHash>
+       perl $0 <configurationFile> --tls-cert-list
+       perl $0 <configurationFile> --tls-cert-list=<hostName>
+EOH
   exit 1;
 }
 
 invalidUsage() if($#ARGV < 0 || ! (-f $ARGV[0]));
 
 my $genDoc=0;
+my ($tlsAction,$tlsHost,$tlsCert);
 sub parseMacroTokens {
   my @macroTokens=@_;
   my %macros;
   foreach my $macroToken (@macroTokens) {
-    if($macroToken =~ /^([^=]+)=(.*)$/) {
+    if($macroToken =~ /^--tls-cert-(trust|revoke|list)(?:=(.+))?$/i) {
+      return undef if(defined $tlsAction);
+      $tlsAction=lc($1);
+      my $tlsParam=lc($2) if(defined $2);
+      if(defined $tlsParam) {
+        if($tlsAction eq 'list') {
+          return undef unless($tlsParam =~ /^\w[\w\-\.]*$/);
+          $tlsHost=$tlsParam;
+        }elsif($tlsParam =~ /^(\w[\w\-\.]*):([\da-f]+)$/) {
+          ($tlsHost,$tlsCert)=($1,$2);
+        }elsif($tlsParam =~ /^[\da-f]+$/) {
+          $tlsCert=$tlsParam;
+        }else{
+          return undef;
+        }
+      }else{
+        return undef if($tlsAction eq 'revoke');
+      }
+    }elsif($macroToken =~ /^([^=]+)=(.*)$/) {
       $macros{$1}=$2;
     }elsif($macroToken eq "--doc") {
       $genDoc=1;
@@ -332,7 +360,7 @@ our %timestamps=(connectAttempt => 0,
                  gameOver => 0);
 my $syncedSpringVersion='';
 my $fullSpringVersion='';
-our $lobbyState=0; # (0:not_connected, 1:connecting, 2: connected, 3:logged_in, 4:start_data_received, 5:opening_battle, 6:battle_opened)
+our $lobbyState=0; # (0:not_connected, 1:connecting, 2:connected, 3:logged_in, 4:start_data_received, 5:opening_battle, 6:battle_opened)
 my %pendingRedirect;
 my $lobbyBrokenConnection=0;
 my $loadArchivesInProgress=0;
@@ -411,10 +439,10 @@ my $springServerBin=$conf{springServer};
 my %autoManagedSpringData=(mode => 'off');
 my $failedSpringInstallVersion;
 
-my $lobbySimpleLog=SimpleLog->new(logFiles => [$conf{logDir}."/spads.log"],
-                                  logLevels => [$conf{lobbyInterfaceLogLevel}],
-                                  useANSICodes => [0],
-                                  useTimestamps => [1],
+my $lobbySimpleLog=SimpleLog->new(logFiles => [$conf{logDir}."/spads.log",''],
+                                  logLevels => [$conf{lobbyInterfaceLogLevel},3],
+                                  useANSICodes => [0,-t STDOUT ? 1 : 0],
+                                  useTimestamps => [1,-t STDOUT ? 0 : 1],
                                   prefix => "[SpringLobbyInterface] ");
 
 my $autohostSimpleLog=SimpleLog->new(logFiles => [$conf{logDir}."/spads.log"],
@@ -450,7 +478,6 @@ my $updater = SpadsUpdater->new(sLog => $updaterSimpleLog,
                                 release => $conf{autoUpdateRelease},
                                 packages => \@packagesSpads,
                                 springDir => $conf{autoManagedSpringDir});
-
 
 # Binaries update (Windows only) ##############################################
 
@@ -499,6 +526,55 @@ if($win) {
     }
     slog("Copied \"$versionedUpdatedPackagePath\" to \"$updatedPackagePath\" (Windows binary update mode)",5);
   }
+}
+
+# TLS certificates management #################################################
+
+if(defined $tlsAction && ($tlsAction eq 'revoke' || $tlsAction eq 'list' || defined $tlsCert)) {
+  $tlsHost//=$conf{lobbyHost} unless($tlsAction eq 'list');
+  if($tlsAction eq 'trust') {
+    my $res=$spads->addTrustedCertificateHash({lobbyHost => $tlsHost, certHash => $tlsCert});
+    if($res) {
+      slog("Added trusted certificate hash (SHA-256) $tlsCert for host $tlsHost",3);
+    }else{
+      slog('Failed to add trusted certificate!',1);
+    }
+  }elsif($tlsAction eq 'revoke') {
+    my $res=$spads->removeTrustedCertificateHash({lobbyHost => $tlsHost, certHash => $tlsCert});
+    if($res) {
+      slog("Revoked certificate hash (SHA-256) $tlsCert for host $tlsHost",3);
+    }else{
+      slog('Failed to revoke certificate!',1) unless($res);
+    }
+  }else{
+    my $r_trustedCerts=$spads->getTrustedCertificateHashes();
+    my @trustedCerts;
+    foreach my $lobbyHost (keys %{$r_trustedCerts}) {
+      next if(defined $tlsHost && $lobbyHost ne $tlsHost);
+      foreach my $lobbyCert (keys %{$r_trustedCerts->{$lobbyHost}}) {
+        push(@trustedCerts,{host => $lobbyHost, hash => $lobbyCert});
+      }
+    }
+    if(@trustedCerts) {
+      print 'Trusted lobby certificate hash'.($#trustedCerts>0?'es':'').' (SHA-256)'.(defined $tlsHost ? " for host $tlsHost" : '').":\n";
+      foreach my $r_trustedCert (@trustedCerts) {
+        if(defined $tlsHost) {
+          print "  - $r_trustedCert->{hash}\n";
+        }else{
+          print "  - host:$r_trustedCert->{host}, hash:$r_trustedCert->{hash}\n";
+        }
+      }
+    }else{
+      print 'No trusted lobby certificate'.(defined $tlsHost ? " for host $tlsHost" : '')."!\n";
+    }
+  }
+  exit 0;
+}
+
+my $useTls=0;
+if(exists $confMacros{lobbyTls} && (any {lc($confMacros{lobbyTls}) eq $_} (qw'on yes enabled true 1'))) {
+  fatalError('Module IO::Socket::SSL required for TLS') unless($lobby->isTlsAvailable());
+  $useTls=1;
 }
 
 # Subfunctions ################################################################
@@ -11538,11 +11614,52 @@ sub cbLobbyConnect {
   }
 
   if($lobbySyncedSpringVersion eq '*') {
-    slog("Lobby server has no default engine set, UnitSync is using Spring $syncedSpringVersion",3);
+    slog("Lobby server has no default engine set, UnitSync is using Spring $syncedSpringVersion",4);
   }else{
-    slog("Lobby server default engine is Spring $lobbySyncedSpringVersion, UnitSync is using Spring $syncedSpringVersion",3);
+    slog("Lobby server default engine is Spring $lobbySyncedSpringVersion, UnitSync is using Spring $syncedSpringVersion",4);
   }
 
+  if($useTls) {
+    queueLobbyCommand(["STLS"],{OK => \&cbOk},\&cbStlsTimeout);
+  }else{
+    initLobbyConnection();
+  }
+}
+
+sub cbOk {
+  if(defined $lobby->{tlsCertifHash}) {
+    if($spads->isTrustedCertificateHash($conf{lobbyHost},$lobby->{tlsCertifHash})) {
+      initLobbyConnection();
+    }else{
+      if(defined $tlsAction && $tlsAction eq 'trust') {
+        $spads->addTrustedCertificateHash({lobbyHost => $conf{lobbyHost}, certHash => $lobby->{tlsCertifHash}});
+        slog("Adding following certificate to the trusted certificates list:\n".($lobby->{lobbySock}->dump_peer_certificate())."SHA-256: $lobby->{tlsCertifHash}",2);
+        initLobbyConnection();
+      }else{
+        slog("Untrusted lobby certificate, lobby server authenticity cannot be verified:\n".($lobby->{lobbySock}->dump_peer_certificate())."SHA-256: $lobby->{tlsCertifHash}",2);
+        slog("Restart SPADS with following parameter if you decide to trust this certificate: --tls-cert-trust=$conf{lobbyHost}:$lobby->{tlsCertifHash}",2);
+        $lobbyState=0;
+        SimpleEvent::unregisterSocket($lobby->{lobbySock});
+        $lobby->disconnect();
+        quitAfterGame('untrusted lobby certificate');
+      }
+    }
+  }else{
+    $lobbyState=0;
+    slog('Failed to enable TLS !',2);
+    SimpleEvent::unregisterSocket($lobby->{lobbySock});
+    $lobby->disconnect();
+  }
+}
+
+sub cbStlsTimeout {
+  $lobbyState=0;
+  slog('Timeout while enabling TLS !',2);
+  SimpleEvent::unregisterSocket($lobby->{lobbySock});
+  $lobby->disconnect();
+}
+
+sub initLobbyConnection {
   $lobby->addCallbacks({CHANNELTOPIC => \&cbChannelTopic,
                         LOGININFOEND => \&cbLoginInfoEnd,
                         JOIN => \&cbJoin,

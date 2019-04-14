@@ -2,7 +2,7 @@
 #
 # This program update SPADS components in current directory from remote repository.
 #
-# Copyright (C) 2008-2017  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2019  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.11 (2017/08/18)
+# Version 0.12 (2019/04/14)
 
 use strict;
 
@@ -74,6 +74,7 @@ for my $argNb (1..$#ARGV) {
     %packages=('getDefaultModOptions.pl' => 1,
                'help.dat' => 1,
                'helpSettings.dat' => 1,
+               'springLobbyCertificates.dat' => 1,
                'SpringAutoHostInterface.pm' => 1,
                'SpringLobbyInterface.pm' => 1,
                'SimpleEvent.pm' => 1,

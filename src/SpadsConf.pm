@@ -38,7 +38,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.12.2';
+my $moduleVersion='0.12.3';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -287,6 +287,7 @@ my @mapBoxesFields=(['mapName','nbTeams'],['boxes']);
 my @mapHashesFields=(['springMajorVersion','mapName'],['mapHash']);
 my @userDataFieldsOld=(['accountId'],['country','cpu','lobbyClient','rank','timestamp','ips','names']);
 my @userDataFields=(['accountId'],['country','lobbyClient','rank','timestamp','ips','names']);
+my @springLobbyCertificatesFields=(['lobbyHost'],['certHashes']);
 
 # Constructor #################################################################
 
@@ -370,6 +371,15 @@ sub new {
     return 0;
   }
 
+  my $p_springLobbyCertificates={''=>{}};
+  if(-f "$spadsDir/springLobbyCertificates.dat") {
+    $p_springLobbyCertificates=loadFastTableFile($sLog,"$spadsDir/springLobbyCertificates.dat",\@springLobbyCertificatesFields,{});
+    if(! %{$p_springLobbyCertificates}) {
+      $sLog->log('Unable to load official Spring lobby certificates',1);
+      return 0;
+    }
+  }
+
   touch($p_conf->{''}{instanceDir}.'/userData.dat') unless(-f $p_conf->{''}{instanceDir}.'/userData.dat');
   my $p_userData=loadFastTableFile($sLog,$p_conf->{''}{instanceDir}.'/userData.dat',\@userDataFieldsOld,{});
   if(! %{$p_userData}) {
@@ -393,6 +403,15 @@ sub new {
     $p_mapInfoCache=retrieve($p_conf->{''}{instanceDir}.'/mapInfoCache.dat');
     if(! defined $p_mapInfoCache) {
       $sLog->log('Unable to load map info cache',1);
+      return 0;
+    }
+  }
+  
+  my $p_trustedLobbyCertificates={};
+  if(-f $p_conf->{''}{instanceDir}.'/trustedLobbyCertificates.dat') {
+    $p_trustedLobbyCertificates=retrieve($p_conf->{''}{instanceDir}.'/trustedLobbyCertificates.dat');
+    if(! defined $p_trustedLobbyCertificates) {
+      $sLog->log('Unable to load trusted lobby certificates',1);
       return 0;
     }
   }
@@ -429,7 +448,9 @@ sub new {
     ghostMaps => {},
     orderedGhostMaps => [],
     macros => $p_macros,
-    pluginsConf => {}
+    pluginsConf => {},
+    springLobbyCertificates => $p_springLobbyCertificates->{''},
+    trustedLobbyCertificates => $p_trustedLobbyCertificates
   };
 
   bless ($self, $class);
@@ -512,6 +533,15 @@ sub checkValue {
 sub checkNonEmptyHash {
   foreach my $p_hash (@_) {
     return 0 unless(%{$p_hash});
+  }
+  return 1;
+}
+
+sub roExists {
+  my ($r_hash,$r_keys)=@_;
+  for my $i (0..$#{$r_keys}) {
+    return 0 unless(exists $r_hash->{$r_keys->[$i]});
+    $r_hash=$r_hash->{$r_keys->[$i]};
   }
   return 1;
 }
@@ -1957,6 +1987,76 @@ sub saveMapHash {
   $self->{mapHashes}{$springMajorVersion}{$map}{mapHash}=$hash;
   $self->{log}->log("Hash saved for map \"$map\" (springMajorVersion=$springMajorVersion)",5);
   return 1;
+}
+
+# Business functions - Dynamic data - Trusted certificate hashes ##############################
+
+sub isTrustedCertificateHash {
+  my ($self,$lobbyHost,$certHash)=@_;
+  $lobbyHost=lc($lobbyHost);
+  $certHash=lc($certHash);
+  if(exists $self->{springLobbyCertificates}{$lobbyHost}) {
+    my @trustedLobbyCertificates=split(/,/,$self->{springLobbyCertificates}{$lobbyHost}{certHashes});
+    return 1 if(any {$certHash eq $_} @trustedLobbyCertificates);
+  }
+  return 1 if(roExists($self->{trustedLobbyCertificates},[$lobbyHost,$certHash]));
+  return 0;
+}
+
+sub addTrustedCertificateHash {
+  my ($self,@trustedCert)=@_;
+  my $nbAddedHashes=0;
+  foreach my $p_trustedCert (@trustedCert) {
+    my ($lobbyHost,$certHash)=(lc($p_trustedCert->{lobbyHost}),lc($p_trustedCert->{certHash}));
+    if($self->isTrustedCertificateHash($lobbyHost,$certHash)) {
+      $self->{log}->log("Ignoring addition of trusted certificate hash: certificate is already trusted! ($lobbyHost:$certHash)",2);
+    }else{
+      $self->{trustedLobbyCertificates}{$lobbyHost}{$certHash}=1;
+      $nbAddedHashes++;
+    }
+  }
+  if($nbAddedHashes) {
+    $self->{log}->log('Unable to store trusted lobby certificates',1) unless(nstore($self->{trustedLobbyCertificates},$self->{conf}{instanceDir}.'/trustedLobbyCertificates.dat'));
+  }
+  return $nbAddedHashes;
+}
+
+sub removeTrustedCertificateHash {
+  my ($self,@trustedCert)=@_;
+  my $nbRemovedHashes=0;
+  foreach my $p_trustedCert (@trustedCert) {
+    my ($lobbyHost,$certHash)=(lc($p_trustedCert->{lobbyHost}),lc($p_trustedCert->{certHash}));
+    if(roExists($self->{trustedLobbyCertificates},[$lobbyHost,$certHash])) {
+      delete $self->{trustedLobbyCertificates}{$lobbyHost}{$certHash};
+      delete $self->{trustedLobbyCertificates}{$lobbyHost} unless(%{$self->{trustedLobbyCertificates}{$lobbyHost}});
+      $nbRemovedHashes++;
+    }else{
+      my $reason='this certificate is already not trusted';
+      $reason='this certificate is an official Spring lobby certificate' if($self->isTrustedCertificateHash($lobbyHost,$certHash));
+      $self->{log}->log("Ignoring removal of trusted certificate hash: $reason! ($lobbyHost:$certHash)",2);
+    }
+  }
+  if($nbRemovedHashes) {
+    $self->{log}->log('Unable to store trusted lobby certificates',1) unless(nstore($self->{trustedLobbyCertificates},$self->{conf}{instanceDir}.'/trustedLobbyCertificates.dat'));
+  }
+  return $nbRemovedHashes;
+}
+
+sub getTrustedCertificateHashes {
+  my $self=shift;
+  my %trustedCerts;
+  foreach my $host (keys %{$self->{springLobbyCertificates}}) {
+    my @trustedLobbyCertificates=split(/,/,$self->{springLobbyCertificates}{$host}{certHashes});
+    foreach my $hash (@trustedLobbyCertificates) {
+      $trustedCerts{$host}{$hash}=1;
+    }
+  }
+  foreach my $host (keys %{$self->{trustedLobbyCertificates}}) {
+    foreach my $hash (keys %{$self->{trustedLobbyCertificates}{$host}}) {
+      $trustedCerts{$host}{$hash}=0;
+    }
+  }
+  return \%trustedCerts;
 }
 
 # Business functions - Dynamic data - User data ###############################
