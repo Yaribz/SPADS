@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.22 (2019/04/14)
+# Version 0.23 (2019/06/16)
 
 use strict;
 
@@ -72,6 +72,28 @@ my $sLog=SimpleLog->new(logFiles => [''],
                         prefix => '[SpadsInstaller] ');
 sub slog {
   $sLog->log(@_);
+}
+
+my %autoInstallData;
+my $autoInstallFile=File::Spec->catfile($conf{installDir},'spadsInstaller.auto');
+if(-f $autoInstallFile) {
+  my $fh=new FileHandle($autoInstallFile,'r');
+  if(! defined $fh) {
+    print "ERROR - Unable to read auto-install data from file \"$autoInstallFile\" ($!)\n";
+    exit 1;
+  }
+  while(<$fh>) {
+    next if(/^\s*(\#.*)?$/);
+    if(/^\s*([^:]*[^:\s])\s*:\s*((?:.*[^\s])?)\s*$/) {
+      $autoInstallData{$1}=$2;
+    }else{
+      s/[\cJ\cM]*$//;
+      print "ERROR - Invalid line \"$_\" in auto-install file \"$autoInstallFile\"\n";
+      exit 1;
+    }
+  }
+  $fh->close();
+  slog("Using auto-install data from file \"$autoInstallFile\"...",3);
 }
 
 my $genUnitsync=0;
@@ -181,47 +203,56 @@ sub portableExec {
 }
 
 sub promptStdin {
-  my ($promptMsg,$defaultValue)=@_;
+  my ($promptMsg,$defaultValue,$autoInstallValue)=@_;
   print "$promptMsg ".(defined $defaultValue ? "[$defaultValue] " : '').'? ';
-  my $value=<STDIN>;
-  print "\n" unless($isInteractive);
-  $value//='';
-  chomp($value);
+  my $value;
+  if(defined $autoInstallValue) {
+    $value=$autoInstallValue;
+    print "$value\n";
+  }else{
+    $value=<STDIN>;
+    print "\n" unless($isInteractive);
+    $value//='';
+    chomp($value);
+  }
   $value=$defaultValue if(defined $defaultValue && $value eq '');
   return $value;
 }
 
 sub promptChoice {
-  my ($prompt,$p_choices,$default)=@_;
+  my ($prompt,$p_choices,$default,$autoInstallValue)=@_;
   my @choices=@{$p_choices};
   my $choicesString=join(',',@choices);
   my $choice='';
   while(none {$choice eq $_} @choices) {
-    $choice=promptStdin("$prompt ($choicesString)",$default);
+    $choice=promptStdin("$prompt ($choicesString)",$default,$autoInstallValue);
+    $autoInstallValue=undef;
   }
   return $choice;
 }
 
 sub promptExistingFile {
-  my ($prompt,$fileName,$default)=@_;
+  my ($prompt,$fileName,$default,$autoInstallValue)=@_;
   my $choice='';
   my $firstTry=1;
   while(! isAbsoluteFilePath($choice,$fileName)) {
     fatalError("Inconsistent data received in non-interactive mode \"$choice\", exiting!") unless($firstTry || $isInteractive);
     $firstTry=0;
-    $choice=promptStdin("$prompt ($fileName)",$default);
+    $choice=promptStdin("$prompt ($fileName)",$default,$autoInstallValue);
+    $autoInstallValue=undef;
   }
   return isAbsoluteFilePath($choice,$fileName);
 }
 
 sub promptExistingDir {
-  my ($prompt,$default,$acceptSpecialValue,$r_testFunction)=@_;
+  my ($prompt,$default,$acceptSpecialValue,$r_testFunction,$autoInstallValue)=@_;
   my $choice='';
   my $firstTry=1;
   while(! isAbsolutePath($choice) || ! -d $choice || index($choice,$pathSep) != -1 || (defined $r_testFunction && ! $r_testFunction->($choice))) {
     fatalError("Inconsistent data received in non-interactive mode \"$choice\", exiting!") unless($firstTry || $isInteractive);
     $firstTry=0;
-    $choice=promptStdin($prompt,$default);
+    $choice=promptStdin($prompt,$default,$autoInstallValue);
+    $autoInstallValue=undef;
     last if(defined $acceptSpecialValue && $choice eq $acceptSpecialValue);
   }
   return $choice;
@@ -229,7 +260,8 @@ sub promptExistingDir {
 
 sub promptDir {
   my ($prompt,$dirName,$defaultDir,$defaultBaseDir)=@_;
-  my $dir=promptStdin($prompt,$defaultDir);
+  my $autoInstallValue=$autoInstallData{$dirName};
+  my $dir=promptStdin($prompt,$defaultDir,$autoInstallValue);
   $conf{$dirName}=$dir;
   my $fullDir=makeAbsolutePath($dir,$defaultBaseDir);
   createDir($fullDir);
@@ -237,13 +269,14 @@ sub promptDir {
 }
 
 sub promptString {
-  my $prompt=shift;
+  my ($prompt,$autoInstallValue)=@_;
   my $choice='';
   my $firstTry=1;
   while($choice eq '') {
     fatalError("Inconsistent data received in non-interactive mode \"$choice\", exiting!") unless($firstTry || $isInteractive);
     $firstTry=0;
-    $choice=promptStdin($prompt);
+    $choice=promptStdin($prompt,undef,$autoInstallValue);
+    $autoInstallValue=undef;
   }
   return $choice;
 }
@@ -303,7 +336,7 @@ sub configureUnitsyncDir {
           last;
         }
       }
-      my $unitsync=promptExistingFile("$currentStep/$nbSteps - Please enter the absolute path of the unitsync library".($win?', usually located in the Spring installation directory on Windows systems':''),$unitsyncLibName,$defaultUnitsync);
+      my $unitsync=promptExistingFile("$currentStep/$nbSteps - Please enter the absolute path of the unitsync library".($win?', usually located in the Spring installation directory on Windows systems':''),$unitsyncLibName,$defaultUnitsync,$autoInstallData{unitsyncPath});
       $conf{unitsyncDir}=File::Spec->canonpath((fileparse($unitsync))[1]);
     }
     $currentStep++;
@@ -476,7 +509,11 @@ sub configureSpringDataDir {
         last;
       }
     }
-    $baseDataDir=promptExistingDir("$currentStep/$nbSteps - Please enter the absolute path of the main Spring data directory, containing Spring base content".($win?' (usually the Spring installation directory on Windows systems)':''),$defaultBaseDataDir,undef,sub {my $dir=shift; return -d "$dir/base";} );
+    $baseDataDir=promptExistingDir("$currentStep/$nbSteps - Please enter the absolute path of the main Spring data directory, containing Spring base content".($win?' (usually the Spring installation directory on Windows systems)':''),
+                                   $defaultBaseDataDir,
+                                   undef,
+                                   sub {my $dir=shift; return -d "$dir/base";},
+                                   $autoInstallData{baseDataDir} );
     $currentStep++;
   }
 
@@ -502,7 +539,11 @@ sub configureSpringDataDir {
     }
   }
   if(exists $conf{autoInstalledSpringDir}) {
-    $mapModDataDir=promptExistingDir("$currentStep/$nbSteps - Please enter the absolute path of the Spring data directory containing the games and maps hosted by the autohost, or ".($defaultMapModDataDir eq 'new' ? 'press enter' : 'enter "new"').' to use a new directory instead',$defaultMapModDataDir,'new');
+    $mapModDataDir=promptExistingDir("$currentStep/$nbSteps - Please enter the absolute path of the Spring data directory containing the games and maps hosted by the autohost, or ".($defaultMapModDataDir eq 'new' ? 'press enter' : 'enter "new"').' to use a new directory instead',
+                                     $defaultMapModDataDir,
+                                     'new',
+                                     undef,
+                                     $autoInstallData{mapModDataDir});
     $currentStep++;
     if($mapModDataDir eq 'new') {
       $mapModDataDir=File::Spec->catdir($conf{absoluteVarDir},'spring','data');
@@ -526,7 +567,7 @@ sub configureSpringDataDir {
       my %gamesData;
       foreach my $shortName (sort keys %games) {
         my ($name,$repoUrl,$separator)=@{$games{$shortName}};
-        $repoUrl//="http://$shortName.repo.springrts.com/builds/";
+        $repoUrl//="http://repos.springrts.com/$shortName/builds/";
         $separator//='-';
         my $httpRes=HTTP::Tiny->new(timeout => 10)->request('GET',$repoUrl.'?C=M;O=A');
         my @gameArchives;
@@ -555,7 +596,7 @@ sub configureSpringDataDir {
           print "  $shortName : $gamesData{$shortName}{name}\n";
         }
         print "\n";
-        my $downloadedShortName=promptChoice("$currentStep/$nbSteps - Which game do you want to download to initialize the autohost \"games\" directory",[(sort keys %gamesData),'none'],$defaultShortName);
+        my $downloadedShortName=promptChoice("$currentStep/$nbSteps - Which game do you want to download to initialize the autohost \"games\" directory",[(sort keys %gamesData),'none'],$defaultShortName,$autoInstallData{downloadedGameShortName});
         $currentStep++;
         if(exists $gamesData{$downloadedShortName}) {
           slog("Downloading $gamesData{$downloadedShortName}{name}...",3);
@@ -575,7 +616,7 @@ sub configureSpringDataDir {
       print "\nDirectory \"$mapsDir\" has been created to store the maps used by the autohost.\n";
       print "You can download a minimal set of 3 maps (\"Red Comet\", \"Comet Catcher Redux\" and \"Delta Siege Dry\") in this directory automatically, or you can choose to manually place some maps archives there then enter \"no\" when finished.\n\n";
       my @mapFiles=(qw'red_comet.sd7 comet_catcher_redux.sd7 deltasiegedry.sd7');
-      my $downloadMaps=promptChoice("$currentStep/$nbSteps - Do you want to download a minimal set of 3 maps to initialize the autohost \"maps\" directory",['yes','no'],'yes');
+      my $downloadMaps=promptChoice("$currentStep/$nbSteps - Do you want to download a minimal set of 3 maps to initialize the autohost \"maps\" directory",['yes','no'],'yes',$autoInstallData{downloadMaps});
       $currentStep++;
       if($downloadMaps eq 'yes') {
         slog('Downloading maps...',3);
@@ -585,7 +626,11 @@ sub configureSpringDataDir {
       $nbSteps-=2;
     }
   }else{
-    $mapModDataDir=promptExistingDir("$currentStep/$nbSteps - Please enter the absolute path of an optional ".($win?'':'secondary ')."Spring data directory containing additional games and maps (".($defaultMapModDataDir eq 'none' ? 'press enter' : 'enter "none"').' to skip)',$defaultMapModDataDir,'none');
+    $mapModDataDir=promptExistingDir("$currentStep/$nbSteps - Please enter the absolute path of an optional ".($win?'':'secondary ')."Spring data directory containing additional games and maps (".($defaultMapModDataDir eq 'none' ? 'press enter' : 'enter "none"').' to skip)',
+                                     $defaultMapModDataDir,
+                                     'none',
+                                     undef,
+                                     $autoInstallData{mapModDataDir});
     $currentStep++;
   }
 
@@ -677,7 +722,7 @@ if(! exists $conf{release}) {
   print "You can stop this installation at any time by hitting Ctrl-c.\n";
   print "Note: if SPADS is already installed on the system, you don't need to reinstall it to run multiple autohosts. Instead, you can share SPADS binaries and use multiple configuration files and/or configuration macros.\n\n";
 
-  $conf{release}=promptChoice("1/$nbSteps - Which SPADS release do you want to install",[qw'stable testing unstable contrib'],'testing');
+  $conf{release}=promptChoice("1/$nbSteps - Which SPADS release do you want to install",[qw'stable testing unstable contrib'],'testing',$autoInstallData{release});
 }
 
 my $updaterLog=SimpleLog->new(logFiles => [''],
@@ -729,7 +774,7 @@ if(! exists $conf{autoManagedSpringVersion}) {
   if($macOs) {
     $springBinariesType='custom';
   }else{
-    $springBinariesType=promptChoice("5/$nbSteps - Do you want to use official Spring binary files (auto-managed by SPADS), or a custom Spring installation already existing on the system?",[qw'official custom'],'official');
+    $springBinariesType=promptChoice("5/$nbSteps - Do you want to use official Spring binary files (auto-managed by SPADS), or a custom Spring installation already existing on the system?",[qw'official custom'],'official',$autoInstallData{springBinariesType});
   }
 
   if($springBinariesType eq 'official') {
@@ -777,8 +822,10 @@ if(! exists $conf{autoManagedSpringVersion}) {
     print 'If you choose a specific Spring version number ("'.join('", "',@springVersionExamples)."\", ...), SPADS will stick to this version until you manualy change it in the configuration file.\n\n";
     my $autoManagedSpringVersion='';
     my $springVersion;
+    my $autoInstallValue=$autoInstallData{autoManagedSpringVersion};
     while(! exists $availableVersions{$autoManagedSpringVersion}) {
-      $autoManagedSpringVersion=promptStdin("6/$nbSteps - Which Spring version do you want to use (".(join(',',@springVersionExamples,(sort keys %springReleases),'...')).')',$springReleasesVersion{stable});
+      $autoManagedSpringVersion=promptStdin("6/$nbSteps - Which Spring version do you want to use (".(join(',',@springVersionExamples,(sort keys %springReleases),'...')).')',$springReleasesVersion{stable},$autoInstallValue);
+      $autoInstallValue=undef;
       if( exists $availableVersions{$autoManagedSpringVersion}) {
         $springVersion=$springReleasesVersion{$autoManagedSpringVersion} // $autoManagedSpringVersion;
         my $springSetupRes=$updater->setupSpring($springVersion);
@@ -819,7 +866,10 @@ configureSpringDataDir();
 my $r_availableMods=checkUnitsync();
 my @availableMods=sort(@{$r_availableMods});
 
-my $springServerType=promptChoice("$currentStep/$nbSteps - Which type of server do you want to use (\"headless\" requires much more CPU/memory and doesn't support \"ghost maps\", but it allows running AI bots and LUA scripts on server side)?",[qw'dedicated headless'],'dedicated');
+my $springServerType=promptChoice("$currentStep/$nbSteps - Which type of server do you want to use (\"headless\" requires much more CPU/memory and doesn't support \"ghost maps\", but it allows running AI bots and LUA scripts on server side)?",
+                                  [qw'dedicated headless'],
+                                  'dedicated',
+                                  $autoInstallData{springServerType});
 $conf{springServerType} = exists $conf{autoInstalledSpringDir} ? $springServerType : '';
 $currentStep++;
 
@@ -842,75 +892,81 @@ if(exists $conf{autoInstalledSpringDir}) {
     }
   }
 
-  $conf{springServer}=promptExistingFile("$currentStep/$nbSteps - Please enter the absolute path of the spring $springServerType server",$springServerName,$defaultSpringServerPath);
+  $conf{springServer}=promptExistingFile("$currentStep/$nbSteps - Please enter the absolute path of the spring $springServerType server",$springServerName,$defaultSpringServerPath,$autoInstallData{springServer});
   $currentStep++;
 }
 
 $conf{modName}='_NO_GAME_FOUND_';
-if(! @availableMods) {
-  slog("No Spring game found, consequently the \"modName\" parameter in \"hostingPresets.conf\" will NOT be auto-configured",2);
-  slog('Hit Ctrl-C now if you want to abort this installation to fix the problem, or remember that you will have to set the default hosted game manually later',2);
-  $nbSteps-=2;
+if(defined $autoInstallData{modName}) {
+  $conf{modName}=$autoInstallData{modName};
+  slog("Default hosted game set to \"$conf{modName}\" from auto-install data",3);
+    $nbSteps-=2;
 }else{
-  my $chosenModNb='';
-  if($#availableMods == 0) {
-    $chosenModNb=0;
-    $nbSteps--;
+  if(! @availableMods) {
+    slog("No Spring game found, consequently the \"modName\" parameter in \"hostingPresets.conf\" will NOT be auto-configured",2);
+    slog('Hit Ctrl-C now if you want to abort this installation to fix the problem, or remember that you will have to set the default hosted game manually later',2);
+    $nbSteps-=2;
   }else{
-    print "\nAvailable games in your \"games\" and \"packages\" folders:\n";
-    foreach my $modNb (0..$#availableMods) {
-      print "  $modNb --> $availableMods[$modNb]\n";
-    }
-    print "\n";
-    while($chosenModNb !~ /^\d+$/ || $chosenModNb > $#availableMods) {
-      print "$currentStep/$nbSteps - Please choose the default hosted game ? ";
-      $chosenModNb=<STDIN>;
-      $chosenModNb//='';
-      chomp($chosenModNb);
-    }
-    $currentStep++;
-  }
-  $conf{modName}=$availableMods[$chosenModNb];
-
-  my $modFilter;
-  if($conf{modName} =~ /^(.+ )test\-\d+\-[\da-f]+$/) {
-    $modFilter=quotemeta($1).'test\-\d+\-[\da-f]+';
-  }else{
-    $modFilter=quotemeta($conf{modName});
-    $modFilter =~ s/\d+/\\d+/g;
-  }
-
-  my $isLatestMod=1;
-  foreach my $availableMod (@availableMods) {
-    next if($availableMod eq $conf{modName});
-    if($availableMod =~ /^$modFilter$/ && $availableMod gt $conf{modName}) {
-      $isLatestMod=0;
-      last;
-    }
-  }
-
-  if($isLatestMod) {
-    my $chosenModText=$#availableMods>0?'You chose the latest version of this game currently available in your "games" and "packages" folders. ':'';
-    my $useLatestMod=promptChoice("$currentStep/$nbSteps - ${chosenModText}Do you want to enable new game auto-detection to always host the latest version of the game available in your \"games\" and \"packages\" folders?",[qw'yes no'],'yes');
-    $currentStep++;
-    if($useLatestMod eq 'yes') {
-      slog("Using following regular expression as autohost default game filter: \"$modFilter\"",3);
-      $modFilter='~'.$modFilter;
-      $conf{modName}=$modFilter;
+    my $chosenModNb='';
+    if($#availableMods == 0) {
+      $chosenModNb=0;
+      $nbSteps--;
     }else{
+      print "\nAvailable games in your \"games\" and \"packages\" folders:\n";
+      foreach my $modNb (0..$#availableMods) {
+        print "  $modNb --> $availableMods[$modNb]\n";
+      }
+      print "\n";
+      while($chosenModNb !~ /^\d+$/ || $chosenModNb > $#availableMods) {
+        print "$currentStep/$nbSteps - Please choose the default hosted game ? ";
+        $chosenModNb=<STDIN>;
+        $chosenModNb//='';
+        chomp($chosenModNb);
+      }
+      $currentStep++;
+    }
+    $conf{modName}=$availableMods[$chosenModNb];
+
+    my $modFilter;
+    if($conf{modName} =~ /^(.+ )test\-\d+\-[\da-f]+$/) {
+      $modFilter=quotemeta($1).'test\-\d+\-[\da-f]+';
+    }else{
+      $modFilter=quotemeta($conf{modName});
+      $modFilter =~ s/\d+/\\d+/g;
+    }
+
+    my $isLatestMod=1;
+    foreach my $availableMod (@availableMods) {
+      next if($availableMod eq $conf{modName});
+      if($availableMod =~ /^$modFilter$/ && $availableMod gt $conf{modName}) {
+        $isLatestMod=0;
+        last;
+      }
+    }
+
+    if($isLatestMod) {
+      my $chosenModText=$#availableMods>0?'You chose the latest version of this game currently available in your "games" and "packages" folders. ':'';
+      my $useLatestMod=promptChoice("$currentStep/$nbSteps - ${chosenModText}Do you want to enable new game auto-detection to always host the latest version of the game available in your \"games\" and \"packages\" folders?",[qw'yes no'],'yes',$autoInstallData{useLatestMod});
+      $currentStep++;
+      if($useLatestMod eq 'yes') {
+        slog("Using following regular expression as autohost default game filter: \"$modFilter\"",3);
+        $modFilter='~'.$modFilter;
+        $conf{modName}=$modFilter;
+      }else{
+        slog("Using \"$conf{modName}\" as default hosted game",3);
+      }
+    }else{
+      $nbSteps--;
       slog("Using \"$conf{modName}\" as default hosted game",3);
     }
-  }else{
-    $nbSteps--;
-    slog("Using \"$conf{modName}\" as default hosted game",3);
   }
 }
 
-$conf{lobbyLogin}=promptString("$currentStep/$nbSteps - Please enter the autohost lobby login (the lobby account must already exist)");
+$conf{lobbyLogin}=promptString("$currentStep/$nbSteps - Please enter the autohost lobby login (the lobby account must already exist)",$autoInstallData{lobbyLogin});
 $currentStep++;
-$conf{lobbyPassword}=promptString("$currentStep/$nbSteps - Please enter the autohost lobby password");
+$conf{lobbyPassword}=promptString("$currentStep/$nbSteps - Please enter the autohost lobby password",$autoInstallData{lobbyPassword});
 $currentStep++;
-$conf{owner}=promptString("$currentStep/$nbSteps - Please enter the lobby login of the autohost owner");
+$conf{owner}=promptString("$currentStep/$nbSteps - Please enter the lobby login of the autohost owner",$autoInstallData{owner});
 $currentStep++;
 
 my @confFiles=qw'banLists.conf battlePresets.conf commands.conf hostingPresets.conf levels.conf mapBoxes.conf mapLists.conf spads.conf users.conf';

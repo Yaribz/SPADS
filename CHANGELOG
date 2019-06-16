@@ -1041,6 +1041,8 @@ spadsInstaller.pl:
       renamed config macros used during installation to better reflect target setting names
 0.21: fix mod name regular expression for test mods
 0.22: add "springLobbyCertificates.dat" to the list of auto-updated modules
+0.23: add fully automatic/unattended install support
+      fix URL for automatic mod/game downloads
 
 SpadsPluginApi.pm:
 =================
