@@ -824,6 +824,7 @@ spads.pl:
         retrieve full Spring version only once (when unitsync library is loaded), instead of retrieving it each time a (re)connection to lobby server is performed
 0.12.6: experimental support for TLS on lobby connection
         SpringLobbyInterface module logs are now also printed on standard output
+0.12.6a: improve lobby compatibility flags management
 
 SpadsConf.pm:
 ============
