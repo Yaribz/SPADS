@@ -6,11 +6,23 @@ use File::Spec::Functions 'catfile';
 use HTTP::Tiny;
 use List::Util 'first';
 
+my $httpTinyCanSsl;
+if(HTTP::Tiny->can('can_ssl')) {
+  $httpTinyCanSsl=HTTP::Tiny->can_ssl();
+}else{
+  $httpTinyCanSsl=eval { require IO::Socket::SSL;
+                         IO::Socket::SSL->VERSION(1.42);
+                         require Net::SSLeay;
+                         Net::SSLeay->VERSION(1.49);
+                         1; };
+}
+my $httpRegExp='http'.($httpTinyCanSsl?'s?':'').'://';
+
 use SpadsPluginApi;
 
 no warnings 'redefine';
 
-my $pluginVersion='0.3';
+my $pluginVersion='0.4';
 my $requiredSpadsVersion='0.11.4';
 
 my %globalPluginParams = ( commandsFile => ['notNull'],
@@ -26,7 +38,7 @@ sub new {
   bless($self,$class);
   addSpadsCommandHandler({dlmap => \&hSpadsDlMap,
                           dlmod => \&hSpadsDlMod});
-  slog("Plugin loaded (version $pluginVersion)",3);
+  slog("Plugin loaded (version $pluginVersion, TLS support ".($httpTinyCanSsl?'':'not ').'available)',3);
   return $self;
 }
 
@@ -45,7 +57,7 @@ sub hSpadsDlMod {
 
 sub spadsDlArchive {
   my ($type,$source,$user,$p_params,$checkOnly)=@_;
-  if($#{$p_params} != 0 || $p_params->[0] !~ /^http:\/\//i || $p_params->[0] =~ /\"/) {
+  if($#{$p_params} != 0 || $p_params->[0] !~ /^$httpRegExp/i || $p_params->[0] =~ /\"/) {
     ::invalidSyntax($user,"dl$type");
     return 0;
   }
@@ -115,7 +127,7 @@ sub generateRandomFileChars {
 sub downloadFileForked {
   my ($self,$url,$dlDir)=@_;
   my $defaultFileName=getFileNameFromUrl($url);
-  if($url !~ /^http:\/\//i || ! defined $defaultFileName) {
+  if($url !~ /^$httpRegExp/i || ! defined $defaultFileName) {
     slog("Invalid URL \"$url\", cancelling download!",2);
     exit 1;
   }

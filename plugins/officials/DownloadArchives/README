@@ -1,0 +1,8 @@
+TLS downloads (HTTPS) are only supported if the IO::Socket::SSL perl module is 
+installed. On Windows this module should already be installed by default. On 
+main Linux distributions, the installation of this module can be performed 
+through the standard package manager. For example:
+. Debian/Ubuntu: "apt-get install libio-socket-ssl-perl"
+. RedHat/Centos: "yum install perl-IO-Socket-SSL"
+It is also possible to install this module using CPAN binary:
+  "cpan IO::Socket::SSL"
