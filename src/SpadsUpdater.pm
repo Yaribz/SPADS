@@ -1,6 +1,6 @@
 # Perl module used for Spads auto-updating functionnality
 #
-# Copyright (C) 2008-2017  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2020  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -39,7 +39,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $archName=$win?'win32':($Config{ptrsize} > 4 ? 'linux64' : 'linux32');
 
-my $moduleVersion='0.14';
+my $moduleVersion='0.15';
 
 my @constructorParams = qw'sLog repository release packages';
 my @optionalConstructorParams = qw'localDir springDir';
@@ -191,13 +191,21 @@ sub _compareSpringVersions ($$) {
 sub _getSpringRequiredFiles {
   my $springVersion=shift;
   my @requiredFiles = $win ?
-      (qw'DevIL.dll spring-dedicated.exe spring-headless.exe unitsync.dll zlib1.dll')
+      (qw'spring-dedicated.exe spring-headless.exe unitsync.dll zlib1.dll')
       : (qw'libunitsync.so spring-dedicated spring-headless');
   if($win) {
     if(_compareSpringVersions($springVersion,92) < 0) {
       push(@requiredFiles,'mingwm10.dll');
     }elsif(_compareSpringVersions($springVersion,95) < 0) {
       push(@requiredFiles,'pthreadGC2.dll');
+    }
+    if(_compareSpringVersions($springVersion,'104.0.1-1398-') < 0) {
+      push(@requiredFiles,'DevIL.dll');
+    }else{
+      push(@requiredFiles,'libIL.dll');
+    }
+    if(_compareSpringVersions($springVersion,'104.0.1-1058-') > 0) {
+      push(@requiredFiles,'libcurl.dll');
     }
   }
   return \@requiredFiles;
@@ -209,7 +217,7 @@ sub checkSpringDir {
   return wantarray ? (undef,[]) : undef unless(defined $springDir);
   return wantarray ? (undef,['base']) : undef unless(-d "$springDir/base");
   my $p_requiredFiles=_getSpringRequiredFiles($springVersion);
-  my @missingFiles=grep {! -f "$springDir/$_"} @{$p_requiredFiles};
+  my @missingFiles=grep {! -f "$springDir/$_" && $_ ne 'libcurl.dll'} @{$p_requiredFiles};
   return wantarray ? (undef,[@missingFiles]) : undef if(@missingFiles);
   return wantarray ? ($springDir,[]) : $springDir;
 }

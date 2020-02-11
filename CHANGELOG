@@ -1128,6 +1128,7 @@ SpadsUpdater.pm:
       Spring version dependant and Perl version dependant packages are no longer supported
 0.13a: localize variable $_ (improve AnyEvent stability)
 0.14: automatic Spring installation functionality is now compatible with all Spring branches
+0.15: handle new spring-headless.exe dependencies: libIL.dll and libcurl.dll (Windows)
 
 springLobbyCertificates.dat:
 ===========================
