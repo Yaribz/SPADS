@@ -1129,6 +1129,7 @@ SpadsUpdater.pm:
 0.13a: localize variable $_ (improve AnyEvent stability)
 0.14: automatic Spring installation functionality is now compatible with all Spring branches
 0.15: handle new spring-headless.exe dependencies: libIL.dll and libcurl.dll (Windows)
+0.16: workaround for 7za static binary incompatibility with recent Linux kernels when using specific locales (Linux)
 
 springLobbyCertificates.dat:
 ===========================

@@ -39,7 +39,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $archName=$win?'win32':($Config{ptrsize} > 4 ? 'linux64' : 'linux32');
 
-my $moduleVersion='0.15';
+my $moduleVersion='0.16';
 
 my @constructorParams = qw'sLog repository release packages';
 my @optionalConstructorParams = qw'localDir springDir';
@@ -601,7 +601,16 @@ sub uncompress7zipFile {
   my $sl=$self->{sLog};
   my $sevenZipBin=catfile($self->{localDir},$win?'7za.exe':'7za');
   $sl->log("Extracting sevenzip file \"$archiveFile\" into \"$destDir\"...",5);
+  my $previousEnvLangValue=$ENV{LANG};
+  $ENV{LANG}='C' unless($win);
   my ($exitCode,$errorMsg)=_systemNoOutput($sevenZipBin,'x','-y',"-o$destDir",$archiveFile,@filesToExtract);
+  if(! $win) {
+    if(defined $previousEnvLangValue) {
+      $ENV{LANG}=$previousEnvLangValue;
+    }else{
+      delete $ENV{LANG};
+    }
+  }
   my $failReason;
   if(defined $errorMsg) {
     $failReason=", error while running 7zip ($errorMsg)";
