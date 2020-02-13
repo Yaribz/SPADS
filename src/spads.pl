@@ -52,7 +52,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.7';
+our $spadsVer='0.12.7a';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -4780,7 +4780,7 @@ sub needRehost {
     $params{maxPlayers}='maxPlayers';
   }else{
     return 1 if($spads->{hSettings}{maxPlayers} != $lobby->{battles}{$lobby->{battle}{battleId}}{maxPlayers}
-                && ($spads->{hSettings}{maxPlayers} < 11 || $lobby->{battles}{$lobby->{battle}{battleId}}{maxPlayers} != 10));
+                && ($spads->{hSettings}{maxPlayers} < 9 || $lobby->{battles}{$lobby->{battle}{battleId}}{maxPlayers} != 8));
   }
   foreach my $p (keys %params) {
     return 1 if($spads->{hSettings}->{$p} ne $lobby->{battles}->{$lobby->{battle}->{battleId}}->{$params{$p}});

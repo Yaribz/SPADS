@@ -828,6 +828,7 @@ spads.pl:
 0.12.7: TLS encryption is now used by default for lobby server communication if available (requires IO::Socket::SSL module)
         TLS status is now shown in !version output
         minor optimization in the REMOVESCRIPTTAGS command sent when a player leaves the battle
+0.12.7a: fix rehost loop when trying to host for more than 8 players without bot flag
 
 SpadsConf.pm:
 ============
