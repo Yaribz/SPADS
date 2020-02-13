@@ -52,10 +52,12 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.6a';
+our $spadsVer='0.12.7';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
+
+my $ioSocketSslVer=eval { require IO::Socket::SSL; $IO::Socket::SSL::VERSION; };
 
 my %optionTypes = (
   0 => "error",
@@ -571,10 +573,13 @@ if(defined $tlsAction && ($tlsAction eq 'revoke' || $tlsAction eq 'list' || defi
   exit 0;
 }
 
-my $useTls=0;
-if(exists $confMacros{lobbyTls} && (any {lc($confMacros{lobbyTls}) eq $_} (qw'on yes enabled true 1'))) {
-  fatalError('Module IO::Socket::SSL required for TLS') unless($lobby->isTlsAvailable());
-  $useTls=1;
+my $useTls = defined $ioSocketSslVer ? 1 : 0;
+if(exists $confMacros{lobbyTls}) {
+  if(any {lc($confMacros{lobbyTls}) eq $_} (qw'on yes enabled true 1')) {
+    fatalError('Module IO::Socket::SSL required for TLS support') unless(defined $ioSocketSslVer);
+  }else{
+    $useTls=0;
+  }
 }
 
 # Subfunctions ################################################################
@@ -11279,7 +11284,7 @@ sub hVersion {
     $autoUpdateString="auto-update: $autoUpdateRelease";
   }
 
-  my $springVersion=$syncedSpringVersion;
+  my $springVersion=$syncedSpringVersion.$C{1};
   if($autoManagedSpringData{mode} eq 'version') {
     $springVersion.=' (auto-downloaded)';
   }elsif($autoManagedSpringData{mode} eq 'release') {
@@ -11297,10 +11302,12 @@ sub hVersion {
   foreach my $module (keys %components) {
     $versionedComponents{$module}='v'.$components{$module}->getVersion();
   }
+  $versionedComponents{SpringLobbyInterface}.=$C{1}.' (TLS '.($useTls?'enabled':'disabled').')';
   my $simpleEventModel=SimpleEvent::getModel();
   if(defined $simpleEventModel && $simpleEventModel ne 'internal') {
     $versionedComponents{AnyEvent}='v'.$AnyEvent::VERSION."$C{1} ($simpleEventModel)";
   }
+  $versionedComponents{'IO::Socket::SSL'}='v'.$ioSocketSslVer if(defined $ioSocketSslVer);
   foreach my $component (sort keys %versionedComponents) {
     sayPrivate($user,"- $C{5}$component$C{10} $versionedComponents{$component}");
   }
@@ -12311,8 +12318,7 @@ sub cbLeftBattle {
     }
     updateCurrentGameType();
 
-    queueLobbyCommand(["REMOVESCRIPTTAGS",'game/players/'.lc($user).'/skill']);
-    queueLobbyCommand(["REMOVESCRIPTTAGS",'game/players/'.lc($user).'/skilluncertainty']);
+    queueLobbyCommand(["REMOVESCRIPTTAGS",'game/players/'.lc($user).'/skill','game/players/'.lc($user).'/skilluncertainty']);
   }
 }
 

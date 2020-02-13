@@ -825,6 +825,9 @@ spads.pl:
 0.12.6: experimental support for TLS on lobby connection
         SpringLobbyInterface module logs are now also printed on standard output
 0.12.6a: improve lobby compatibility flags management
+0.12.7: TLS encryption is now used by default for lobby server communication if available (requires IO::Socket::SSL module)
+        TLS status is now shown in !version output
+        minor optimization in the REMOVESCRIPTTAGS command sent when a player leaves the battle
 
 SpadsConf.pm:
 ============
