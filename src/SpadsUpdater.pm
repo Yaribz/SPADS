@@ -39,7 +39,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $archName=$win?'win32':($Config{ptrsize} > 4 ? 'linux64' : 'linux32');
 
-my $moduleVersion='0.16';
+my $moduleVersion='0.17';
 
 my @constructorParams = qw'sLog repository release packages';
 my @optionalConstructorParams = qw'localDir springDir';
@@ -534,6 +534,11 @@ sub setupSpring {
   return 0 if($self->checkSpringDir($version));
 
   my (undef,$unavailabilityMsg)=$self->checkSpringVersionAvailability($version,$branch);
+  if(defined $unavailabilityMsg && $branch eq 'develop') {
+    $branch='maintenance';
+    my (undef,$unavailabilityMsg2)=$self->checkSpringVersionAvailability($version,$branch);
+    $unavailabilityMsg=undef if(! defined $unavailabilityMsg2);
+  }
   if(defined $unavailabilityMsg) {
     $sl->log("Spring $version installation cancelled ($unavailabilityMsg)",1);
     return -10;
