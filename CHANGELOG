@@ -1048,6 +1048,7 @@ spadsInstaller.pl:
 0.22: add "springLobbyCertificates.dat" to the list of auto-updated modules
 0.23: add fully automatic/unattended install support
       fix URL for automatic mod/game downloads
+0.24: add full support for maintenance Spring branch
 
 SpadsPluginApi.pm:
 =================

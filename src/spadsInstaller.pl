@@ -2,7 +2,7 @@
 #
 # This program installs SPADS in current directory from remote repository.
 #
-# Copyright (C) 2008-2019  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2020  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.23 (2019/06/16)
+# Version 0.24 (2020/02/16)
 
 use strict;
 
@@ -779,9 +779,10 @@ if(! exists $conf{autoManagedSpringVersion}) {
 
   if($springBinariesType eq 'official') {
     my (%springVersions,%springReleasesVersion,%springVersionsReleases);
-    my @springBranches=(qw'dev release');
+    my @springBranches=(qw'dev maintenance release');
     my %springReleases=(stable => 'recommended release',
                         testing => 'next release candidate',
+                        maintenance => 'latest maintenance version',
                         unstable => 'latest develop version');
 
     slog('Checking available Spring versions...',3);
@@ -815,7 +816,7 @@ if(! exists $conf{autoManagedSpringVersion}) {
       }
     }
     print "\nPlease choose the Spring version which will be used by the autohost.\n";
-    print "If you choose \"stable\", \"testing\" or \"unstable\", SPADS will stay up to date with the corresponding official Spring release by automatically downloading and using new Spring binary files when needed.\n";
+    print "If you choose \"stable\", \"testing\", \"maintenance\" or \"unstable\", SPADS will stay up to date with the corresponding official Spring release by automatically downloading and using new Spring binary files when needed.\n";
     my @springVersionExamples=($springReleasesVersion{stable});
     push(@springVersionExamples,$springReleasesVersion{testing}) unless($springReleasesVersion{stable} eq $springReleasesVersion{testing});
     push(@springVersionExamples,$springReleasesVersion{unstable});
