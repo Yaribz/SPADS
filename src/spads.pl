@@ -52,7 +52,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.7a';
+our $spadsVer='0.12.8';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -1985,7 +1985,7 @@ sub sendBattleSettings {
   my %bSettings=%{$spads->{bSettings}};
   my $currentModName=$lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod};
   my $p_modOptions=getModOptions($currentModName);
-  my @scriptTagsSettings=("game/startPosType=$bSettings{startpostype}",'game/hosttype=SPADS');
+  my @scriptTagsSettings=("game/startpostype=$bSettings{startpostype}",'game/hosttype=SPADS');
   foreach my $scriptTagsSetting (keys %{$p_modOptions}) {
     my $bValue;
     if(exists $bSettings{$scriptTagsSetting}) {
