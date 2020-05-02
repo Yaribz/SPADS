@@ -52,7 +52,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.8';
+our $spadsVer='0.12.8a';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -3996,7 +3996,7 @@ sub randomRevSort {
   my @sortedItems;
   
   my %itemGroups;
-  foreach my $item (keys %{$p_items}) {
+  foreach my $item (sort keys %{$p_items}) {
     my $itemValue=&{$p_evalFunc}($p_items->{$item});
     $itemGroups{$itemValue}=[] unless(exists $itemGroups{$itemValue});
     push(@{$itemGroups{$itemValue}},$item);

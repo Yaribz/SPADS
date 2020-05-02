@@ -830,6 +830,7 @@ spads.pl:
         minor optimization in the REMOVESCRIPTTAGS command sent when a player leaves the battle
 0.12.7a: fix rehost loop when trying to host for more than 8 players without bot flag
 0.12.8: force startPosType battle setting to be sent lower case (workaround for uberserver not converting to lower case as documented)
+0.12.8a: fix team balancing not being deterministic on modern perl versions when some players had exact same skill values (!balance was actually acting like !rebalance)
 
 SpadsConf.pm:
 ============
