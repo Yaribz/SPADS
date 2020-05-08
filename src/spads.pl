@@ -52,7 +52,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.8a';
+our $spadsVer='0.12.9';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -11226,9 +11226,10 @@ sub hUpdate {
                                release => $release,
                                packages => \@packagesSpads,
                                springDir => $conf{autoManagedSpringDir});
-  if(! SimpleEvent::forkProcess(
+  if(! SimpleEvent::forkCall(
+         sub { return $updater->update() },
          sub {
-           my $updateRc=$updater->update();
+           my $updateRc = shift;
            my ($answerMsg,$exitCode);
            if($updateRc < 0) {
              if($updateRc == -7) {
@@ -11244,15 +11245,9 @@ sub hUpdate {
              $answerMsg="$updateRc SPADS component(s) updated (a restart is needed to apply modifications)";
              $exitCode=0;
            }
-           if($source eq "pv") {
-             logMsg("pv_$user","<$conf{lobbyLogin}> $answerMsg") if($conf{logPvChat});
-             sendLobbyCommand([["SAYPRIVATE",$user,$answerMsg]]);
-           }else{
-             answer($answerMsg);
-           }
-           exit $exitCode;
-         },
-         \&onUpdaterProcessExit)) {
+           sayPrivate($user,$answerMsg);
+           onUpdaterProcessExit(undef,$exitCode);
+         })) {
     answer("Unable to update: cannot fork to launch SPADS updater");
     return 0;
   }
