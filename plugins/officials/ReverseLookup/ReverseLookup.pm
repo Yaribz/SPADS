@@ -16,7 +16,7 @@ sub any (&@) {
   return defined first {&{$code}} @_;
 }
 
-my $pluginVersion='0.2';
+my $pluginVersion='0.3';
 my $requiredSpadsVersion='0.11.31';
 
 my %globalPluginParams = ( dnsCacheTime => ['integer'],
@@ -222,13 +222,10 @@ sub updateStatusInfo {
     }elsif($hostname eq '_RESOLVING_') {
       $hostname='resolving...';
     }
-    if(index($hostname,'_') != 0) {
-      $p_playerStatus->{IP}=$p_playerStatus->{IP}." ($hostname)";
-      return ['IP'];
-    }
-    return [];
+    $p_playerStatus->{IP}.=" ($hostname)" if(index($hostname,'_') != 0);
+    return ['IP'];
   }
-  $p_playerStatus->{IP}=$p_playerStatus->{IP}.' (?)';
+  $p_playerStatus->{IP}.=' (?)';
   return ['IP'];
 }
 
