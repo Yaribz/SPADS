@@ -52,7 +52,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.9';
+our $spadsVer='0.12.10';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -2555,11 +2555,18 @@ sub handleRequest {
   
   return if($floodCheck && checkCmdFlood($user));
   
-  my %answerFunctions = ( pv => sub { sayPrivate($user,$_[0]) },
-                          battle => \&sayBattle,
-                          chan => sub { sayChan($masterChannel,$_[0]) },
-                          game => sub { sayGame($_[0]) ; sayBattle($_[0]) } );
-  $p_answerFunction=$answerFunctions{$source};
+  if($source eq 'game') {
+    if(isUserAllowedToSpeakInGame($user)) {
+      $p_answerFunction = \&sayBattleAndGame;
+    }else{
+      $p_answerFunction = sub { sayPrivate($user,$_[0]) };
+    }
+  }else{
+    my %answerFunctions = ( pv => sub { sayPrivate($user,$_[0]) },
+                            battle => \&sayBattle,
+                            chan => sub { sayChan($masterChannel,$_[0]) } );
+    $p_answerFunction=$answerFunctions{$source};
+  }
   
   my @cmd=grep {$_ ne ''} (split(/ /,$command));
   
@@ -2698,12 +2705,19 @@ sub executeCommand {
   my ($source,$user,$p_cmd,$checkOnly)=@_;
   $checkOnly//=0;
 
-  my %answerFunctions = ( pv => sub { sayPrivate($user,$_[0]) },
-                          battle => \&sayBattle,
-                          chan => sub { sayChan($masterChannel,$_[0]) },
-                          game => sub { sayGame($_[0]) ; sayBattle($_[0]) } );
-  $p_answerFunction=$answerFunctions{$source};
-
+  if($source eq 'game') {
+    if(isUserAllowedToSpeakInGame($user)) {
+      $p_answerFunction = \&sayBattleAndGame;
+    }else{
+      $p_answerFunction = sub { sayPrivate($user,$_[0]) };
+    }
+  }else{
+    my %answerFunctions = ( pv => sub { sayPrivate($user,$_[0]) },
+                            battle => \&sayBattle,
+                            chan => sub { sayChan($masterChannel,$_[0]) } );
+    $p_answerFunction=$answerFunctions{$source};
+  }
+  
   my @cmd=@{$p_cmd};
   my $command=lc(shift(@cmd));
 
@@ -12647,18 +12661,21 @@ sub cbAhPlayerLeft {
 sub cbAhPlayerChat {
   my (undef,$playerNb,$dest,$msg)=@_;
   my $player=$autohost->{players}->{$playerNb}->{name};
-  $dest="(to $dest) " if($dest ne "");
-  logMsg("game","$dest<$player> $msg") if($conf{logGameChat});
-  if($dest eq "") {
-    if(isUserAllowedToSpeakInGame($player)) {
-      my $p_messages=splitMsg($msg,$conf{maxChatMessageLength}-13-length($player));
-      foreach my $mes (@{$p_messages}) {
-        queueLobbyCommand(["SAYBATTLE","<$player> $mes"]);
-      }
+  my $destString;
+  if($dest eq '') {
+    $destString=isUserAllowedToSpeakInGame($player)?'':'(to spectators, forced) '
+  }else{
+    $destString="(to $dest) ";
+  }
+  logMsg("game","$destString<$player> $msg") if($conf{logGameChat});
+  if($destString eq '') {
+    my $p_messages=splitMsg($msg,$conf{maxChatMessageLength}-13-length($player));
+    foreach my $mes (@{$p_messages}) {
+      queueLobbyCommand(["SAYBATTLE","<$player> $mes"]);
     }
-    if("$msg" =~ /^!(\w.*)$/) {
-      handleRequest("game",$player,$1);
-    }
+  }
+  if($dest eq '' && "$msg" =~ /^!(\w.*)$/) {
+    handleRequest("game",$player,$1);
   }
 }
 

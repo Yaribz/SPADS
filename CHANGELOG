@@ -832,6 +832,7 @@ spads.pl:
 0.12.8: force startPosType battle setting to be sent lower case (workaround for uberserver not converting to lower case as documented)
 0.12.8a: fix team balancing not being deterministic on modern perl versions when some players had exact same skill values (!balance was actually acting like !rebalance)
 0.12.9: fix !update command triggering reconnection to lobby server on some system
+0.12.10: improve noSpecChat mode (prevent some bypass tricks + better logging)
 
 SpadsConf.pm:
 ============
