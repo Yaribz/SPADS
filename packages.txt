@@ -30,12 +30,12 @@ PerlUnitSync.pm:PerlUnitSync-91.0c.pm
 replay_upload.py:replay_upload_0.7.py
 SimpleEvent.pm:SimpleEvent_0.1c.pm
 SimpleLog.pm:SimpleLog_0.7.pm
-spads.pl:spads_0.12.9.pl
+spads.pl:spads_0.12.10.pl
 SpadsConf.pm:SpadsConf_0.12.3.pm
 spadsInstaller.pl:spadsInstaller_0.24.pl
 SpadsPluginApi.pm:SpadsPluginApi_0.22b.pm
 SpadsUpdater.pm:SpadsUpdater_0.17.pm
-SpringAutoHostInterface.pm:SpringAutoHostInterface_0.11.pm
+SpringAutoHostInterface.pm:SpringAutoHostInterface_0.12.pm
 SpringLobbyInterface.pm:SpringLobbyInterface_0.28.pm
 springLobbyCertificates.dat:springLobbyCertificates_0.1.dat
 update.pl:update_0.12.pl
@@ -51,7 +51,7 @@ PerlUnitSync.pm:PerlUnitSync-91.0c.pm
 replay_upload.py:replay_upload_0.7.py
 SimpleEvent.pm:SimpleEvent_0.1c.pm
 SimpleLog.pm:SimpleLog_0.7.pm
-spads.pl:spads_0.12.10.pl
+spads.pl:spads_0.12.11.pl
 SpadsConf.pm:SpadsConf_0.12.3.pm
 spadsInstaller.pl:spadsInstaller_0.24.pl
 SpadsPluginApi.pm:SpadsPluginApi_0.22b.pm
@@ -72,7 +72,7 @@ PerlUnitSync.pm:PerlUnitSync-91.0c.pm
 replay_upload.py:replay_upload_0.7.py
 SimpleEvent.pm:SimpleEvent_0.1c.pm
 SimpleLog.pm:SimpleLog_0.7.pm
-spads.pl:spads_0.12.10.pl
+spads.pl:spads_0.12.11.pl
 SpadsConf.pm:SpadsConf_0.12.3.pm
 spadsInstaller.pl:spadsInstaller_0.24.pl
 SpadsPluginApi.pm:SpadsPluginApi_0.22b.pm

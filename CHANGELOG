@@ -833,6 +833,7 @@ spads.pl:
 0.12.8a: fix team balancing not being deterministic on modern perl versions when some players had exact same skill values (!balance was actually acting like !rebalance)
 0.12.9: fix !update command triggering reconnection to lobby server on some system
 0.12.10: improve noSpecChat mode (prevent some bypass tricks + better logging)
+0.12.11: improve balance algorithm for 3v3 when one player has a very low skill value compared to the others (degrade team skill homogeneity in profit of better overall balance)
 
 SpadsConf.pm:
 ============

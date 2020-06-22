@@ -52,7 +52,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.10';
+our $spadsVer='0.12.11';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -4114,6 +4114,10 @@ sub getNextPlayerGroup {
 sub balancePlayers {
   my ($p_players,$p_bots,$p_groups,$avgGroupSkill)=@_;
 
+  my $optim3v3 = @{$p_groups} == 2
+      && (all {$_->{freeSlots} == 3 && ! %{$_->{players}} && ! %{$_->{bots}}} @{$p_groups})
+      && (scalar keys %{$p_players}) + (scalar keys %{$p_bots}) == 6;
+
   my $p_sortedPlayers=randomRevSort(sub {return $_[0]->{skill}},$p_players);
   my $p_sortedBots=randomRevSort(sub {return $_[0]->{skill}},$p_bots);
   my @sortedPlayers=@{$p_sortedPlayers};
@@ -4129,6 +4133,43 @@ sub balancePlayers {
     }else{
       my $bot=shift(@sortedBots);
       assignBot($bot,$groupNb,$p_bots,$p_groups);
+    }
+    if($optim3v3 && $p_groups->[$groupNb]{freeSlots} == 2) {
+      my $nextBestPlayerSkill=$p_players->{$sortedPlayers[0]}->{skill} if(@sortedPlayers);
+      my $nextBestBotSkill=$p_bots->{$sortedBots[0]}->{skill} if(@sortedBots);
+      my $nextEntityIsPlayer;
+      if(defined $nextBestPlayerSkill) {
+        if(defined $nextBestBotSkill) {
+          $nextEntityIsPlayer=$nextBestPlayerSkill>$nextBestBotSkill;
+        }else{
+          $nextEntityIsPlayer=1;
+        }
+      }else{
+        $nextEntityIsPlayer=0;
+      }
+      my $nextBestSkill=$nextEntityIsPlayer?$nextBestPlayerSkill:$nextBestBotSkill;
+      my $nextWorstPlayerSkill=$p_players->{$sortedPlayers[-1]}->{skill} if(@sortedPlayers);
+      my $nextWorstBotSkill=$p_bots->{$sortedBots[-1]}->{skill} if(@sortedBots);
+      my $nextWorstSkill;
+      if(defined $nextWorstPlayerSkill) {
+        if(defined $nextWorstBotSkill) {
+          $nextWorstSkill=$nextWorstPlayerSkill<$nextWorstBotSkill?$nextWorstPlayerSkill:$nextWorstBotSkill;
+        }else{
+          $nextWorstSkill=$nextWorstPlayerSkill;
+        }
+      }else{
+        $nextWorstSkill=$nextWorstBotSkill;
+      }
+      if($p_groups->[$groupNb]{skill}+$nextBestSkill+$nextWorstSkill<$avgGroupSkill) {
+        if($nextEntityIsPlayer) {
+          my $player=shift(@sortedPlayers);
+          assignPlayer($player,$groupNb,$p_players,$p_groups);
+        }else{
+          my $bot=shift(@sortedBots);
+          assignBot($bot,$groupNb,$p_bots,$p_groups);
+        }
+      }
+      $optim3v3=0;
     }
   }
 }
