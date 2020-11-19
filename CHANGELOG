@@ -834,6 +834,8 @@ spads.pl:
 0.12.9: fix !update command triggering reconnection to lobby server on some system
 0.12.10: improve noSpecChat mode (prevent some bypass tricks + better logging)
 0.12.11: improve balance algorithm for 3v3 when one player has a very low skill value compared to the others (degrade team skill homogeneity in profit of better overall balance)
+0.12.12: improve concurrent SPADS auto-update management (instances sharing same installation directory)
+         enrich !version command output with information about auto-update configuration
 
 SpadsConf.pm:
 ============

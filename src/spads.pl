@@ -52,7 +52,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.11';
+our $spadsVer='0.12.12';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -85,7 +85,7 @@ if($win) {
   push(@packagesSpads,'7za');
 }
 
-my ($lockFh,$pidFile,$lockAcquired);
+my ($lockFh,$pidFile,$lockAcquired,$ahLockFh,$periodicAutoUpdateLockAcquired);
 
 eval "use HTML::Entities";
 my $htmlEntitiesUnavailable=$@;
@@ -838,6 +838,17 @@ sub convertBanDuration {
   $duration = $1 * 1440 if($duration =~ /^(\d+)d$/);
   $duration = $1 * 60 if($duration =~ /^(\d+)h$/);
   return $duration;
+}
+
+sub secToBriefTime {
+  my $sec=shift;
+  my @units=qw'y d h min s';
+  my @amounts=(gmtime $sec)[5,7,2,1,0];
+  $amounts[0]-=70;
+  for my $i (0..$#units) {
+    return $amounts[$i].$units[$i].'.' if($amounts[$i] > 0);
+  }
+  return '0s.';
 }
 
 sub secToTime {
@@ -2924,23 +2935,45 @@ sub checkDataDump {
   }
 }
 
+sub acquireAutoUpdateLock {
+  return 1 if($periodicAutoUpdateLockAcquired);
+  my $autoUpdateLockFile=catfile($spadsDir,'autoUpdate.lock');
+  if(open($ahLockFh,'>',$autoUpdateLockFile)) {
+    if(flock($ahLockFh, LOCK_EX|LOCK_NB)) {
+      slog('Auto-update has been automatically re-enabled on this instance (auto-update was previously managed by another instance running from same directory)',3) if(defined $periodicAutoUpdateLockAcquired);
+      $periodicAutoUpdateLockAcquired=1;
+    }else{
+      if(! defined $periodicAutoUpdateLockAcquired) {
+        $periodicAutoUpdateLockAcquired=0;
+        slog('Auto-update has been automatically disabled on this instance (auto-update is already managed by another instance running from same directory)',3);
+      }
+    }
+  }else{
+    slog("Unable to write SPADS auto-update lock file \"$autoUpdateLockFile\", bypassing concurrent auto-update check ($!)",1);
+    $periodicAutoUpdateLockAcquired=1;
+  }
+  return $periodicAutoUpdateLockAcquired;
+}
+
 sub checkAutoUpdate {
   if($conf{autoUpdateRelease} ne '' && $conf{autoUpdateDelay} && time - $timestamps{autoUpdate} > 60 * $conf{autoUpdateDelay}) {
     $timestamps{autoUpdate}=time;
-    if($updater->isUpdateInProgress()) {
-      slog('Skipping auto-update, another updater instance is already running',2);
-    }else{
-      if(! SimpleEvent::forkProcess(
-             sub {
-               my $updateRc=$updater->update();
-               if($updateRc < 0) {
-                 slog('Unable to check or apply SPADS update',2);
-                 exit $updateRc;
-               }
-               exit 0;
-             },
-             \&onUpdaterProcessExit)) {
-        slog('Unable to fork to launch SPADS updater',1);
+    if(acquireAutoUpdateLock()) {
+      if($updater->isUpdateInProgress()) {
+        slog('Skipping auto-update, another updater instance is already running',2);
+      }else{
+        if(! SimpleEvent::forkProcess(
+               sub {
+                 my $updateRc=$updater->update();
+                 if($updateRc < 0) {
+                   slog('Unable to check or apply SPADS update',2);
+                   exit $updateRc;
+                 }
+                 exit 0;
+               },
+               \&onUpdaterProcessExit)) {
+          slog('Unable to fork to launch SPADS updater',1);
+        }
       }
     }
   }
@@ -11317,30 +11350,13 @@ sub hVersion {
   my ($p_C,$B)=initUserIrcColors($user);
   my %C=%{$p_C};
   
-  my $autoUpdateString="auto-update disabled";
-  $autoUpdateString="auto-restart for update: $conf{autoRestartForUpdate}" if($conf{autoRestartForUpdate} ne "off");
-  if($conf{autoUpdateRelease}) {
-    my $autoUpdateRelease;
-    if($conf{autoUpdateRelease} eq "stable") {
-      $autoUpdateRelease=$C{3};
-    }elsif($conf{autoUpdateRelease} eq 'testing') {
-      $autoUpdateRelease=$C{7};
-    }elsif($conf{autoUpdateRelease} eq 'unstable') {
-      $autoUpdateRelease=$C{4};
-    }else{
-      $autoUpdateRelease=$C{6};
-    }
-    $autoUpdateRelease.="$conf{autoUpdateRelease}$C{1}";
-    $autoUpdateString="auto-update: $autoUpdateRelease";
-  }
-
   my $springVersion=$syncedSpringVersion.$C{1};
   if($autoManagedSpringData{mode} eq 'version') {
     $springVersion.=' (auto-downloaded)';
   }elsif($autoManagedSpringData{mode} eq 'release') {
     $springVersion.=" (auto-download: $autoManagedSpringData{release})";
   }
-  sayPrivate($user,"$C{12}$conf{lobbyLogin}$C{1} is running ${B}$C{5}SPADS $C{10}v$spadsVer$B$C{1} ($autoUpdateString), with following components:");
+  sayPrivate($user,"$C{12}$conf{lobbyLogin}$C{1} is running ${B}$C{5}SPADS $C{10}v$spadsVer$B$C{1} with following components:");
   my %versionedComponents=(Perl => $^V."$C{1} ($Config{archname})",
                            Spring => 'v'.$springVersion,
                            SimpleEvent => 'v'.SimpleEvent::getVersion());
@@ -11365,6 +11381,51 @@ sub hVersion {
     my $pluginVersion=$plugins{$pluginName}->getVersion();
     sayPrivate($user,"- $C{3}$pluginName$C{10} v$pluginVersion$C{1} (plugin)");
   }
+
+  if($conf{autoUpdateRelease}) {
+    my ($autoUpdateStatus,$autoUpdateDelayString);
+    if($conf{autoUpdateDelay}) {
+      my $autoUpdateCheckType;
+      if(defined $periodicAutoUpdateLockAcquired) {
+        $autoUpdateStatus=$periodicAutoUpdateLockAcquired?"$C{3}enabled$C{1}":"on $C{10}standby$C{1}";
+        $autoUpdateCheckType='next';
+      }else{
+        $autoUpdateStatus="$C{3}enabled$C{1}";
+        $autoUpdateCheckType='first periodic';
+      }
+      my $autoUpdateDelayTime=secToTime($conf{autoUpdateDelay} * 60);
+      $autoUpdateDelayString="$autoUpdateDelayTime ($autoUpdateCheckType check in ".(secToBriefTime($timestamps{autoUpdate} + ($conf{autoUpdateDelay} * 60) - time)).')';
+    }else{
+      $autoUpdateStatus="$C{7}enabled at startup only$C{1}";
+    }
+    
+    sayPrivate($user,"$C{12}Auto-update$C{1} is $autoUpdateStatus");
+    
+    my $autoUpdateRelease;
+    if($conf{autoUpdateRelease} eq 'stable') {
+      $autoUpdateRelease=$C{3};
+    }elsif($conf{autoUpdateRelease} eq 'testing') {
+      $autoUpdateRelease=$C{7};
+    }elsif($conf{autoUpdateRelease} eq 'unstable') {
+      $autoUpdateRelease=$C{4};
+    }else{
+      $autoUpdateRelease=$C{6};
+    }
+    $autoUpdateRelease.="$conf{autoUpdateRelease}$C{1}";
+    
+    sayPrivate($user,"- $C{5}release$C{1}: $autoUpdateRelease");
+    sayPrivate($user,"- $C{5}check delay$C{1}: $autoUpdateDelayString") if(defined $autoUpdateDelayString);
+    
+  }else{
+    sayPrivate($user,"$C{12}Auto-update$C{1} is $C{4}disabled$C{1}")
+  }
+
+  my $autoRestartMode = {off => "$C{4}disabled$C{1}",
+                         whenEmpty => 'when no game is running and battle room is empty',
+                         whenOnlySpec => 'when no game is running and battle room is empty or contains only spectators',
+                         on => 'when no game is running'}->{$conf{autoRestartForUpdate}};
+  sayPrivate($user,"- $C{5}auto-restart$C{1}: $autoRestartMode");
+
 }
 
 sub hVote {
