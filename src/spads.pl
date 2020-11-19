@@ -52,7 +52,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.12';
+our $spadsVer='0.12.12a';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -11394,7 +11394,9 @@ sub hVersion {
         $autoUpdateCheckType='first periodic';
       }
       my $autoUpdateDelayTime=secToTime($conf{autoUpdateDelay} * 60);
-      $autoUpdateDelayString="$autoUpdateDelayTime ($autoUpdateCheckType check in ".(secToBriefTime($timestamps{autoUpdate} + ($conf{autoUpdateDelay} * 60) - time)).')';
+      my $remainingSec=$timestamps{autoUpdate} + ($conf{autoUpdateDelay} * 60) - time;
+      $remainingSec=1 if($remainingSec<1);
+      $autoUpdateDelayString="$autoUpdateDelayTime ($autoUpdateCheckType check in ".(secToBriefTime($remainingSec)).')';
     }else{
       $autoUpdateStatus="$C{7}enabled at startup only$C{1}";
     }

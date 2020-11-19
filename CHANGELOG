@@ -836,6 +836,7 @@ spads.pl:
 0.12.11: improve balance algorithm for 3v3 when one player has a very low skill value compared to the others (degrade team skill homogeneity in profit of better overall balance)
 0.12.12: improve concurrent SPADS auto-update management (instances sharing same installation directory)
          enrich !version command output with information about auto-update configuration
+0.12.12a: fix minor bug in !version command output (race condition in auto-update delay computation)
 
 SpadsConf.pm:
 ============
