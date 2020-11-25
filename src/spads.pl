@@ -52,7 +52,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.13';
+our $spadsVer='0.12.14';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -3592,11 +3592,22 @@ sub applyBalanceTarget {
 }
 
 sub applyColorsTarget {
+  my $autoBalanceInProgress=shift;
+
   my $p_battle=$lobby->getBattle();
 
   my $p_players=$p_battle->{users};
   my $p_bots=$p_battle->{bots};
 
+  my ($p_targetPlayers,$p_targetBots);
+  if($autoBalanceInProgress) {
+    $p_targetPlayers=$balanceTarget{players};
+    $p_targetBots=$balanceTarget{bots};
+  }else{
+    $p_targetPlayers=$p_players;
+    $p_targetBots=$p_bots;
+  }
+  
   my $newColorsState=1;
   foreach my $player (keys %{$p_players}) {
     if(! defined $p_players->{$player}->{battleStatus}) {
@@ -3604,14 +3615,14 @@ sub applyColorsTarget {
       next;
     }
     next unless($p_players->{$player}->{battleStatus}->{mode});
-    my $colorId=$conf{idShareMode} eq "off" ? $player : $p_players->{$player}->{battleStatus}->{id};
+    my $colorId=$conf{idShareMode} eq "off" ? $player : $p_targetPlayers->{$player}->{battleStatus}->{id};
     if(colorDistance($colorsTarget{$colorId},$p_players->{$player}->{color}) != 0) {
       $newColorsState=0;
       queueLobbyCommand(["FORCETEAMCOLOR",$player,$lobby->marshallColor($colorsTarget{$colorId})]);
     }
   }
   foreach my $bot (keys %{$p_bots}) {
-    my $colorId=$conf{idShareMode} eq "off" ? $bot.' (bot)' : $p_bots->{$bot}->{battleStatus}->{id};
+    my $colorId=$conf{idShareMode} eq "off" ? $bot.' (bot)' : $p_targetBots->{$bot}->{battleStatus}->{id};
     if(colorDistance($colorsTarget{$colorId},$p_bots->{$bot}->{color}) != 0) {
       $newColorsState=0;
       queueLobbyCommand(["UPDATEBOT",
@@ -3712,14 +3723,22 @@ sub balance {
 }
 
 sub fixColors {
-  my $p_battle=$lobby->getBattle();
+  my $autoBalanceInProgress=shift;
 
-  my $p_players=$p_battle->{users};
-  my $p_bots=$p_battle->{bots};
+  my ($p_players,$p_bots);
 
+  if($autoBalanceInProgress) {
+    $p_players=$balanceTarget{players};
+    $p_bots=$balanceTarget{bots};
+  }else{
+    my $p_battle=$lobby->getBattle();
+    $p_players=$p_battle->{users};
+    $p_bots=$p_battle->{bots};
+  }
+  
   my $p_colorsTarget=getFixedColorsOf($p_players,$p_bots);
   %colorsTarget=%{$p_colorsTarget};
-  applyColorsTarget();
+  applyColorsTarget($autoBalanceInProgress);
 }
 
 sub getUserIps {
@@ -5321,8 +5340,6 @@ sub autoManageBattle {
   return if($springPid);
   return unless(%{$lobby->{battle}});
 
-  my $battleState=0;
-
   my $nbNonPlayer=getNbNonPlayer();
   my @clients=keys %{$lobby->{battle}->{users}};
   my @bots=keys %{$lobby->{battle}->{bots}};
@@ -5406,6 +5423,7 @@ sub autoManageBattle {
 
   return if(time - $timestamps{battleChange} < 2 || time - $latestPendingBot < 5);
 
+  my $battleState=0;
   if((($minTeamSize == 1 && (! ($nbPlayers % $conf{nbTeams}) || $nbPlayers < $conf{nbTeams}))
       || ($minTeamSize > 1 && (! ($nbPlayers % $minTeamSize))))
      && $nbPlayers >= $conf{minPlayers}
@@ -5413,29 +5431,32 @@ sub autoManageBattle {
     $battleState=1;
     $battleState=2 if($nbPlayers >= $targetNbPlayers);
   }
+  return unless($battleState);
+
+  my $autoBalanceInProgress=0;
   if($conf{autoBalance} ne 'off') {
-    return if($battleState < 1);
     return if($conf{autoBalance} eq 'on' && $battleState < 2);
     if(! $balanceState) {
       return if(time - $timestamps{balance} < 5 || time - $timestamps{autoBalance} < 1);
       $timestamps{autoBalance}=time;
       balance();
-      return;
+      $autoBalanceInProgress=1;
     }
   }
 
   if($conf{autoFixColors} ne 'off') {
-    return if($battleState < 1);
     return if($conf{autoFixColors} eq 'on' && $battleState < 2);
     if(! $colorsState) {
       return if(time - $timestamps{fixColors} < 5);
-      fixColors();
+      fixColors($autoBalanceInProgress);
       return;
     }
   }
 
+  return if($autoBalanceInProgress);
+  
   if($conf{autoStart} ne 'off') {
-    return if($battleState < 1 || %{$lobby->{battle}->{bots}});
+    return if(%{$lobby->{battle}->{bots}});
     return if($conf{autoStart} eq 'on' && $battleState < 2);
     launchGame(0,0,1);
   }
@@ -5583,7 +5604,7 @@ sub getDefaultAndMaxAllowedValues {
     @allowedValues=@{$spads->{values}->{$setting}};
   }
   my $defaultValue=$allowedValues[0];
-  my $maxAllowedValue=$defaultValue;;
+  my $maxAllowedValue=$defaultValue;
   foreach my $allowedValue (@allowedValues) {
     if($allowedValue =~ /^\d+\-(\d+)$/) {
       $maxAllowedValue=$1 if($1 > $maxAllowedValue);
@@ -6327,7 +6348,11 @@ sub hBalance {
   }
   my $balanceMsg="Balancing according to current balance mode: $conf{balanceMode}";
   my @extraStrings;
-  push(@extraStrings,"teams were already balanced") if($balanceState);
+  if($balanceState) {
+    push(@extraStrings,"teams were already balanced");
+  }elsif($conf{autoFixColors} ne 'off' && time - $timestamps{fixColors} > 4) {
+    fixColors(1);
+  }
   push(@extraStrings,"$nbSmurfs smurf".($nbSmurfs>1 ? 's' : '')." found") if($nbSmurfs);
   push(@extraStrings,"balance deviation: $unbalanceIndicator\%") if($conf{balanceMode} =~ /skill$/);
   my $extraString=join(", ",@extraStrings);

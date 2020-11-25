@@ -841,6 +841,8 @@ spads.pl:
          cleanup file handles before restarting SPADS (workaround for missing close-on-exec flag causing file handle leak on SPADS restart)
          replace forkProcess by forkCall for auto-update management
          cleanup exec calls
+0.12.14: allow autoBalance and autoFixColors to run simultaneously to speed up automatic battle management
+         the !balance command now also automatically fixes colors simultaneously if autoFixColors is enabled
 
 SpadsConf.pm:
 ============
