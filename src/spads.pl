@@ -52,7 +52,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.12a';
+our $spadsVer='0.12.13';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -617,14 +617,13 @@ sub onSpringProcessExit {
   }
 }
 
-sub onUpdaterProcessExit {
-  my (undef,$exitCode,$signalNb,$hasCoreDump)=@_;
-  $exitCode-=256 if($exitCode > 128);
-  if($exitCode || $signalNb || $hasCoreDump) {
-    if($exitCode > -7) {
+sub onUpdaterCallEnd {
+  my $updateRc=shift;
+  if($updateRc < 0) {
+    if($updateRc > -7 || $updateRc == -12) {
       delete @pendingAlerts{('UPD-002','UPD-003')};
       addAlert('UPD-001');
-    }elsif($exitCode == -7) {
+    }elsif($updateRc == -7) {
       delete @pendingAlerts{('UPD-001','UPD-003')};
       addAlert('UPD-002');
     }else{
@@ -655,6 +654,25 @@ sub escapeWin32Parameter {
     $arg = "\"$arg\"";
   }
   return $arg;
+}
+
+sub closeAllUserFds {
+  if(! $win) {
+    my $devFdFh;
+    if(opendir($devFdFh,'/dev/fd') || opendir($devFdFh,'/proc/self/fd')) {
+      my @fds = sort { $a <=> $b } (grep {/^\d+$/} readdir($devFdFh));
+      if(@fds < 20 || "@fds" ne join(' ', 0..$#fds)) {
+        foreach my $fd (@fds) {
+          POSIX::close($fd) if($fd > $^F);
+        }
+        return;
+      }
+    }
+  }
+  my $maxFd = eval {POSIX::sysconf(POSIX::_SC_OPEN_MAX()) -1} // 1023;
+  for my $fd (($^F+1)..$maxFd) {
+    POSIX::close($fd);
+  }
 }
 
 sub portableExec {
@@ -759,8 +777,10 @@ sub setSpringEnv {
       system('install_name_tool','-change',$currentUnitsyncPathInWrapper,$newUnitsyncPathInWrapper,"$spadsDir/$wrapperLibName");
       fatalError("Unable to configure Unitsync shared library path in $wrapperLibName using \"install_name_tool -change\" command".($!?" ($!)":'')) if($?);
     }
-  }else{
-    portableExec($^X,$0,@ARGV,'restartedForSpringEnv=1') if(setEnvVarFirstPaths('LD_LIBRARY_PATH',$unitSyncPath));
+  }elsif(setEnvVarFirstPaths('LD_LIBRARY_PATH',$unitSyncPath)) {
+    closeAllUserFds();
+    portableExec($^X,$0,@ARGV,'restartedForSpringEnv=1')
+        or die "Unable to restart SPADS to setup Spring environment ($!)";
   }
 }
 
@@ -2962,16 +2982,15 @@ sub checkAutoUpdate {
       if($updater->isUpdateInProgress()) {
         slog('Skipping auto-update, another updater instance is already running',2);
       }else{
-        if(! SimpleEvent::forkProcess(
+        if(! SimpleEvent::forkCall(
+               sub { return $updater->update() },
                sub {
-                 my $updateRc=$updater->update();
+                 my $updateRc = shift // -12;
                  if($updateRc < 0) {
                    slog('Unable to check or apply SPADS update',2);
-                   exit $updateRc;
                  }
-                 exit 0;
-               },
-               \&onUpdaterProcessExit)) {
+                 onUpdaterCallEnd($updateRc);
+               })) {
           slog('Unable to fork to launch SPADS updater',1);
         }
       }
@@ -4595,7 +4614,8 @@ sub launchGame {
       sub {
         chdir($conf{instanceDir});
         if($win) {
-          exec(join(' ',(map {escapeWin32Parameter($_)} ($springServerBin,@springServerCmdParams)),'>>'.escapeWin32Parameter($logFile),'2>&1')) || execError("Unable to launch Spring ($!)",1);
+          exec(join(' ',(map {escapeWin32Parameter($_)} ($springServerBin,@springServerCmdParams)),'>>'.escapeWin32Parameter($logFile),'2>&1'))
+              or execError("Unable to launch Spring ($!)",1);
         }else{
           open(my $previousStdout,'>&',\*STDOUT);
           open(my $previousStderr,'>&',\*STDERR);
@@ -5995,7 +6015,8 @@ sub endGameProcessing {
            }
          }
          slog("End game command: \"$endGameCommand\"",5);
-         exec($endGameCommand) || execError("Unable to launch endGameCommand ($!)",2);;
+         exec($endGameCommand)
+             or execError("Unable to launch endGameCommand ($!)",2);
        },
        sub {
          my ($endGameCommandPid,$exitCode,$signalNb,$hasCoreDump)=@_;
@@ -11317,24 +11338,21 @@ sub hUpdate {
   if(! SimpleEvent::forkCall(
          sub { return $updater->update() },
          sub {
-           my $updateRc = shift;
-           my ($answerMsg,$exitCode);
+           my $updateRc = shift // -12;
+           my $answerMsg;
            if($updateRc < 0) {
              if($updateRc == -7) {
                $answerMsg="Unable to update SPADS components (manual action required for new major version), please check logs for further information" ;
              }else{
                $answerMsg="Unable to update SPADS components (error code: $updateRc), please check logs for further information";
              }
-             $exitCode=$updateRc;
            }elsif($updateRc == 0) {
              $answerMsg="No update available for $release release (SPADS components are already up to date)";
-             $exitCode=0;
            }else{
              $answerMsg="$updateRc SPADS component(s) updated (a restart is needed to apply modifications)";
-             $exitCode=0;
            }
            sayPrivate($user,$answerMsg);
-           onUpdaterProcessExit(undef,$exitCode);
+           onUpdaterCallEnd($updateRc);
          })) {
     answer("Unable to update: cannot fork to launch SPADS updater");
     return 0;
@@ -13778,7 +13796,7 @@ if(! $restartedForSpringEnv) {
       my $updateRc=$updater->update();
       if($updateRc < 0) {
         slog("Unable to check or apply SPADS update",2);
-        if($updateRc > -7) {
+        if($updateRc > -7 || $updateRc == -12) {
           addAlert("UPD-001");
         }elsif($updateRc == -7) {
           addAlert("UPD-002");
@@ -14124,8 +14142,9 @@ unlink($pidFile) if(defined $pidFile);
 close($lockFh) if(defined $lockFh);
 if($quitAfterGame{action} == 1) {
   close(STDIN) if($win);
-  portableExec($^X,$0,$confFile,map {"$_=$confMacros{$_}"} (keys %confMacros));
-  execError("Unable to restart SPADS ($!)",0);
+  closeAllUserFds();
+  portableExec($^X,$0,$confFile,map {"$_=$confMacros{$_}"} (keys %confMacros))
+      or die "Unable to restart SPADS ($!)";
 }
 
 exit 0;
