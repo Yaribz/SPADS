@@ -52,7 +52,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.14';
+our $spadsVer='0.12.15';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -6307,18 +6307,6 @@ sub hAuth {
   my %C=%{$p_C};
   if($oldLevelDescription ne $levelDescription) {
     sayPrivate($user,"Switching from \"$C{4}$oldLevelDescription$C{1}\" to \"$C{3}$levelDescription$C{1}\" access level");
-    if(%bosses && exists $lobby->{battle}->{users}->{$user}) {
-      my $p_bossLevels=$spads->getCommandLevels("boss","battle","player","stopped");
-      if(exists $p_bossLevels->{directLevel}) {
-        my $requiredLevel=$p_bossLevels->{directLevel};
-        if($level >= $requiredLevel) {
-          $bosses{$user}=1;
-        }else{
-          delete($bosses{$user});
-        }
-      }
-      broadcastMsg("Boss mode disabled") if(! %bosses);
-    }
     if($level >= $conf{alertLevel} && %pendingAlerts) {
       alertUser($user) if(! exists $alertedUsers{$user} || time-$alertedUsers{$user} > $conf{alertDelay}*3600);
     }
@@ -6789,14 +6777,6 @@ sub hBoss {
     $bosses{$bossUser}=1;
   }else{
     %bosses=($bossUser => 1);
-    my $p_bossLevels=$spads->getCommandLevels("boss","battle","player","stopped");
-    if(exists $p_bossLevels->{directLevel}) {
-      my $requiredLevel=$p_bossLevels->{directLevel};
-      foreach my $player (@players) {
-        my $playerLevel=getUserAccessLevel($player);
-        $bosses{$player}=1 if($playerLevel >= $requiredLevel);
-      }
-    }
   }
   my $bossMsg="Boss mode enabled for $bossUser";
   $bossMsg.=" (by $user)" if($user ne $bossUser);
@@ -6987,13 +6967,23 @@ sub hCallVote {
     $p_params=\@rewrittenCommand;
   }
 
-  my $p_bossLevels=$spads->getCommandLevels("boss","battle","player","stopped");
   my $p_levelsForVote=getCommandLevels($source,$user,lc($p_params->[0]));
-  my $voterLevel=getUserAccessLevel($user);
-  $voterLevel=0 if(%bosses && ! exists $bosses{$user} && exists $p_bossLevels->{directLevel} && $voterLevel < $p_bossLevels->{directLevel});
 
-  if(! (defined $p_levelsForVote->{voteLevel} && $p_levelsForVote->{voteLevel} ne "" && $voterLevel >= $p_levelsForVote->{voteLevel})) {
+  if(! defined $p_levelsForVote->{voteLevel} || $p_levelsForVote->{voteLevel} eq '') {
     answer("$user, you are not allowed to vote for command \"$p_params->[0]\" in current context.");
+    return;
+  }
+
+  my $voterLevel=getUserAccessLevel($user);
+  my $voterLevelWithoutBoss=$voterLevel;
+  $voterLevel=0 if(%bosses && ! exists $bosses{$user});
+  
+  if($voterLevel < $p_levelsForVote->{voteLevel}) {
+    if($voterLevelWithoutBoss >= $p_levelsForVote->{voteLevel}) {
+      answer("$user, you are not allowed to vote for command \"$p_params->[0]\" in current context (boss mode is enabled).");
+    }else{
+      answer("$user, you are not allowed to vote for command \"$p_params->[0]\" in current context.");
+    }
     return;
   }
 
@@ -7026,7 +7016,7 @@ sub hCallVote {
       next if($bUser eq $user || $bUser eq $conf{lobbyLogin});
       my $p_levels=getCommandLevels($source,$bUser,lc($p_params->[0]));
       my $level=getUserAccessLevel($bUser);
-      $level=0 if(%bosses && ! exists $bosses{$bUser} && exists $p_bossLevels->{directLevel} && $level < $p_bossLevels->{directLevel});
+      $level=0 if(%bosses && ! exists $bosses{$bUser});
       if(defined $p_levels->{voteLevel} && $p_levels->{voteLevel} ne "" && $level >= $p_levels->{voteLevel}) {
         my ($voteRingDelay,$votePvMsgDelay)=(getUserPref($bUser,'voteRingDelay'),getUserPref($bUser,'votePvMsgDelay'));
         $remainingVoters{$bUser} = { ringTime => 0,
@@ -7043,7 +7033,7 @@ sub hCallVote {
       next if($gUser eq $user || $gUser eq $conf{lobbyLogin} || exists $remainingVoters{$gUser});
       my $p_levels=getCommandLevels($source,$gUser,lc($p_params->[0]));
       my $level=getUserAccessLevel($gUser);
-      $level=0 if(%bosses && ! exists $bosses{$gUser} && exists $p_bossLevels->{directLevel} && $level < $p_bossLevels->{directLevel});
+      $level=0 if(%bosses && ! exists $bosses{$gUser});
       if(defined $p_levels->{voteLevel} && $p_levels->{voteLevel} ne "" && $level >= $p_levels->{voteLevel}) {
         my ($voteRingDelay,$votePvMsgDelay)=(getUserPref($gUser,'voteRingDelay'),getUserPref($gUser,'votePvMsgDelay'));
         $remainingVoters{$gUser} = { ringTime => 0,
@@ -7122,21 +7112,6 @@ sub hChpasswd {
     answer("Password set to \"$p_params->[1]\" for user $passwdUser");
   }
   if($lobbyState > 3 && exists $lobby->{users}->{$passwdUser}) {
-    my $level=getUserAccessLevel($passwdUser);
-    if($level != $oldLevel) {
-      if(%bosses && exists $lobby->{battle}->{users}->{$passwdUser}) {
-        my $p_bossLevels=$spads->getCommandLevels("boss","battle","player","stopped");
-        if(exists $p_bossLevels->{directLevel}) {
-          my $requiredLevel=$p_bossLevels->{directLevel};
-          if($level >= $requiredLevel) {
-            $bosses{$passwdUser}=1;
-          }else{
-            delete($bosses{$passwdUser});
-          }
-        }
-        broadcastMsg("Boss mode disabled") if(! %bosses);
-      }
-    }
     sayPrivate($passwdUser,"Your AutoHost password has been modified by $user");
   }
 }
@@ -12353,14 +12328,6 @@ sub cbJoinedBattle {
     }
   }
 
-  if(%bosses) {
-    my $p_bossLevels=$spads->getCommandLevels("boss","battle","player","stopped");
-    if(exists $p_bossLevels->{directLevel}) {
-      my $requiredLevel=$p_bossLevels->{directLevel};
-      $bosses{$user}=1 if($level >= $requiredLevel);
-    }
-  }
-  
   if($autohost->getState() && defined $lobby->{battle}->{users}->{$user}->{scriptPass}) {
     if(exists $p_runningBattle->{users}->{$user} && ! exists $inGameAddedUsers{$user}) {
       $inGameAddedUsers{$user}=$lobby->{battle}->{users}->{$user}->{scriptPass};

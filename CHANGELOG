@@ -843,6 +843,7 @@ spads.pl:
          cleanup exec calls
 0.12.14: allow autoBalance and autoFixColors to run simultaneously to speed up automatic battle management
          the !balance command now also automatically fixes colors simultaneously if autoFixColors is enabled
+0.12.15: improve boss mode usability (only the !boss command originator is made boss initially)
 
 SpadsConf.pm:
 ============
