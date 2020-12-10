@@ -1,6 +1,6 @@
 # Object-oriented Perl module handling SPADS configuration files
 #
-# Copyright (C) 2008-2019  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2020  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -38,7 +38,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.12.3';
+my $moduleVersion='0.12.4';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -296,7 +296,7 @@ sub new {
   $p_previousInstance//=0;
   my $class = ref($objectOrClass) || $objectOrClass;
 
-  my $p_conf = loadSettingsFile($sLog,$confFile,\%globalParameters,\%spadsSectionParameters,$p_macros);
+  my $p_conf = loadSettingsFile($sLog,$confFile,\%globalParameters,\%spadsSectionParameters,$p_macros,undef,'set');
   if(! checkSpadsConfig($sLog,$p_conf)) {
     $sLog->log('Unable to load main configuration parameters',1);
     return 0;
@@ -308,7 +308,7 @@ sub new {
                        useTimestamps => [1,-t STDOUT ? 0 : 1],
                        prefix => '[SPADS] ');
 
-  my $p_hConf =  loadSettingsFile($sLog,$p_conf->{''}{etcDir}.'/hostingPresets.conf',{},\%hostingParameters,$p_macros);
+  my $p_hConf =  loadSettingsFile($sLog,$p_conf->{''}{etcDir}.'/hostingPresets.conf',{},\%hostingParameters,$p_macros,undef,'hSet');
   if(! checkHConfig($sLog,$p_conf,$p_hConf)) {
     $sLog->log('Unable to load hosting presets',1);
     return 0;
@@ -674,7 +674,7 @@ sub preProcessConfFile {
 }
 
 sub loadSettingsFile {
-  my ($sLog,$cFile,$p_globalParams,$p_sectionParams,$p_macros,$caseInsensitiveNoCheck)=@_;
+  my ($sLog,$cFile,$p_globalParams,$p_sectionParams,$p_macros,$caseInsensitiveNoCheck,$overwriteMacrosPrefix)=@_;
 
   $caseInsensitiveNoCheck//=0;
   my $currentSection='';
@@ -694,6 +694,7 @@ sub loadSettingsFile {
     }elsif(/^([^:]+):\s*((?:.*[^\s])?)\s*$/) {
       my ($param,$value)=($1,$2);
       $param=lc($param) if($caseInsensitiveNoCheck);
+      $value=$p_macros->{"$overwriteMacrosPrefix:$param"} if(defined $overwriteMacrosPrefix && exists $p_macros->{"$overwriteMacrosPrefix:$param"});
       if($currentSection) {
         if(! exists $p_sectionParams->{$param}) {
           if(!$caseInsensitiveNoCheck) {
@@ -744,7 +745,52 @@ sub loadSettingsFile {
     return {};
   }
 
+  my %inheritedSections;
+  foreach my $section (keys %newConf) {
+    next unless($section =~ /^(.+)<(.+)>$/);
+    my ($sectionName,$inheritedSectionsString)=($1,$2);
+    if(exists $newConf{$sectionName}) {
+      $sLog->log("Configuration file \"$cFile\" contains multiple inconsistent preset inheritances for preset \"$sectionName\"",1);
+      return {};
+    }
+    my @inheritedSectionsList=split(',',$inheritedSectionsString);
+    $inheritedSections{$sectionName}=\@inheritedSectionsList;
+    $newConf{$sectionName}=delete $newConf{$section};
+  }
+
+  foreach my $section (keys %inheritedSections) {
+    my $r_inherits=flattenSectionInheritance(\%inheritedSections,$section);
+    shift(@{$r_inherits});
+    my @invalidInheritedSections;
+    foreach my $inheritedSection (@{$r_inherits}) {
+      if(! exists $newConf{$inheritedSection}) {
+        push(@invalidInheritedSections,$inheritedSection);
+        next;
+      }
+      foreach my $param (keys %{$newConf{$inheritedSection}}) {
+        $newConf{$section}{$param}//=$newConf{$inheritedSection}{$param};
+      }
+    }
+    if(@invalidInheritedSections) {
+     $sLog->log("Configuration file \"$cFile\" contains invalid inheritance for preset \"$section\": ".(join(', ',@invalidInheritedSections)),1);
+     return {};
+    }
+  }
+
+  
   return \%newConf;
+}
+
+sub flattenSectionInheritance {
+  my ($r_inheritances,$section,$r_alreadyInherited)=@_;
+  $r_alreadyInherited//={};
+  return [] if(exists $r_alreadyInherited->{$section});
+  my @flattenedInheritance=($section);
+  $r_alreadyInherited->{$section}=1;
+  if(exists $r_inheritances->{$section}) {
+    map {my $r_subInherits=flattenSectionInheritance($r_inheritances,$_,$r_alreadyInherited); push(@flattenedInheritance,@{$r_subInherits})} @{$r_inheritances->{$section}};
+  }
+  return \@flattenedInheritance;
 }
 
 sub loadTableFile {

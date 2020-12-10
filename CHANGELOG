@@ -844,6 +844,9 @@ spads.pl:
 0.12.14: allow autoBalance and autoFixColors to run simultaneously to speed up automatic battle management
          the !balance command now also automatically fixes colors simultaneously if autoFixColors is enabled
 0.12.15: improve boss mode usability (only the !boss command originator is made boss initially)
+0.12.16: close unused handle on lock file when auto-update is in standby mode (multi-instance mode)
+         display the Spring server type used by SPADS in !version command output ("dedicated" or "headless")
+         show instance name and SPADS version in console window title (Windows)
 
 SpadsConf.pm:
 ============
@@ -991,6 +994,8 @@ SpadsConf.pm:
         ignore obsolete CPU data when retrieving user access level
         remove "similar accounts" detection which was based on deprecated CPU speed values
 0.12.3: add lobby certificates management for TLS support
+0.12.4: added configuration setting override functionality (configuration macros with specific prefixes "set:" and "hSet:")
+        added configuration preset inheritance functionality (preset declaration syntax extension)
 
 spadsInstaller.pl:
 =================

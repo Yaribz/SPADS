@@ -52,7 +52,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.15';
+our $spadsVer='0.12.16';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -85,7 +85,7 @@ if($win) {
   push(@packagesSpads,'7za');
 }
 
-my ($lockFh,$pidFile,$lockAcquired,$ahLockFh,$periodicAutoUpdateLockAcquired);
+my ($lockFh,$pidFile,$lockAcquired,$auLockFh,$periodicAutoUpdateLockAcquired);
 
 eval "use HTML::Entities";
 my $htmlEntitiesUnavailable=$@;
@@ -580,6 +580,19 @@ if(exists $confMacros{lobbyTls}) {
   }else{
     $useTls=0;
   }
+}
+
+# Console title update (Windows only) #########################################
+
+if($win) {
+  eval {
+    require Win32::Console;
+    my $title=$conf{lobbyLogin};
+    $title.="\@$conf{lobbyHost}" if($conf{lobbyHost} ne 'lobby.springrts.com' || $conf{lobbyPort} != 8200);
+    $title.=":$conf{lobbyPort}" if($conf{lobbyPort} != 8200);
+    $title.=" (SPADS $spadsVer)";
+    Win32::Console->new()->Title($title);
+  };
 }
 
 # Subfunctions ################################################################
@@ -2958,11 +2971,12 @@ sub checkDataDump {
 sub acquireAutoUpdateLock {
   return 1 if($periodicAutoUpdateLockAcquired);
   my $autoUpdateLockFile=catfile($spadsDir,'autoUpdate.lock');
-  if(open($ahLockFh,'>',$autoUpdateLockFile)) {
-    if(flock($ahLockFh, LOCK_EX|LOCK_NB)) {
+  if(open($auLockFh,'>',$autoUpdateLockFile)) {
+    if(flock($auLockFh, LOCK_EX|LOCK_NB)) {
       slog('Auto-update has been automatically re-enabled on this instance (auto-update was previously managed by another instance running from same directory)',3) if(defined $periodicAutoUpdateLockAcquired);
       $periodicAutoUpdateLockAcquired=1;
     }else{
+      close($auLockFh);
       if(! defined $periodicAutoUpdateLockAcquired) {
         $periodicAutoUpdateLockAcquired=0;
         slog('Auto-update has been automatically disabled on this instance (auto-update is already managed by another instance running from same directory)',3);
@@ -11376,7 +11390,7 @@ sub hVersion {
   }
   sayPrivate($user,"$C{12}$conf{lobbyLogin}$C{1} is running ${B}$C{5}SPADS $C{10}v$spadsVer$B$C{1} with following components:");
   my %versionedComponents=(Perl => $^V."$C{1} ($Config{archname})",
-                           Spring => 'v'.$springVersion,
+                           "Spring $springServerType" => 'v'.$springVersion,
                            SimpleEvent => 'v'.SimpleEvent::getVersion());
   my %components = (SpringLobbyInterface => $lobby,
                     SpringAutoHostInterface => $autohost,
