@@ -847,6 +847,8 @@ spads.pl:
 0.12.16: close unused handle on lock file when auto-update is in standby mode (multi-instance mode)
          display the Spring server type used by SPADS in !version command output ("dedicated" or "headless")
          show instance name and SPADS version in console window title (Windows)
+0.12.17: detect when running in daemon mode (no console) and prevent new console creation when SPADS is restarted (Windows)
+         replace the internal function used to close all non-system filehandles by the one provided by the SimpleEvent module
 
 SpadsConf.pm:
 ============

@@ -52,7 +52,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.16';
+our $spadsVer='0.12.17';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -669,25 +669,6 @@ sub escapeWin32Parameter {
   return $arg;
 }
 
-sub closeAllUserFds {
-  if(! $win) {
-    my $devFdFh;
-    if(opendir($devFdFh,'/dev/fd') || opendir($devFdFh,'/proc/self/fd')) {
-      my @fds = sort { $a <=> $b } (grep {/^\d+$/} readdir($devFdFh));
-      if(@fds < 20 || "@fds" ne join(' ', 0..$#fds)) {
-        foreach my $fd (@fds) {
-          POSIX::close($fd) if($fd > $^F);
-        }
-        return;
-      }
-    }
-  }
-  my $maxFd = eval {POSIX::sysconf(POSIX::_SC_OPEN_MAX()) -1} // 1023;
-  for my $fd (($^F+1)..$maxFd) {
-    POSIX::close($fd);
-  }
-}
-
 sub portableExec {
   my ($program,@params)=@_;
   my @args=($program,@params);
@@ -791,7 +772,7 @@ sub setSpringEnv {
       fatalError("Unable to configure Unitsync shared library path in $wrapperLibName using \"install_name_tool -change\" command".($!?" ($!)":'')) if($?);
     }
   }elsif(setEnvVarFirstPaths('LD_LIBRARY_PATH',$unitSyncPath)) {
-    closeAllUserFds();
+    SimpleEvent::closeAllUserFds();
     portableExec($^X,$0,@ARGV,'restartedForSpringEnv=1')
         or die "Unable to restart SPADS to setup Spring environment ($!)";
   }
@@ -14147,8 +14128,16 @@ $spads->dumpDynamicData();
 unlink($pidFile) if(defined $pidFile);
 close($lockFh) if(defined $lockFh);
 if($quitAfterGame{action} == 1) {
-  close(STDIN) if($win);
-  closeAllUserFds();
+  if($win) {
+    if(! -t STDIN && ! -t STDOUT && ! -t STDERR) {
+      SimpleEvent::createDetachedProcess($^X,
+                                         [$0,$confFile,map {"$_=$confMacros{$_}"} (keys %confMacros)],
+                                         $cwd);
+      exit 0;
+    }
+    close(STDIN);
+  }
+  SimpleEvent::closeAllUserFds();
   portableExec($^X,$0,$confFile,map {"$_=$confMacros{$_}"} (keys %confMacros))
       or die "Unable to restart SPADS ($!)";
 }
