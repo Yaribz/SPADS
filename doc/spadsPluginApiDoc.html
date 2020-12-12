@@ -56,28 +56,25 @@
 
 <h1 id="SYNOPSIS">SYNOPSIS</h1>
 
-<pre><code>  <span class="keyword">package</span> <span class="variable">MyPlugin</span><span class="operator">;</span>
-  
-  <span class="keyword">use</span> <span class="variable">SpadsPluginApi</span><span class="operator">;</span>
-  
-  <span class="keyword">no</span> <span class="variable">warnings</span> <span class="string">'redefine'</span><span class="operator">;</span>
-  
-  <span class="keyword">my</span> <span class="variable">$pluginVersion</span><span class="operator">=</span><span class="string">'0.1'</span><span class="operator">;</span>
-  <span class="keyword">my</span> <span class="variable">$requiredSpadsVersion</span><span class="operator">=</span><span class="string">'0.11'</span><span class="operator">;</span>
-  
-  <span class="keyword">sub</span><span class="variable"> getVersion </span><span class="operator">{</span> <span class="keyword">return</span> <span class="variable">$pluginVersion</span><span class="operator">;</span> <span class="operator">}</span>
-  <span class="keyword">sub</span><span class="variable"> getRequiredSpadsVersion </span><span class="operator">{</span> <span class="keyword">return</span> <span class="variable">$requiredSpadsVersion</span><span class="operator">;</span> <span class="operator">}</span>
-  
-  <span class="keyword">sub</span><span class="variable"> new </span><span class="operator">{</span>
-    <span class="keyword">my</span> <span class="variable">$class</span><span class="operator">=</span><span class="keyword">shift</span><span class="operator">;</span>
-    <span class="keyword">my</span> <span class="variable">$self</span> <span class="operator">=</span> <span class="operator">{}</span><span class="operator">;</span>
-    <span class="keyword">bless</span><span class="operator">(</span><span class="variable">$self</span><span class="operator">,</span><span class="variable">$class</span><span class="operator">);</span>
-    <span class="variable">slog</span><span class="operator">(</span><span class="string">"MyPlugin plugin loaded (version </span><span class="variable">$pluginVersion</span><span class="string">)"</span><span class="operator">,</span><span class="number">3</span><span class="operator">);</span>
-    <span class="keyword">return</span> <span class="variable">$self</span><span class="operator">;</span>
-  <span class="operator">}</span>
-  
-  <span class="number">1</span><span class="operator">;</span>
-</code></pre>
+<pre><code>  package MyPlugin;
+
+  use SpadsPluginApi;
+
+  my $pluginVersion=&#39;0.1&#39;;
+  my $requiredSpadsVersion=&#39;0.11&#39;;
+
+  sub getVersion { return $pluginVersion; }
+  sub getRequiredSpadsVersion { return $requiredSpadsVersion; }
+
+  sub new {
+    my $class=shift;
+    my $self = {};
+    bless($self,$class);
+    slog(&quot;MyPlugin plugin loaded (version $pluginVersion)&quot;,3);
+    return $self;
+  }
+
+  1;</code></pre>
 
 <h1 id="DESCRIPTION">DESCRIPTION</h1>
 
@@ -95,10 +92,12 @@
 
 <dl>
 
-<dt id="new"><code>new()</code></dt>
+<dt id="new-context"><code>new($context)</code></dt>
 <dd>
 
 <p>This is the plugin constructor, it is called when SPADS (re)loads the plugin. It must return the plugin object.</p>
+
+<p>The <code>$context</code> parameter is a string which indicates in which context the plugin constructor has been called: <code>&quot;autoload&quot;</code> means the plugin is being loaded automatically at startup, <code>&quot;load&quot;</code> means the plugin is being loaded manually using <code>!plugin &lt;pluginName&gt; load</code> command, <code>&quot;reload&quot;</code> means the plugin is being reloaded manually using <code>!plugin &lt;pluginName&gt; reload</code> command.</p>
 
 </dd>
 <dt id="getVersion"><code>getVersion()</code></dt>
@@ -128,13 +127,12 @@
 
 <p>Example of implementation:</p>
 
-<pre><code>  <span class="keyword">my</span> <span class="variable">%globalPluginParams</span> <span class="operator">=</span> <span class="operator">(</span> <span class="string">MyGlobalSetting1</span> <span class="operator">=&gt;</span> <span class="operator">[</span><span class="string">'integer'</span><span class="operator">]</span><span class="operator">,</span>
-                             <span class="string">MyGlobalSetting2</span> <span class="operator">=&gt;</span> <span class="operator">[</span><span class="string">'ipAddr'</span><span class="operator">]</span><span class="operator">);</span>
-  <span class="keyword">my</span> <span class="variable">%presetPluginParams</span> <span class="operator">=</span> <span class="operator">(</span> <span class="string">MyPresetSetting1</span> <span class="operator">=&gt;</span> <span class="operator">[</span><span class="string">'readableDir'</span><span class="operator">,</span><span class="string">'null'</span><span class="operator">]</span><span class="operator">,</span>
-                             <span class="string">MyPresetSetting2</span> <span class="operator">=&gt;</span> <span class="operator">[</span><span class="string">'bool'</span><span class="operator">]</span> <span class="operator">);</span>
-  
-  <span class="keyword">sub</span><span class="variable"> getParams </span><span class="operator">{</span> <span class="keyword">return</span> <span class="operator">[</span><span class="operator">\</span><span class="variable">%globalPluginParams</span><span class="operator">,\</span><span class="variable">%presetPluginParams</span><span class="operator">]</span><span class="operator">;</span> <span class="operator">}</span>
-</code></pre>
+<pre><code>  my %globalPluginParams = ( MyGlobalSetting1 =&gt; [&#39;integer&#39;],
+                             MyGlobalSetting2 =&gt; [&#39;ipAddr&#39;]);
+  my %presetPluginParams = ( MyPresetSetting1 =&gt; [&#39;readableDir&#39;,&#39;null&#39;],
+                             MyPresetSetting2 =&gt; [&#39;bool&#39;] );
+
+  sub getParams { return [\%globalPluginParams,\%presetPluginParams]; }</code></pre>
 
 </dd>
 </dl>
@@ -152,8 +150,7 @@
 
 <p>Example of implementation:</p>
 
-<pre><code>  <span class="keyword">sub</span><span class="variable"> getDependencies </span><span class="operator">{</span> <span class="keyword">return</span> <span class="operator">(</span><span class="string">'SpringForumInterface'</span><span class="operator">,</span><span class="string">'MailAlerts'</span><span class="operator">);</span> <span class="operator">}</span>
-</code></pre>
+<pre><code>  sub getDependencies { return (&#39;SpringForumInterface&#39;,&#39;MailAlerts&#39;); }</code></pre>
 
 </dd>
 </dl>
@@ -167,17 +164,31 @@
 <dt id="onBattleClosed"><code>onBattleClosed()</code></dt>
 <dd>
 
+<p>This callback is called when the battle lobby of the autohost is closed.</p>
+
 </dd>
 <dt id="onBattleOpened"><code>onBattleOpened()</code></dt>
 <dd>
+
+<p>This callback is called when the battle lobby of the autohost is opened.</p>
 
 </dd>
 <dt id="onGameEnd-endGameData"><code>onGameEnd(\%endGameData)</code></dt>
 <dd>
 
+<p>This callback is called each time a game hosted by the autohost ends.</p>
+
+<p>The <code>\%endGameData</code> parameter is a reference to a hash containing all the data stored by SPADS concerning the game that just ended. It is recommended to use a data printing function (such as the <code>Dumper</code> function from the standard <code>Data::Dumper</code> module included in Perl core) to check the content of this hash for the desired data.</p>
+
 </dd>
 <dt id="onJoinBattleRequest-userName-ipAddr"><code>onJoinBattleRequest($userName,$ipAddr)</code></dt>
 <dd>
+
+<p>This callback is called each time a client requests to join the battle lobby managed by the autohost.</p>
+
+<p><code>$userName</code> is the name of the user requesting to join the battle</p>
+
+<p><code>$ipAddr</code> is the IP address of the user requesting to join the battle</p>
 
 <p>This callback must return:</p>
 
@@ -191,27 +202,57 @@
 <dt id="onLobbyConnected-lobbyInterface"><code>onLobbyConnected($lobbyInterface)</code></dt>
 <dd>
 
+<p>This callback is called each time the autohost successfully logged in on the lobby server, after all login info has been received from lobby server (this callback is called after the <code>onLobbyLogin($lobbyInterface)</code> callback).</p>
+
+<p>The <code>$lobbyInterface</code> parameter is the instance of the <a href="https://github.com/Yaribz/SpringLobbyInterface">SpringLobbyInterface</a> module used by SPADS.</p>
+
 </dd>
 <dt id="onLobbyDisconnected"><code>onLobbyDisconnected()</code></dt>
 <dd>
+
+<p>This callback is called each time the autohost is disconnected from the lobby server.</p>
+
+</dd>
+<dt id="onLobbyLogin-lobbyInterface"><code>onLobbyLogin($lobbyInterface)</code></dt>
+<dd>
+
+<p>This callback is called each time the autohost tries to login on the lobby server, just after the LOGIN command has been sent to the lobby server (this callback is called before the <code>onLobbyConnected($lobbyInterface)</code> callback).</p>
+
+<p>The <code>$lobbyInterface</code> parameter is the instance of the <a href="https://github.com/Yaribz/SpringLobbyInterface">SpringLobbyInterface</a> module used by SPADS.</p>
 
 </dd>
 <dt id="onPresetApplied-oldPresetName-newPresetName"><code>onPresetApplied($oldPresetName,$newPresetName)</code></dt>
 <dd>
 
+<p>This callback is called each time a global preset is applied.</p>
+
+<p><code>$oldPresetName</code> is the name of the previous global preset</p>
+
+<p><code>$newPresetName</code> is the name of the new global preset</p>
+
 </dd>
 <dt id="onPrivateMsg-userName-message"><code>onPrivateMsg($userName,$message)</code></dt>
 <dd>
 
+<p>This callback is called each time the autohost receives a private message.</p>
+
+<p><code>$userName</code> is the name of the user who sent a private message to the autohost</p>
+
+<p><code>$message</code> is the private message received by the autohost</p>
+
 <p>This callback must return:</p>
 
-<p><code>0</code> if the message can be treated by other plugins and SPADS core</p>
+<p><code>0</code> if the message can be processed by other plugins and SPADS core</p>
 
-<p><code>1</code> if the message must not be treated by other plugins and SPADS core (this prevents logging)</p>
+<p><code>1</code> if the message must not be processed by other plugins and SPADS core (this prevents logging)</p>
 
 </dd>
 <dt id="onReloadConf-keepSettings"><code>onReloadConf($keepSettings)</code></dt>
 <dd>
+
+<p>This callback is called each time the SPADS configuration is reloaded.</p>
+
+<p><code>$keepSettings</code> is a boolean parameter indicating if current settings must be kept.</p>
 
 <p>This callback must return:</p>
 
@@ -223,19 +264,37 @@
 <dt id="onSettingChange-settingName-oldValue-newValue"><code>onSettingChange($settingName,$oldValue,$newValue)</code></dt>
 <dd>
 
+<p>This callback is called each time a setting of the plugin configuration is changed (using <code>!plugin &lt;pluginName&gt; set ...</code> command).</p>
+
+<p><code>$settingName</code> is the name of the updated setting</p>
+
+<p><code>$oldValue</code> is the previous value of the setting</p>
+
+<p><code>$newValue</code> is the new value of the setting</p>
+
 </dd>
 <dt id="onSpringStart-springPid"><code>onSpringStart($springPid)</code></dt>
 <dd>
+
+<p>This callback is called each time a Spring process is launched to host a game.</p>
+
+<p><code>$springPid</code> is the PID of the Spring process that has just been launched.</p>
 
 </dd>
 <dt id="onSpringStop-springPid"><code>onSpringStop($springPid)</code></dt>
 <dd>
 
+<p>This callback is called each time the Spring process ends.</p>
+
+<p><code>$springPid</code> is the PID of the Spring process that just ended.</p>
+
 </dd>
-<dt id="onUnload"><code>onUnload()</code></dt>
+<dt id="onUnload-context"><code>onUnload($context)</code></dt>
 <dd>
 
-<p>This callback is called when the plugin is unloaded. If the plugin added handlers for SPADS command, lobby commands, or Spring commands, then they must be removed here. If the plugin handles persistent data, then these data must be serialized here.</p>
+<p>This callback is called when the plugin is unloaded. If the plugin has added handlers for SPADS command, lobby commands, or Spring commands, then they must be removed here. If the plugin has added timers, they must also be removed here. If the plugin handles persistent data, then these data must be serialized and written to persistent storage here.</p>
+
+<p>The <code>$context</code> parameter is a string which indicates in which context the callback has been called: <code>&quot;exiting&quot;</code> means the plugin is being unloaded because SPADS is exiting, <code>&quot;restarting&quot;</code> means the plugin is being unloaded because SPADS is restarting, <code>&quot;unload&quot;</code> means the plugin is being unloaded manually using <code>!plugin &lt;pluginName&gt; unload</code> command, <code>&quot;reload&quot;</code> means the plugin is being reloaded manually using <code>!plugin &lt;pluginName&gt; reload</code> command.</p>
 
 </dd>
 <dt id="onVoteRequest-source-user-command-remainingVoters"><code>onVoteRequest($source,$user,\@command,\%remainingVoters)</code></dt>
@@ -243,27 +302,49 @@
 
 <p>This callback is called each time a vote is requested by a player.</p>
 
+<p><code>$source</code> indicates the way the vote has been requested (<code>&quot;pv&quot;</code>: private lobby message, <code>&quot;battle&quot;</code>: battle lobby message, <code>&quot;chan&quot;</code>: master lobby channel message, <code>&quot;game&quot;</code>: in game message)</p>
+
+<p><code>$user</code> is the name of the user requesting the vote</p>
+
+<p><code>\@command</code> is an array reference containing the command for which a vote is requested</p>
+
 <p><code>\%remainingVoters</code> is a reference to a hash containing the players allowed to vote. This hash is indexed by player names. The plugin can filter these players by simply removing the corresponding entries from the hash.</p>
 
-<p>This callback must return 0 to prevent the vote call from happening, or 1 to allow it.</p>
+<p>This callback must return <code>0</code> to prevent the vote call from happening, or <code>1</code> to allow it.</p>
 
 </dd>
 <dt id="onVoteStart-user-command"><code>onVoteStart($user,\@command)</code></dt>
 <dd>
 
+<p>This callback is called each time a new vote poll is started.</p>
+
+<p><code>$user</code> is the name of the user who started the vote poll</p>
+
+<p><code>\@command</code> is an array reference containing the command for which a vote is started</p>
+
 </dd>
 <dt id="onVoteStop-voteResult"><code>onVoteStop($voteResult)</code></dt>
 <dd>
 
-<p><code>$voteResult</code> values: <code>-1</code> (vote failed), <code>0</code> (vote cancelled), <code>1</code> (vote passed)</p>
+<p>This callback is called each time a vote poll is stoped.</p>
+
+<p><code>$voteResult</code> indicates the result of the vote: <code>-1</code> (vote failed), <code>0</code> (vote cancelled), <code>1</code> (vote passed)</p>
 
 </dd>
 <dt id="postSpadsCommand-command-source-user-params-commandResult"><code>postSpadsCommand($command,$source,$user,\@params,$commandResult)</code></dt>
 <dd>
 
-<p>This callback is called each time a SPADS command has been executed.</p>
+<p>This callback is called each time a SPADS command has been called.</p>
 
-<p>If <code>$commandResult</code> is defined and set to 0, then it means the command failed.</p>
+<p><code>$command</code> is the name of the command (without the parameters)</p>
+
+<p><code>$source</code> indicates the way the command has been called (<code>&quot;pv&quot;</code>: private lobby message, <code>&quot;battle&quot;</code>: battle lobby message, <code>&quot;chan&quot;</code>: master lobby channel message, <code>&quot;game&quot;</code>: in game message)</p>
+
+<p><code>$user</code> is the name of the user who called the command</p>
+
+<p><code>\@params</code> is a reference to an array containing the parameters of the command</p>
+
+<p><code>$commandResult</code> indicates the result of the command (if it is defined and set to <code>0</code> then the command failed, in all other cases the command succeeded)</p>
 
 </dd>
 <dt id="preGameCheck-force-checkOnly-automatic"><code>preGameCheck($force,$checkOnly,$automatic)</code></dt>
@@ -283,9 +364,17 @@
 <dt id="preSpadsCommand-command-source-user-params"><code>preSpadsCommand($command,$source,$user,\@params)</code></dt>
 <dd>
 
-<p>This callback is called each time a SPADS command is going to be executed.</p>
+<p>This callback is called each time a SPADS command is called, just before it is actually executed.</p>
 
-<p>It must return 0 to prevent the command from being treated by other plugins and executed by SPADS core, or 1 to allow it.</p>
+<p><code>$command</code> is the name of the command (without the parameters)</p>
+
+<p><code>$source</code> indicates the way the command has been called (<code>&quot;pv&quot;</code>: private lobby message, <code>&quot;battle&quot;</code>: battle lobby message, <code>&quot;chan&quot;</code>: master lobby channel message, <code>&quot;game&quot;</code>: in game message)</p>
+
+<p><code>$user</code> is the name of the user who called the command</p>
+
+<p><code>\@params</code> is a reference to an array containing the parameters of the command</p>
+
+<p>This callback must return <code>0</code> to prevent the command from being processed by other plugins and SPADS core, or <code>1</code> to allow it.</p>
 
 </dd>
 </dl>
@@ -301,8 +390,7 @@
 
 <p>This callback is called when a Spring start script is generated, just before launching the game. It allows plugins to declare additional scrip tags which will be written in the start script.</p>
 
-<p><code>\%additionalData</code> is a reference to a hash which must be updated by adding the desired keys/values. For example a plugin can add a modoption named &quot;hiddenoption&quot; with value &quot;test&quot; like this: <code><span class="variable">$additionalData</span><span class="operator">{</span><span class="string">"game/modoptions/hiddenoption"</span><span class="operator">}</span><span class="operator">=</span><span class="string">"test"</span>
-</code>. For tags to be added in player sections, the special key &quot;playerData&quot; must be used. This special key must point to a hash associating each account ID to a hash containing the tags to add in the corresponding player section.</p>
+<p><code>\%additionalData</code> is a reference to a hash which must be updated by adding the desired keys/values. For example a plugin can add a modoption named &quot;hiddenoption&quot; with value &quot;test&quot; like this: <code>$additionalData{&quot;game/modoptions/hiddenoption&quot;}=&quot;test&quot;</code>. For tags to be added in player sections, the special key &quot;playerData&quot; must be used. This special key must point to a hash associating each account ID to a hash containing the tags to add in the corresponding player section.</p>
 
 </dd>
 <dt id="balanceBattle-players-bots-clanMode-nbTeams-teamSize"><code>balanceBattle(\%players,\%bots,$clanMode,$nbTeams,$teamSize)</code></dt>
@@ -310,8 +398,7 @@
 
 <p>This callback is called each time SPADS needs to balance a battle and evaluate the resulting balance quality. It allows plugins to replace the built-in balance algorithm.</p>
 
-<p><code>\%players</code> is a reference to a hash containing the players in the battle lobby. This hash is indexed by player names, and the values are references to a hash containing player data. For balancing, you should only need to access the players skill as follows: <code><span class="variable">$players</span><span class="operator">-&gt;</span><span class="operator">{</span><span class="operator">&lt;</span><span class="variable">playerName</span><span class="operator">&gt;</span><span class="operator">}</span><span class="operator">-&gt;</span><span class="operator">{</span><span class="string">skill</span><span class="operator">}</span>
-</code></p>
+<p><code>\%players</code> is a reference to a hash containing the players in the battle lobby. This hash is indexed by player names, and the values are references to a hash containing player data. For balancing, you should only need to access the players skill as follows: <code>$players-&gt;{&lt;playerName&gt;}-&gt;{skill}</code></p>
 
 <p><code>\%bots</code> is a reference to a hash containing the bots in the battle lobby. This hash has exact same structure has <code>\%players</code>.</p>
 
@@ -319,9 +406,7 @@
 
 <p><code>$nbTeams</code> and <code>$teamSize</code> are the target battle structue computed by SPADS. The number of entities to balance is the number of entries in <code>\%players</code> + number of entries in <code>\%bots</code>. The number of entities to balance is always <code>&gt; $nbTeams*($teamSize-1)</code>, and <code>&lt;= $nbTeams*$teamSize</code>.</p>
 
-<p>If the plugin is able to balance the battle, it must update the <code>\%players</code> and <code>\%bots</code> hash references with the team and id information. Assigned player teams must be written in <code><span class="variable">$players</span><span class="operator">-&gt;</span><span class="operator">{</span><span class="operator">&lt;</span><span class="variable">playerName</span><span class="operator">&gt;</span><span class="operator">}</span><span class="operator">-&gt;</span><span class="operator">{</span><span class="string">battleStatus</span><span class="operator">}</span><span class="operator">-&gt;</span><span class="operator">{</span><span class="string">team</span><span class="operator">}</span>
-</code>, and assigned player ids must be written in <code><span class="variable">$players</span><span class="operator">-&gt;</span><span class="operator">{</span><span class="operator">&lt;</span><span class="variable">playerName</span><span class="operator">&gt;</span><span class="operator">}</span><span class="operator">-&gt;</span><span class="operator">{</span><span class="string">battleStatus</span><span class="operator">}</span><span class="operator">-&gt;</span><span class="operator">{</span><span class="string">id</span><span class="operator">}</span>
-</code>. <code>\%bots</code> works the same way. The return value is the unbalance indicator, defined as follows: <code>standardDeviationOfTeamSkills * 100 / averageTeamSkill</code>.</p>
+<p>If the plugin is able to balance the battle, it must update the <code>\%players</code> and <code>\%bots</code> hash references with the team and id information. Assigned player teams must be written in <code>$players-&gt;{&lt;playerName&gt;}-&gt;{battleStatus}-&gt;{team}</code>, and assigned player ids must be written in <code>$players-&gt;{&lt;playerName&gt;}-&gt;{battleStatus}-&gt;{id}</code>. <code>\%bots</code> works the same way. The return value is the unbalance indicator, defined as follows: <code>standardDeviationOfTeamSkills * 100 / averageTeamSkill</code>.</p>
 
 <p>If the plugin is unable to balance the battle, it must not update <code>\%players</code> and <code>\%bots</code>. The callback must return undef or a negative value so that SPADS knows it has to use another plugin or internal balance algorithm instead.</p>
 
@@ -387,11 +472,9 @@
 <dt id="updateCmdAliases-aliases"><code>updateCmdAliases(\%aliases)</code></dt>
 <dd>
 
-<p>This callback allows plugins to add new SPADS command aliases by adding new entries in the <code>\%aliases</code> hash reference. This hash is indexed by alias names and the values are references to an array containing the associated command. For example, a plugin can add an alias &quot;<code>!cvmap ...</code>&quot; for &quot;<code>!callVote map ...</code>&quot; like this: <code><span class="variable">$aliases</span><span class="operator">-&gt;</span><span class="operator">{</span><span class="string">cvmap</span><span class="operator">}</span><span class="operator">=</span><span class="operator">[</span><span class="string">'callVote'</span><span class="operator">,</span><span class="string">'map'</span><span class="operator">]</span>
-</code></p>
+<p>This callback allows plugins to add new SPADS command aliases by adding new entries in the <code>\%aliases</code> hash reference. This hash is indexed by alias names and the values are references to an array containing the associated command. For example, a plugin can add an alias &quot;<code>!cvmap ...</code>&quot; for &quot;<code>!callVote map ...</code>&quot; like this: <code>$aliases-&gt;{cvmap}=[&#39;callVote&#39;,&#39;map&#39;]</code></p>
 
-<p><code>&quot;%&lt;N&gt;%&quot;</code> can be used as placeholders for original alias command parameters. For example, a plugin can add an alias &quot;<code>!iprank &lt;playerName&gt;</code>&quot; for &quot;<code>!chrank &lt;playerName&gt; ip</code>&quot; like this: <code><span class="variable">$aliases</span><span class="operator">-&gt;</span><span class="operator">{</span><span class="string">iprank</span><span class="operator">}</span><span class="operator">=</span><span class="operator">[</span><span class="string">'chrank'</span><span class="operator">,</span><span class="string">'%1%'</span><span class="operator">,</span><span class="string">'ip'</span><span class="operator">]</span>
-</code></p>
+<p><code>&quot;%&lt;N&gt;%&quot;</code> can be used as placeholders for original alias command parameters. For example, a plugin can add an alias &quot;<code>!iprank &lt;playerName&gt;</code>&quot; for &quot;<code>!chrank &lt;playerName&gt; ip</code>&quot; like this: <code>$aliases-&gt;{iprank}=[&#39;chrank&#39;,&#39;%1%&#39;,&#39;ip&#39;]</code></p>
 
 </dd>
 <dt id="updatePlayerSkill-playerSkill-accountId-modName-gameType"><code>updatePlayerSkill(\%playerSkill,$accountId,$modName,$gameType)</code></dt>
@@ -399,8 +482,7 @@
 
 <p>This callback is called by SPADS each time it needs to get or update the skill of a player (on battle join, on game type change...). This allows plugins to replace the built-in skill estimations (rank, TrueSkill...) with custom skill estimations (ELO, Glicko ...).</p>
 
-<p><code>\%playerSkill</code> is a reference to a hash containing the skill data of the player. The plugin must update the <code>skill</code> entry as follows: <code><span class="variable">$playerSkill</span><span class="operator">-&gt;</span><span class="operator">{</span><span class="string">skill</span><span class="operator">}</span><span class="operator">=&lt;</span><span class="variable">skillValue</span><span class="operator">&gt;</span>
-</code></p>
+<p><code>\%playerSkill</code> is a reference to a hash containing the skill data of the player. The plugin must update the <code>skill</code> entry as follows: <code>$playerSkill-&gt;{skill}=&lt;skillValue&gt;</code></p>
 
 <p><code>$accountId</code> is the account ID of the player for whom skill value is requested.</p>
 
@@ -416,8 +498,7 @@
 
 <p>This callback is called by SPADS for each player in game when the <code>!status</code> command is called, to allow plugins to update and/or add data which will be presented to the user.</p>
 
-<p><code>\%playerStatus</code> is a reference to the hash containing current player status data. The plugin must update existing data or add new data in this hash. For example: <code><span class="variable">$playerStatus</span><span class="operator">-&gt;</span><span class="operator">{</span><span class="string">myPluginData</span><span class="operator">}</span><span class="operator">=&lt;</span><span class="variable">myPluginValue</span><span class="operator">&gt;</span>
-</code></p>
+<p><code>\%playerStatus</code> is a reference to the hash containing current player status data. The plugin must update existing data or add new data in this hash. For example: <code>$playerStatus-&gt;{myPluginData}=&lt;myPluginValue&gt;</code></p>
 
 <p><code>$accessLevel</code> is the autohost access level of the user issuing the <code>!status</code> command.</p>
 
@@ -429,8 +510,7 @@
 
 <p>This callback is called by SPADS for each player in the battle lobby when the <code>!status</code> command is called, to allow plugins to update and/or add data which will be presented to the user.</p>
 
-<p><code>\%playerStatus</code> is a reference to the hash containing current player status data. The plugin must update existing data or add new data in this hash. For example: <code><span class="variable">$playerStatus</span><span class="operator">-&gt;</span><span class="operator">{</span><span class="string">myPluginData</span><span class="operator">}</span><span class="operator">=&lt;</span><span class="variable">myPluginValue</span><span class="operator">&gt;</span>
-</code></p>
+<p><code>\%playerStatus</code> is a reference to the hash containing current player status data. The plugin must update existing data or add new data in this hash. For example: <code>$playerStatus-&gt;{myPluginData}=&lt;myPluginValue&gt;</code></p>
 
 <p><code>$accountId</code> is the account ID of the player for whom status data update is requested.</p>
 
@@ -467,6 +547,12 @@
 
 <dl>
 
+<dt id="getConfMacros"><code>getConfMacros()</code></dt>
+<dd>
+
+<p>This accessor returns a reference to the hash containing the configuration macros used to (re)start SPADS.</p>
+
+</dd>
 <dt id="getCurrentVote"><code>getCurrentVote()</code></dt>
 <dd>
 
@@ -474,11 +560,13 @@
 <dt id="getLobbyInterface"><code>getLobbyInterface()</code></dt>
 <dd>
 
+<p>This accessor returns the instance of the <a href="https://github.com/Yaribz/SpringLobbyInterface">SpringLobbyInterface</a> module used by SPADS.</p>
+
 </dd>
 <dt id="getLobbyState"><code>getLobbyState()</code></dt>
 <dd>
 
-<p>This accessor returns an integer describing current lobby state (<code>0</code>: not connected, <code>1</code>: connecting, <code>2</code>: connected, <code>3</code>: just logged in, <code>4</code>: lobby data received, <code>5</code>: opening battle, <code>6</code>: battle opened)</p>
+<p>This accessor returns an integer describing current lobby state (<code>0</code>: not connected, <code>1</code>: connecting, <code>2</code>: connected, <code>3</code>: just logged in, <code>4</code>: initial lobby data received, <code>5</code>: opening battle, <code>6</code>: battle opened)</p>
 
 </dd>
 <dt id="getRunningBattle"><code>getRunningBattle()</code></dt>
@@ -538,8 +626,7 @@
 
 <p>This function allows plugins to set up their own handlers for Spring lobby commands received by SPADS from lobby server.</p>
 
-<p><code>\%handlers</code> is a reference to a hash which contains the handlers to be added: each entry associates a lobby command (in uppercase) to a handler function implemented by the plugin. For example, with <code><span class="operator">{</span> <span class="string">JOINBATTLEREQUEST</span> <span class="operator">=&gt;</span> <span class="operator">\&amp;</span><span class="variable">hLobbyJoinBattleRequest</span> <span class="operator">}</span>
-</code>, the plugin has to implement the function <code>hLobbyJoinBattleRequest</code>. The parameters passed to the handlers are the command tokens: the command name followed by command parameters. Refer to <a href="http://springrts.com/dl/LobbyProtocol/ProtocolDescription.html">Spring lobby protocol specifications</a> for more information.</p>
+<p><code>\%handlers</code> is a reference to a hash which contains the handlers to be added: each entry associates a lobby command (in uppercase) to a handler function implemented by the plugin. For example, with <code>{ JOINBATTLEREQUEST =&gt; \&amp;hLobbyJoinBattleRequest }</code>, the plugin has to implement the function <code>hLobbyJoinBattleRequest</code>. The parameters passed to the handlers are the command tokens: the command name followed by command parameters. Refer to <a href="http://springrts.com/dl/LobbyProtocol/ProtocolDescription.html">Spring lobby protocol specifications</a> for more information.</p>
 
 <p><code>$priority</code> is the priority of the handlers. Lowest priority number actually means higher priority. If not provided, the plugin name is used as priority, which means it is executed after handlers having priority &lt; 1000, and before handlers having priority &gt; 1000. Usually you don&#39;t need to provide priority, unless you use data managed by other handlers.</p>
 
@@ -549,8 +636,7 @@
 
 <p>This function allows plugins to add or replace SPADS command handlers.</p>
 
-<p><code>\%handlers</code> is a reference to a hash which contains the handlers to be added or replaced: each entry associates a SPADS command to a handler function implemented by the plugin. For example, with <code><span class="operator">{</span> <span class="string">myCommand</span> <span class="operator">=&gt;</span> <span class="operator">\&amp;</span><span class="variable">hSpadsMyCommand</span> <span class="operator">}</span>
-</code>, the plugin has to implement the function <code>hSpadsMyCommand</code>. The parameters passed to the handlers are: <code>$source</code>,<code>$userName</code>,<code>\@params</code>,<code>$checkOnly</code>.</p>
+<p><code>\%handlers</code> is a reference to a hash which contains the handlers to be added or replaced: each entry associates a SPADS command to a handler function implemented by the plugin. For example, with <code>{ myCommand =&gt; \&amp;hSpadsMyCommand }</code>, the plugin has to implement the function <code>hSpadsMyCommand</code>. The parameters passed to the handlers are: <code>$source</code>,<code>$userName</code>,<code>\@params</code>,<code>$checkOnly</code>.</p>
 
 <p><code>$source</code> indicates the way the command has been called (<code>&quot;pv&quot;</code>: private lobby message, <code>&quot;battle&quot;</code>: battle lobby message, <code>&quot;chan&quot;</code>: master lobby channel message, <code>&quot;game&quot;</code>: in game message)</p>
 
@@ -570,8 +656,7 @@
 
 <p>This function allows plugins to set up their own handlers for Spring AutoHost commands received by SPADS from Spring server.</p>
 
-<p><code>\%handlers</code> is a reference to a hash which contains the handlers to be added: each entry associates a Spring AutoHost command to a handler function implemented by the plugin. The Spring AutoHost command names must match the values of <code>%commandCodes</code> defined in SpringAutoHostInterface.pm. For example, with <code><span class="operator">{</span> <span class="string">SERVER_STARTED</span> <span class="operator">=&gt;</span> <span class="operator">\&amp;</span><span class="variable">hSpringServerStarted</span> <span class="operator">}</span>
-</code>, the plugin has to implement the function <code>hSpringServerStarted</code>. The parameters passed to the handlers are the command tokens: the command name followed by command parameters. Refer to <a href="https://raw.github.com/spring/spring/master/rts/Net/AutohostInterface.cpp">Spring autohost protocol specifications (from source comments)</a> for more information.</p>
+<p><code>\%handlers</code> is a reference to a hash which contains the handlers to be added: each entry associates a Spring AutoHost command to a handler function implemented by the plugin. The Spring AutoHost command names must match the values of <code>%commandCodes</code> defined in SpringAutoHostInterface.pm. For example, with <code>{ SERVER_STARTED =&gt; \&amp;hSpringServerStarted }</code>, the plugin has to implement the function <code>hSpringServerStarted</code>. The parameters passed to the handlers are the command tokens: the command name followed by command parameters. Refer to <a href="https://raw.github.com/spring/spring/master/rts/Net/AutohostInterface.cpp">Spring autohost protocol specifications (from source comments)</a> for more information.</p>
 
 <p><code>$priority</code> is the priority of the handlers. Lowest priority number actually means higher priority. If not provided, the plugin name is used as priority, which means it is executed after handlers having priority &lt; 1000, and before handlers having priority &gt; 1000. Usually you don&#39;t need to provide priority, unless you use data managed by other handlers.</p>
 
@@ -622,8 +707,14 @@
 <dd>
 
 </dd>
-<dt id="closeBattle-reason"><code>closeBattle($reason)</code></dt>
+<dt id="closeBattle-reason-silentMode-0"><code>closeBattle($reason,$silentMode=0)</code></dt>
 <dd>
+
+<p>This function makes SPADS close current battle lobby.</p>
+
+<p>The <code>$reason</code> parameter must be a string containing the reason for closing the battle lobby.</p>
+
+<p>The <code>$silentMode</code> parameter is an optional boolean parameter specifying if the broadcast message (which is normally sent when the battle lobby is closed) must be prevented.</p>
 
 </dd>
 <dt id="getUserAccessLevel-user"><code>getUserAccessLevel($user)</code></dt>
@@ -744,6 +835,20 @@
 
 <dl>
 
+<dt id="createDetachedProcess-applicationPath-commandParams-workingDirectory-createNewConsole"><code>createDetachedProcess($applicationPath,\@commandParams,$workingDirectory,$createNewConsole)</code></dt>
+<dd>
+
+<p>This function allows plugins to create a new detached/daemon process, which can keep running even if the main SPADS process exits. It returns <code>1</code> if the new process has correctly been created, <code>0</code> else.</p>
+
+<p><code>$applicationPath</code> is the absolute path of the application that will be executed in the detached process.</p>
+
+<p><code>\@commandParams</code> is a reference to an array containing the parameters passed to the application.</p>
+
+<p><code>$workingDirectory</code> is the working directory for the detached process.</p>
+
+<p><code>$createNewConsole</code> indicates if a console must be created for the detached process: <code>0</code> means no console is created for the process (daemon mode) <code>1</code> means a new console will be created for the detached process (this mode is only available on Windows system)</p>
+
+</dd>
 <dt id="forkProcess-processFunction-endProcessCallback-preventQueuing-1"><code>forkProcess(\&amp;processFunction,\&amp;endProcessCallback,$preventQueuing=1)</code></dt>
 <dd>
 
@@ -851,6 +956,10 @@
 
 </dd>
 <dt id="conf"><code>%::conf</code></dt>
+<dd>
+
+</dd>
+<dt id="confMacros"><code>%::confMacros</code></dt>
 <dd>
 
 </dd>

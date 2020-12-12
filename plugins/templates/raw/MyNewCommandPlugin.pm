@@ -4,8 +4,6 @@ use strict;
 
 use SpadsPluginApi;
 
-no warnings 'redefine';
-
 my $pluginVersion='0.1';
 my $requiredSpadsVersion='0.11.5';
 

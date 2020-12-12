@@ -33,6 +33,7 @@ use List::Util qw'first shuffle';
 use MIME::Base64;
 use POSIX qw'ceil uname';
 use Storable qw'nfreeze dclone';
+use Symbol qw'delete_package';
 use Text::ParseWords;
 use Time::HiRes;
 
@@ -52,7 +53,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.17';
+our $spadsVer='0.12.18';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -297,7 +298,7 @@ my @macroDefinitions=@ARGV;
 my $confFile=shift(@macroDefinitions);
 my $p_macroData=parseMacroTokens(@macroDefinitions);
 invalidUsage() unless(defined $p_macroData);
-my %confMacros=%{$p_macroData};
+our %confMacros=%{$p_macroData};
 
 
 my $sLog=SimpleLog->new(prefix => "[SPADS] ");
@@ -1704,10 +1705,10 @@ sub quitAfterGame { applyQuitAction(0,0,shift); }
 sub restartAfterGame { applyQuitAction(1,0,shift); }
 
 sub closeBattleAfterGame {
-  my $reason=shift;
+  my ($reason,$silentMode)=@_;
   $closeBattleAfterGame=1;
   my $msg="Close battle scheduled (reason: $reason)";
-  broadcastMsg($msg);
+  broadcastMsg($msg) unless($silentMode);
   slog($msg,3);
 }
 
@@ -9070,7 +9071,7 @@ sub hPlugin {
       return 0;
     }
     return 1 if($checkOnly);
-    my $loadRes=loadPlugin($pluginName);
+    my $loadRes=loadPlugin($pluginName,'load');
     if($loadRes) {
       answer("Loaded plugin $pluginName.");
       return 1;
@@ -9084,7 +9085,7 @@ sub hPlugin {
   }
   if($action eq 'unload') {
     return 1 if($checkOnly);
-    my $p_unloadedPlugins=unloadPlugin($pluginName);
+    my $p_unloadedPlugins=unloadPlugin($pluginName,'unload');
     answer('Unloaded plugin'.($#{$p_unloadedPlugins} > 0 ? 's ' : ' ').(join(',',@{$p_unloadedPlugins})).'.');
     return 1;
   }
@@ -9497,6 +9498,12 @@ sub hReloadConf {
         invalidSyntax($user,"reloadconf");
         return 0;
       }
+      foreach my $forbiddenOverride (qw'set:springServer set:endGameCommand') {
+        if(exists $p_macroDataReload->{$forbiddenOverride}) {
+          answer('Unable to reload SPADS configuration: override of "'.(substr($forbiddenOverride,4)).'" setting is forbidden');
+          return 0;
+        }
+      }
 
       return 1 if($checkOnly);
 
@@ -9657,7 +9664,13 @@ sub hRestart {
         invalidSyntax($user,'restart');
         return 0;
       }
-
+      foreach my $forbiddenOverride (qw'set:springServer set:endGameCommand') {
+        if(exists $p_macroDataRestart->{$forbiddenOverride}) {
+          answer('Unable to restart SPADS: override of "'.(substr($forbiddenOverride,4)).'" setting is forbidden');
+          return 0;
+        }
+      }
+      
       return 1 if($checkOnly);
 
       foreach my $macroName (keys %{$p_macroDataRestart}) {
@@ -11832,6 +11845,9 @@ sub initLobbyConnection {
                      DENIED => \&cbLoginDenied,
                      AGREEMENTEND => \&cbAgreementEnd},
                     \&cbLoginTimeout);
+  foreach my $pluginName (@pluginsOrder) {
+    $plugins{$pluginName}->onLobbyLogin($lobby) if($plugins{$pluginName}->can('onLobbyLogin'));
+  }
 }
 
 sub cbBroadcast {
@@ -13281,11 +13297,11 @@ sub removePluginFromList {
 
 sub reloadPlugin {
   my $pluginName=shift;
-  my $p_unloadedPlugins=unloadPlugin($pluginName);
+  my $p_unloadedPlugins=unloadPlugin($pluginName,'reload');
   my (@reloadedPlugins,$failedPlugin,@notReloadedPlugins);
   while(@{$p_unloadedPlugins}) {
     my $pluginToLoad=pop(@{$p_unloadedPlugins});
-    if(loadPlugin($pluginToLoad)) {
+    if(loadPlugin($pluginToLoad,'reload')) {
       push(@reloadedPlugins,$pluginToLoad);
     }else{
       $failedPlugin=$pluginToLoad;
@@ -13297,7 +13313,7 @@ sub reloadPlugin {
 }
 
 sub unloadPlugin {
-  my $pluginName=shift;
+  my ($pluginName,$reason)=@_;
   if(! exists $plugins{$pluginName}) {
     slog("Ignoring unloadPlugin call for plugin $pluginName (plugin is not loaded!)",2);
     return [];
@@ -13311,7 +13327,7 @@ sub unloadPlugin {
         slog("Ignoring already unloaded dependent plugin ($dependentPlugin) during $pluginName plugin unload operation",5);
         next;
       }
-      my $p_unloadedPlugins=unloadPlugin($dependentPlugin);
+      my $p_unloadedPlugins=unloadPlugin($dependentPlugin,$reason);
       push(@unloadedPlugins,@{$p_unloadedPlugins});
     }
     slog("Plugin dependent tree not cleared during $pluginName plugin unload operation",2) if(%{$pluginsReverseDeps{$pluginName}});
@@ -13332,10 +13348,11 @@ sub unloadPlugin {
     delete $pluginsReverseDeps{$dependencyPlugin}->{$pluginName};
   }
 
-  $plugins{$pluginName}->onUnload() if($plugins{$pluginName}->can('onUnload'));
+  $plugins{$pluginName}->onUnload($reason) if($plugins{$pluginName}->can('onUnload'));
   delete $spads->{pluginsConf}->{$pluginName};
   removePluginFromList($pluginName);
   delete($plugins{$pluginName});
+  delete_package($pluginName);
   delete $INC{"$pluginName.pm"};
 
   push(@unloadedPlugins,$pluginName);
@@ -13343,11 +13360,11 @@ sub unloadPlugin {
 }
 
 sub loadPlugin {
-  my $pluginName=shift;
+  my ($pluginName,$reason)=@_;
   if($spads->loadPluginConf($pluginName)) {
     $spads->applyPluginPreset($pluginName,$conf{defaultPreset});
     $spads->applyPluginPreset($pluginName,$conf{preset}) if($conf{preset} ne $conf{defaultPreset});
-    return 1 if(loadPluginModule($pluginName));
+    return 1 if(loadPluginModule($pluginName,$reason));
   }
   delete $spads->{pluginsConf}->{$pluginName};
   delete $INC{"$pluginName.pm"};
@@ -13355,7 +13372,7 @@ sub loadPlugin {
 }
 
 sub loadPluginModule {
-  my $pluginName=shift;
+  my ($pluginName,$reason)=@_;
 
   foreach my $mandatoryPluginFunction (qw'getVersion getRequiredSpadsVersion') {
     my $hasMandatoryFunc;
@@ -13402,7 +13419,7 @@ sub loadPluginModule {
   }
 
   my $plugin;
-  eval "\$plugin=$pluginName->new()";
+  eval "\$plugin=$pluginName->new(\$reason)";
   if($@) {
     slog("Unable to instanciate plugin module \"$pluginName\": $@",1);
     return 0;
@@ -13422,6 +13439,7 @@ sub loadPluginModule {
 
   push(@pluginsOrder,$pluginName);
   $plugins{$pluginName}=$plugin;
+  
   return 1;
 }
 
@@ -13952,7 +13970,7 @@ if(! $abortSpadsStartForAutoUpdate) {
   if($conf{autoLoadPlugins} ne '') {
     my @pluginNames=split(/;/,$conf{autoLoadPlugins});
     foreach my $pluginName (@pluginNames) {
-      loadPluginModule($pluginName);
+      loadPluginModule($pluginName,'autoload');
     }
   }
 
@@ -14101,7 +14119,7 @@ sub checkExit {
 sub postMainLoop {
   while(@pluginsOrder) {
     my $pluginName=pop(@pluginsOrder);
-    unloadPlugin($pluginName);
+    unloadPlugin($pluginName,$quitAfterGame{action} == 1 ? 'restarting' : 'exiting');
   }
   if($lobbyState) {
     foreach my $joinedChan (keys %{$lobby->{channels}}) {

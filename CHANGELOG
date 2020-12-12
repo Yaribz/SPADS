@@ -849,6 +849,12 @@ spads.pl:
          show instance name and SPADS version in console window title (Windows)
 0.12.17: detect when running in daemon mode (no console) and prevent new console creation when SPADS is restarted (Windows)
          replace the internal function used to close all non-system filehandles by the one provided by the SimpleEvent module
+0.12.18: new plugin event callback "onLobbyLogin"
+         configuration macros data are now available from plugins
+         plugin constructors and onUnload callbacks now receive an additional parameter which indicates the context/reason
+         plugins can now close the battle lobby without triggering broadcast messages
+         the plugin package namespace is now correctly removed from the symbol table on plugin unload (the "no warnings 'redefine'" pragma is no longer needed in plugins)
+         forbid configuration setting overrides for critical settings "springServer" and "endGameCommand" when used through !reloadConf and !restart commands
 
 SpadsConf.pm:
 ============
@@ -1113,6 +1119,15 @@ SpadsPluginApi.pm:
 0.22: new plugin event callback: preGameCheck
 0.22a: the "preGameCheck" callback can now return a special value "1" which prevents game start without generating any message in battle lobby
 0.22b: remove documentation for the deprecated plugin customization callback "forceCpuSpeedValue"
+0.23: new plugin API accessor "getConfMacros" to retrieve the new shared data "%::confMacros" (configuration macros data)
+      new plugin API function: "createDetachedProcess" (create a new detached/daemon process)
+      new plugin event callback: "onLobbyLogin" (called when connecting to lobby server, just after the login data are sent)
+      the plugin constructor now receives an additional parameter which indicates the context/reason (autoload|load|reload)
+      the "onUnload" plugin event callback now receives an additional parameter which indicates the context/reason (exiting|restarting|unload|reload)
+      the "closeBattle" plugin API function now accepts an additional optional parameter to prevent the broadcast message from being triggered (documentation completed)
+      the "no warnings 'redefine'" pragma is no longer needed in plugin code (the plugin package namespace is now automatically removed from symbol table on plugin unload)
+      enrich the documentation of the plugin event callbacks
+      add the documentation of the "getlobbyInterface" plugin API function
 
 SpadsUpdater.pm:
 ===============

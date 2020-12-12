@@ -7,9 +7,6 @@ use strict;
 # We use the SPADS plugin API module
 use SpadsPluginApi;
 
-# We don't want warnings when the plugin is reloaded
-no warnings 'redefine';
-
 # This is the first version of the plugin
 my $pluginVersion='0.1';
 

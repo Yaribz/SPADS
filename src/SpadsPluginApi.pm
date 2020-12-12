@@ -1,6 +1,6 @@
 # SpadsPluginApi: SPADS plugin API
 #
-# Copyright (C) 2013-2019  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2013-2020  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -19,9 +19,9 @@
 package SpadsPluginApi;
 
 use Exporter 'import';
-@EXPORT=qw/$spadsVersion $spadsDir getLobbyState getSpringPid getSpringServerType getTimestamps getRunningBattle getCurrentVote getPlugin addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess forkCall addTimer removeTimer addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives/;
+@EXPORT=qw/$spadsVersion $spadsDir getLobbyState getSpringPid getSpringServerType getTimestamps getRunningBattle getConfMacros getCurrentVote getPlugin addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess forkCall createDetachedProcess addTimer removeTimer addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives/;
 
-my $apiVersion='0.22b';
+my $apiVersion='0.23';
 
 our $spadsVersion=$::spadsVer;
 our $spadsDir=$::cwd;
@@ -33,6 +33,10 @@ sub getVersion {
 ################################
 # Accessors
 ################################
+
+sub getConfMacros {
+  return \%::confMacros;
+}
 
 sub getCurrentVote {
   return \%::currentVote;
@@ -157,6 +161,12 @@ sub forkCall {
   my $childPid = SimpleEvent::forkCall(@_);
   ::slog('Failed to fork process for function call by plugin '.caller().' !',1) if($childPid == 0);
   return $childPid;
+}
+
+sub createDetachedProcess {
+  my $res = SimpleEvent::createDetachedProcess(@_);
+  ::slog('Failed to create detached process for plugin '.caller().' !',1) unless($res);
+  return $res;
 }
 
 ################################
@@ -342,8 +352,6 @@ SpadsPluginApi - SPADS Plugin API
 
   use SpadsPluginApi;
 
-  no warnings 'redefine';
-
   my $pluginVersion='0.1';
   my $requiredSpadsVersion='0.11';
 
@@ -385,10 +393,17 @@ To be valid, a SPADS plugin must implement at least these 3 callbacks:
 
 =over 2
 
-=item C<new()>
+=item C<new($context)>
 
 This is the plugin constructor, it is called when SPADS (re)loads the plugin. It
 must return the plugin object.
+
+The C<$context> parameter is a string which indicates in which context the
+plugin constructor has been called: C<"autoload"> means the plugin is being
+loaded automatically at startup, C<"load"> means the plugin is being loaded
+manually using C<< !plugin <pluginName> load >> command, C<"reload"> means the
+plugin is being reloaded manually using C<< !plugin <pluginName> reload >>
+command.
 
 =item C<getVersion()>
 
@@ -460,11 +475,30 @@ lobby, Spring server...):
 
 =item C<onBattleClosed()>
 
+This callback is called when the battle lobby of the autohost is closed.
+
 =item C<onBattleOpened()>
+
+This callback is called when the battle lobby of the autohost is opened.
 
 =item C<onGameEnd(\%endGameData)>
 
+This callback is called each time a game hosted by the autohost ends.
+
+The C<\%endGameData> parameter is a reference to a hash containing all the data
+stored by SPADS concerning the game that just ended. It is recommended to use a
+data printing function (such as the C<Dumper> function from the standard
+C<Data::Dumper> module included in Perl core) to check the content of this hash
+for the desired data.
+
 =item C<onJoinBattleRequest($userName,$ipAddr)>
+
+This callback is called each time a client requests to join the battle lobby
+managed by the autohost.
+
+C<$userName> is the name of the user requesting to join the battle
+
+C<$ipAddr> is the IP address of the user requesting to join the battle
 
 This callback must return:
 
@@ -472,24 +506,63 @@ C<0> if the user is allowed to join the battle
 
 C<1> if the user isn't allowed to join the battle (without explicit reason)
 
-C<< "<explicit reason string>" >> if the user isn't allowed to join the battle, with explicit reason
+C<< "<explicit reason string>" >> if the user isn't allowed to join the battle,
+with explicit reason
 
 =item C<onLobbyConnected($lobbyInterface)>
 
+This callback is called each time the autohost successfully logged in on the
+lobby server, after all login info has been received from lobby server (this
+callback is called after the C<onLobbyLogin($lobbyInterface)> callback).
+
+The C<$lobbyInterface> parameter is the instance of the
+ L<SpringLobbyInterface|https://github.com/Yaribz/SpringLobbyInterface> module
+used by SPADS.
+
 =item C<onLobbyDisconnected()>
+
+This callback is called each time the autohost is disconnected from the lobby
+server.
+
+=item C<onLobbyLogin($lobbyInterface)>
+
+This callback is called each time the autohost tries to login on the lobby
+server, just after the LOGIN command has been sent to the lobby server (this
+callback is called before the C<onLobbyConnected($lobbyInterface)> callback).
+
+The C<$lobbyInterface> parameter is the instance of the
+ L<SpringLobbyInterface|https://github.com/Yaribz/SpringLobbyInterface> module
+used by SPADS.
 
 =item C<onPresetApplied($oldPresetName,$newPresetName)>
 
+This callback is called each time a global preset is applied.
+
+C<$oldPresetName> is the name of the previous global preset
+
+C<$newPresetName> is the name of the new global preset
+
 =item C<onPrivateMsg($userName,$message)>
+
+This callback is called each time the autohost receives a private message.
+
+C<$userName> is the name of the user who sent a private message to the autohost
+
+C<$message> is the private message received by the autohost
 
 This callback must return:
 
-C<0> if the message can be treated by other plugins and SPADS core
+C<0> if the message can be processed by other plugins and SPADS core
 
-C<1> if the message must not be treated by other plugins and SPADS core (this
+C<1> if the message must not be processed by other plugins and SPADS core (this
 prevents logging)
 
 =item C<onReloadConf($keepSettings)>
+
+This callback is called each time the SPADS configuration is reloaded.
+
+C<$keepSettings> is a boolean parameter indicating if current settings must be
+kept.
 
 This callback must return:
 
@@ -499,40 +572,95 @@ C<1> if the plugin configuration has been reloaded correctly
 
 =item C<onSettingChange($settingName,$oldValue,$newValue)>
 
+This callback is called each time a setting of the plugin configuration is
+changed (using C<< !plugin <pluginName> set ... >> command).
+
+C<$settingName> is the name of the updated setting
+
+C<$oldValue> is the previous value of the setting
+
+C<$newValue> is the new value of the setting
+
 =item C<onSpringStart($springPid)>
+
+This callback is called each time a Spring process is launched to host a game.
+
+C<$springPid> is the PID of the Spring process that has just been launched.
 
 =item C<onSpringStop($springPid)>
 
-=item C<onUnload()>
+This callback is called each time the Spring process ends.
 
-This callback is called when the plugin is unloaded. If the plugin added
+C<$springPid> is the PID of the Spring process that just ended.
+
+=item C<onUnload($context)>
+
+This callback is called when the plugin is unloaded. If the plugin has added
 handlers for SPADS command, lobby commands, or Spring commands, then they must
-be removed here. If the plugin handles persistent data, then these data must be
-serialized here.
+be removed here. If the plugin has added timers, they must also be removed here.
+If the plugin handles persistent data, then these data must be serialized and
+written to persistent storage here.
+
+The C<$context> parameter is a string which indicates in which context the
+callback has been called: C<"exiting"> means the plugin is being unloaded
+because SPADS is exiting, C<"restarting"> means the plugin is being unloaded
+because SPADS is restarting, C<"unload"> means the plugin is being unloaded
+manually using C<< !plugin <pluginName> unload >> command, C<"reload"> means the
+plugin is being reloaded manually using C<< !plugin <pluginName> reload >>
+command.
 
 =item C<onVoteRequest($source,$user,\@command,\%remainingVoters)>
 
 This callback is called each time a vote is requested by a player.
 
+C<$source> indicates the way the vote has been requested (C<"pv">: private lobby
+message, C<"battle">: battle lobby message, C<"chan">: master lobby channel
+message, C<"game">: in game message)
+
+C<$user> is the name of the user requesting the vote
+
+C<\@command> is an array reference containing the command for which a vote is
+requested
+
 C<\%remainingVoters> is a reference to a hash containing the players allowed to
 vote. This hash is indexed by player names. The plugin can filter these players
 by simply removing the corresponding entries from the hash.
 
-This callback must return 0 to prevent the vote call from happening, or 1 to
-allow it.
+This callback must return C<0> to prevent the vote call from happening, or C<1>
+to allow it.
 
 =item C<onVoteStart($user,\@command)>
 
+This callback is called each time a new vote poll is started.
+
+C<$user> is the name of the user who started the vote poll
+
+C<\@command> is an array reference containing the command for which a vote is
+started
+
 =item C<onVoteStop($voteResult)>
 
-C<$voteResult> values: C<-1> (vote failed), C<0> (vote cancelled), C<1> (vote
-passed)
+This callback is called each time a vote poll is stoped.
+
+C<$voteResult> indicates the result of the vote: C<-1> (vote failed), C<0> (vote
+cancelled), C<1> (vote passed)
 
 =item C<postSpadsCommand($command,$source,$user,\@params,$commandResult)>
 
-This callback is called each time a SPADS command has been executed.
+This callback is called each time a SPADS command has been called.
 
-If C<$commandResult> is defined and set to 0, then it means the command failed.
+C<$command> is the name of the command (without the parameters)
+
+C<$source> indicates the way the command has been called (C<"pv">: private lobby
+message, C<"battle">: battle lobby message, C<"chan">: master lobby channel
+message, C<"game">: in game message)
+
+C<$user> is the name of the user who called the command
+
+C<\@params> is a reference to an array containing the parameters of the command
+
+C<$commandResult> indicates the result of the command (if it is defined and set
+to C<0> then the command failed, in all other cases the command succeeded)
 
 =item C<preGameCheck($force,$checkOnly,$automatic)>
 
@@ -554,10 +682,21 @@ or undef to allow the game to start.
 
 =item C<preSpadsCommand($command,$source,$user,\@params)>
 
-This callback is called each time a SPADS command is going to be executed.
+This callback is called each time a SPADS command is called, just before it is
+actually executed.
 
-It must return 0 to prevent the command from being treated by other plugins and
-executed by SPADS core, or 1 to allow it.
+C<$command> is the name of the command (without the parameters)
+
+C<$source> indicates the way the command has been called (C<"pv">: private lobby
+message, C<"battle">: battle lobby message, C<"chan">: master lobby channel
+message, C<"game">: in game message)
+
+C<$user> is the name of the user who called the command
+
+C<\@params> is a reference to an array containing the parameters of the command
+
+This callback must return C<0> to prevent the command from being processed by
+other plugins and SPADS core, or C<1> to allow it.
 
 =back
 
@@ -804,15 +943,24 @@ plugins.
 
 =over 2
 
+=item C<getConfMacros()>
+
+This accessor returns a reference to the hash containing the configuration
+macros used to (re)start SPADS.
+
 =item C<getCurrentVote()>
 
 =item C<getLobbyInterface()>
 
+This accessor returns the instance of the
+L<SpringLobbyInterface|https://github.com/Yaribz/SpringLobbyInterface> module
+used by SPADS.
+
 =item C<getLobbyState()>
 
 This accessor returns an integer describing current lobby state (C<0>: not
-connected, C<1>: connecting, C<2>: connected, C<3>: just logged in, C<4>: lobby
-data received, C<5>: opening battle, C<6>: battle opened)
+connected, C<1>: connecting, C<2>: connected, C<3>: just logged in, C<4>:
+initial lobby data received, C<5>: opening battle, C<6>: battle opened)
 
 =item C<getRunningBattle()>
 
@@ -978,7 +1126,16 @@ managed by other handlers.
 
 =item C<cancelQuit($reason)>
 
-=item C<closeBattle($reason)>
+=item C<closeBattle($reason,$silentMode=0)>
+
+This function makes SPADS close current battle lobby.
+
+The C<$reason> parameter must be a string containing the reason for closing the
+battle lobby.
+
+The C<$silentMode> parameter is an optional boolean parameter specifying if the
+broadcast message (which is normally sent when the battle lobby is closed) must
+be prevented.
 
 =item C<getUserAccessLevel($user)>
 
@@ -1055,6 +1212,25 @@ C<$level> is the log level of the message: C<0> (critical), C<1> (error), C<2>
 =head2 Forking processes
 
 =over 2
+
+=item C<createDetachedProcess($applicationPath,\@commandParams,$workingDirectory,$createNewConsole)>
+
+This function allows plugins to create a new detached/daemon process, which can
+keep running even if the main SPADS process exits. It returns C<1> if the new
+process has correctly been created, C<0> else.
+
+C<$applicationPath> is the absolute path of the application that will be
+executed in the detached process.
+
+C<\@commandParams> is a reference to an array containing the parameters passed
+to the application.
+
+C<$workingDirectory> is the working directory for the detached process.
+
+C<$createNewConsole> indicates if a console must be created for the detached
+process: C<0> means no console is created for the process (daemon mode) C<1>
+means a new console will be created for the detached process (this mode is only
+available on Windows system)
 
 =item C<forkProcess(\&processFunction,\&endProcessCallback,$preventQueuing=1)>
 
@@ -1187,6 +1363,8 @@ strongly recommended to use the accessors from the API instead:
 =item C<$::autohost>
 
 =item C<%::conf>
+
+=item C<%::confMacros>
 
 =item C<%::currentVote>
 
