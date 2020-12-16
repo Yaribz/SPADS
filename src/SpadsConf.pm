@@ -22,12 +22,14 @@ use strict;
 
 use Digest::MD5 'md5_base64';
 use FileHandle;
+use Fcntl qw':DEFAULT :flock';
 use File::Basename;
 use File::Copy;
 use File::Spec;
 use FindBin;
 use List::Util 'first';
 use Storable qw'nstore retrieve dclone';
+use Time::HiRes;
 
 use SimpleLog;
 
@@ -38,7 +40,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.12.4';
+my $moduleVersion='0.12.5';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -289,6 +291,12 @@ my @userDataFieldsOld=(['accountId'],['country','cpu','lobbyClient','rank','time
 my @userDataFields=(['accountId'],['country','lobbyClient','rank','timestamp','ips','names']);
 my @springLobbyCertificatesFields=(['lobbyHost'],['certHashes']);
 
+my %shareableData = ( savedBoxes => { type => 'fastTable',
+                                      fields => \@mapBoxesFields },
+                      bans => { type => 'table',
+                                fields => \@banListsFields },
+                      trustedLobbyCertificates => { type => 'binary' } );
+
 # Constructor #################################################################
 
 sub new {
@@ -333,9 +341,26 @@ sub new {
   my $p_commands=loadTableFile($sLog,$p_conf->{''}{etcDir}."/$commandsFile",\@commandsFields,$p_macros,1);
   my $p_help=loadSimpleTableFile($sLog,"$spadsDir/help.dat",$p_macros,1);
   my $p_helpSettings=loadHelpSettingsFile($sLog,"$spadsDir/helpSettings.dat",$p_macros,1);
-  
-  touch($p_conf->{''}{instanceDir}.'/bans.dat') unless(-f $p_conf->{''}{instanceDir}.'/bans.dat');
-  my $p_bans=loadTableFile($sLog,$p_conf->{''}{instanceDir}.'/bans.dat',\@banListsFields,$p_macros);
+
+  my %sharedDataTs=map {$_ => 0} (keys %shareableData);
+  if(exists $p_macros->{sharedData}) {
+    foreach my $sharedData (split(',',$p_macros->{sharedData})) {
+      if(exists $sharedDataTs{$sharedData}) {
+        $sharedDataTs{$sharedData}=-1;
+      }else{
+        $sLog->log("Ignoring request to share invalid data \"$sharedData\"",2);
+      }
+    }
+  }
+
+  my $p_bans;
+  if($sharedDataTs{bans}) {
+    $p_bans=initSharedData($sLog,$p_conf,\%sharedDataTs,'bans');
+  }else{
+    my $bansFile=$p_conf->{''}{instanceDir}.'/bans.dat';
+    touch($bansFile) unless(-f $bansFile);
+    $p_bans=loadTableFile($sLog,$bansFile,\@banListsFields,{});
+  }
 
   if(! checkNonEmptyHash($p_users,$p_levels,$p_commands,$p_help,$p_helpSettings,$p_bans)) {
     $sLog->log('Unable to load commands, help and permission system',1);
@@ -357,8 +382,14 @@ sub new {
     return 0;
   }
 
-  touch($p_conf->{''}{instanceDir}.'/savedBoxes.dat') unless(-f $p_conf->{''}{instanceDir}.'/savedBoxes.dat');
-  my $p_savedBoxes=loadFastTableFile($sLog,$p_conf->{''}{instanceDir}.'/savedBoxes.dat',\@mapBoxesFields,{});
+  my $p_savedBoxes;
+  if($sharedDataTs{savedBoxes}) {
+    $p_savedBoxes=initSharedData($sLog,$p_conf,\%sharedDataTs,'savedBoxes');
+  }else{
+    my $savedBoxesFile=$p_conf->{''}{instanceDir}.'/savedBoxes.dat';
+    touch($savedBoxesFile) unless(-f $savedBoxesFile);
+    $p_savedBoxes=loadFastTableFile($sLog,$savedBoxesFile,\@mapBoxesFields,{});
+  }
   if(! %{$p_savedBoxes}) {
     $sLog->log('Unable to load saved map boxes',1);
     return 0;
@@ -406,14 +437,19 @@ sub new {
       return 0;
     }
   }
-  
+
   my $p_trustedLobbyCertificates={};
-  if(-f $p_conf->{''}{instanceDir}.'/trustedLobbyCertificates.dat') {
-    $p_trustedLobbyCertificates=retrieve($p_conf->{''}{instanceDir}.'/trustedLobbyCertificates.dat');
-    if(! defined $p_trustedLobbyCertificates) {
-      $sLog->log('Unable to load trusted lobby certificates',1);
-      return 0;
+  if($sharedDataTs{trustedLobbyCertificates}) {
+    $p_trustedLobbyCertificates=initSharedData($sLog,$p_conf,\%sharedDataTs,'trustedLobbyCertificates');
+  }else{
+    my $trustedLobbyCertificatesFile=$p_conf->{''}{instanceDir}.'/trustedLobbyCertificates.dat';
+    if(-f $trustedLobbyCertificatesFile) {
+      $p_trustedLobbyCertificates=retrieve($trustedLobbyCertificatesFile);
     }
+  }
+  if(! defined $p_trustedLobbyCertificates) {
+    $sLog->log('Unable to load trusted lobby certificates',1);
+    return 0;
   }
 
   my $self = {
@@ -450,7 +486,8 @@ sub new {
     macros => $p_macros,
     pluginsConf => {},
     springLobbyCertificates => $p_springLobbyCertificates->{''},
-    trustedLobbyCertificates => $p_trustedLobbyCertificates
+    trustedLobbyCertificates => $p_trustedLobbyCertificates,
+    sharedDataTs => \%sharedDataTs
   };
 
   bless ($self, $class);
@@ -494,6 +531,20 @@ sub getVersion {
 }
 
 # Internal functions ##########################################################
+
+sub _acquireLock {
+  my ($file,$lockType)=@_;
+  if(open(my $lockFh,'>',$file.'.lock')) {
+    if(flock($lockFh, $lockType)) {
+      return $lockFh;
+    }else{
+      close($lockFh);
+      return undef;
+    }
+  }else{
+    return undef;
+  }
+}
 
 sub isAbsolutePath {
   my $fileName=shift;
@@ -1359,6 +1410,129 @@ sub printFastTable {
   }
 }
 
+sub initSharedData {
+  my ($sLog,$p_conf,$r_sharedDataTs,$sharedData)=@_;
+  my $dataStorageType=$shareableData{$sharedData}{type};
+  my $isCustomStorageType = $dataStorageType ne 'binary';
+  my $r_data;
+  $r_data={} if($isCustomStorageType);
+  my ($privateFile,$sharedFile)=map {$p_conf->{''}{$_}."/$sharedData.dat"} (qw'instanceDir varDir');
+  if(-f $sharedFile) {
+    $sLog->log("Loading shared $sharedData data from shared file",5);
+    if(my $lock=_acquireLock($sharedFile,LOCK_SH)) {
+      $r_data=loadShareableData($sLog,$sharedFile,$sharedData);
+      $r_sharedDataTs->{$sharedData}=(Time::HiRes::stat($sharedFile))[9];
+      close($lock);
+    }else{
+      $sLog->log("Failed to acquire lock on shared file to load $sharedData data",1);
+    }
+  }elsif(-f $privateFile) {
+    $sLog->log("Initializing shared $sharedData data from private file",3);
+    if(my $lock=_acquireLock($sharedFile,LOCK_EX)) {
+      if(-f $sharedFile) {
+        $sLog->log("A shared file has appeared meanwhile for shared $sharedData data, loading data directly from shared file instead",3);
+        $r_data=loadShareableData($sLog,$sharedFile,$sharedData);
+        $r_sharedDataTs->{$sharedData}=(Time::HiRes::stat($sharedFile))[9];
+      }else{
+        $r_data=loadShareableData($sLog,$privateFile,$sharedData);
+        if(($isCustomStorageType && %{$r_data})
+           || (! $isCustomStorageType && defined $r_data)) {
+          if(copy($privateFile,$sharedFile)) {
+            $r_sharedDataTs->{$sharedData}=(Time::HiRes::stat($sharedFile))[9];
+          }else{
+            $sLog->log("Failed to initialize shared $sharedData data from private file: $!",2);
+          }
+        }else{
+          $sLog->log("Failed to load private $sharedData data to initialize shared data",1);
+        }
+      }
+      close($lock);
+    }else{
+      $sLog->log("Failed to acquire lock on shared file to load $sharedData data",1);
+    }
+  }elsif($isCustomStorageType) {
+    $sLog->log("Initializing empty shared $sharedData data",3);
+    if(my $lock=_acquireLock($sharedFile,LOCK_EX)) {
+      if(-f $sharedFile) {
+        $sLog->log("A shared file has appeared meanwhile for shared $sharedData data, loading data from shared file instead",3);
+      }else{
+        touch($sharedFile);
+      }
+      $r_data=loadShareableData($sLog,$sharedFile,$sharedData);
+      $r_sharedDataTs->{$sharedData}=(Time::HiRes::stat($sharedFile))[9];
+      close($lock);
+    }else{
+      $sLog->log("Failed to acquire lock on shared file to load $sharedData data",1);
+    }
+  }else{
+    $r_data={};
+    $sLog->log("No $sharedData data found",5);
+  }
+  return $r_data;
+}
+
+sub loadShareableData {
+  my ($sLog,$file,$sharedData)=@_;
+  my ($dataStorageType,$r_fields)=@{$shareableData{$sharedData}}{qw'type fields'};
+  if($dataStorageType eq 'fastTable') {
+    return loadFastTableFile($sLog,$file,$r_fields,{});
+  }elsif($dataStorageType eq 'table') {
+    return loadTableFile($sLog,$file,$r_fields,{});
+  }elsif($dataStorageType eq 'binary') {
+    return retrieve($file);
+  }else{
+    $sLog->log("Unable to load data \"$sharedData\" (not a shareable data)",0);
+    return undef;
+  }
+}
+
+sub refreshAndLockSharedDataForUpdate {
+  my ($self,$sharedData)=@_;
+  my $sharedFile="$self->{conf}{varDir}/$sharedData.dat";
+  if(my $lock = _acquireLock($sharedFile,LOCK_EX)) {
+    if(-f $sharedFile && (Time::HiRes::stat($sharedFile))[9] > $self->{sharedDataTs}{$sharedData}) {
+      $self->{log}->log("Shared file \"$sharedData.dat\" has been modified, refreshing data before update",5);
+      my $r_refreshedData;
+      my $r_loadedData=loadShareableData($self->{log},$sharedFile,$sharedData);
+      if($shareableData{$sharedData}{type} eq 'binary') {
+        $r_refreshedData = defined $r_loadedData ? {'' => $r_loadedData} : {};
+      }else{
+        $r_refreshedData=$r_loadedData;
+      }
+      if(! %{$r_refreshedData}) {
+        $self->{log}->log("Unable to update $sharedData data (failed to refresh data from shared file before update)",1);
+        close($lock);
+        return undef;
+      }
+      $self->{$sharedData}=$r_refreshedData->{''};
+      $self->{sharedDataTs}{$sharedData}=(Time::HiRes::stat($sharedFile))[9];
+    }
+    return $lock;
+  }else{
+    $self->{log}->log("Unable to update $sharedData data (failed to acquire lock on shared file)",1);
+    return undef;
+  }
+}
+
+sub updateAndUnlockSharedData {
+  my ($self,$sharedData,$lock)=@_;
+  my $sharedFile="$self->{conf}{varDir}/$sharedData.dat";
+  my $res;
+  if($shareableData{$sharedData}{type} eq 'fastTable') {
+    $res=$self->dumpFastTable($self->{$sharedData},$sharedFile,$shareableData{$sharedData}{fields});
+  }elsif($shareableData{$sharedData}{type} eq 'table') {
+    $res=$self->dumpTable($self->{$sharedData},$sharedFile,$shareableData{$sharedData}{fields});
+  }elsif($shareableData{$sharedData}{type} eq 'binary') {
+    $res=nstore($self->{$sharedData},$sharedFile);
+  }else{
+    $self->{log}->log("Unable to update shared data \"$sharedData\", unknown data",0);
+    $res=0;
+  }
+  $self->{sharedDataTs}{$sharedData}=(Time::HiRes::stat($sharedFile))[9] if($res);
+  close($lock);
+  return $res;
+}
+
 # Internal functions - Dynamic data - Preferences #############################
 
 sub preparePreferences {
@@ -1542,6 +1716,47 @@ sub removeMatchingData {
 
 sub removeExpiredBans {
   my $self=shift;
+  if($self->{sharedDataTs}{bans}) {
+    $self->removeSharedExpiredBans();
+  }else{
+    $self->removePrivateExpiredBans();
+  }
+}
+
+sub removeSharedExpiredBans {
+  my $self=shift;
+  my @bans=@{$self->{bans}};
+  my $hasExpiredBans=0;
+  for my $i (0..$#bans) {
+    if(exists $bans[$i][1]{endDate} && defined $bans[$i][1]{endDate} && $bans[$i][1]{endDate} ne '' && $bans[$i][1]{endDate} < time) {
+      $hasExpiredBans=1;
+      last;
+    }
+  }
+  return unless($hasExpiredBans);
+  my $lock=$self->refreshAndLockSharedDataForUpdate('bans')
+      or return;
+  my $nbRemovedBans=0;
+  @bans=@{$self->{bans}};
+  my @newBans=();
+  for my $i (0..$#bans) {
+    if(exists $bans[$i][1]{endDate} && defined $bans[$i][1]{endDate} && $bans[$i][1]{endDate} ne '' && $bans[$i][1]{endDate} < time) {
+      $nbRemovedBans++;
+    }else{
+      push(@newBans,$bans[$i]);
+    }
+  }
+  if($nbRemovedBans) {
+    $self->{bans}=\@newBans;
+    $self->updateAndUnlockSharedData('bans',$lock);
+    $self->{log}->log("$nbRemovedBans expired ban(s) removed from shared file \"bans.dat\"",3);
+  }else{
+    close($lock);
+  }
+}
+
+sub removePrivateExpiredBans {
+  my $self=shift;
   my $nbRemovedBans=0;
   my @bans=@{$self->{bans}};
   my @newBans=();
@@ -1554,8 +1769,8 @@ sub removeExpiredBans {
   }
   if($nbRemovedBans) {
     $self->{bans}=\@newBans;
-    $self->{log}->log("$nbRemovedBans expired ban(s) removed from file \"bans.dat\"",3);
     $self->dumpTable($self->{bans},$self->{conf}{instanceDir}.'/bans.dat',\@banListsFields);
+    $self->{log}->log("$nbRemovedBans expired ban(s) removed from file \"bans.dat\"",3);
   }
 }
 
@@ -1633,6 +1848,29 @@ sub flattenBan {
     return '['.join(',',@resArray).']';
   }
   return $data;
+}
+
+sub banIsDuplicate {
+  my ($self,$r_banFilters,$r_banParams)=@_;
+  for my $i (0..$#{$self->{bans}}) {
+    return 1 if(areSameBans($r_banFilters,$self->{bans}[$i][0],0) && areSameBans($r_banParams,$self->{bans}[$i][1],1));
+  }
+  return 0;
+}
+
+sub areSameBans {
+  my ($r_ban1,$r_ban2,$banPart)=@_;
+  foreach my $field (@{$banListsFields[$banPart]}) {
+    my @definedStatus = map {exists $_->{$field} && defined $_->{$field} && $_->{$field} ne '' ? 1 : 0} ($r_ban1,$r_ban2);
+    return 0 unless($definedStatus[0] == $definedStatus[1]);
+    next unless($definedStatus[0]);
+    if($field eq 'startDate') {
+      my $currentTime=time;
+      next if($r_ban1->{startDate} <= $currentTime && $r_ban2->{startDate} <= $currentTime);
+    }
+    return 0 unless($r_ban1->{$field} eq $r_ban2->{$field});
+  }
+  return 1;
 }
 
 # Internal functions - Dynamic data - Map hashes ##############################
@@ -1932,6 +2170,33 @@ sub dumpDynamicData {
   $self->{log}->log("Dynamic data dump process took $dumpDuration seconds",2) if($dumpDuration > 15);
 }
 
+sub refreshSharedData {
+  my $self=shift;
+  foreach my $sharedData (keys %shareableData) {
+    my $sharedFile="$self->{conf}{varDir}/$sharedData.dat";
+    next unless($self->{sharedDataTs}{$sharedData} && -f $sharedFile && (Time::HiRes::stat($sharedFile))[9] > $self->{sharedDataTs}{$sharedData});
+    $self->{log}->log("Shared file \"$sharedData.dat\" has been modified, refreshing data",5);
+    if(my $lock = _acquireLock($sharedFile,LOCK_SH)) {
+      my $r_refreshedData;
+      my $r_loadedData=loadShareableData($self->{log},$sharedFile,$sharedData);
+      if($shareableData{$sharedData}{type} eq 'binary') {
+        $r_refreshedData = defined $r_loadedData ? {'' => $r_loadedData} : {};
+      }else{
+        $r_refreshedData=$r_loadedData;
+      }
+      if(! %{$r_refreshedData}) {
+        $self->{log}->log("Unable to refresh $sharedData data (failed to read data from shared file)",1);
+      }else{
+        $self->{$sharedData}=$r_refreshedData->{''};
+        $self->{sharedDataTs}{$sharedData}=(Time::HiRes::stat($sharedFile))[9];
+      }
+      close($lock);
+    }else{
+      $self->{log}->log("Unable to refresh $sharedData data (failed to acquire lock on shared file)",1);
+    }
+  }
+}
+
 # Business functions - Dynamic data - Map info cache ##########################
 
 sub getUncachedMaps {
@@ -1997,22 +2262,32 @@ sub getMapBoxes {
 
 sub saveMapBoxes {
   my ($self,$map,$p_startRects,$extraBox)=@_;
-  return -1 unless(%{$p_startRects});
+  return undef unless(%{$p_startRects});
   my @ids=sort (keys %{$p_startRects});
   my $nbTeams=$#ids+1;
   $nbTeams.="(-$extraBox)" if($extraBox);
-  $self->{savedBoxes}{$map}={} unless(exists $self->{savedBoxes}{$map});
-  $self->{savedBoxes}{$map}{$nbTeams}={} unless(exists $self->{savedBoxes}{$map}{$nbTeams});
   my $boxId=$ids[0];
   my $boxesString="$p_startRects->{$boxId}{left} $p_startRects->{$boxId}{top} $p_startRects->{$boxId}{right} $p_startRects->{$boxId}{bottom}";
   for my $boxIndex (1..$#ids) {
     $boxId=$ids[$boxIndex];
     $boxesString.=";$p_startRects->{$boxId}{left} $p_startRects->{$boxId}{top} $p_startRects->{$boxId}{right} $p_startRects->{$boxId}{bottom}";
   }
-  return if(exists $self->{savedBoxes}{$map}{$nbTeams}{boxes} && $self->{savedBoxes}{$map}{$nbTeams}{boxes} eq $boxesString);
+  return 2 if($self->existSavedMapBoxes($map,$nbTeams) && $self->{savedBoxes}{$map}{$nbTeams}{boxes} eq $boxesString);
+  my $lock;
+  if($self->{sharedDataTs}{savedBoxes}) {
+    $lock=$self->refreshAndLockSharedDataForUpdate('savedBoxes')
+        or return 0;
+  }
+  $self->{savedBoxes}{$map}={} unless(exists $self->{savedBoxes}{$map});
+  $self->{savedBoxes}{$map}{$nbTeams}={} unless(exists $self->{savedBoxes}{$map}{$nbTeams});
   $self->{savedBoxes}{$map}{$nbTeams}{boxes}=$boxesString;
-  $self->dumpFastTable($self->{savedBoxes},$self->{conf}{instanceDir}.'/savedBoxes.dat',\@mapBoxesFields);
-  $self->{log}->log("File \"savedBoxes.dat\" updated for \"$map\" (nbTeams=$nbTeams)",3);
+  if($lock) {
+    $self->updateAndUnlockSharedData('savedBoxes',$lock);
+    $self->{log}->log("Shared file \"savedBoxes.dat\" updated for \"$map\" (nbTeams=$nbTeams)",3);
+  }else{
+    $self->dumpFastTable($self->{savedBoxes},$self->{conf}{instanceDir}.'/savedBoxes.dat',\@mapBoxesFields);
+    $self->{log}->log("File \"savedBoxes.dat\" updated for \"$map\" (nbTeams=$nbTeams)",3);
+  }
   return 1;
 }
 
@@ -2050,42 +2325,52 @@ sub isTrustedCertificateHash {
 }
 
 sub addTrustedCertificateHash {
-  my ($self,@trustedCert)=@_;
-  my $nbAddedHashes=0;
-  foreach my $p_trustedCert (@trustedCert) {
-    my ($lobbyHost,$certHash)=(lc($p_trustedCert->{lobbyHost}),lc($p_trustedCert->{certHash}));
-    if($self->isTrustedCertificateHash($lobbyHost,$certHash)) {
-      $self->{log}->log("Ignoring addition of trusted certificate hash: certificate is already trusted! ($lobbyHost:$certHash)",2);
-    }else{
-      $self->{trustedLobbyCertificates}{$lobbyHost}{$certHash}=1;
-      $nbAddedHashes++;
-    }
+  my ($self,$p_trustedCert)=@_;
+  my ($lobbyHost,$certHash)=(lc($p_trustedCert->{lobbyHost}),lc($p_trustedCert->{certHash}));
+  if($self->isTrustedCertificateHash($lobbyHost,$certHash)) {
+    $self->{log}->log("Ignoring addition of trusted certificate hash: certificate is already trusted! ($lobbyHost:$certHash)",2);
+    return 0;
   }
-  if($nbAddedHashes) {
-    $self->{log}->log('Unable to store trusted lobby certificates',1) unless(nstore($self->{trustedLobbyCertificates},$self->{conf}{instanceDir}.'/trustedLobbyCertificates.dat'));
+  my $lock;
+  if($self->{sharedDataTs}{trustedLobbyCertificates}) {
+    $lock=$self->refreshAndLockSharedDataForUpdate('trustedLobbyCertificates')
+        or return 0;
   }
-  return $nbAddedHashes;
+  $self->{trustedLobbyCertificates}{$lobbyHost}{$certHash}=1;
+  my $res;
+  if($lock) {
+    $res=$self->updateAndUnlockSharedData('trustedLobbyCertificates',$lock);
+  }else{
+    $res=nstore($self->{trustedLobbyCertificates},$self->{conf}{instanceDir}.'/trustedLobbyCertificates.dat');
+  }
+  $self->{log}->log('Unable to store trusted lobby certificates',1) unless($res);
+  return 1;
 }
 
 sub removeTrustedCertificateHash {
-  my ($self,@trustedCert)=@_;
-  my $nbRemovedHashes=0;
-  foreach my $p_trustedCert (@trustedCert) {
-    my ($lobbyHost,$certHash)=(lc($p_trustedCert->{lobbyHost}),lc($p_trustedCert->{certHash}));
-    if(roExists($self->{trustedLobbyCertificates},[$lobbyHost,$certHash])) {
-      delete $self->{trustedLobbyCertificates}{$lobbyHost}{$certHash};
-      delete $self->{trustedLobbyCertificates}{$lobbyHost} unless(%{$self->{trustedLobbyCertificates}{$lobbyHost}});
-      $nbRemovedHashes++;
-    }else{
-      my $reason='this certificate is already not trusted';
-      $reason='this certificate is an official Spring lobby certificate' if($self->isTrustedCertificateHash($lobbyHost,$certHash));
-      $self->{log}->log("Ignoring removal of trusted certificate hash: $reason! ($lobbyHost:$certHash)",2);
-    }
+  my ($self,$p_trustedCert)=@_;
+  my ($lobbyHost,$certHash)=(lc($p_trustedCert->{lobbyHost}),lc($p_trustedCert->{certHash}));
+  if(! roExists($self->{trustedLobbyCertificates},[$lobbyHost,$certHash])) {
+    my $reason='this certificate is already not trusted';
+    $reason='this certificate is an official Spring lobby certificate' if($self->isTrustedCertificateHash($lobbyHost,$certHash));
+    $self->{log}->log("Ignoring removal of trusted certificate hash: $reason! ($lobbyHost:$certHash)",2);
+    return 0;
   }
-  if($nbRemovedHashes) {
-    $self->{log}->log('Unable to store trusted lobby certificates',1) unless(nstore($self->{trustedLobbyCertificates},$self->{conf}{instanceDir}.'/trustedLobbyCertificates.dat'));
+  my $lock;
+  if($self->{sharedDataTs}{trustedLobbyCertificates}) {
+    $lock=$self->refreshAndLockSharedDataForUpdate('trustedLobbyCertificates')
+        or return 0;
   }
-  return $nbRemovedHashes;
+  delete $self->{trustedLobbyCertificates}{$lobbyHost}{$certHash};
+  delete $self->{trustedLobbyCertificates}{$lobbyHost} unless(%{$self->{trustedLobbyCertificates}{$lobbyHost}});
+  my $res;
+  if($lock) {
+    $res=$self->updateAndUnlockSharedData('trustedLobbyCertificates',$lock);
+  }else{
+    $res=nstore($self->{trustedLobbyCertificates},$self->{conf}{instanceDir}.'/trustedLobbyCertificates.dat');
+  }
+  $self->{log}->log('Unable to store trusted lobby certificates',1) unless($res);
+  return 1;
 }
 
 sub getTrustedCertificateHashes {
@@ -2387,12 +2672,33 @@ sub removeBanByHash {
   my ($self,$hash,$checkOnly)=@_;
   foreach my $banIndex (0..$#{$self->{bans}}) {
     if($self->getBanHash($self->{bans}[$banIndex]) eq $hash) {
-      return 1 if($checkOnly);
-      my $res=splice(@{$self->{bans}},$banIndex,1);
-      $self->dumpTable($self->{bans},$self->{conf}{instanceDir}.'/bans.dat',\@banListsFields);
+      my $res=1;
+      if($checkOnly) {
+        return $res;
+      }elsif($self->{sharedDataTs}{bans}) {
+        $res=$self->removeBanByHashShared($hash);
+      }else{
+        $res=splice(@{$self->{bans}},$banIndex,1);
+        $self->dumpTable($self->{bans},$self->{conf}{instanceDir}.'/bans.dat',\@banListsFields);
+      }
       return $res;
     }
   }
+  return 0;
+}
+
+sub removeBanByHashShared {
+  my ($self,$hash)=@_;
+  my $lock=$self->refreshAndLockSharedDataForUpdate('bans')
+      or return 0;
+  foreach my $banIndex (0..$#{$self->{bans}}) {
+    if($self->getBanHash($self->{bans}[$banIndex]) eq $hash) {
+      my $res=splice(@{$self->{bans}},$banIndex,1);
+      $self->updateAndUnlockSharedData('bans',$lock);
+      return $res;
+    }
+  }
+  close($lock);
   return 0;
 }
 
@@ -2461,17 +2767,84 @@ sub getUserBan {
 
 sub banUser {
   my ($self,$p_user,$p_ban)=@_;
+  return 2 if($self->banIsDuplicate($p_user,$p_ban));
+  my $lock;
+  if($self->{sharedDataTs}{bans}) {
+    $lock=$self->refreshAndLockSharedDataForUpdate('bans')
+        or return 0;
+    if($self->banIsDuplicate($p_user,$p_ban)) {
+      close($lock);
+      return 2;
+    }
+  }
   push(@{$self->{bans}},[$p_user,$p_ban]);
-  $self->dumpTable($self->{bans},$self->{conf}{instanceDir}.'/bans.dat',\@banListsFields);
+  if($lock) {
+    $self->updateAndUnlockSharedData('bans',$lock);
+  }else{
+    $self->dumpTable($self->{bans},$self->{conf}{instanceDir}.'/bans.dat',\@banListsFields);
+  }
+  return 1;
 }
 
 sub unban {
   my ($self,$p_filters)=@_;
+  my $lock;
+  if($self->{sharedDataTs}{bans}) {
+    $lock=$self->refreshAndLockSharedDataForUpdate('bans')
+        or return;
+  }
   $self->{bans}=removeMatchingData($p_filters,$self->{bans});
-  $self->dumpTable($self->{bans},$self->{conf}{instanceDir}.'/bans.dat',\@banListsFields);
+  if($lock) {
+    $self->updateAndUnlockSharedData('bans',$lock);
+  }else{
+    $self->dumpTable($self->{bans},$self->{conf}{instanceDir}.'/bans.dat',\@banListsFields);
+  }
 }
 
 sub decreaseGameBasedBans {
+  my $self=shift;
+  if($self->{sharedDataTs}{bans}) {
+    $self->decreaseSharedGameBasedBans();
+  }else{
+    $self->decreasePrivateGameBasedBans();
+  }
+}
+
+sub decreaseSharedGameBasedBans {
+  my $self=shift;
+  my $hasModifiedBans=0;
+  foreach my $p_ban (@{$self->{bans}}) {
+    if(exists $p_ban->[1]{remainingGames} && defined $p_ban->[1]{remainingGames} && $p_ban->[1]{remainingGames} ne '') {
+      $hasModifiedBans=1;
+      last;
+    }
+  }
+  return unless($hasModifiedBans);
+  my $lock=$self->refreshAndLockSharedDataForUpdate('bans')
+      or return;
+  my ($nbRemovedBans,$nbModifiedBans)=(0,0);
+  my @newBans;
+  foreach my $p_ban (@{$self->{bans}}) {
+    if(exists $p_ban->[1]{remainingGames} && defined $p_ban->[1]{remainingGames} && $p_ban->[1]{remainingGames} ne '') {
+      if($p_ban->[1]{remainingGames} < 2) {
+        $nbRemovedBans++;
+        next;
+      }
+      $nbModifiedBans++;
+      $p_ban->[1]{remainingGames}--;
+    }
+    push(@newBans,$p_ban);
+  }
+  if($nbRemovedBans || $nbModifiedBans) {
+    $self->{bans}=\@newBans;
+    $self->updateAndUnlockSharedData('bans',$lock);
+    $self->{log}->log("$nbRemovedBans expired ban(s) removed from shared file \"bans.dat\"",3) if($nbRemovedBans);
+  }else{
+    close($lock);
+  }
+}
+
+sub decreasePrivateGameBasedBans {
   my $self=shift;
   my ($nbRemovedBans,$nbModifiedBans)=(0,0);
   my @newBans;

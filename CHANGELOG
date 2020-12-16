@@ -855,6 +855,8 @@ spads.pl:
          plugins can now close the battle lobby without triggering broadcast messages
          the plugin package namespace is now correctly removed from the symbol table on plugin unload (the "no warnings 'redefine'" pragma is no longer needed in plugins)
          forbid configuration setting overrides for critical settings "springServer" and "endGameCommand" when used through !reloadConf and !restart commands
+0.12.19: experimental support for shared dynamic data between multiple instances (saved map boxes, bans and trusted lobby certificates)
+         add a check to prevent some duplicate bans
 
 SpadsConf.pm:
 ============
@@ -1004,6 +1006,7 @@ SpadsConf.pm:
 0.12.3: add lobby certificates management for TLS support
 0.12.4: added configuration setting override functionality (configuration macros with specific prefixes "set:" and "hSet:")
         added configuration preset inheritance functionality (preset declaration syntax extension)
+0.12.5: experimental support for shared dynamic data between multiple instances (saved map boxes, bans and trusted lobby certificates)
 
 spadsInstaller.pl:
 =================

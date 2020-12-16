@@ -53,7 +53,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.18';
+our $spadsVer='0.12.19';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -574,12 +574,22 @@ if(defined $tlsAction && ($tlsAction eq 'revoke' || $tlsAction eq 'list' || defi
   exit 0;
 }
 
+# Specific features configurable by configuration macros ######################
+
 my $useTls = defined $ioSocketSslVer ? 1 : 0;
 if(exists $confMacros{lobbyTls}) {
   if(any {lc($confMacros{lobbyTls}) eq $_} (qw'on yes enabled true 1')) {
     fatalError('Module IO::Socket::SSL required for TLS support') unless(defined $ioSocketSslVer);
   }else{
     $useTls=0;
+  }
+}
+my $sharedDataRefreshDelay=5;
+if(exists $confMacros{sharedDataRefreshDelay}) {
+  if($confMacros{sharedDataRefreshDelay} !~ /^\d+$/) {
+    fatalError("Invalid sharedDataRefreshDelay value (not a number): $confMacros{sharedDataRefreshDelay}");
+  }else{
+    $sharedDataRefreshDelay=$confMacros{sharedDataRefreshDelay};
   }
 }
 
@@ -6432,11 +6442,12 @@ sub hBan {
   }
 
   return 1 if($checkOnly);
+  my $banRes=$spads->banUser($p_user,$p_ban);
 
   my $banMsg="Full ";
   $banMsg="Battle " if($p_ban->{banType} == 1);
   $banMsg="Force-spec " if($p_ban->{banType} == 2);
-  $banMsg.="ban added for $banMode \"$bannedUser\" (";
+  $banMsg.='ban '.{0 => 'creation failed', 1 => 'added', 2 => 'unchanged'}->{$banRes}." for $banMode \"$bannedUser\" (";
   if(exists $p_ban->{remainingGames}) {
     $banMsg.="duration: $p_ban->{remainingGames} game".($p_ban->{remainingGames} > 1 ? 's' : '').')';
   }elsif(defined $duration && $duration) {
@@ -6445,7 +6456,6 @@ sub hBan {
   }else{
     $banMsg.="perm-ban)";
   }
-  $spads->banUser($p_user,$p_ban);
   answer($banMsg);
   
   if($banMode eq 'account' && exists $lobby->{accounts}->{$id}) {
@@ -6542,10 +6552,11 @@ sub hBanIp {
   }
 
   return 1 if($checkOnly);
+  my $banRes=$spads->banUser({ip => $userIp},$p_ban);
 
   my $banMsg="Battle IP-";
   $banMsg="Force-spec IP-" if($p_ban->{banType} == 2);
-  $banMsg.="ban added for $banMode $bannedUser (";
+  $banMsg.='ban '.{0 => 'creation failed', 1 => 'added', 2 => 'unchanged'}->{$banRes}." for $banMode $bannedUser (";
   if(exists $p_ban->{remainingGames}) {
     $banMsg.="duration: $p_ban->{remainingGames} game".($p_ban->{remainingGames} > 1 ? 's' : '').')';
   }elsif(defined $duration && $duration) {
@@ -6554,7 +6565,6 @@ sub hBanIp {
   }else{
     $banMsg.="perm-ban)";
   }
-  $spads->banUser({ip => $userIp},$p_ban);
   answer($banMsg);
   
   if($banMode eq 'account' && exists $lobby->{accounts}->{$id}) {
@@ -6656,10 +6666,11 @@ sub hBanIps {
   }
 
   return 1 if($checkOnly);
+  my $banRes=$spads->banUser({ip => join(",",@{$p_userIps})},$p_ban);
 
   my $banMsg="Battle IP-";
   $banMsg="Force-spec IP-" if($p_ban->{banType} == 2);
-  $banMsg.="ban added for $banMode $bannedUser (";
+  $banMsg.='ban '.{0 => 'creation failed', 1 => 'added', 2 => 'unchanged'}->{$banRes}." for $banMode $bannedUser (";
   $banMsg.=($#{$p_userIps}+1)." IPs, " if($#{$p_userIps} > 0);
   if(exists $p_ban->{remainingGames}) {
     $banMsg.="duration: $p_ban->{remainingGames} game".($p_ban->{remainingGames} > 1 ? 's' : '').')';
@@ -6669,7 +6680,6 @@ sub hBanIps {
   }else{
     $banMsg.="perm-ban)";
   }
-  $spads->banUser({ip => join(",",@{$p_userIps})},$p_ban);
   answer($banMsg);
   
   if($banMode eq 'account' && exists $lobby->{accounts}->{$id}) {
@@ -11778,8 +11788,8 @@ sub cbOk {
       initLobbyConnection();
     }else{
       if(defined $tlsAction && $tlsAction eq 'trust') {
-        $spads->addTrustedCertificateHash({lobbyHost => $conf{lobbyHost}, certHash => $lobby->{tlsCertifHash}});
         slog("Adding following certificate to the trusted certificates list:\n".($lobby->{lobbySock}->dump_peer_certificate())."SHA-256: $lobby->{tlsCertifHash}",2);
+        $spads->addTrustedCertificateHash({lobbyHost => $conf{lobbyHost}, certHash => $lobby->{tlsCertifHash}});
         initLobbyConnection();
       }else{
         slog("Untrusted lobby certificate, lobby server authenticity cannot be verified:\n".($lobby->{lobbySock}->dump_peer_certificate())."SHA-256: $lobby->{tlsCertifHash}",2);
@@ -13976,6 +13986,7 @@ if(! $abortSpadsStartForAutoUpdate) {
 
   SimpleEvent::addTimer('SpadsMainLoop',0,1,\&mainLoop);
   SimpleEvent::addTimer('SpringVersionAutoManagement',$autoManagedSpringData{delay}*60,$autoManagedSpringData{delay}*60,\&springVersionAutoManagement) if($autoManagedSpringData{mode} eq 'release');
+  SimpleEvent::addTimer('RefreshSharedData',$sharedDataRefreshDelay,$sharedDataRefreshDelay,sub {$spads->refreshSharedData()}) if($sharedDataRefreshDelay);
   SimpleEvent::startLoop(\&postMainLoop);
 }
 
@@ -14140,6 +14151,7 @@ sub postMainLoop {
   $autohost->close();
   SimpleEvent::removeTimer('SpadsMainLoop');
   SimpleEvent::removeTimer('SpringVersionAutoManagement') if($autoManagedSpringData{mode} eq 'release');
+  SimpleEvent::removeTimer('RefreshSharedData') if($sharedDataRefreshDelay);
 }
 
 $spads->dumpDynamicData();
