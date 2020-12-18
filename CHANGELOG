@@ -857,6 +857,7 @@ spads.pl:
          forbid configuration setting overrides for critical settings "springServer" and "endGameCommand" when used through !reloadConf and !restart commands
 0.12.19: experimental support for shared dynamic data between multiple instances (saved map boxes, bans and trusted lobby certificates)
          add a check to prevent some duplicate bans
+0.12.20: enrich !version command output with the list of shared data (if any) and SQLite information (if used)
 
 SpadsConf.pm:
 ============
@@ -1007,6 +1008,7 @@ SpadsConf.pm:
 0.12.4: added configuration setting override functionality (configuration macros with specific prefixes "set:" and "hSet:")
         added configuration preset inheritance functionality (preset declaration syntax extension)
 0.12.5: experimental support for shared dynamic data between multiple instances (saved map boxes, bans and trusted lobby certificates)
+0.12.6: preferences dynamic data can now also be shared between multiple instances (requires DBD::SQLite module)
 
 spadsInstaller.pl:
 =================

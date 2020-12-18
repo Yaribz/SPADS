@@ -53,7 +53,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.19';
+our $spadsVer='0.12.20';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -11404,12 +11404,15 @@ sub hVersion {
   foreach my $module (keys %components) {
     $versionedComponents{$module}='v'.$components{$module}->getVersion();
   }
+  my @sharedData=grep {$spads->{sharedDataTs}{$_}} (keys %{$spads->{sharedDataTs}});
+  $versionedComponents{SpadsConf}.=$C{1}.' (shared:'.join(',',sort @sharedData).')' if(@sharedData);
   $versionedComponents{SpringLobbyInterface}.=$C{1}.' (TLS '.($useTls?'enabled':'disabled').')';
   my $simpleEventModel=SimpleEvent::getModel();
   if(defined $simpleEventModel && $simpleEventModel ne 'internal') {
     $versionedComponents{AnyEvent}='v'.$AnyEvent::VERSION."$C{1} ($simpleEventModel)";
   }
   $versionedComponents{'IO::Socket::SSL'}='v'.$ioSocketSslVer if(defined $ioSocketSslVer);
+  $versionedComponents{'DBD::SQLite'}="v$DBD::SQLite::VERSION $C{1}(SQLite $spads->{preferences}{sqlite_version})" if($spads->{sharedDataTs}{preferences});
   foreach my $component (sort keys %versionedComponents) {
     sayPrivate($user,"- $C{5}$component$C{10} $versionedComponents{$component}");
   }

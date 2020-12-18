@@ -40,7 +40,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.12.5';
+my $moduleVersion='0.12.6';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -295,7 +295,9 @@ my %shareableData = ( savedBoxes => { type => 'fastTable',
                                       fields => \@mapBoxesFields },
                       bans => { type => 'table',
                                 fields => \@banListsFields },
-                      trustedLobbyCertificates => { type => 'binary' } );
+                      trustedLobbyCertificates => { type => 'binary' },
+                      preferences => { type => 'sqlite',
+                                       fields => \@preferencesListsFields } );
 
 # Constructor #################################################################
 
@@ -342,10 +344,23 @@ sub new {
   my $p_help=loadSimpleTableFile($sLog,"$spadsDir/help.dat",$p_macros,1);
   my $p_helpSettings=loadHelpSettingsFile($sLog,"$spadsDir/helpSettings.dat",$p_macros,1);
 
+  my $sqliteChecked=0;
   my %sharedDataTs=map {$_ => 0} (keys %shareableData);
   if(exists $p_macros->{sharedData}) {
     foreach my $sharedData (split(',',$p_macros->{sharedData})) {
       if(exists $sharedDataTs{$sharedData}) {
+        if($shareableData{$sharedData}{type} eq 'sqlite' && ! $sqliteChecked) {
+          eval 'use DBI';
+          if($@) {
+            $sLog->log("Unable to share $sharedData data (Perl DBI module not found)",1);
+            return 0;
+          }
+          if(none {$_ eq 'SQLite'} DBI->available_drivers()) {
+            $sLog->log("Unable to share $sharedData data (Perl DBD::SQLite module not found)",1);
+            return 0;
+          }
+          $sqliteChecked=1;
+        }
         $sharedDataTs{$sharedData}=-1;
       }else{
         $sLog->log("Ignoring request to share invalid data \"$sharedData\"",2);
@@ -367,13 +382,24 @@ sub new {
     return 0;
   }
 
-  touch($p_conf->{''}{instanceDir}.'/preferences.dat') unless(-f $p_conf->{''}{instanceDir}.'/preferences.dat');
-  my $p_preferences=loadFastTableFile($sLog,$p_conf->{''}{instanceDir}.'/preferences.dat',\@preferencesListsFields,{});
-  if(! %{$p_preferences}) {
-    $sLog->log('Unable to load preferences',1);
-    return 0;
+  my $p_preferences;
+  if($sharedDataTs{preferences}) {
+    $p_preferences=initSqliteDb($sLog,$p_conf,'preferences');
+    if(! $p_preferences) {
+      $sLog->log('Unable to load shared preferences',1);
+      return 0;
+    }
+    $p_preferences->sqlite_busy_timeout(5000);
   }else{
-    $p_preferences=preparePreferences($sLog,$p_preferences->{''});
+    my $preferencesFile=$p_conf->{''}{instanceDir}.'/preferences.dat';
+    touch($preferencesFile) unless(-f $preferencesFile);
+    $p_preferences=loadFastTableFile($sLog,$preferencesFile,\@preferencesListsFields,{});
+    if(! %{$p_preferences}) {
+      $sLog->log('Unable to load preferences',1);
+      return 0;
+    }else{
+      $p_preferences=preparePreferences($sLog,$p_preferences->{''});
+    }
   }
 
   my $p_mapBoxes=loadFastTableFile($sLog,$p_conf->{''}{etcDir}.'/mapBoxes.conf',\@mapBoxesFields,$p_macros);
@@ -1410,6 +1436,94 @@ sub printFastTable {
   }
 }
 
+sub initSqliteDb {
+  my ($sLog,$p_conf,$sharedData)=@_;
+  my $dbFile=$p_conf->{''}{varDir}."/$sharedData.sqlite";
+  if(-f $dbFile) {
+    my $dbh=DBI->connect("dbi:SQLite:dbname=$dbFile",'','');
+    $sLog->log("Failed to connect to SQLite database for shared $sharedData data ($DBI::errstr)",1) unless($dbh);
+    return $dbh;
+  }
+  if(my $lock=_acquireLock($dbFile,LOCK_EX)) {
+    if(-f $dbFile) {
+      close($lock);
+      my $dbh=DBI->connect("dbi:SQLite:dbname=$dbFile",'','');
+      $sLog->log("Failed to connect to SQLite database for shared $sharedData data ($DBI::errstr)",1) unless($dbh);
+      return $dbh;
+    }
+    my $r_fields=$shareableData{$sharedData}{fields};
+    my $privateFile=$p_conf->{''}{instanceDir}."/$sharedData.dat";
+    my $p_privateData;
+    if(-f $privateFile) {
+      $sLog->log("Reading $sharedData data from private file to initialize shared data",3);
+      $p_privateData=loadFastTableFile($sLog,$privateFile,$r_fields,{});
+      if(! %{$p_privateData}) {
+        close($lock);
+        $sLog->log("Failed to load private $sharedData data to initialize shared data",1);
+        return undef;
+      }
+      if($sharedData eq 'preferences') {
+        $p_privateData=preparePreferences($sLog,$p_privateData->{''});
+      }else{
+        $p_privateData=$p_privateData->{''};
+      }
+    }
+    $sLog->log("Initializing SQLite database for shared $sharedData data",3);
+    my $dbh=DBI->connect("dbi:SQLite:dbname=$dbFile",'','');
+    if(! $dbh) {
+      close($lock);
+      $sLog->log("Failed to initialize SQLite database for shared $sharedData data ($DBI::errstr)",1);
+      return undef;
+    }
+    my @tableColumns=('accountId INTEGER NOT NULL','name TEXT NOT NULL');
+    map {push(@tableColumns,"$_ BLOB")} @{$r_fields->[1]};
+    push(@tableColumns,"PRIMARY KEY (accountId,name)");
+    if(! $dbh->do("CREATE TABLE $sharedData (".(join(', ',@tableColumns)).")")) {
+      close($lock);
+      $sLog->log("Failed to create table in SQLite database for shared $sharedData data ($DBI::errstr)",1);
+      return undef;
+    }
+    foreach my $indexField (qw'accountId name') {
+      if(! $dbh->do("CREATE INDEX idx_${sharedData}_${indexField} ON $sharedData ($indexField)")) {
+        close($lock);
+        $sLog->log("Failed to create index in SQLite database for shared $sharedData.$indexField data ($DBI::errstr)",1);
+        return undef;
+      }
+    }
+    if($p_privateData) {
+      $sLog->log("Importing $sharedData data from private file into shared SQLite database",3);
+      my $sth=$dbh->prepare("INSERT INTO $sharedData (accountId,name,".(join(',',@{$r_fields->[1]})).') VALUES (?,?'.(',?' x @{$r_fields->[1]}).')');
+      if(! $sth) {
+        close($lock);
+        $sLog->log("Failed to prepare statement for data import in SQLite database for shared $sharedData data ($DBI::errstr)",1);
+        return undef;
+      }
+      foreach my $key (keys %{$p_privateData}) {
+        my $accountId;
+        if($key =~ /^\d+$/) {
+          $accountId=$key;
+        }elsif($key =~ /^([0\?])\(.+\)$/) {
+          $accountId=$1;
+        }else{
+          $sLog->log("Ignoring private $sharedData data with unexpected key format encountered during import: \"$key\"",1);
+          next;
+        }
+        my @importedData=map {if($_ eq '') { undef } elsif($_ =~ /^\d+$/) { $_ } else{ $dbh->quote($_) }} @{$p_privateData->{$key}}{@{$r_fields->[1]}};
+        if(! $sth->execute($accountId,$p_privateData->{$key}{name},@importedData)) {
+          close($lock);
+          $sLog->log("Failed to import data in SQLite database for shared $sharedData data ($DBI::errstr)",1);
+          return undef;
+        }
+      }
+    }
+    close($lock);
+    return $dbh;
+  }else{
+    $sLog->log("Failed to acquire lock to initialize SQLite database for shared $sharedData data",1);
+    return undef;
+  }
+}
+
 sub initSharedData {
   my ($sLog,$p_conf,$r_sharedDataTs,$sharedData)=@_;
   my $dataStorageType=$shareableData{$sharedData}{type};
@@ -2161,8 +2275,10 @@ sub getHelpForLevel {
 sub dumpDynamicData {
   my $self=shift;
   my $startDumpTs=time;
-  my $p_prunedPrefs=$self->getPrunedRawPreferences();
-  $self->dumpFastTable($p_prunedPrefs,$self->{conf}{instanceDir}.'/preferences.dat',\@preferencesListsFields);
+  if(! $self->{sharedDataTs}{preferences}) {
+    my $p_prunedPrefs=$self->getPrunedRawPreferences();
+    $self->dumpFastTable($p_prunedPrefs,$self->{conf}{instanceDir}.'/preferences.dat',\@preferencesListsFields);
+  }
   $self->dumpFastTable($self->{mapHashes},$self->{conf}{instanceDir}.'/mapHashes.dat',\@mapHashesFields);
   my $p_userData=flushUserDataCache($self);
   $self->dumpFastTable($p_userData,$self->{conf}{instanceDir}.'/userData.dat',\@userDataFields);
@@ -2173,6 +2289,7 @@ sub dumpDynamicData {
 sub refreshSharedData {
   my $self=shift;
   foreach my $sharedData (keys %shareableData) {
+    next if($shareableData{$sharedData}{type} eq 'sqlite');
     my $sharedFile="$self->{conf}{varDir}/$sharedData.dat";
     next unless($self->{sharedDataTs}{$sharedData} && -f $sharedFile && (Time::HiRes::stat($sharedFile))[9] > $self->{sharedDataTs}{$sharedData});
     $self->{log}->log("Shared file \"$sharedData.dat\" has been modified, refreshing data",5);
@@ -2891,6 +3008,28 @@ sub getAccountPrefs {
   foreach my $pref (@{$preferencesListsFields[1]}) {
     $prefs{$pref}='';
   }
+  if($self->{sharedDataTs}{preferences}) {
+    my ($accountId,$name);
+    if($aId =~ /^\d+$/ && $aId != 0) {
+      $accountId=$aId;
+    }elsif($aId =~ /^0\((.+)\)$/) {
+      $name=$1;
+    }else{
+      $self->{log}->log("Unexpected getAccountPrefs() call with parameter \"$aId\"",0);
+      return \%prefs;
+    }
+    my $dbh=$self->{preferences};
+    my $whereClause = defined $accountId ? "accountId=$accountId" : "accountId=0 AND name=".$dbh->quote($name);
+    my $r_dbPrefs=$dbh->selectrow_hashref('SELECT '.(join(',',@{$preferencesListsFields[1]}))." FROM preferences WHERE $whereClause");
+    if($dbh->err()) {
+      $self->{log}->log("Failed to query SQLite database for preferences of account \"$aId\" ($DBI::errstr)",2);
+    }elsif(defined $r_dbPrefs) {
+      foreach my $pref (keys %{$r_dbPrefs}) {
+        $prefs{$pref}=$r_dbPrefs->{$pref} if(defined $r_dbPrefs->{$pref});
+      }
+    }
+    return \%prefs;
+  }
   return \%prefs unless(exists $self->{preferences}{$aId});
   foreach my $pref (keys %{$self->{preferences}{$aId}}) {
     next if($pref eq 'name');
@@ -2906,6 +3045,32 @@ sub getUserPrefs {
     $prefs{$pref}='';
   }
   my $key=$aId || "?($name)";
+  if($self->{sharedDataTs}{preferences}) {
+    my $accountId;
+    if($key =~ /^\d+$/) {
+      $accountId=$key;
+    }elsif($key =~ /^([0\?])\(.+\)$/) {
+      $accountId=$1;
+    }else{
+      $self->{log}->log("Unexpected getUserPrefs() call with parameters aId=\"$aId\", name=\"$name\"",0);
+      return \%prefs;
+    }
+    my $dbh=$self->{preferences};
+    my $quotedAccountId=$accountId =~ /^\d+$/?$accountId:$dbh->quote($accountId);
+    my $quotedName=$dbh->quote($name);
+    my $whereClause="accountId=$quotedAccountId";
+    $whereClause.=" AND name=$quotedName" if(any {$accountId eq $_} (0,'?'));
+    my $r_dbPrefs=$dbh->selectrow_hashref('SELECT '.(join(',',@{$preferencesListsFields[1]}))." FROM preferences WHERE $whereClause");
+    if($dbh->err()) {
+      $self->{log}->log("Failed to query SQLite database for preferences of account \"$aId\" with name \"$name\" ($DBI::errstr)",2);
+    }elsif(defined $r_dbPrefs) {
+      foreach my $pref (keys %{$r_dbPrefs}) {
+        $prefs{$pref}=$r_dbPrefs->{$pref} if(defined $r_dbPrefs->{$pref});
+      }
+      $dbh->do("UPDATE preferences SET name=$quotedName WHERE accountId=$quotedAccountId") unless(any {$accountId eq $_} (0,'?'));
+    }
+    return \%prefs;
+  }
   if(! exists $self->{preferences}{$key}) {
     if(exists $self->{preferences}{"?($name)"}) {
       $self->{preferences}{$key}=delete $self->{preferences}{"?($name)"};
@@ -2924,6 +3089,56 @@ sub getUserPrefs {
 sub setUserPref {
   my ($self,$aId,$name,$prefName,$prefValue)=@_;
   my $key=$aId || "?($name)";
+  if($self->{sharedDataTs}{preferences}) {
+    my $accountId;
+    if($key =~ /^\d+$/) {
+      $accountId=$key;
+    }elsif($key =~ /^([0\?])\(.+\)$/) {
+      $accountId=$1;
+    }else{
+      $self->{log}->log("Unexpected setUserPref() call with parameters aId=\"$aId\", name=\"$name\"",0);
+      return;
+    }
+    my $dbh=$self->{preferences};
+    my $quotedAccountId=$accountId=~/^\d+$/?$accountId:$dbh->quote($accountId);
+    my $quotedName=$dbh->quote($name);
+    my $quotedPrefValue;
+    if($prefValue eq '') {
+      $quotedPrefValue='NULL';
+    }elsif($prefValue =~ /^\d+$/) {
+      $quotedPrefValue=$prefValue;
+    }else{
+      $quotedPrefValue=$dbh->quote($prefValue);
+    }
+    my $whereClause="accountId=$quotedAccountId";
+    $whereClause.=" AND name=$quotedName" if(any {$accountId eq $_} (0,'?'));
+    if(! $dbh->begin_work()) {
+      $self->{log}->log("Unable to start transaction on SQLite database to update preferences ($DBI::errstr)",1);
+      return;
+    }
+    my $nbExistingRows=$dbh->selectrow_array("SELECT count(*) FROM preferences WHERE $whereClause");
+    if($dbh->err()) {
+      $self->{log}->log("Failed to check SQLite database before update for preferences of account \"$aId\" with name \"$name\" ($DBI::errstr)",2);
+      $dbh->rollback();
+      return;
+    }
+    if($nbExistingRows) {
+      if($nbExistingRows > 1) {
+        $self->{log}->log("Inconsistent state of preferences SQLite database: $nbExistingRows rows found for \"$whereClause\" condition",0);
+        $dbh->rollback();
+        return;
+      }
+      if(! $dbh->do("UPDATE preferences SET $prefName=$quotedPrefValue, name=$quotedName WHERE $whereClause")) {
+        $self->{log}->log("Failed to update SQLite database for preferences of account \"$aId\" with name \"$name\" ($prefName=$quotedPrefValue) ($DBI::errstr)",2);
+      }
+    }else{
+      if(! $dbh->do("INSERT INTO preferences (accountId,name,$prefName) VALUES ($quotedAccountId,$quotedName,$quotedPrefValue)")) {
+        $self->{log}->log("Failed to update SQLite database for preferences of new account \"$aId\" with name \"$name\" ($prefName=$quotedPrefValue) ($DBI::errstr)",2);
+      }
+    }
+    $dbh->commit();
+    return;
+  }
   if(! exists $self->{preferences}{$key}) {
     if(exists $self->{preferences}{"?($name)"}) {
       $self->{preferences}{$key}=delete $self->{preferences}{"?($name)"};
