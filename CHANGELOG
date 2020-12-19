@@ -1082,6 +1082,7 @@ spadsInstaller.pl:
 0.23: add fully automatic/unattended install support
       fix URL for automatic mod/game downloads
 0.24: add full support for maintenance Spring branch
+0.25: improve resilience to broken official Spring repository (makes it possible to continue using automatic Spring version management even though the maintenance branch repository is broken)
 
 SpadsPluginApi.pm:
 =================

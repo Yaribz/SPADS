@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.24 (2020/02/16)
+# Version 0.25 (2020/12/19)
 
 use strict;
 
@@ -790,11 +790,12 @@ if(! exists $conf{autoManagedSpringVersion}) {
           fatalError("Couldn't check available Spring versions") unless(@{$r_availableSpringVersions});
           $springVersions{$_}=$r_availableSpringVersions; } @springBranches;
     map { my $releaseVersion=$updater->resolveSpringReleaseNameToVersion($_);
-          fatalError("Couldn't check Spring releases") unless(defined $releaseVersion);
-          $springReleasesVersion{$_}=$releaseVersion;
-          $springVersionsReleases{$releaseVersion}{$_}=1; } (keys %springReleases);
+          if(defined $releaseVersion) {
+            $springReleasesVersion{$_}=$releaseVersion;
+            $springVersionsReleases{$releaseVersion}{$_}=1;
+          } } (keys %springReleases);
 
-    my %availableVersions=%springReleases;
+    my %availableVersions=%springReleasesVersion;
     print "\nAvailable Spring versions:\n";
     foreach my $springBranch (@springBranches) {
       my $versionsToAdd=5;
@@ -827,7 +828,7 @@ if(! exists $conf{autoManagedSpringVersion}) {
     while(! exists $availableVersions{$autoManagedSpringVersion}) {
       $autoManagedSpringVersion=promptStdin("6/$nbSteps - Which Spring version do you want to use (".(join(',',@springVersionExamples,(sort keys %springReleases),'...')).')',$springReleasesVersion{stable},$autoInstallValue);
       $autoInstallValue=undef;
-      if( exists $availableVersions{$autoManagedSpringVersion}) {
+      if(exists $availableVersions{$autoManagedSpringVersion}) {
         $springVersion=$springReleasesVersion{$autoManagedSpringVersion} // $autoManagedSpringVersion;
         my $springSetupRes=$updater->setupSpring($springVersion);
         if($springSetupRes < -9) {
