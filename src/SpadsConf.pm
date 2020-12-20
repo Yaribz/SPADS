@@ -40,7 +40,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.12.6';
+my $moduleVersion='0.12.7';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -329,6 +329,7 @@ sub new {
     $sLog->log('Unable to load battle presets',1);
     return 0;
   }
+
   my $p_banLists=loadTableFile($sLog,$p_conf->{''}{etcDir}.'/banLists.conf',\@banListsFields,$p_macros);
   my $p_mapLists=loadSimpleTableFile($sLog,$p_conf->{''}{etcDir}.'/mapLists.conf',$p_macros);
   if(!checkConfigLists($sLog,$p_conf,$p_banLists,$p_mapLists)) {
@@ -1226,11 +1227,13 @@ sub checkSpadsConfig {
     return 0;
   }
   foreach my $preset (keys %{$p_conf}) {
-    next if($preset eq '');
-    if(exists $p_conf->{$preset}{preset} && $p_conf->{$preset}{preset}[0] ne $preset) {
-      $sLog->log("The default value of parameter \"preset\" ($p_conf->{$preset}{preset}[0]) must be the name of the preset ($preset)",1);
+    next if($preset eq '' || ! exists $p_conf->{$preset}{preset});
+    if($p_conf->{$preset}{preset}[0] ne $preset) {
+      $sLog->log("Invalid global preset configuration: the default value for \"preset\" parameter ($p_conf->{$preset}{preset}[0]) must be the name of the preset ($preset)",1);
       return 0;
     }
+    my @unknownPresets = grep {! exists $p_conf->{$_}} @{$p_conf->{$preset}{preset}};
+    $sLog->log('Invalid global preset'.($#unknownPresets>0?'s':'').' ('.join(',',@unknownPresets).") referenced by global preset \"$preset\"",2) if(@unknownPresets);
   }
 
   my @relDirParams=(['etcDir'],
@@ -1290,12 +1293,18 @@ sub checkHConfig {
 
   return 0 unless(%{$p_conf});
 
+  foreach my $preset (keys %{$p_conf}) {
+    next if($preset eq '' || ! exists $p_conf->{$preset}{hostingPreset});
+    if(! exists $p_hConf->{$p_conf->{$preset}{hostingPreset}[0]}) {
+      $sLog->log("Invalid hosting preset configuration: default hosting preset \"$p_conf->{$preset}{hostingPreset}[0]\" for global preset \"$preset\" does not exist",1);
+      return 0;
+    }
+    my @unknownPresets = grep {! exists $p_hConf->{$_}} @{$p_conf->{$preset}{hostingPreset}};
+    $sLog->log('Invalid hosting preset'.($#unknownPresets>0?'s':'').' ('.join(',',@unknownPresets).") referenced by global preset \"$preset\"",2) if(@unknownPresets);
+  }
+
   my $defaultPreset=$p_conf->{''}{defaultPreset};
   my $defaultHPreset=$p_conf->{$defaultPreset}{hostingPreset}[0];
-  if(! exists $p_hConf->{$defaultHPreset}) {
-    $sLog->log("Invalid hosting settings configuration: default hosting preset \"$defaultHPreset\" does not exist",1);
-    return 0;
-  }
   my @missingParams;
   foreach my $requiredParam (keys %hostingParameters) {
     if(! exists $p_hConf->{$defaultHPreset}{$requiredParam}) {
@@ -1316,12 +1325,18 @@ sub checkBConfig {
 
   return 0 unless(%{$p_conf});
 
+  foreach my $preset (keys %{$p_conf}) {
+    next if($preset eq '' || ! exists $p_conf->{$preset}{battlePreset});
+    if(! exists $p_bConf->{$p_conf->{$preset}{battlePreset}[0]}) {
+      $sLog->log("Invalid battle preset configuration: default battle preset \"$p_conf->{$preset}{battlePreset}[0]\" for global preset \"$preset\" does not exist",1);
+      return 0;
+    }
+    my @unknownPresets = grep {! exists $p_bConf->{$_}} @{$p_conf->{$preset}{battlePreset}};
+    $sLog->log('Invalid battle preset'.($#unknownPresets>0?'s':'').' ('.join(',',@unknownPresets).") referenced by global preset \"$preset\"",2) if(@unknownPresets);
+  }
+
   my $defaultPreset=$p_conf->{''}{defaultPreset};
   my $defaultBPreset=$p_conf->{$defaultPreset}{battlePreset}[0];
-  if(! exists $p_bConf->{$defaultBPreset}) {
-    $sLog->log("Invalid battle settings configuration: default battle preset \"$defaultBPreset\" does not exist",1);
-    return 0;
-  }
   my @missingParams;
   foreach my $requiredParam (keys %battleParameters) {
     if(! exists $p_bConf->{$defaultBPreset}{$requiredParam}) {
@@ -1330,7 +1345,7 @@ sub checkBConfig {
   }
   if(@missingParams) {
     my $mParams=join(',',@missingParams);
-    $sLog->log("Incomplete battle settings configuration (missing parameter(s) in default preset: $mParams)",1);
+    $sLog->log("Incomplete battle settings configuration (missing parameter(s) in default battle preset: $mParams)",1);
     return 0;
   }
 
