@@ -1010,6 +1010,7 @@ SpadsConf.pm:
 0.12.5: experimental support for shared dynamic data between multiple instances (saved map boxes, bans and trusted lobby certificates)
 0.12.6: preferences dynamic data can now also be shared between multiple instances (requires DBD::SQLite module)
 0.12.7: improve consistency checks for preset configuration
+0.12.8: in plugins configuration files, the default preset now inheriths automatically from the "_DEFAULT_" preset if existing (make plugin configuration more flexible)
 
 spadsInstaller.pl:
 =================

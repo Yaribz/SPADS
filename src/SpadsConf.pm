@@ -40,7 +40,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.12.7';
+my $moduleVersion='0.12.8';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -1130,8 +1130,13 @@ sub loadPluginConf {
   $p_presetParams//={};
   return 1 unless(%{$p_globalParams} || %{$p_presetParams});
   my $p_pluginPresets = loadSettingsFile($self->{log},"$self->{conf}{etcDir}/$pluginName.conf",$p_globalParams,$p_presetParams,$self->{macros});
-  if(%{$p_presetParams} && ! exists $p_pluginPresets->{$self->{conf}{defaultPreset}} && exists $p_pluginPresets->{'_DEFAULT_'}) {
-    $p_pluginPresets->{$self->{conf}{defaultPreset}}=$p_pluginPresets->{'_DEFAULT_'};
+  if(%{$p_presetParams} && exists $p_pluginPresets->{'_DEFAULT_'}) {
+    my $defaultPreset=$self->{conf}{defaultPreset};
+    if(! exists $p_pluginPresets->{$defaultPreset}) {
+      $p_pluginPresets->{$defaultPreset}=$p_pluginPresets->{'_DEFAULT_'};
+    }else{
+      map {$p_pluginPresets->{$defaultPreset}{$_}//=$p_pluginPresets->{'_DEFAULT_'}{$_} if(exists $p_pluginPresets->{'_DEFAULT_'}{$_})} (keys %{$p_presetParams});
+    }
   }
   return 0 unless($self->checkPluginConfig($pluginName,$p_pluginPresets,$p_globalParams,$p_presetParams));
   my ($p_commands,$p_help)=({},{});
