@@ -1,0 +1,55 @@
+This plugin turns a SPADS instance into a manager of clusters of SPADS
+instances. Each cluster is associated with a SPADS global preset which is used
+for all the instances of this cluster. The cluster manager can be used in
+mono-cluster mode (all the instances are in the same cluster and thus use the
+same SPADS preset) or in multi-cluster mode (several clusters are managed at the
+same time, each cluster having its own SPADS preset for all the instances it
+contains). For information regarding cluster parameterization, refer to the
+"ClusterManager.conf.README" file.
+
+Auto-registration of lobby accounts:
+-----------------------------------
+If the lobby account used by the cluster manager instance has lobby server
+admin access, then the required bot accounts for the slave instances can be
+automatically created on the fly by the manager, as they are required.
+Otherwise the slave instances will try to auto-register their account if
+needed, but these accounts will lack the bot flag. Also, depending on the
+lobby server configuration, auto-registration may fail if it requires a
+validation code sent by email to finalize the registration. In this case you
+will have to pre-register beforehand all the lobby accounts which could be
+required by the cluster manager to start the slave instances, based in the
+"nameTemplate" plugin setting.
+
+Public instances VS private instances:
+-------------------------------------
+Clusters may contain two types of instances: public instances and private
+instances. Public instances are non-passworded hosts automatically started by
+the cluster manager. Private instances are passworded hosts, started on-request
+by the cluster manager when a client uses the !privateHost command.
+Clusters may contain public instances only, private instances only, or both
+types of instances at the same time (depending on the cluster configuration).
+
+Dependencies:
+------------
+- This plugin depends on the AutoRegister SPADS plugin, which must be loaded
+before the ClusterManager plugin.
+- For preferences data sharing between the instances, the Perl "DBD::SQLite"
+module from CPAN is required. On Windows, main Perl distributions (ActivePerl
+and Strawberry) already include this module in their package, so nothing needs
+to be done. On Linux systems, this module may need to be installed manually. It
+can be done easily either with your standard package manager (for example on
+Debian-based systems: "apt-get install libdbd-sqlite3-perl"), either with a
+Perl module manager such as cpanminus: "cpanm DBD::SQLite".
+
+Caveats:
+-------
+- This plugin considers the default configuration regarding the "logDir" global
+setting has NOT been modified (i.e. "logDir:log" in spads.conf)
+- This plugin considers the "varDir" global setting is the same for all the
+instances
+- All the UDP ports between baseGamePort and baseGamePort+maxInstances
+(included) must be unused and accessible from the outside (ports open on
+firewall and forwarded if needed) so that the instances can host games
+- All the UDP ports between baseAutoHostPort and
+baseAutoHostPort+maxInstances (included) must be unused on the loppback
+interface

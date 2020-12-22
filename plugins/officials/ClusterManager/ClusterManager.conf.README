@@ -1,0 +1,139 @@
+commandsFile:ClusterManagerCmd.conf
+helpFile:ClusterManagerHelp.dat
+
+# The list of comma-separated SPADS global presets which must be instanciated as
+# clusters.
+# Each global preset listed here will generate its own cluster of instances
+# based on this preset. Only "full presets" (i.e. presets defining all preset
+# settings) are usable as cluster preset.
+# If this setting is left empty, it is the same as if it was only containing the
+# current SPADS default preset: ClusterManager is in mono-cluster mode.
+clusters:
+
+# The maximum number of instances allowed to run simultaneously, all clusters
+# combined.
+maxInstances:50
+
+# The maximum number of public instances allowed to run simultaneously, all
+# clusters combined.
+# (0 = no limit)
+maxInstancesPublic:40
+
+# The maximum number of private instances allowed to run simultaneously, all
+# clusters combined.
+# (0 = no limit)
+maxInstancesPrivate:20
+
+# The list of comma-separated SPADS data that will be shared between the
+# instances started by the cluster manager.
+# It is recommended to share all possible data so that players and admins will
+# get consistent behavior among the instances.
+# Notice: The standard Perl DBD::SQLite module from CPAN is required to share
+# preferences data. This module is normally already included by default on
+# Windows, but on Linux system you may need to install it using the
+# "apt-get install libdbd-sqlite3-perl" command for example (depending on your
+# distribution).
+# For more information, see:
+#   https://springrts.com/phpbb/viewtopic.php?p=596361#p596361
+sharedData:savedBoxes,trustedLobbyCertificates,bans,preferences
+
+# Specify if instances must try to auto-register the lobby account when there is
+# a login error due to invalid login/password. Allowed values are:
+#   0 = auto-registration is disabled
+#   1 = auto-registration is enabled except for the cluster manager instance
+#   2 = auto-registration enabled for all instances, cluster manager included
+autoRegister:1
+
+# The base game port, used to generate the "port" hosting setting of SPADS which
+# is specific to each instance launched by the cluster manager.
+# The cluster manager must be able to open all UDP ports between (baseGamePort)
+# and (baseGamePort+maxInstances-1) included on the network interfaces.
+baseGamePort:8452
+
+# The autohost port, used to generate the "autoHostPort" global setting of SPADS
+# which is specific to each instance launched by the cluster manager.
+# The cluster manager must be able to open all UDP ports between
+# (baseAutoHostPort) and (baseAutoHostPort+maxInstances-1) included on the
+# loopback interface.
+baseAutoHostPort:9452
+
+# The waiting delay in seconds before removing a superfluous spare public
+# instance (when number of spare instances in cluster > targetSpares).
+# Don't set this too low, or the cluster manager will spend its time
+# starting/stopping instances on peak times.
+# (0 = never remove spare instances)
+removeSpareInstanceDelay:60
+
+# The waiting delay in seconds before removing an empty/unused private instance.
+# Don't set this too low, or the user requesting the private instance won't have
+# time to join the host before it is automatically removed.
+removePrivateInstanceDelay:60
+
+# The waiting delay in seconds before considering an instance launched by the
+# cluster manager which didn't update its state file has failed to start.
+# Don't set this too low, or the instances won't have time to startup before
+# being considered faulty by the cluster manager, which will try to replace them
+# prematurely.
+# (0 = disable detection of instances failing to start)
+startingInstanceTimeout:120
+
+# The waiting delay in seconds before considering an offline instance is in
+# crashed/frozen state.
+# Don't set this too low, or the instances having small network hiccups will be
+# considered as crashed/frozen by the cluster manager which will try to replace
+# them prematurely.
+# (0 = disable detection of crashed/frozen instances)
+offlineInstanceTimeout:120
+
+# The waiting delay in seconds before an instance whose manager is offline (i.e.
+# an "orphan" instance) should exit if idle.
+# (0 = disable auto-exit for idle orphan instances)
+orphanInstanceTimeout:120
+
+# Windows systems only: specify if a new console window must be created for each
+# instance started by the cluster manager, or if the instances must be started
+# in detached/daemon mode.
+# On Linux systems, this setting is ignored and instances are always started in
+# detached/daemon mode.
+createNewConsoles:0
+
+[_DEFAULT_]
+
+# The template used to build the name of each instance started in the cluster.
+# Following placeholders can be used:
+#   %InstNb%: instance number
+#   %InstNb2%: instance number, 2 digits (left-padded with zeros if needed)
+#   %InstNb3%: instance number, 3 digits (left-padded with zeros if needed)
+#   %InstNb0%: instance number, auto-left-padded with zeros if needed (based on maxInstances value)
+#   %ClustInstNb%: cluster instance number
+#   %ClustInstNb2%: cluster instance number, 2 digits (left-padded with zeros if needed)
+#   %ClustInstNb3%: cluster instance number, 3 digits (left-padded with zeros if needed)
+#   %ClustInstNb0%: cluster instance number, auto-left-padded with zeros if needed (based on maxInstancesInCluster value)
+#   %PresetName%: name of the SPADS global preset on which the cluster is based
+#   %ManagerName%: name of the cluster manager which started the instance
+nameTemplate:[%ManagerName%]%PresetName%
+
+# The target number of spare (i.e. unused/empty) public instances that the
+# cluster manager should keep running simultaneously in the cluster.
+targetSpares:1
+
+# The maximum number of instances allowed to run simultaneously in the cluster.
+# (0 = no limit)
+maxInstancesInCluster:0
+
+# The maximum number of public instances allowed to run simultaneously in the
+# cluster.
+# (0 = no limit)
+maxInstancesInClusterPublic:0
+
+# The maximum number of private instances allowed to run simultaneously in the
+# cluster.
+# (0 = no limit)
+maxInstancesInClusterPrivate:0
+
+# The lobby password to use for the cluster instances, if different from that of
+# the manager.
+# Notice: if you plan to give lobby server admin access to the cluster manager
+# so that it can automatically create bot accounts, then you must not use a
+# cluster specific lobby password and must let this setting empty.
+lobbyPassword:

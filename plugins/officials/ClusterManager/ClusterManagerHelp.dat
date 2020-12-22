@@ -1,0 +1,25 @@
+[clusterConfig]
+!clusterConfig [<clusterName>] - shows the configuration in use for a cluster, or for the cluster manager if no <clusterName> is provided
+"!clusterConfig" shows current configuration for the cluster manager
+"!clusterConfig duel" shows current configuration for the duel cluster
+
+[clusterStats]
+!clusterStats - shows the current instance counts by type (public/private) and by cluster
+
+[clusterStatus]
+!clusterStatus [<clusterName>] - shows the current instance counts by type (public/private) and status (inUse/idle/offline/error) for the <clusterName> cluster, or globally if <clusterName> is not provided
+"!clusterStatus" shows the total instance counts for all clusters
+"!clusterStatus team" shows the instance counts for the team cluster specifically
+
+[listClusters]
+!listClusters - lists available clusters
+
+[listInstances]
+!listInstances [<clusterName>] - lists all the instances currently running, with detailed information, for the <clusterName> cluster or globally if <clusterName> is not provided
+"!listInstances" lists all the instances currently running in all clusters
+"!listInstances teamFfa" lists all the instances currently running in the teamFfa cluster
+
+[privateHost]
+!privateHost [<clusterName>] - creates a new private (password protected) SPADS instance in the <clusterName> cluster (or default cluster if <clusterName> is not provided)
+"!privateHost" creates a new private SPADS instance in default cluster
+"!privateHost ffa" creates a new private SPADS instance in the ffa cluster
