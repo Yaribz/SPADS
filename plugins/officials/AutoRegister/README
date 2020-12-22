@@ -1,0 +1,6 @@
+By default this plugin is configured in plugin-dependency mode: the
+autoregistration functionality is provided for other plugins which can enable it
+if needed, but it is disabled by default.
+If you want to use this plugin in standalone mode and enable autoregistration
+by default, you need to set the "enabled" setting to 1 in the configuration
+file.
