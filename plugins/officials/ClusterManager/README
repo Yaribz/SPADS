@@ -1,11 +1,12 @@
-This plugin turns a SPADS instance into a manager of clusters of SPADS
-instances. Each cluster is associated with a SPADS global preset which is used
-for all the instances of this cluster. The cluster manager can be used in
-mono-cluster mode (all the instances are in the same cluster and thus use the
-same SPADS preset) or in multi-cluster mode (several clusters are managed at the
-same time, each cluster having its own SPADS preset for all the instances it
-contains). For information regarding cluster parameterization, refer to the
-"ClusterManager.conf.README" file.
+This plugin turns a SPADS instance into a highly configurable manager of
+clusters of SPADS instances, auto-scaling to the players' demand and offering
+on-demand private hosts. Each cluster is associated with a SPADS global preset
+which is used for all the instances of this cluster. The cluster manager can be
+used in mono-cluster mode (all the instances are in the same cluster and thus
+use the same SPADS preset) or in multi-cluster mode (several clusters are
+managed at the same time, each cluster having its own SPADS preset for all the
+instances it contains). For information regarding cluster parameterization,
+refer to the "ClusterManager.conf.README" file.
 
 Auto-registration of lobby accounts:
 -----------------------------------
@@ -17,7 +18,7 @@ needed, but these accounts will lack the bot flag. Also, depending on the
 lobby server configuration, auto-registration may fail if it requires a
 validation code sent by email to finalize the registration. In this case you
 will have to pre-register beforehand all the lobby accounts which could be
-required by the cluster manager to start the slave instances, based in the
+required by the cluster manager to start the slave instances, based on the
 "nameTemplate" plugin setting.
 
 Public instances VS private instances:
@@ -26,7 +27,7 @@ Clusters may contain two types of instances: public instances and private
 instances. Public instances are non-passworded hosts automatically started by
 the cluster manager. Private instances are passworded hosts, started on-request
 by the cluster manager when a client uses the !privateHost command.
-Clusters may contain public instances only, private instances only, or both
+Clusters can contain public instances only, private instances only, or both
 types of instances at the same time (depending on the cluster configuration).
 
 Dependencies:
@@ -43,13 +44,13 @@ Perl module manager such as cpanminus: "cpanm DBD::SQLite".
 
 Caveats:
 -------
-- This plugin considers the default configuration regarding the "logDir" global
+- This plugin assumes the default configuration regarding the "logDir" global
 setting has NOT been modified (i.e. "logDir:log" in spads.conf)
-- This plugin considers the "varDir" global setting is the same for all the
+- This plugin assumes the "varDir" global setting is the same for all the
 instances
-- All the UDP ports between baseGamePort and baseGamePort+maxInstances
+- All the UDP ports between baseGamePort and baseGamePort+maxInstances-1
 (included) must be unused and accessible from the outside (ports open on
 firewall and forwarded if needed) so that the instances can host games
 - All the UDP ports between baseAutoHostPort and
-baseAutoHostPort+maxInstances (included) must be unused on the loppback
+baseAutoHostPort+maxInstances-1 (included) must be unused on the loopback
 interface
