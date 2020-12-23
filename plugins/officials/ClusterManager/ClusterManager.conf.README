@@ -111,7 +111,7 @@ createNewConsoles:0
 #   %ClustInstNb0%: cluster instance number, auto-left-padded with zeros if needed (based on maxInstancesInCluster value)
 #   %PresetName%: name of the SPADS global preset on which the cluster is based
 #   %ManagerName%: name of the cluster manager which started the instance
-nameTemplate:[%ManagerName%]%PresetName%
+nameTemplate:[%ManagerName%]%PresetName%[%ClustInstNb0%]
 
 # The target number of spare (i.e. unused/empty) public instances that the
 # cluster manager should keep running simultaneously in the cluster.
