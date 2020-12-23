@@ -44,10 +44,14 @@ Perl module manager such as cpanminus: "cpanm DBD::SQLite".
 
 Caveats:
 -------
-- This plugin assumes the default configuration regarding the "logDir" global
-setting has NOT been modified (i.e. "logDir:log" in spads.conf)
 - This plugin assumes the "varDir" global setting is the same for all the
-instances
+instances (cluster manager instance and slave instances)
+- For each instance started by the cluster manager, a subdirectory with the
+name of the instance will be automatically created if needed in the
+"%varDir%/ClusterManager" directory. This subdirectory will be used as the
+"instanceDir" for this instance. A "log" subdirectory
+("%varDir%/ClusterManager/%instanceName%/log") will also be created to store
+all the logs of the instance.
 - All the UDP ports between baseGamePort and baseGamePort+maxInstances-1
 (included) must be unused and accessible from the outside (ports open on
 firewall and forwarded if needed) so that the instances can host games

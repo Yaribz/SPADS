@@ -10,9 +10,7 @@ use Storable qw'nstore retrieve';
 
 use SpadsPluginApi;
 
-no warnings 'redefine';
-
-my $pluginVersion='0.1';
+my $pluginVersion='0.2';
 my $requiredSpadsVersion='0.12.20';
 
 my %globalPluginParams = ( commandsFile => ['notNull'],
@@ -42,8 +40,6 @@ sub getVersion { return $pluginVersion; }
 sub getRequiredSpadsVersion { return $requiredSpadsVersion; }
 sub getParams { return [\%globalPluginParams,\%presetPluginParams]; }
 sub getDependencies { return ('AutoRegister'); }
-
-my $win=$^O eq 'MSWin32' ? 1 : 0;
 
 sub new {
   my ($class,$context)=@_;
@@ -1035,7 +1031,7 @@ sub c_startInstance {
     return undef;
   }
 
-  my $fpInstanceDir=catdir($r_conf->{varDir},$instName);
+  my $fpInstanceDir=catdir($r_conf->{varDir},'ClusterManager',$instName);
   if(! -d $fpInstanceDir && ! mkdir($fpInstanceDir)) {
     slog("Unable to start new instance, failed to create new instance directory \"$fpInstanceDir\"",1);
     return undef;
@@ -1101,7 +1097,8 @@ sub c_startInstance {
   $instanceMacros{'set:defaultPreset'}=$preset;
   $instanceMacros{'hSet:port'}=$r_pluginConf->{baseGamePort}+$instNb;
   $instanceMacros{'set:autoHostPort'}=$r_pluginConf->{baseAutoHostPort}+$instNb;
-  $instanceMacros{'set:instanceDir'}=$instName;
+  $instanceMacros{'set:instanceDir'}=catdir('ClusterManager',$instName);
+  $instanceMacros{'set:logDir'}='log';
   $instanceMacros{sharedData}=$r_pluginConf->{sharedData} if($r_pluginConf->{sharedData} ne '');
   if($owner) {
     my $passwd=::generatePassword(4);
