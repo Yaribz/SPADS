@@ -53,7 +53,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.20';
+our $spadsVer='0.12.21';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -98,7 +98,7 @@ if($win) {
   die "\nSPADS requires Win32::API module version 0.73 or superior.\nPlease update your Perl installation (Perl 5.16.2 or superior is recommended)\n"
       unless(eval { require Win32::API; Win32::API->VERSION(0.73); 1; });
   eval "use Win32::TieRegistry ':KEY_'";
-  $regLMachine=new Win32::TieRegistry("LMachine");
+  $regLMachine=new Win32::TieRegistry("LMachine", { Access => KEY_READ() });
   $regLMachine->Delimiter("/") if(defined $regLMachine);
 }
 
@@ -665,7 +665,7 @@ sub onUpdaterCallEnd {
 sub getLastWin32Error {
   my $errorNb=Win32::GetLastError();
   return 'unknown error' unless($errorNb);
-  my $errorMsg=Win32::FormatMessage($errorNb);
+  my $errorMsg=Win32::FormatMessage($errorNb)//($^E=$errorNb);
   $errorMsg=~s/\cM?\cJ$//;
   return $errorMsg;
 }

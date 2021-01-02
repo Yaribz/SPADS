@@ -1,6 +1,6 @@
 # Perl UnitSync interface module for Win32 system
 #
-# Copyright (C) 2008-2017  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2020  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -16,7 +16,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 91.0c (2017/09/16)
+# Version 91.0d (2021/01/02)
 
 package PerlUnitSync;
 
@@ -37,7 +37,7 @@ sub _fixTypesForWin32Api {
 sub _getLastWin32Error {
   my $errorNb=Win32::GetLastError();
   return 'unknown error' unless($errorNb);
-  my $errorMsg=Win32::FormatMessage($errorNb);
+  my $errorMsg=Win32::FormatMessage($errorNb)//($^E=$errorNb);
   $errorMsg=~s/\cM?\cJ$//;
   return $errorMsg;
 }

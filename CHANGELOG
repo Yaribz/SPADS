@@ -179,6 +179,7 @@ PerlUnitSync.pm:
 91.0a: first public version, based on Spring 91 unitsync API header file (Windows)
 91.0b: remove functions obsolete in Spring 104+
 91.0c: localize variable $_ (improve AnyEvent stability)
+91.0d: improve handling of Windows error messages (support more error codes)
 
 spads.pl:
 ========
@@ -858,6 +859,8 @@ spads.pl:
 0.12.19: experimental support for shared dynamic data between multiple instances (saved map boxes, bans and trusted lobby certificates)
          add a check to prevent some duplicate bans
 0.12.20: enrich !version command output with the list of shared data (if any) and SQLite information (if used)
+0.12.21: fix CPU and local LAN IP detection when using 64-bit Perl (Windows)
+         improve handling of Windows error messages (support more error codes)
 
 SpadsConf.pm:
 ============
@@ -1181,6 +1184,7 @@ SpadsUpdater.pm:
 0.15: handle new spring-headless.exe dependencies: libIL.dll and libcurl.dll (Windows)
 0.16: workaround for 7za static binary incompatibility with recent Linux kernels when using specific locales (Linux)
 0.17: support automatic Spring installation for specific versions of the maintenance branch too
+0.18: automatic Spring installation now also supports 64-bit builds on Windows (requires 64-bit Perl)
 
 springLobbyCertificates.dat:
 ===========================

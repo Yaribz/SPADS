@@ -37,9 +37,9 @@ sub none (&@) { my $c = shift; return ! defined first {&$c} @_; }
 sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
-my $archName=$win?'win32':($Config{ptrsize} > 4 ? 'linux64' : 'linux32');
+my $archName=($win?'win':'linux').($Config{ptrsize} > 4 ? 64 : 32);
 
-my $moduleVersion='0.17';
+my $moduleVersion='0.18';
 
 my @constructorParams = qw'sLog repository release packages';
 my @optionalConstructorParams = qw'localDir springDir';
@@ -491,7 +491,7 @@ sub _getSpringVersionDownloadInfo {
   my $versionInArchives = $branch eq 'master' ? $version : "{$branch}$version";
   my ($requiredArchive,@optionalArchives);
   if($win) {
-    $requiredArchive="spring_${versionInArchives}_".(_compareSpringVersions($version,102)<0?'':'win32-').'minimal-portable.7z';
+    $requiredArchive="spring_${versionInArchives}_".(_compareSpringVersions($version,102)<0?'':"$archName-").'minimal-portable.7z';
     @optionalArchives=("${versionInArchives}_spring-dedicated.7z","${versionInArchives}_spring-headless.7z")
   }else{
     $requiredArchive="spring_${versionInArchives}_minimal-portable-$archName-static.7z";
