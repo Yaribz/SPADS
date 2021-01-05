@@ -31,6 +31,8 @@ use List::Util 'first';
 use Storable qw'nstore retrieve dclone';
 use Time::HiRes;
 
+use constant LOCK_RE => LOCK_SH|LOCK_EX;
+
 use SimpleLog;
 
 sub any (&@) { my $c = shift; return defined first {&$c} @_; }
@@ -40,7 +42,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.12.8';
+my $moduleVersion='0.12.9';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -296,6 +298,7 @@ my %shareableData = ( savedBoxes => { type => 'fastTable',
                       bans => { type => 'table',
                                 fields => \@banListsFields },
                       trustedLobbyCertificates => { type => 'binary' },
+                      mapInfoCache => { type => 'binary' },
                       preferences => { type => 'sqlite',
                                        fields => \@preferencesListsFields } );
 
@@ -457,12 +460,17 @@ sub new {
   my ($p_accountData,$p_ipIds,$p_nameIds)=buildUserDataCaches($p_userData->{''});
 
   my $p_mapInfoCache={};
-  if(-f $p_conf->{''}{instanceDir}.'/mapInfoCache.dat') {
-    $p_mapInfoCache=retrieve($p_conf->{''}{instanceDir}.'/mapInfoCache.dat');
-    if(! defined $p_mapInfoCache) {
-      $sLog->log('Unable to load map info cache',1);
-      return 0;
+  if($sharedDataTs{mapInfoCache}) {
+    $p_mapInfoCache=initSharedData($sLog,$p_conf,\%sharedDataTs,'mapInfoCache');
+  }else{
+    my $mapInfoCacheFile=$p_conf->{''}{instanceDir}.'/mapInfoCache.dat';
+    if(-f $mapInfoCacheFile) {
+      $p_mapInfoCache=retrieve($mapInfoCacheFile);
     }
+  }
+  if(! defined $p_mapInfoCache) {
+    $sLog->log('Unable to load map info cache',1);
+    return 0;
   }
 
   my $p_trustedLobbyCertificates={};
@@ -505,7 +513,7 @@ sub new {
     accountData => $p_accountData,
     ipIds => $p_ipIds,
     nameIds => $p_nameIds,
-    mapInfo => $p_mapInfoCache,
+    mapInfoCache => $p_mapInfoCache,
     maps => {},
     orderedMaps => [],
     ghostMaps => {},
@@ -561,7 +569,12 @@ sub getVersion {
 
 sub _acquireLock {
   my ($file,$lockType)=@_;
-  if(open(my $lockFh,'>',$file.'.lock')) {
+  my $lockSuffix='';
+  if(($lockType & LOCK_RE) == LOCK_RE) {
+    $lockSuffix='.res';
+    $lockType^=LOCK_SH;
+  }
+  if(open(my $lockFh,'>',$file.$lockSuffix.'.lock')) {
     if(flock($lockFh, $lockType)) {
       return $lockFh;
     }else{
@@ -1562,7 +1575,7 @@ sub initSharedData {
     }
   }elsif(-f $privateFile) {
     $sLog->log("Initializing shared $sharedData data from private file",3);
-    if(my $lock=_acquireLock($sharedFile,LOCK_EX)) {
+    if(my $resLock=_acquireLock($sharedFile,LOCK_RE)) {
       if(-f $sharedFile) {
         $sLog->log("A shared file has appeared meanwhile for shared $sharedData data, loading data directly from shared file instead",3);
         $r_data=loadShareableData($sLog,$sharedFile,$sharedData);
@@ -1571,32 +1584,42 @@ sub initSharedData {
         $r_data=loadShareableData($sLog,$privateFile,$sharedData);
         if(($isCustomStorageType && %{$r_data})
            || (! $isCustomStorageType && defined $r_data)) {
-          if(copy($privateFile,$sharedFile)) {
-            $r_sharedDataTs->{$sharedData}=(Time::HiRes::stat($sharedFile))[9];
+          if(my $exLock=_acquireLock($sharedFile,LOCK_EX)) {
+            if(copy($privateFile,$sharedFile)) {
+              $r_sharedDataTs->{$sharedData}=(Time::HiRes::stat($sharedFile))[9];
+            }else{
+              $sLog->log("Failed to initialize shared $sharedData data from private file: $!",2);
+            }
+            close($exLock);
           }else{
-            $sLog->log("Failed to initialize shared $sharedData data from private file: $!",2);
+            $sLog->log("Failed to acquire exclusive lock on shared file to initialize $sharedData data",1);
           }
         }else{
           $sLog->log("Failed to load private $sharedData data to initialize shared data",1);
         }
       }
-      close($lock);
+      close($resLock);
     }else{
-      $sLog->log("Failed to acquire lock on shared file to load $sharedData data",1);
+      $sLog->log("Failed to acquire reserved lock on shared file to initialize $sharedData data",1);
     }
   }elsif($isCustomStorageType) {
     $sLog->log("Initializing empty shared $sharedData data",3);
-    if(my $lock=_acquireLock($sharedFile,LOCK_EX)) {
+    if(my $resLock=_acquireLock($sharedFile,LOCK_RE)) {
       if(-f $sharedFile) {
         $sLog->log("A shared file has appeared meanwhile for shared $sharedData data, loading data from shared file instead",3);
       }else{
-        touch($sharedFile);
+        if(my $exLock=_acquireLock($sharedFile,LOCK_EX)) {
+          touch($sharedFile);
+          close($exLock);
+        }else{
+          $sLog->log("Failed to acquire exclusive lock on shared file to initialize $sharedData data",1);
+        }
       }
       $r_data=loadShareableData($sLog,$sharedFile,$sharedData);
       $r_sharedDataTs->{$sharedData}=(Time::HiRes::stat($sharedFile))[9];
-      close($lock);
+      close($resLock);
     }else{
-      $sLog->log("Failed to acquire lock on shared file to load $sharedData data",1);
+      $sLog->log("Failed to acquire reserved lock on shared file to initialize $sharedData data",1);
     }
   }else{
     $r_data={};
@@ -1623,7 +1646,7 @@ sub loadShareableData {
 sub refreshAndLockSharedDataForUpdate {
   my ($self,$sharedData)=@_;
   my $sharedFile="$self->{conf}{varDir}/$sharedData.dat";
-  if(my $lock = _acquireLock($sharedFile,LOCK_EX)) {
+  if(my $resLock = _acquireLock($sharedFile,LOCK_RE)) {
     if(-f $sharedFile && (Time::HiRes::stat($sharedFile))[9] > $self->{sharedDataTs}{$sharedData}) {
       $self->{log}->log("Shared file \"$sharedData.dat\" has been modified, refreshing data before update",5);
       my $r_refreshedData;
@@ -1635,35 +1658,40 @@ sub refreshAndLockSharedDataForUpdate {
       }
       if(! %{$r_refreshedData}) {
         $self->{log}->log("Unable to update $sharedData data (failed to refresh data from shared file before update)",1);
-        close($lock);
+        close($resLock);
         return undef;
       }
       $self->{$sharedData}=$r_refreshedData->{''};
       $self->{sharedDataTs}{$sharedData}=(Time::HiRes::stat($sharedFile))[9];
     }
-    return $lock;
+    return $resLock;
   }else{
-    $self->{log}->log("Unable to update $sharedData data (failed to acquire lock on shared file)",1);
+    $self->{log}->log("Unable to update $sharedData data (failed to acquire reserved lock on shared file)",1);
     return undef;
   }
 }
 
 sub updateAndUnlockSharedData {
-  my ($self,$sharedData,$lock)=@_;
+  my ($self,$sharedData,$resLock)=@_;
+  $self->{log}->log("updateAndUnlockSharedData() called without reserved lock for $sharedData data",0) unless($resLock);
   my $sharedFile="$self->{conf}{varDir}/$sharedData.dat";
-  my $res;
-  if($shareableData{$sharedData}{type} eq 'fastTable') {
-    $res=$self->dumpFastTable($self->{$sharedData},$sharedFile,$shareableData{$sharedData}{fields});
-  }elsif($shareableData{$sharedData}{type} eq 'table') {
-    $res=$self->dumpTable($self->{$sharedData},$sharedFile,$shareableData{$sharedData}{fields});
-  }elsif($shareableData{$sharedData}{type} eq 'binary') {
-    $res=nstore($self->{$sharedData},$sharedFile);
+  my $res=0;
+  if(my $exLock = _acquireLock($sharedFile,LOCK_EX)) {
+    if($shareableData{$sharedData}{type} eq 'fastTable') {
+      $res=$self->dumpFastTable($self->{$sharedData},$sharedFile,$shareableData{$sharedData}{fields});
+    }elsif($shareableData{$sharedData}{type} eq 'table') {
+      $res=$self->dumpTable($self->{$sharedData},$sharedFile,$shareableData{$sharedData}{fields});
+    }elsif($shareableData{$sharedData}{type} eq 'binary') {
+      $res=nstore($self->{$sharedData},$sharedFile);
+    }else{
+      $self->{log}->log("Unable to update shared data \"$sharedData\", unknown data",0);
+    }
+    $self->{sharedDataTs}{$sharedData}=(Time::HiRes::stat($sharedFile))[9] if($res);
+    close($exLock);
   }else{
-    $self->{log}->log("Unable to update shared data \"$sharedData\", unknown data",0);
-    $res=0;
+    $self->{log}->log("Unable to update $sharedData data (failed to acquire exclusive lock on shared file)",1);
   }
-  $self->{sharedDataTs}{$sharedData}=(Time::HiRes::stat($sharedFile))[9] if($res);
-  close($lock);
+  close($resLock) if($resLock);
   return $res;
 }
 
@@ -2306,9 +2334,14 @@ sub dumpDynamicData {
   $self->{log}->log("Dynamic data dump process took $dumpDuration seconds",2) if($dumpDuration > 15);
 }
 
-sub refreshSharedData {
-  my $self=shift;
-  foreach my $sharedData (keys %shareableData) {
+sub refreshSharedDataIfNeeded {
+  my ($self,@dataToRefresh)=@_;
+  @dataToRefresh=keys %shareableData unless(@dataToRefresh);
+  foreach my $sharedData (@dataToRefresh) {
+    if(! exists $shareableData{$sharedData}) {
+      $self->{log}->log("Ignoring request to refresh unknown/unshareable data \"$sharedData\"",0);
+      next;
+    }
     next if($shareableData{$sharedData}{type} eq 'sqlite');
     my $sharedFile="$self->{conf}{varDir}/$sharedData.dat";
     next unless($self->{sharedDataTs}{$sharedData} && -f $sharedFile && (Time::HiRes::stat($sharedFile))[9] > $self->{sharedDataTs}{$sharedData});
@@ -2336,27 +2369,47 @@ sub refreshSharedData {
 
 # Business functions - Dynamic data - Map info cache ##########################
 
-sub getUncachedMaps {
-  my ($self,$p_maps)=@_;
-  my $p_uncachedMaps=[];
-  foreach my $map (@{$p_maps}) {
-    push(@{$p_uncachedMaps},$map) unless(exists $self->{mapInfo}{$map});
-  }
-  return $p_uncachedMaps;
-}
-
 sub getCachedMapInfo {
   my ($self,$map)=@_;
-  return $self->{mapInfo}{$map} if(exists $self->{mapInfo}{$map});
+  return $self->{mapInfoCache}{$map} if(exists $self->{mapInfoCache}{$map});
   return undef;
+}
+
+sub getUncachedMaps {
+  my ($self,$p_maps)=@_;
+  my $lock;
+  if($self->{sharedDataTs}{mapInfoCache}) {
+    if(exists $self->{mapInfoCacheResLock} && defined $self->{mapInfoCacheResLock}) {
+      $self->{log}->log('getUncachedMaps() called with reserved lock already acquired',0);
+      $lock=delete $self->{mapInfoCacheResLock};
+    }else{
+      $lock=$self->refreshAndLockSharedDataForUpdate('mapInfoCache');
+    }
+  }
+  my @uncachedMaps=grep {! exists $self->{mapInfoCache}{$_}} @{$p_maps};
+  if($lock) {
+    if(@uncachedMaps) {
+      $self->{mapInfoCacheResLock}=$lock;
+    }else{
+      close($lock);
+    }
+  }
+  return \@uncachedMaps;
 }
 
 sub cacheMapsInfo {
   my ($self,$p_mapsInfo)=@_;
   foreach my $map (keys %{$p_mapsInfo}) {
-    $self->{mapInfo}{$map}=$p_mapsInfo->{$map};
+    $self->{mapInfoCache}{$map}=$p_mapsInfo->{$map};
   }
-  $self->{log}->log('Unable to store map info cache',1) unless(nstore($self->{mapInfo},$self->{conf}{instanceDir}.'/mapInfoCache.dat'));
+  my $res;
+  if($self->{sharedDataTs}{mapInfoCache}) {
+    my $lock=delete $self->{mapInfoCacheResLock};
+    $res=$self->updateAndUnlockSharedData('mapInfoCache',$lock);
+  }else{
+    $res=nstore($self->{mapInfoCache},$self->{conf}{instanceDir}.'/mapInfoCache.dat');
+  }
+  $self->{log}->log('Unable to store map info cache',1) unless($res);
 }
 
 # Business functions - Dynamic data - Map boxes ###############################

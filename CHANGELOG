@@ -861,6 +861,7 @@ spads.pl:
 0.12.20: enrich !version command output with the list of shared data (if any) and SQLite information (if used)
 0.12.21: fix CPU and local LAN IP detection when using 64-bit Perl (Windows)
          improve handling of Windows error messages (support more error codes)
+0.12.22: allow map info cache data to be shared between instances (only one instance needs to build the cache, saving lots of slow unitsync library calls in multi-instance case)
 
 SpadsConf.pm:
 ============
@@ -1014,6 +1015,8 @@ SpadsConf.pm:
 0.12.6: preferences dynamic data can now also be shared between multiple instances (requires DBD::SQLite module)
 0.12.7: improve consistency checks for preset configuration
 0.12.8: in plugins configuration files, the default preset now inheriths automatically from the "_DEFAULT_" preset if existing (make plugin configuration more flexible)
+0.12.9: allow map info cache data to be shared between instances (only one instance needs to build the cache, saving lots of slow unitsync library calls in multi-instance case)
+        improve shared data concurrent access efficiency (add "reserved" lock type)
 
 spadsInstaller.pl:
 =================

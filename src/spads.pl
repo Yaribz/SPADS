@@ -53,7 +53,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.21';
+our $spadsVer='0.12.22';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -1250,6 +1250,7 @@ sub loadArchivesBlocking {
       }
     }
     slog("Caching Spring map info... $nbUncachedMaps/$nbUncachedMaps (100%)",3) if($nbUncachedMaps > 4);
+    $spads->cacheMapsInfo(\%newCachedMaps) if($spads->{sharedDataTs}{mapInfoCache});
   }
 
   my @newAvailableMods=();
@@ -1363,7 +1364,12 @@ sub loadArchivesPostActions {
   for my $modNb (0..$#availableMods) {
     $availableModsNameToNb{$availableMods[$modNb]->{name}}=$modNb unless(exists $availableModsNameToNb{$availableMods[$modNb]->{name}});
   }
-  $spads->cacheMapsInfo($r_newCachedMaps) if(%{$r_newCachedMaps});
+
+  if($spads->{sharedDataTs}{mapInfoCache}) {
+    $spads->refreshSharedDataIfNeeded('mapInfoCache');
+  }else{
+    $spads->cacheMapsInfo($r_newCachedMaps) if(%{$r_newCachedMaps});
+  }
 
   updateTargetMod($verbose);
 
@@ -13989,7 +13995,7 @@ if(! $abortSpadsStartForAutoUpdate) {
 
   SimpleEvent::addTimer('SpadsMainLoop',0,1,\&mainLoop);
   SimpleEvent::addTimer('SpringVersionAutoManagement',$autoManagedSpringData{delay}*60,$autoManagedSpringData{delay}*60,\&springVersionAutoManagement) if($autoManagedSpringData{mode} eq 'release');
-  SimpleEvent::addTimer('RefreshSharedData',$sharedDataRefreshDelay,$sharedDataRefreshDelay,sub {$spads->refreshSharedData()}) if($sharedDataRefreshDelay);
+  SimpleEvent::addTimer('RefreshSharedData',$sharedDataRefreshDelay,$sharedDataRefreshDelay,sub {$spads->refreshSharedDataIfNeeded()}) if($sharedDataRefreshDelay);
   SimpleEvent::startLoop(\&postMainLoop);
 }
 
