@@ -13,7 +13,7 @@ Then you can run SPADS as follows:
 To install SPADS on Windows, you have to:
 =========================================
 
-1) Install ActivePerl Windows (x86) (available here: http://www.activestate.com/activeperl/downloads) or Strawberry Perl (32bit) (available here: http://strawberryperl.com)
+1) Install ActivePerl Windows (available here: http://www.activestate.com/activeperl/downloads) or Strawberry Perl (available here: http://strawberryperl.com)
 2) Ensure your Perl bin directory is in your PATH environement variable
 3) Open a Command shell, go in the directory where you extracted SPADS installation files, and run "perl spadsInstaller.pl" (SPADS will be installed in current directory)
 4) Check your configuration files, in particular "spads.conf", "hostingPresets.conf" and "battlePresets.conf"
