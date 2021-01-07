@@ -862,6 +862,7 @@ spads.pl:
 0.12.21: fix CPU and local LAN IP detection when using 64-bit Perl (Windows)
          improve handling of Windows error messages (support more error codes)
 0.12.22: allow map info cache data to be shared between instances (only one instance needs to build the cache, saving lots of slow unitsync library calls in multi-instance case)
+0.12.23: fix end of forked process not always detected properly on Perl 64-bit builds (Windows)
 
 SpadsConf.pm:
 ============

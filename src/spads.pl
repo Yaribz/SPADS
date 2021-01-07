@@ -53,7 +53,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.22';
+our $spadsVer='0.12.23';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -92,14 +92,11 @@ eval "use HTML::Entities";
 my $htmlEntitiesUnavailable=$@;
 
 our $cwd=cwd();
-my $regLMachine;
 if($win) {
   eval "use Win32";
   die "\nSPADS requires Win32::API module version 0.73 or superior.\nPlease update your Perl installation (Perl 5.16.2 or superior is recommended)\n"
       unless(eval { require Win32::API; Win32::API->VERSION(0.73); 1; });
   eval "use Win32::TieRegistry ':KEY_'";
-  $regLMachine=new Win32::TieRegistry("LMachine", { Access => KEY_READ() });
-  $regLMachine->Delimiter("/") if(defined $regLMachine);
 }
 
 my %macOsData;
@@ -1590,9 +1587,16 @@ sub getSysInfo {
   my ($procName,$origin);
   if($win) {
     $origin='from Windows registry';
-    if(defined $regLMachine) {
-      my $cpuInfo=$regLMachine->Open('Hardware/Description/System/CentralProcessor/0', { Access => KEY_READ() });
-      $procName=$cpuInfo->GetValue('ProcessorNameString') if(defined $cpuInfo);
+    eval {
+      if(my $regLMachine=new Win32::TieRegistry('LMachine', { Access => KEY_READ() })) {
+        $regLMachine->Delimiter('/');
+        my $cpuInfo=$regLMachine->Open('Hardware/Description/System/CentralProcessor/0', { Access => KEY_READ() });
+        $procName=$cpuInfo->GetValue('ProcessorNameString') if(defined $cpuInfo);
+      }
+    };
+    if($@) {
+      chomp($@);
+      slog("Failed to access Windows registry: $@",2);
     }
   }elsif($macOs) {
     $origin='using sysctl command';
@@ -1616,18 +1620,33 @@ sub getLocalLanIp {
   my @ips;
   if($win) {
     my $netIntsEntry;
-    $netIntsEntry=$regLMachine->Open("System/CurrentControlSet/Services/Tcpip/Parameters/Interfaces/", { Access => KEY_READ() }) if(defined $regLMachine);
+    eval {
+      if(my $regLMachine=new Win32::TieRegistry('LMachine', { Access => KEY_READ() })) {
+        $regLMachine->Delimiter('/');
+        $netIntsEntry=$regLMachine->Open('System/CurrentControlSet/Services/Tcpip/Parameters/Interfaces/', { Access => KEY_READ() });
+      }
+    };
+    if($@) {
+      chomp($@);
+      slog("Failed to access Windows registry: $@",2);
+    }
     if(defined $netIntsEntry) {
-      my @interfaces=$netIntsEntry->SubKeyNames();
-      foreach my $interface (@interfaces) {
-        my $netIntEntry=$netIntsEntry->Open($interface, { Access => KEY_READ() });
-        my $ipAddr=$netIntEntry->GetValue("IPAddress");
-        if(defined $ipAddr && $ipAddr =~ /(\d+\.\d+\.\d+\.\d+)/) {
-          push(@ips,$1);
-        }else{
-          $ipAddr=$netIntEntry->GetValue("DhcpIPAddress");
-          push(@ips,$1) if(defined $ipAddr && $ipAddr =~ /(\d+\.\d+\.\d+\.\d+)/);
+      eval {
+        my @interfaces=$netIntsEntry->SubKeyNames();
+        foreach my $interface (@interfaces) {
+          my $netIntEntry=$netIntsEntry->Open($interface, { Access => KEY_READ() });
+          my $ipAddr=$netIntEntry->GetValue("IPAddress");
+          if(defined $ipAddr && $ipAddr =~ /(\d+\.\d+\.\d+\.\d+)/) {
+            push(@ips,$1);
+          }else{
+            $ipAddr=$netIntEntry->GetValue("DhcpIPAddress");
+            push(@ips,$1) if(defined $ipAddr && $ipAddr =~ /(\d+\.\d+\.\d+\.\d+)/);
+          }
         }
+      };
+      if($@) {
+        chomp($@);
+        slog("Failed to access Windows registry: $@",2);
       }
     }else{
       slog("Unable to find network interfaces in registry, trying ipconfig workaround...",2);
