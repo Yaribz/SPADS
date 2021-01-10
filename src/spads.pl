@@ -53,7 +53,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.24';
+our $spadsVer='0.12.24a';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -1733,7 +1733,7 @@ sub applyQuitAction {
   %quitAfterGame=(action => undef, condition => undef) unless(defined $action);
   broadcastMsg($msg);
   slog($msg,3);
-  checkExit();
+  checkExit() if(SimpleEvent::getModel());
   return 1;
 }
 
