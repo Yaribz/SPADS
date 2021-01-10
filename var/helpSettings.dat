@@ -819,12 +819,17 @@ Specifies if SPADS must use the native process spawning method to launch Spring 
 [global:eventModel]
 Event model
 -
-SPADS is based on the asynchronous programming paradigm, with events, event handlers, callbacks etc. It can use either its own internal event model, or the AnyEvent module if available on the system.
-AnyEvent is more efficient and makes it possible to integrate a lot of high-performance Perl modules such as web servers directly in the plugins.
+The "eventModel" global setting specifies which event model must be used by SPADS. SPADS is based on the asynchronous programming paradigm, with events, event handlers, callbacks etc. It can use either its own internal event model, or the Perl AnyEvent module if available on the system.
+Compared to the internal event model, AnyEvent is more efficient and makes it possible to integrate a lot of high-performance Perl modules such as web servers directly in the plugins.
+The default time slice used for the event loop is 0.5 second. This can be changed by specifying the desired value between parentheses after the event model type (unit is hundredth of second, default value is 50).
 -
-auto: AnyEvent is used if available, otherwise the internal event model is used 
-internal: internal event model is used
-AnyEvent: AnyEvent is used
+<eventModelType>
+<eventModelType>(<timeSlice>)
+Examples:
+  "auto": AnyEvent is used if available, otherwise the internal event model is used
+  "internal": internal event model is used
+  "AnyEvent": AnyEvent is used
+  "internal(20)": internal event model is used, with an event loop time slice of 0.2 second instead of default 0.5 second
 -
 auto
 

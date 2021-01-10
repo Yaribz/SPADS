@@ -53,7 +53,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.23';
+our $spadsVer='0.12.24';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -306,6 +306,15 @@ sub slog {
 }
 
 $SIG{__WARN__} = sub { my $msg=shift; chomp($msg); slog("PERL WARNING: $msg",1); };
+
+sub hasEvalError {
+  if($@) {
+    chomp($@);
+    return 1;
+  }else{
+    return 0;
+  }
+}
 
 sub fatalError {
   my $m=shift;
@@ -1594,10 +1603,7 @@ sub getSysInfo {
         $procName=$cpuInfo->GetValue('ProcessorNameString') if(defined $cpuInfo);
       }
     };
-    if($@) {
-      chomp($@);
-      slog("Failed to access Windows registry: $@",2);
-    }
+    slog("Failed to access Windows registry: $@",2) if(hasEvalError());
   }elsif($macOs) {
     $origin='using sysctl command';
     $procName=$macOsData{'machdep.cpu.brand_string'} if(exists $macOsData{'machdep.cpu.brand_string'});
@@ -1626,10 +1632,7 @@ sub getLocalLanIp {
         $netIntsEntry=$regLMachine->Open('System/CurrentControlSet/Services/Tcpip/Parameters/Interfaces/', { Access => KEY_READ() });
       }
     };
-    if($@) {
-      chomp($@);
-      slog("Failed to access Windows registry: $@",2);
-    }
+    slog("Failed to access Windows registry: $@",2) if(hasEvalError());
     if(defined $netIntsEntry) {
       eval {
         my @interfaces=$netIntsEntry->SubKeyNames();
@@ -1644,10 +1647,7 @@ sub getLocalLanIp {
           }
         }
       };
-      if($@) {
-        chomp($@);
-        slog("Failed to access Windows registry: $@",2);
-      }
+      slog("Failed to access Windows registry: $@",2) if(hasEvalError());
     }else{
       slog("Unable to find network interfaces in registry, trying ipconfig workaround...",2);
       my @ipConfOut=`ipconfig`;
@@ -1733,6 +1733,7 @@ sub applyQuitAction {
   %quitAfterGame=(action => undef, condition => undef) unless(defined $action);
   broadcastMsg($msg);
   slog($msg,3);
+  checkExit();
   return 1;
 }
 
@@ -9088,6 +9089,11 @@ sub hPlugin {
     return 0;
   }
 
+  if($pluginName !~ /^\w+$/) {
+    invalidSyntax($user,'plugin','wrong plugin name format');
+    return 0;
+  }
+  
   my $actionIsAllowed=0;
   foreach my $allowedAction (qw'load unload reload reloadConf set') {
     if(lc($action) eq lc($allowedAction)) {
@@ -13458,7 +13464,7 @@ sub loadPluginModule {
 
   my $plugin;
   eval "\$plugin=$pluginName->new(\$reason)";
-  if($@) {
+  if(hasEvalError()) {
     slog("Unable to instanciate plugin module \"$pluginName\": $@",1);
     return 0;
   }
@@ -13829,7 +13835,7 @@ $timestamps{autoUpdate}=time if($conf{autoUpdateRelease} ne '');
 my $restartedForSpringEnv=delete $confMacros{restartedForSpringEnv};
 if(! $restartedForSpringEnv) {
 
-  slog("Initializing SPADS $spadsVer",3);
+  slog("Initializing SPADS $spadsVer (PID: $$)",3);
   slog('SPADS process is currently running as root!',2) unless($win || $>);
 
   if($conf{autoUpdateRelease} ne "") {
@@ -13933,7 +13939,7 @@ if(! $abortSpadsStartForAutoUpdate) {
 # Unitsync loading #####################
 
   eval "use PerlUnitSync";
-  fatalError("Unable to load PerlUnitSync module ($@)") if ($@);
+  fatalError("Unable to load PerlUnitSync module ($@)") if (hasEvalError());
   $syncedSpringVersion=PerlUnitSync::GetSpringVersion();
   $fullSpringVersion=$syncedSpringVersion;
   my $buggedUnitsync=0;
@@ -14000,7 +14006,9 @@ if(! $abortSpadsStartForAutoUpdate) {
                            SERVER_MESSAGE => \&cbAhServerMessage,
                            GAME_TEAMSTAT => \&cbAhGameTeamStat});
 
-  fatalError('Unable to initialize SimpleEvent module') unless(SimpleEvent::init(mode => ($conf{eventModel} eq 'auto' ? undef : $conf{eventModel}), sLog => $simpleEventSimpleLog, maxChildProcesses => $conf{maxChildProcesses}));
+  $conf{eventModel}=~/^(auto|internal|AnyEvent)(?:\(([1-9]\d?\d?)\))?$/;
+  my ($eventModel,$eventLoopTimeSlice)=($1,($2//50)/100);
+  fatalError('Unable to initialize SimpleEvent module') unless(SimpleEvent::init(mode => ($eventModel eq 'auto' ? undef : $eventModel), timeSlice => $eventLoopTimeSlice, sLog => $simpleEventSimpleLog, maxChildProcesses => $conf{maxChildProcesses}));
   fatalError('Unable to register SIGTERM') unless($win || SimpleEvent::registerSignal('TERM', sub { quitAfterGame('SIGTERM signal received'); } ));
   fatalError('Unable to create socket for Spring AutoHost interface') unless($autohost->open());
   fatalError('Unable to register Spring AutoHost interface socket') unless(SimpleEvent::registerSocket($autohost->{autoHostSock},sub { $autohost->receiveCommand() }));
@@ -14012,7 +14020,7 @@ if(! $abortSpadsStartForAutoUpdate) {
     }
   }
 
-  SimpleEvent::addTimer('SpadsMainLoop',0,1,\&mainLoop);
+  SimpleEvent::addTimer('SpadsMainLoop',0,0.5,\&mainLoop);
   SimpleEvent::addTimer('SpringVersionAutoManagement',$autoManagedSpringData{delay}*60,$autoManagedSpringData{delay}*60,\&springVersionAutoManagement) if($autoManagedSpringData{mode} eq 'release');
   SimpleEvent::addTimer('RefreshSharedData',$sharedDataRefreshDelay,$sharedDataRefreshDelay,sub {$spads->refreshSharedDataIfNeeded()}) if($sharedDataRefreshDelay);
   SimpleEvent::startLoop(\&postMainLoop);

@@ -42,7 +42,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.12.9';
+my $moduleVersion='0.12.10';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -130,7 +130,7 @@ my %globalParameters = (lobbyLogin => ['login'],
                         privacyTrustLevel => ['integer'],
                         userDataRetention => ['dataRetention'],
                         useWin32Process => ['useWin32ProcessType'],
-                        autoLoadPlugins => [],
+                        autoLoadPlugins => ['pluginList','null'],
                         eventModel => ['eventModelType'],
                         maxChildProcesses => ['integer']);
 
@@ -280,7 +280,8 @@ my %paramTypes = (login => '[\w\[\]]{2,20}',
                                  },
                   botList => '[\w\[\]]{2,20} \w+(#[\da-fA-F]{6})? [^ \;][^\;]*(;[\w\[\]]{2,20} \w+(#[\da-fA-F]{6})? [^ \;][^\;]*)*',
                   db => '[^\/]+\/[^\@]+\@(?i:dbi)\:\w+\:\w.*',
-                  eventModelType => '(auto|internal|AnyEvent)');
+                  pluginList => '\w+(;\w+)*',
+                  eventModelType => '(auto|internal|AnyEvent)(\([1-9]\d?\d?\))?');
 
 my @banListsFields=(['accountId','name','country','cpu','lobbyClient','rank','access','bot','level','ip','skill','skillUncert'],['banType','startDate','endDate','remainingGames','reason']);
 my @preferencesListsFields=(['accountId'],['autoSetVoteMode','voteMode','votePvMsgDelay','voteRingDelay','minRingDelay','handleSuggestions','password','rankMode','skillMode','shareId','spoofProtection','ircColors','clan']);
@@ -355,8 +356,8 @@ sub new {
       if(exists $sharedDataTs{$sharedData}) {
         if($shareableData{$sharedData}{type} eq 'sqlite' && ! $sqliteChecked) {
           eval 'use DBI';
-          if($@) {
-            $sLog->log("Unable to share $sharedData data (Perl DBI module not found)",1);
+          if(hasEvalError()) {
+            $sLog->log("Unable to share $sharedData data (failed to load Perl DBI module: $@)",1);
             return 0;
           }
           if(none {$_ eq 'SQLite'} DBI->available_drivers()) {
@@ -566,6 +567,15 @@ sub getVersion {
 }
 
 # Internal functions ##########################################################
+
+sub hasEvalError {
+  if($@) {
+    chomp($@);
+    return 1;
+  }else{
+    return 0;
+  }
+}
 
 sub _acquireLock {
   my ($file,$lockType)=@_;
@@ -1124,7 +1134,7 @@ sub loadPluginConf {
   if(! exists $self->{pluginsConf}{$pluginName}) {
     unshift(@INC,$self->{conf}{pluginsDir}) unless(any {$self->{conf}{pluginsDir} eq $_} @INC);
     eval "use $pluginName";
-    if($@) {
+    if(hasEvalError()) {
       $self->{log}->log("Unable to load plugin module \"$pluginName\": $@",1);
       return 0;
     }
@@ -1134,7 +1144,7 @@ sub loadPluginConf {
   }
   my $p_pluginParams;
   eval "\$p_pluginParams=$pluginName->getParams()";
-  if($@) {
+  if(hasEvalError()) {
     $self->{log}->log("Unable to get parameters for plugin \"$pluginName\": $@",1);
     return 0;
   }

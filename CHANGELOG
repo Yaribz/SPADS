@@ -173,6 +173,7 @@ helpSettings.dat:
 0.6.1: the "autoManagedSpringVersion" global setting now accepts "maintenance" value in springRelease field (to stay up to date with Spring maintenance builds)
 0.6.2: default value for "autoLockClients" global setting is now "64"
        clarify "autoLockClients" and "autoLock" settings differences
+0.6.3: event loop time slice is now configurable (extended format of "eventModel" global setting)
 
 PerlUnitSync.pm:
 ===============
@@ -863,6 +864,13 @@ spads.pl:
          improve handling of Windows error messages (support more error codes)
 0.12.22: allow map info cache data to be shared between instances (only one instance needs to build the cache, saving lots of slow unitsync library calls in multi-instance case)
 0.12.23: fix end of forked process not always detected properly on Perl 64-bit builds (Windows)
+0.12.24: event loop time slice is now configurable (extended format of "eventModel" global setting)
+         default event loop time slice reduced from 1s to 0.5s to increase global responsiveness
+         delay between main SPADS checks reduced from 1s to 0.5s to increase responsiveness of automatic functionalities
+         increased shutdown/restart speed
+         enforce valid plugin name format in !plugin command
+         print SPADS process ID in startup log message
+         fixed some errors generating empty line after log message
 
 SpadsConf.pm:
 ============
@@ -1018,6 +1026,9 @@ SpadsConf.pm:
 0.12.8: in plugins configuration files, the default preset now inheriths automatically from the "_DEFAULT_" preset if existing (make plugin configuration more flexible)
 0.12.9: allow map info cache data to be shared between instances (only one instance needs to build the cache, saving lots of slow unitsync library calls in multi-instance case)
         improve shared data concurrent access efficiency (add "reserved" lock type)
+0.12.10: event loop time slice is now configurable (extended format of "eventModel" global setting)
+         enforce valid plugin name format in "autoLoadPlugins" global setting
+         fixed some errors generating empty line after log message
 
 spadsInstaller.pl:
 =================
