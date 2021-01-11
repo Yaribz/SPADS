@@ -292,7 +292,7 @@
 <dt id="onUnload-context"><code>onUnload($context)</code></dt>
 <dd>
 
-<p>This callback is called when the plugin is unloaded. If the plugin has added handlers for SPADS command, lobby commands, or Spring commands, then they must be removed here. If the plugin has added timers, they must also be removed here. If the plugin handles persistent data, then these data must be serialized and written to persistent storage here.</p>
+<p>This callback is called when the plugin is unloaded. If the plugin has added handlers for SPADS command, lobby commands, or Spring commands, then they must be removed here. If the plugin has added timers or forked process callbacks, they must also be removed here. If the plugin handles persistent data, then these data must be serialized and written to persistent storage here.</p>
 
 <p>The <code>$context</code> parameter is a string which indicates in which context the callback has been called: <code>&quot;exiting&quot;</code> means the plugin is being unloaded because SPADS is exiting, <code>&quot;restarting&quot;</code> means the plugin is being unloaded because SPADS is restarting, <code>&quot;unload&quot;</code> means the plugin is being unloaded manually using <code>!plugin &lt;pluginName&gt; unload</code> command, <code>&quot;reload&quot;</code> means the plugin is being reloaded manually using <code>!plugin &lt;pluginName&gt; reload</code> command.</p>
 
@@ -852,7 +852,7 @@
 <dt id="forkProcess-processFunction-endProcessCallback-preventQueuing-1"><code>forkProcess(\&amp;processFunction,\&amp;endProcessCallback,$preventQueuing=1)</code></dt>
 <dd>
 
-<p>This function allows plugins to fork a process from main SPADS process, for parallel processing. It returns the PID of the forked process on success, <code>-1</code> if the fork request has been queued, or <code>0</code> if the fork request failed.</p>
+<p>This function allows plugins to fork a process from main SPADS process, for parallel processing. In scalar context it returns the PID of the forked process on success, <code>-1</code> if the fork request has been queued, or <code>0</code> if the fork request failed. In list context it returns the PID as first parameter and a handle as second parameter. This handle can be passed as parameter to the <code>removeProcessCallback</code> function to remove the <code>endProcessCallback</code> callback.</p>
 
 <p><code>\&amp;processFunction</code> is a reference to a function containing the code to be executed in the forked process (no parameter is passed to this function). This function can call <code>exit</code> to end the forked process with a specific exit code. If it returns without calling exit, then the exit code <code>0</code> will be used.</p>
 
@@ -864,13 +864,21 @@
 <dt id="forkCall-processFunction-endProcessCallback-preventQueuing-0"><code>forkCall(\&amp;processFunction,\&amp;endProcessCallback,$preventQueuing=0)</code></dt>
 <dd>
 
-<p>This function allows plugins to call a function asynchronously and retrieve the data returned by this function (this is done internally by forking a process to execute the function and use a socketpair to transmit the result back to the parent process). It returns the PID of the forked process on success, <code>-1</code> if the fork request has been queued, or <code>0</code> on error.</p>
+<p>This function allows plugins to call a function asynchronously and retrieve the data returned by this function (this is done internally by forking a process to execute the function and use a socketpair to transmit the result back to the parent process). In scalar context it returns the PID of the forked process on success, <code>-1</code> if the fork request has been queued, or <code>0</code> on error. In list context it returns the PID as first parameter and a handle as second parameter. This handle can be passed as parameter to the <code>removeProcessCallback</code> function to remove the <code>endProcessCallback</code> callback.</p>
 
 <p><code>\&amp;processFunction</code> is a reference to a function containing the code to be executed in the forked process (no parameter is passed to this function). This function must not call <code>exit</code>, it should use <code>return</code> instead to return values (scalars, arrays, hashes...) that will be passed to the callback.</p>
 
 <p><code>\&amp;endProcessCallback</code> is a reference to a function containing the code to be executed in main SPADS process, once the forked function call (<code>\&amp;processFunction</code>) returned. The values returned by the forked function call will be passed as parameters to this callback.</p>
 
 <p><code>$preventQueuing</code> is an optional boolean parameter (default value: 0) indicating if the fork request must not be queued (i.e., the fork request will fail instead of being queued if too many forked processes are already running)</p>
+
+</dd>
+<dt id="removeProcessCallback-processHandle"><code>removeProcessCallback($processHandle)</code></dt>
+<dd>
+
+<p>This function can be used by plugins to remove the callbacks on forked processes added beforehand with the <code>forkProcess</code> and <code>forkCall</code> functions, if the callback hasn&#39;t been called yet (i.e. the corresponding forked process didn&#39;t exit yet). It returns <code>1</code> if the callback could be removed, <code>0</code> else.</p>
+
+<p><code>$processHandle</code> is an internal process handle, returned as second return value by the <code>forkProcess</code> and <code>forkCall</code> functions.</p>
 
 </dd>
 </dl>
@@ -1021,7 +1029,7 @@
 
 <h1 id="COPYRIGHT">COPYRIGHT</h1>
 
-<p>Copyright (C) 2013 Yann Riou &lt;yaribzh@gmail.com&gt;</p>
+<p>Copyright (C) 2013-2020 Yann Riou &lt;yaribzh@gmail.com&gt;</p>
 
 <p>This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.</p>
 

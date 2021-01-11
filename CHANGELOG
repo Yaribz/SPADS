@@ -1155,6 +1155,8 @@ SpadsPluginApi.pm:
       the "no warnings 'redefine'" pragma is no longer needed in plugin code (the plugin package namespace is now automatically removed from symbol table on plugin unload)
       enrich the documentation of the plugin event callbacks
       add the documentation of the "getlobbyInterface" plugin API function
+0.24: the "forkProcess" and "forkCall" plugin API functions now also return a handle in addition to the PID
+      new plugin API function: "removeProcessCallback" (remove a process callback added with the "forkProcess" or "forkCall" plugin API function)
 
 SpadsUpdater.pm:
 ===============

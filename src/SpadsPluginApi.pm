@@ -19,9 +19,9 @@
 package SpadsPluginApi;
 
 use Exporter 'import';
-@EXPORT=qw/$spadsVersion $spadsDir getLobbyState getSpringPid getSpringServerType getTimestamps getRunningBattle getConfMacros getCurrentVote getPlugin addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess forkCall createDetachedProcess addTimer removeTimer addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives/;
+@EXPORT=qw/$spadsVersion $spadsDir getLobbyState getSpringPid getSpringServerType getTimestamps getRunningBattle getConfMacros getCurrentVote getPlugin addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess forkCall removeProcessCallback createDetachedProcess addTimer removeTimer addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives/;
 
-my $apiVersion='0.23';
+my $apiVersion='0.24';
 
 our $spadsVersion=$::spadsVer;
 our $spadsDir=$::cwd;
@@ -152,15 +152,21 @@ sub removeSpringCommandHandler {
 sub forkProcess {
   my ($p_processFunction,$p_endCallback,$preventQueuing)=@_;
   $preventQueuing//=1;
-  my $childPid = SimpleEvent::forkProcess($p_processFunction, sub { &{$p_endCallback}($_[1],$_[2],$_[3],$_[0]) },$preventQueuing);
+  my ($childPid,$procHdl) = SimpleEvent::forkProcess($p_processFunction, sub { &{$p_endCallback}($_[1],$_[2],$_[3],$_[0]) },$preventQueuing);
   ::slog('Failed to fork process for plugin '.caller().' !',1) if($childPid == 0);
-  return $childPid;
+  return wantarray() ? ($childPid,$procHdl) : $childPid;
 }
 
 sub forkCall {
-  my $childPid = SimpleEvent::forkCall(@_);
+  my ($childPid,$procHdl) = SimpleEvent::forkCall(@_);
   ::slog('Failed to fork process for function call by plugin '.caller().' !',1) if($childPid == 0);
-  return $childPid;
+  return wantarray() ? ($childPid,$procHdl) : $childPid;
+}
+
+sub removeProcessCallback {
+  my $res=SimpleEvent::removeProcessCallback(@_);
+  ::slog('Failed to remove process callback for plugin '.caller().' !',1) unless($res);
+  return $res;
 }
 
 sub createDetachedProcess {
@@ -597,9 +603,9 @@ C<$springPid> is the PID of the Spring process that just ended.
 
 This callback is called when the plugin is unloaded. If the plugin has added
 handlers for SPADS command, lobby commands, or Spring commands, then they must
-be removed here. If the plugin has added timers, they must also be removed here.
-If the plugin handles persistent data, then these data must be serialized and
-written to persistent storage here.
+be removed here. If the plugin has added timers or forked process callbacks,
+they must also be removed here. If the plugin handles persistent data, then
+these data must be serialized and written to persistent storage here.
 
 The C<$context> parameter is a string which indicates in which context the
 callback has been called: C<"exiting"> means the plugin is being unloaded
@@ -1235,8 +1241,11 @@ available on Windows system)
 =item C<forkProcess(\&processFunction,\&endProcessCallback,$preventQueuing=1)>
 
 This function allows plugins to fork a process from main SPADS process, for
-parallel processing. It returns the PID of the forked process on success, C<-1>
-if the fork request has been queued, or C<0> if the fork request failed.
+parallel processing. In scalar context it returns the PID of the forked process
+on success, C<-1> if the fork request has been queued, or C<0> if the fork
+request failed. In list context it returns the PID as first parameter and a
+handle as second parameter. This handle can be passed as parameter to the
+C<removeProcessCallback> function to remove the C<endProcessCallback> callback.
 
 C<\&processFunction> is a reference to a function containing the code to be
 executed in the forked process (no parameter is passed to this function). This
@@ -1259,8 +1268,11 @@ fail instead of being queued if too many forked processes are already running)
 This function allows plugins to call a function asynchronously and retrieve the
 data returned by this function (this is done internally by forking a process to
 execute the function and use a socketpair to transmit the result back to the
-parent process). It returns the PID of the forked process on success, C<-1> if
-the fork request has been queued, or C<0> on error.
+parent process). In scalar context it returns the PID of the forked process on
+success, C<-1> if the fork request has been queued, or C<0> on error. In list
+context it returns the PID as first parameter and a handle as second parameter.
+This handle can be passed as parameter to the C<removeProcessCallback> function
+to remove the C<endProcessCallback> callback.
 
 C<\&processFunction> is a reference to a function containing the code to be
 executed in the forked process (no parameter is passed to this function). This
@@ -1275,6 +1287,16 @@ will be passed as parameters to this callback.
 C<$preventQueuing> is an optional boolean parameter (default value: 0)
 indicating if the fork request must not be queued (i.e., the fork request will
 fail instead of being queued if too many forked processes are already running)
+
+=item C<removeProcessCallback($processHandle)>
+
+This function can be used by plugins to remove the callbacks on forked processes
+added beforehand with the C<forkProcess> and C<forkCall> functions, if the 
+callback hasn't been called yet (i.e. the corresponding forked process didn't
+exit yet). It returns C<1> if the callback could be removed, C<0> else.
+
+C<$processHandle> is an internal process handle, returned as second return value
+by the C<forkProcess> and C<forkCall> functions.
 
 =back
 
@@ -1404,7 +1426,7 @@ L<Introduction to Perl|http://perldoc.perl.org/perlintro.html>
 
 =head1 COPYRIGHT
 
-Copyright (C) 2013  Yann Riou <yaribzh@gmail.com>
+Copyright (C) 2013-2020  Yann Riou <yaribzh@gmail.com>
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
