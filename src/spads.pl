@@ -53,7 +53,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.24a';
+our $spadsVer='0.12.25';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -14012,6 +14012,7 @@ if(! $abortSpadsStartForAutoUpdate) {
   fatalError('Unable to register SIGTERM') unless($win || SimpleEvent::registerSignal('TERM', sub { quitAfterGame('SIGTERM signal received'); } ));
   fatalError('Unable to create socket for Spring AutoHost interface') unless($autohost->open());
   fatalError('Unable to register Spring AutoHost interface socket') unless(SimpleEvent::registerSocket($autohost->{autoHostSock},sub { $autohost->receiveCommand() }));
+  SimpleEvent::addAutoCloseOnFork(\$lockFh,\$auLockFh);
 
   if($conf{autoLoadPlugins} ne '') {
     my @pluginNames=split(/;/,$conf{autoLoadPlugins});

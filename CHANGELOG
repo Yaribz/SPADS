@@ -872,6 +872,7 @@ spads.pl:
          print SPADS process ID in startup log message
          fixed some errors generating empty line after log message
 0.12.24a: fix error message when restarting for update at start
+0.12.25: auto-close lock file handles on forks to avoid I/O race conditions
 
 SpadsConf.pm:
 ============
