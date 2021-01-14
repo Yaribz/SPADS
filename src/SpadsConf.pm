@@ -42,7 +42,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.12.10';
+my $moduleVersion='0.12.11';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -2437,25 +2437,18 @@ sub getSavedBoxesMaps {
 
 sub getMapBoxes {
   my ($self,$map,$nbTeams,$extraBox)=@_;
-  my $p_boxes;
-  if($extraBox) {
-    my $tmpNbTeams=($nbTeams+$extraBox)."(-$extraBox)";
-    if(exists $self->{mapBoxes}{$map} && exists $self->{mapBoxes}{$map}{$tmpNbTeams}) {
-      $p_boxes=$self->{mapBoxes}{$map}{$tmpNbTeams}{boxes};
-    }elsif(exists $self->{savedBoxes}{$map} && exists $self->{savedBoxes}{$map}{$tmpNbTeams}) {
-      $p_boxes=$self->{savedBoxes}{$map}{$tmpNbTeams}{boxes};
+  my @nbTeamsLookups=$extraBox?(($nbTeams+$extraBox)."(-$extraBox)",$nbTeams,$nbTeams+$extraBox):($nbTeams);
+  foreach my $nbTeamsLookup (@nbTeamsLookups) {
+    my $boxesString;
+    if(exists $self->{mapBoxes}{$map} && exists $self->{mapBoxes}{$map}{$nbTeamsLookup}) {
+      $boxesString=$self->{mapBoxes}{$map}{$nbTeamsLookup}{boxes};
+    }elsif(exists $self->{savedBoxes}{$map} && exists $self->{savedBoxes}{$map}{$nbTeamsLookup}) {
+      $boxesString=$self->{savedBoxes}{$map}{$nbTeamsLookup}{boxes};
     }
-  }
-  if(! defined $p_boxes) {
-    if(exists $self->{mapBoxes}{$map} && exists $self->{mapBoxes}{$map}{$nbTeams}) {
-      $p_boxes=$self->{mapBoxes}{$map}{$nbTeams}{boxes};
-    }elsif(exists $self->{savedBoxes}{$map} && exists $self->{savedBoxes}{$map}{$nbTeams}) {
-      $p_boxes=$self->{savedBoxes}{$map}{$nbTeams}{boxes};
+    if(defined $boxesString) {
+      my @boxes=split(';',$boxesString);
+      return \@boxes;
     }
-  }
-  if(defined $p_boxes) {
-    my @boxes=split(';',$p_boxes);
-    return \@boxes;
   }
   return [];
 }

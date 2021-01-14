@@ -52,7 +52,7 @@ replay_upload.py:replay_upload_0.7.py
 SimpleEvent.pm:SimpleEvent_0.6.pm
 SimpleLog.pm:SimpleLog_0.8.pm
 spads.pl:spads_0.12.24a.pl
-SpadsConf.pm:SpadsConf_0.12.10.pm
+SpadsConf.pm:SpadsConf_0.12.11.pm
 spadsInstaller.pl:spadsInstaller_0.25.pl
 SpadsPluginApi.pm:SpadsPluginApi_0.24.pm
 SpadsUpdater.pm:SpadsUpdater_0.18.pm
@@ -73,7 +73,7 @@ replay_upload.py:replay_upload_0.7.py
 SimpleEvent.pm:SimpleEvent_0.6.pm
 SimpleLog.pm:SimpleLog_0.8.pm
 spads.pl:spads_0.12.24a.pl
-SpadsConf.pm:SpadsConf_0.12.10.pm
+SpadsConf.pm:SpadsConf_0.12.11.pm
 spadsInstaller.pl:spadsInstaller_0.25.pl
 SpadsPluginApi.pm:SpadsPluginApi_0.24.pm
 SpadsUpdater.pm:SpadsUpdater_0.18.pm

@@ -1030,6 +1030,7 @@ SpadsConf.pm:
 0.12.10: event loop time slice is now configurable (extended format of "eventModel" global setting)
          enforce valid plugin name format in "autoLoadPlugins" global setting
          fixed some errors generating empty line after log message
+0.12.11: improve map boxes fetching fallback behavior when extraBox is set
 
 spadsInstaller.pl:
 =================
