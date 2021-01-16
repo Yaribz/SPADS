@@ -873,6 +873,9 @@ spads.pl:
          fixed some errors generating empty line after log message
 0.12.24a: fix error message when restarting for update at start
 0.12.25: auto-close lock file handles on forks to avoid I/O race conditions
+0.12.26: plugin callbacks for processes, signals, sockets and timers are now automatically removed when the plugin is unloaded
+         refactor plugin handling code: all plugin code and data are now correctly removed from memory even when the plugin load failed
+         when configuration is reloaded, the new value for the autoLoadPlugins global setting is now taken into account (new plugins are automatically loaded)
 
 SpadsConf.pm:
 ============
@@ -1032,6 +1035,8 @@ SpadsConf.pm:
          enforce valid plugin name format in "autoLoadPlugins" global setting
          fixed some errors generating empty line after log message
 0.12.11: improve map boxes fetching fallback behavior when extraBox is set
+0.12.12: refactor plugin module and configuration loading code: all plugin code and data are now correctly removed from memory when the plugin load failed
+         only check for pluginsDir directory being in Perl include list when configuration is loaded (instead of everytime a plugin is loaded)
 
 spadsInstaller.pl:
 =================

@@ -29,6 +29,7 @@ use File::Spec;
 use FindBin;
 use List::Util 'first';
 use Storable qw'nstore retrieve dclone';
+use Symbol qw'delete_package';
 use Time::HiRes;
 
 use constant LOCK_RE => LOCK_SH|LOCK_EX;
@@ -42,7 +43,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.12.11';
+my $moduleVersion='0.12.12';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -530,13 +531,12 @@ sub new {
 
   $self->removeExpiredBans();
 
+  unshift(@INC,$self->{conf}{pluginsDir}) unless(any {$self->{conf}{pluginsDir} eq $_} @INC);
   if($self->{conf}{autoLoadPlugins} ne '') {
     my @pluginNames=split(/;/,$self->{conf}{autoLoadPlugins});
     foreach my $pluginName (@pluginNames) {
-      if(! $self->loadPluginConf($pluginName)) {
-        $self->{log}->log("Unable to load configuration for plugin \"$pluginName\"",1);
-        return 0;
-      }
+      $self->loadPluginModuleIfNeededAndConf($pluginName)
+          or return 0;
     }
   }
 
@@ -1129,23 +1129,96 @@ sub loadHelpSettingsFile {
   return \%helpSettings;
 }
 
+sub loadPluginModuleIfNeededAndConf {
+  my ($self,$pluginName)=@_;
+  my $pluginState=$self->loadPluginModuleIfNeeded($pluginName);
+  if($pluginState < 1) {
+    $self->{log}->log("Unable to load configuration for plugin \"$pluginName\" (failed to load plugin module)",1);
+    return 0;
+  }
+  return 1 if($self->loadPluginConf($pluginName));
+  cancelModuleLoad($pluginName) if($pluginState == 1);
+  return 0;
+}
+
+sub loadPluginModuleAndConf {
+  my ($self,$pluginName)=@_;
+  return 0 unless($self->loadPluginModule($pluginName));
+  return 1 if($self->loadPluginConf($pluginName));
+  cancelModuleLoad($pluginName);
+  return 0;
+}
+
+my @MANDATORY_PLUGIN_FUNCTIONS=qw'new getVersion getRequiredSpadsVersion';
+sub loadPluginModuleIfNeeded {
+  my ($self,$pluginName)=@_;
+  my $pluginModuleIsLoaded=exists $INC{"$pluginName.pm"}?1:0;
+  my $pluginPackageIsLoaded=exists $::{"${pluginName}::"}?1:0;
+  if($pluginModuleIsLoaded && $pluginPackageIsLoaded) {
+    my @missingPluginFunctions=grep {! eval("$pluginName->can('$_')")} (@MANDATORY_PLUGIN_FUNCTIONS);
+    if(@missingPluginFunctions) {
+      $self->{log}->log("Aborting module load for plugin \"$pluginName\" : module is already loaded but not a SPADS plugin (mandatory function missing: ".join(', ',@missingPluginFunctions).')',1);
+      return -1;
+    }
+    return 2;
+  }elsif(! $pluginModuleIsLoaded && ! $pluginPackageIsLoaded) {
+    return $self->loadPluginModule($pluginName);
+  }else{
+    $self->{log}->log("Aborting module load for plugin \"$pluginName\" (inconsistent package state)",1);
+    return -1;
+  }
+}
+
+sub loadPluginModule {
+  my ($self,$pluginName)=@_;
+  if(exists $INC{"$pluginName.pm"}) {
+    $self->{log}->log("Unable to load module for plugin \"$pluginName\" (a module with same name is already loaded)",1);
+    return 0;
+  }
+  if(exists $::{"${pluginName}::"}) {
+    $self->{log}->log("Unable to load module for plugin \"$pluginName\" (a package with same name is already loaded)",1);
+    return 0;
+  }
+  $self->{log}->log("Loading module for plugin \"$pluginName\"",5);
+  eval "use $pluginName";
+  if(hasEvalError()) {
+    $self->{log}->log("Unable to load module for plugin \"$pluginName\" : $@",1);
+    cancelModuleLoad($pluginName);
+    return 0;
+  }
+  my $cancelCause;
+  if(! exists $INC{"$pluginName.pm"}) {
+    $cancelCause='inconsistent module state after load';
+  }elsif(! exists $::{"${pluginName}::"}) {
+    $cancelCause='inconsistent package state after load';
+  }else{
+    my @missingPluginFunctions=grep {! eval("$pluginName->can('$_')")} (@MANDATORY_PLUGIN_FUNCTIONS);
+    $cancelCause='mandatory plugin function missing ('.join(',',@missingPluginFunctions).')' if(@missingPluginFunctions);
+  }
+  if($cancelCause) {
+    $self->{log}->log("Cancelling module load for plugin \"$pluginName\" : $cancelCause",1);
+    cancelModuleLoad($pluginName);
+    return 0;
+  }
+  return 1;
+}
+
+sub cancelModuleLoad {
+  my $pluginName=shift;
+  delete_package($pluginName);
+  delete $INC{"$pluginName.pm"};
+}
+
 sub loadPluginConf {
   my ($self,$pluginName)=@_;
-  if(! exists $self->{pluginsConf}{$pluginName}) {
-    unshift(@INC,$self->{conf}{pluginsDir}) unless(any {$self->{conf}{pluginsDir} eq $_} @INC);
-    eval "use $pluginName";
-    if(hasEvalError()) {
-      $self->{log}->log("Unable to load plugin module \"$pluginName\": $@",1);
-      return 0;
-    }
-    my $hasConf;
-    eval "\$hasConf=$pluginName->can('getParams')";
-    return 1 unless($hasConf);
-  }
-  my $p_pluginParams;
-  eval "\$p_pluginParams=$pluginName->getParams()";
+  return 1 unless(eval("$pluginName->can('getParams')"));
+  my $p_pluginParams=eval "$pluginName->getParams()";
   if(hasEvalError()) {
-    $self->{log}->log("Unable to get parameters for plugin \"$pluginName\": $@",1);
+    $self->{log}->log("Unable to load configuration for plugin \"$pluginName\", failed to call getParams() function: $@",1);
+    return 0;
+  }
+  if(ref $p_pluginParams ne 'ARRAY') {
+    $self->{log}->log("Unable to load configuration for plugin \"$pluginName\" : getParams() returned an invalid value (not an array reference)",1);
     return 0;
   }
   my ($p_globalParams,$p_presetParams)=@{$p_pluginParams};
@@ -1167,17 +1240,17 @@ sub loadPluginConf {
     my $commandsFile=$p_pluginPresets->{''}{commandsFile};
     $p_commands=loadTableFile($self->{log},$self->{conf}{etcDir}."/$commandsFile",\@commandsFields,$self->{macros},1);
     if(! exists $p_pluginPresets->{''}{helpFile}) {
-      $self->{log}->log("A commands file without associated help file is defined for plugin $pluginName",1);
+      $self->{log}->log("Unable to load configuration for plugin \"$pluginName\" (the plugin command file has no associated help file)",1);
       return 0;
     }
     my $helpFile=$p_pluginPresets->{''}{helpFile};
     $p_help=loadSimpleTableFile($self->{log},$self->{conf}{pluginsDir}."/$helpFile",$self->{macros},1);
     if(! checkNonEmptyHash($p_commands,$p_help)) {
-      $self->{log}->log("Unable to load commands, help and permission system for plugin $pluginName",1);
+      $self->{log}->log("Unable to load configuration for plugin \"$pluginName\" (failed to load commands, help and permission system)",1);
       return 0;
     }
   }
-  $self->{log}->log("Reloading configuration of plugin $pluginName",4) if(exists $self->{pluginsConf}{$pluginName});
+  $self->{log}->log("Reloading configuration of plugin \"$pluginName\"",4) if(exists $self->{pluginsConf}{$pluginName});
   $self->{pluginsConf}{$pluginName}={ presets => $p_pluginPresets,
                                       commands => $p_commands,
                                       help => $p_help,
@@ -1200,7 +1273,7 @@ sub checkPluginConfig {
   }
   if(@missingParams) {
     my $mParams=join(',',@missingParams);
-    $sLog->log("Incomplete plugin configuration for $pluginName (missing global parameters: $mParams)",1);
+    $sLog->log("Incomplete plugin configuration for \"$pluginName\" (missing global parameters: $mParams)",1);
     return 0;
   }
 
@@ -1215,7 +1288,7 @@ sub checkPluginConfig {
     }
     if(@missingParams) {
       my $mParams=join(',',@missingParams);
-      $sLog->log("Incomplete plugin configuration for $pluginName (missing parameter(s) in default preset: $mParams)",1);
+      $sLog->log("Incomplete plugin configuration for \"$pluginName\" (missing parameter(s) in default preset: $mParams)",1);
       return 0;
     }
   }
@@ -2297,7 +2370,7 @@ sub getHelpForLevel {
     my $p_pluginCommands=$self->{pluginsConf}{$pluginName}{commands};
     foreach my $command (sort keys %{$p_pluginCommands}) {
       if(! exists $self->{pluginsConf}{$pluginName}{help}{$command}) {
-        $self->{log}->log("Missing help for command \"$command\" of plugin $pluginName",2);
+        $self->{log}->log("Missing help for command \"$command\" of plugin \"$pluginName\"",2);
         next;
       }
       my $p_filters=$p_pluginCommands->{$command};

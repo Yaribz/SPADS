@@ -53,7 +53,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.25';
+our $spadsVer='0.12.26';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -9597,6 +9597,13 @@ sub hReloadConf {
     $sLog->setLevels([$conf{spadsLogLevel},3]);
     $simpleEventSimpleLog->setLevels([$conf{spadsLogLevel},3]);
 
+    if($conf{autoLoadPlugins} ne '') {
+      my @pluginNames=split(/;/,$conf{autoLoadPlugins});
+      foreach my $pluginName (@pluginNames) {
+        instantiatePlugin($pluginName,'autoload') unless(exists $plugins{$pluginName});
+      }
+    }
+
     my $r_asyncAnswerFunction=$p_answerFunction;
     loadArchives(
       sub {
@@ -13393,11 +13400,9 @@ sub unloadPlugin {
   }
 
   $plugins{$pluginName}->onUnload($reason) if($plugins{$pluginName}->can('onUnload'));
-  delete $spads->{pluginsConf}->{$pluginName};
+  cancelPluginLoad($pluginName);
   removePluginFromList($pluginName);
   delete($plugins{$pluginName});
-  delete_package($pluginName);
-  delete $INC{"$pluginName.pm"};
 
   push(@unloadedPlugins,$pluginName);
   return \@unloadedPlugins;
@@ -13405,71 +13410,65 @@ sub unloadPlugin {
 
 sub loadPlugin {
   my ($pluginName,$reason)=@_;
-  if($spads->loadPluginConf($pluginName)) {
-    $spads->applyPluginPreset($pluginName,$conf{defaultPreset});
-    $spads->applyPluginPreset($pluginName,$conf{preset}) if($conf{preset} ne $conf{defaultPreset});
-    return 1 if(loadPluginModule($pluginName,$reason));
-  }
-  delete $spads->{pluginsConf}->{$pluginName};
-  delete $INC{"$pluginName.pm"};
-  return 0;
+  $spads->loadPluginModuleAndConf($pluginName)
+      or return 0;
+  $spads->applyPluginPreset($pluginName,$conf{defaultPreset});
+  $spads->applyPluginPreset($pluginName,$conf{preset}) if($conf{preset} ne $conf{defaultPreset});
+  return instantiatePlugin($pluginName,$reason);
 }
 
-sub loadPluginModule {
+sub cancelPluginLoad {
+  my $pluginName=shift;
+  SimpleEvent::removeAllCallbacks(undef,$pluginName);
+  delete $spads->{pluginsConf}{$pluginName};
+  delete_package($pluginName);
+  delete $INC{"$pluginName.pm"};
+}
+
+sub instantiatePlugin {
   my ($pluginName,$reason)=@_;
 
-  foreach my $mandatoryPluginFunction (qw'getVersion getRequiredSpadsVersion') {
-    my $hasMandatoryFunc;
-    eval "\$hasMandatoryFunc=$pluginName->can('$mandatoryPluginFunction')";
-    if(! $hasMandatoryFunc) {
-      slog("Unable to load plugin \"$pluginName\", mandatory plugin function missing: $mandatoryPluginFunction",1);
-      return 0;
-    }
+  my $requiredSpadsVersion=eval "$pluginName->getRequiredSpadsVersion()";
+  if(hasEvalError()) {
+    slog("Unable to instantiate plugin $pluginName, failed to call getRequiredSpadsVersion() function: $@",1);
+    cancelPluginLoad($pluginName);
+    return 0;
   }
-
-  my %requiredPluginVersions=(FirstWelcomeMsg => '0.4',
-                              InGameMute => '0.3',
-                              ReverseLookup => '0.2');
-  if(exists $requiredPluginVersions{$pluginName}) {
-    my $pluginVersion;
-    eval "\$pluginVersion=$pluginName->getVersion()";
-    if(compareVersions($pluginVersion,$requiredPluginVersions{$pluginName}) < 0) {
-      slog("Unable to load plugin \"$pluginName\", version $pluginVersion is obsolete (version $requiredPluginVersions{$pluginName} or greater is required)",1);
-      return 0;
-    }
-  }
-
-  my $requiredSpadsVersion;
-  eval "\$requiredSpadsVersion=$pluginName->getRequiredSpadsVersion()";
   if(compareVersions($spadsVer,$requiredSpadsVersion) < 0) {
-    slog("Unable to load plugin \"$pluginName\", this plugin requires a SPADS version >= $requiredSpadsVersion, current is $spadsVer",1);
+    slog("Unable to instantiate plugin $pluginName, this plugin requires a SPADS version >= $requiredSpadsVersion (current is $spadsVer)",1);
+    cancelPluginLoad($pluginName);
     return 0;
   }
 
-  my $hasDependencies;
-  eval "\$hasDependencies=$pluginName->can('getDependencies')";
-
+  my $hasDependencies=eval "$pluginName->can('getDependencies')";
   my @pluginDeps;
   if($hasDependencies) {
     eval "\@pluginDeps=$pluginName->getDependencies()";
+    if(hasEvalError()) {
+      slog("Unable to instantiate plugin $pluginName, failed to call getDependencies() function: $@",1);
+      cancelPluginLoad($pluginName);
+      return 0;
+    }
     my @missingDeps;
     foreach my $pluginDep (@pluginDeps) {
       push(@missingDeps,$pluginDep) unless(exists $plugins{$pluginDep});
     }
     if(@missingDeps) {
-      slog("Unable to load plugin \"$pluginName\", dependenc".($#missingDeps > 0 ? 'ies' : 'y').' missing: '.join(',',@missingDeps),1);
+      slog("Unable to instantiate plugin $pluginName, dependenc".($#missingDeps > 0 ? 'ies' : 'y').' missing: '.join(',',@missingDeps),1);
+      cancelPluginLoad($pluginName);
       return 0;
     }
   }
 
-  my $plugin;
-  eval "\$plugin=$pluginName->new(\$reason)";
+  my $plugin=eval "$pluginName->new(\$reason)";
   if(hasEvalError()) {
-    slog("Unable to instanciate plugin module \"$pluginName\": $@",1);
+    slog("Unable to instantiate plugin $pluginName: $@",1);
+    cancelPluginLoad($pluginName);
     return 0;
   }
   if(! defined $plugin) {
-    slog("Unable to initialize plugin module \"$pluginName\"",1);
+    slog("Unable to initialize plugin $pluginName",1);
+    cancelPluginLoad($pluginName);
     return 0;
   }
 
@@ -14013,11 +14012,12 @@ if(! $abortSpadsStartForAutoUpdate) {
   fatalError('Unable to create socket for Spring AutoHost interface') unless($autohost->open());
   fatalError('Unable to register Spring AutoHost interface socket') unless(SimpleEvent::registerSocket($autohost->{autoHostSock},sub { $autohost->receiveCommand() }));
   SimpleEvent::addAutoCloseOnFork(\$lockFh,\$auLockFh);
+  SimpleEvent::addProxyPackage('SpadsPluginApi');
 
   if($conf{autoLoadPlugins} ne '') {
     my @pluginNames=split(/;/,$conf{autoLoadPlugins});
     foreach my $pluginName (@pluginNames) {
-      loadPluginModule($pluginName,'autoload');
+      instantiatePlugin($pluginName,'autoload');
     }
   }
 
