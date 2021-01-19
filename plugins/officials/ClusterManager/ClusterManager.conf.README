@@ -35,7 +35,7 @@ maxInstancesPrivate:20
 # distribution).
 # For more information, see:
 #   https://springrts.com/phpbb/viewtopic.php?p=596361#p596361
-sharedData:savedBoxes,trustedLobbyCertificates,bans,preferences
+sharedData:savedBoxes,trustedLobbyCertificates,bans,preferences,mapInfoCache
 
 # Specify if instances must try to auto-register the lobby account when there is
 # a login error due to invalid login/password. Allowed values are:
@@ -50,8 +50,8 @@ autoRegister:1
 # and (baseGamePort+maxInstances-1) included on the network interfaces.
 baseGamePort:8452
 
-# The autohost port, used to generate the "autoHostPort" global setting of SPADS
-# which is specific to each instance launched by the cluster manager.
+# The base autohost port, used to generate the "autoHostPort" global setting of
+# SPADS which is specific to each instance launched by the cluster manager.
 # The cluster manager must be able to open all UDP ports between
 # (baseAutoHostPort) and (baseAutoHostPort+maxInstances-1) included on the
 # loopback interface.
@@ -137,3 +137,15 @@ maxInstancesInClusterPrivate:0
 # so that it can automatically create bot accounts, then you must not use a
 # cluster specific lobby password and must let this setting empty.
 lobbyPassword:
+
+# The additional configuration macros passed to all slaves instances of the
+# cluster.
+confMacros:
+
+# The additional configuration macros passed to the public slave instances of
+# the cluster.
+confMacrosPublic:
+
+# The additional configuration macros passed to the private slave instances of
+# the cluster.
+confMacrosPrivate:

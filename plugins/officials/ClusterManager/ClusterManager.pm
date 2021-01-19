@@ -7,11 +7,12 @@ use File::Copy qw'copy move';
 use File::Spec::Functions qw'catdir catfile';
 use List::Util qw'all any none sum';
 use Storable qw'nstore retrieve';
+use Text::ParseWords 'shellwords';
 
 use SpadsPluginApi;
 
-my $pluginVersion='0.2';
-my $requiredSpadsVersion='0.12.20';
+my $pluginVersion='0.3';
+my $requiredSpadsVersion='0.12.27';
 
 my %globalPluginParams = ( commandsFile => ['notNull'],
                            helpFile => ['notNull'],
@@ -34,7 +35,10 @@ my %presetPluginParams = ( maxInstancesInCluster => ['integer'],
                            maxInstancesInClusterPrivate => ['integer'],
                            targetSpares => ['integer'],
                            nameTemplate => ['notNull'],
-                           lobbyPassword => ['password','null'] );
+                           lobbyPassword => ['password','null'],
+                           confMacros => [],
+                           confMacrosPublic => [],
+                           confMacrosPrivate => [] );
 
 sub getVersion { return $pluginVersion; }
 sub getRequiredSpadsVersion { return $requiredSpadsVersion; }
@@ -188,6 +192,22 @@ sub new {
   return $self;
 }
 
+sub getConfMacrosHashFromString {
+  my $macrosString=shift;
+  return {} unless(defined $macrosString && $macrosString !~ /^\s*$/);
+  my @confMacroTokens=shellwords($macrosString)
+      or return undef;
+  my %confMacros;
+  foreach my $confMacroToken (@confMacroTokens) {
+    if($confMacroToken =~ /^([^=]+)=(.*)$/) {
+      $confMacros{$1}=$2;
+    }else{
+      return undef;
+    }
+  }
+  return \%confMacros;
+}
+
 sub onReloadConf {
   my $self=shift;
   return unless($self->{isManager});
@@ -250,6 +270,19 @@ sub onReloadConf {
     if(none {$_ eq 'SQLite'} DBI->available_drivers()) {
       slog('Unable to share preferences data (Perl DBD::SQLite module not found)',1);
       return 0;
+    }
+  }
+
+  foreach my $pluginPreset (keys %{$spads->{pluginsConf}{ClusterManager}{presets}}) {
+    next if($pluginPreset eq '');
+    my $r_pluginPresetConf=$spads->{pluginsConf}{ClusterManager}{presets}{$pluginPreset};
+    foreach my $macroSetting (qw'confMacros confMacrosPublic confMacrosPrivate') {
+      if(exists $r_pluginPresetConf->{$macroSetting}) {
+        if(! getConfMacrosHashFromString($r_pluginPresetConf->{$macroSetting}[0])) {
+          slog("Invalid configuration macro definition (preset \"$pluginPreset\", setting \"$macroSetting\"): $r_pluginPresetConf->{$macroSetting}[0]",1);
+          return 0;
+        }
+      }
     }
   }
 
@@ -1010,10 +1043,12 @@ sub c_startInstance {
                     ClustInstNb3 => sprintf('%03u',$clustInstNb),
                     ClustInstNb0 => sprintf("\%0${clustInstNbAutoDigits}u",$clustInstNb),
                     PresetName => $preset,
-                    ManagerName => $r_conf->{lobbyLogin});
+                    ManagerName => $r_conf->{lobbyLogin},
+                    OwnerName => $owner//'*');
   foreach my $placeHolder (keys %placeHolders) {
     $instName =~ s/\%$placeHolder\%/$placeHolders{$placeHolder}/g;
   }
+  $placeHolders{InstanceName}=$instName;
 
   if($instName !~ /^[\w\[\]]{2,20}$/) {
     slog("Unable to start new instance, invalid instance name: $instName",1);
@@ -1042,9 +1077,9 @@ sub c_startInstance {
     slog("Failed to copy cache data from \"$sourceCacheDir\" to \"$instanceCacheDir\" to initialize instance unitsync cache",2);
   }
   
-  my @instanceDatFiles=qw'mapHashes.dat userData.dat mapInfoCache.dat';
+  my @instanceDatFiles=qw'mapHashes.dat userData.dat';
   my @sharedData=split(',',$r_pluginConf->{sharedData});
-  map {my $data=$_; push(@instanceDatFiles,"$data.dat") unless(any {$data eq $_} @sharedData)} (qw'bans preferences savedBoxes trustedLobbyCertificates');
+  map {my $data=$_; push(@instanceDatFiles,"$data.dat") unless(any {$data eq $_} @sharedData)} (qw'bans preferences savedBoxes trustedLobbyCertificates mapInfoCache');
   my @datFiles = grep {-f "$r_conf->{instanceDir}/$_" && ! -f "$fpInstanceDir/$_"} @instanceDatFiles;
   foreach my $datFile (@datFiles) {
     if(! copy("$r_conf->{instanceDir}/$datFile",$fpInstanceDir)) {
@@ -1091,8 +1126,18 @@ sub c_startInstance {
   foreach my $placeHolder (keys %placeHolders) {
     $instanceMacros{$placeHolder}=$placeHolders{$placeHolder};
   }
-  $instanceMacros{InstanceName}=$instName;
-  $instanceMacros{OwnerName}=$owner//'*';
+
+  my $r_confMacrosOverload=getConfMacrosHashFromString($r_presetConf->{confMacros});
+  my $r_specificConfMacrosOverload=getConfMacrosHashFromString($r_presetConf->{$owner?'confMacrosPrivate':'confMacrosPublic'});
+  foreach my $confOverloadName (keys %{$r_specificConfMacrosOverload}) {
+    $r_confMacrosOverload->{$confOverloadName}=$r_specificConfMacrosOverload->{$confOverloadName};
+  }
+  foreach my $confOverloadValue (values %{$r_confMacrosOverload}) {
+    foreach my $placeHolder (keys %instanceMacros) {
+      $confOverloadValue =~ s/\%$placeHolder\%/$instanceMacros{$placeHolder}/g;
+    }
+  }
+
   $instanceMacros{'set:lobbyLogin'}=$instName;
   $instanceMacros{'set:defaultPreset'}=$preset;
   $instanceMacros{'hSet:port'}=$r_pluginConf->{baseGamePort}+$instNb;
@@ -1106,6 +1151,10 @@ sub c_startInstance {
     $instanceData{password}=$passwd;
   }
   $instanceMacros{'set:lobbyPassword'}=$r_presetConf->{lobbyPassword} unless($r_presetConf->{lobbyPassword} eq '');
+
+  foreach my $confOverloadName (keys %{$r_confMacrosOverload}) {
+    $instanceMacros{$confOverloadName}=$r_confMacrosOverload->{$confOverloadName};
+  }
 
   if(! createDetachedProcess($^X,
                              [$0,$ARGV[0],map {"$_=$instanceMacros{$_}"} (keys %instanceMacros)],
