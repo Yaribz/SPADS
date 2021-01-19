@@ -43,7 +43,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.12.12';
+my $moduleVersion='0.12.13';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -210,7 +210,7 @@ my %spadsSectionParameters = (description => ['notNull'],
 
 my %hostingParameters = (description => ['notNull'],
                          battleName => ['notNull'],
-                         modName => ['notNull'],
+                         modName => ['tildeRegexpOrString'],
                          port => ['port'],
                          natType => ['integer','integerRange'],
                          password => ['password'],
@@ -282,7 +282,15 @@ my %paramTypes = (login => '[\w\[\]]{2,20}',
                   botList => '[\w\[\]]{2,20} \w+(#[\da-fA-F]{6})? [^ \;][^\;]*(;[\w\[\]]{2,20} \w+(#[\da-fA-F]{6})? [^ \;][^\;]*)*',
                   db => '[^\/]+\/[^\@]+\@(?i:dbi)\:\w+\:\w.*',
                   pluginList => '\w+(;\w+)*',
-                  eventModelType => '(auto|internal|AnyEvent)(\([1-9]\d?\d?\))?');
+                  eventModelType => '(auto|internal|AnyEvent)(\([1-9]\d?\d?\))?',
+                  tildeRegexpOrString => sub {
+                                           if(index($_[0],'~') == 0) {
+                                             my $regexp=substr($_[0],1);
+                                             return eval { qr/^$regexp$/ } && ! $@;
+                                           }else{
+                                             return $_[0] ne '';
+                                           }
+                                         } );
 
 my @banListsFields=(['accountId','name','country','cpu','lobbyClient','rank','access','bot','level','ip','skill','skillUncert'],['banType','startDate','endDate','remainingGames','reason']);
 my @preferencesListsFields=(['accountId'],['autoSetVoteMode','voteMode','votePvMsgDelay','voteRingDelay','minRingDelay','handleSuggestions','password','rankMode','skillMode','shareId','spoofProtection','ircColors','clan']);
@@ -1392,7 +1400,7 @@ sub checkSpadsConfig {
 sub checkHConfig {
   my ($sLog,$p_conf,$p_hConf)=@_;
 
-  return 0 unless(%{$p_conf});
+  return 0 unless(%{$p_hConf});
 
   foreach my $preset (keys %{$p_conf}) {
     next if($preset eq '' || ! exists $p_conf->{$preset}{hostingPreset});
@@ -1424,7 +1432,7 @@ sub checkHConfig {
 sub checkBConfig {
   my ($sLog,$p_conf,$p_bConf)=@_;
 
-  return 0 unless(%{$p_conf});
+  return 0 unless(%{$p_bConf});
 
   foreach my $preset (keys %{$p_conf}) {
     next if($preset eq '' || ! exists $p_conf->{$preset}{battlePreset});

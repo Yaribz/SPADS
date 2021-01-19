@@ -29,7 +29,7 @@ use File::Copy;
 use File::Spec::Functions qw'catfile file_name_is_absolute';
 use FindBin;
 use IPC::Cmd 'can_run';
-use List::Util qw'first shuffle';
+use List::Util qw'first shuffle reduce';
 use MIME::Base64;
 use POSIX qw'ceil uname';
 use Storable qw'nfreeze dclone';
@@ -53,7 +53,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.26';
+our $spadsVer='0.12.27';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -1115,26 +1115,34 @@ sub generateColorPanel {
   return @colors;
 } 
 
+sub getTargetModFromList {
+  my $r_availableModNames=shift;
+  if($spads->{hSettings}{modName} =~ /^~(.+)$/) {
+    my $modRegexp=$1;
+    return ((reduce {$b =~ /^$modRegexp$/ && (! defined $a || $b gt $a) ? $b : $a} (undef,@{$r_availableModNames})), $modRegexp);
+  }else{
+    return (((any {$spads->{hSettings}{modName} eq $_} @{$r_availableModNames}) ? $spads->{hSettings}{modName} : undef), undef);
+  }
+}
+
 sub updateTargetMod {
   my $verbose=shift;
-  $verbose//=0;
-  if($spads->{hSettings}->{modName} =~ /^~(.+)$/) {
-    my $modFilter=$1;
-    my $newMod="";
-    foreach my $availableMod (@availableMods) {
-      my $modName=$availableMod->{name};
-      $newMod=$modName if($modName =~ /^$modFilter$/ && $modName gt $newMod);
+  my @availableModsNames=map {$_->{name}} (@availableMods);
+  my ($newMod,$modFilter)=getTargetModFromList(\@availableModsNames);
+  if(defined $newMod) {
+    if($newMod ne $targetMod) {
+      broadcastMsg("New version of current mod detected ($newMod), switching when battle is empty (use !rehost to force)") if($verbose && defined $modFilter);
+      $targetMod=$newMod;
     }
-    if($newMod) {
-      if($newMod ne $targetMod) {
-        broadcastMsg("New version of current mod detected ($newMod), switching when battle is empty (use !rehost to force)") if($verbose);
-        $targetMod=$newMod;
-      }
-    }else{
-      slog("Unable to find mod matching \"$modFilter\" regular expression",1);
-    }
+    loadArchives(sub {quitAfterGame('Unable to reload Spring archives for mod change') unless(shift)},$verbose)
+        unless(defined $availableMods[$availableModsNameToNb{$newMod}]{hash} || $loadArchivesInProgress);
   }else{
-    $targetMod=$spads->{hSettings}->{modName};
+    if(defined $modFilter) {
+      slog("Unable to find mod matching \"$modFilter\" regular expression",1);
+    }else{
+      $targetMod=$spads->{hSettings}{modName};
+      slog("Unable to find mod \"$targetMod\"",1);
+    }
   }
 }
 
@@ -1187,6 +1195,7 @@ sub loadArchivesBlocking {
       $availableMapsByNames{$mapName}=$mapNb;
     }
   }
+  PerlUnitSync::RemoveAllArchives();
 
   my @availableMapsNames=sort keys %availableMapsByNames;
   my $p_uncachedMapsNames = $spads->getUncachedMaps(\@availableMapsNames);
@@ -1202,7 +1211,6 @@ sub loadArchivesBlocking {
       my $mapName=$p_uncachedMapsNames->[$uncachedMapNb];
       my $mapNb=$availableMapsByNames{$mapName};
       $newCachedMaps{$mapName}={};
-      PerlUnitSync::RemoveAllArchives();
 
 # This functionality is disabled since SPADS 0.11.48 because of unitsync backward compatibility breakage in Spring 104...
 #      $newCachedMaps{$mapName}->{width}=PerlUnitSync::GetMapWidth($mapNb);
@@ -1254,12 +1262,14 @@ sub loadArchivesBlocking {
         }
         $newCachedMaps{$mapName}->{options}->{$option{key}}=\%option;
       }
+      PerlUnitSync::RemoveAllArchives();
     }
     slog("Caching Spring map info... $nbUncachedMaps/$nbUncachedMaps (100%)",3) if($nbUncachedMaps > 4);
     $spads->cacheMapsInfo(\%newCachedMaps) if($spads->{sharedDataTs}{mapInfoCache});
   }
 
   my @newAvailableMods=();
+  my %availableModsByNames=();
   for my $modNb (0..($nbMods-1)) {
     my $nbInfo = PerlUnitSync::GetPrimaryModInfoCount($modNb);
     my $modName='';
@@ -1269,22 +1279,30 @@ sub loadArchivesBlocking {
       last;
     }
     my $cachedMod=getMod($modName);
-    if(! $full && defined $cachedMod) {
-      $newAvailableMods[$modNb]=$cachedMod;
-      next;
-    }
-    my $modArchive = PerlUnitSync::GetPrimaryModArchive($modNb);
-    my $modChecksum = int32(PerlUnitSync::GetPrimaryModChecksum($modNb));
-    if(defined $cachedMod && $modChecksum && $modChecksum == $cachedMod->{hash}) {
+    if(defined $cachedMod) {
       $newAvailableMods[$modNb]=$cachedMod;
     }else{
-      $newAvailableMods[$modNb]={name=>$modName,hash=>$modChecksum,archive=>$modArchive,options=>{},sides=>[]};
+      $newAvailableMods[$modNb]={name=>$modName,options=>{},sides=>[]};
+    }
+    if(exists $availableModsByNames{$modName}) {
+      slog("Duplicate archives found for mod \"$modName\"",2);
+    }else{
+      $availableModsByNames{$modName}=$modNb;
     }
   }
+  PerlUnitSync::RemoveAllArchives();
   
-  for my $modNb (0..($nbMods-1)) {
-    next if(@{$newAvailableMods[$modNb]->{sides}});
-    PerlUnitSync::RemoveAllArchives();
+  my @availableModsNames=keys %availableModsByNames;
+  my ($newTargetMod)=getTargetModFromList(\@availableModsNames);
+  if(defined $newTargetMod) {
+    my $modNb=$availableModsByNames{$newTargetMod};
+    my $modChecksum = int32(PerlUnitSync::GetPrimaryModChecksum($modNb));
+    if(defined $newAvailableMods[$modNb]{hash} && $modChecksum && $modChecksum == $newAvailableMods[$modNb]{hash}) {
+      PerlUnitSync::UnInit();
+      return (\@newAvailableMaps,\@newAvailableMods,\%newCachedMaps);
+    }
+    $newAvailableMods[$modNb]{hash}=$modChecksum;
+    $newAvailableMods[$modNb]{archive}=PerlUnitSync::GetPrimaryModArchive($modNb);
     PerlUnitSync::AddAllArchives($newAvailableMods[$modNb]->{archive});
     my $nbModOptions = PerlUnitSync::GetModOptionCount();
     for my $optionIdx (0..($nbModOptions-1)) {
@@ -1329,6 +1347,7 @@ sub loadArchivesBlocking {
       my $sideName = PerlUnitSync::GetSideName($sideIdx);
       $newAvailableMods[$modNb]->{sides}->[$sideIdx]=$sideName;
     }
+    PerlUnitSync::RemoveAllArchives();
   }
 
   PerlUnitSync::UnInit();
@@ -14107,7 +14126,13 @@ sub checkLobbyConnection {
 }
 
 sub manageBattle {
-  openBattle() if($lobbyState == 4 && ! $closeBattleAfterGame);
+  if($lobbyState == 4 && ! $closeBattleAfterGame) {
+    if(exists $availableModsNameToNb{$targetMod} && defined $availableMods[$availableModsNameToNb{$targetMod}]{hash}) {
+      openBattle();
+    }elsif(! $loadArchivesInProgress) {
+      closeBattleAfterGame('mod not found');
+    }
+  }
 
   closeBattle() if($lobbyState >= 6 && $closeBattleAfterGame && $autohost->getState() == 0);
 

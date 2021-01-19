@@ -876,6 +876,7 @@ spads.pl:
 0.12.26: plugin callbacks for processes, signals, sockets and timers are now automatically removed when the plugin is unloaded
          refactor plugin handling code: all plugin code and data are now correctly removed from memory even when the plugin load failed
          when configuration is reloaded, the new value for the autoLoadPlugins global setting is now taken into account (new plugins are automatically loaded)
+0.12.27: unitsync mod data management refactored to reduce start-up time (for servers keeping lots of mods in Spring data directory)
 
 SpadsConf.pm:
 ============
@@ -1037,6 +1038,8 @@ SpadsConf.pm:
 0.12.11: improve map boxes fetching fallback behavior when extraBox is set
 0.12.12: refactor plugin module and configuration loading code: all plugin code and data are now correctly removed from memory when the plugin load failed
          only check for pluginsDir directory being in Perl include list when configuration is loaded (instead of everytime a plugin is loaded)
+0.12.13: the regular expression syntax is now checked when used for the "modName" hosting setting
+         minor fix in hosting presets and battle presets error handling
 
 spadsInstaller.pl:
 =================
