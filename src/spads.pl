@@ -12401,6 +12401,7 @@ sub cbJoinedBattle {
       $welcomeMsg=~s/\%h/$mapHash/g;
       $welcomeMsg=~s/\%a/$mapLink/g;
       $welcomeMsg=~s/\%t/$gameAge/g;
+      $welcomeMsg=~s/\pt/$conf{preset}/g;
       if($welcomeMsg =~ /^!(.+)$/) {
         sayBattleUser($user,$1);
       }else{
