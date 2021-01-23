@@ -174,6 +174,7 @@ helpSettings.dat:
 0.6.2: default value for "autoLockClients" global setting is now "64"
        clarify "autoLockClients" and "autoLock" settings differences
 0.6.3: event loop time slice is now configurable (extended format of "eventModel" global setting)
+0.6.4: support new placeholders in "welcomeMsg" and "welcomeMsgInGame" preset settings: "%p" for current global preset, "%P" for description of current global preset
 
 PerlUnitSync.pm:
 ===============
@@ -877,6 +878,8 @@ spads.pl:
          refactor plugin handling code: all plugin code and data are now correctly removed from memory even when the plugin load failed
          when configuration is reloaded, the new value for the autoLoadPlugins global setting is now taken into account (new plugins are automatically loaded)
 0.12.27: unitsync mod data management refactored to reduce start-up time (for servers keeping lots of mods in Spring data directory)
+0.12.28: show current preset and description of current preset in !status output
+         support new placeholders in "welcomeMsg" and "welcomeMsgInGame" preset settings: "%p" for current global preset, "%P" for description of current global preset
 
 SpadsConf.pm:
 ============
