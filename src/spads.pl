@@ -53,7 +53,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.27';
+our $spadsVer='0.12.28';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -11027,6 +11027,7 @@ sub hStatus {
     sayPrivate($user,"$B$C{10}Map:$B$C{1} $currentMap");
     sayPrivate($user,"$B$C{10}Mod:$B$C{1} $lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod}");
     sayPrivate($user,"$B$C{10}Game type:$B$C{1} $currentGameType");
+    sayPrivate($user,"$B$C{10}Preset:$B$C{1} $conf{preset} ($conf{description})");
   }
   if(%bosses) {
     my $bossList=join(",",keys %bosses);
@@ -12392,15 +12393,20 @@ sub cbJoinedBattle {
   @welcomeMsgs=@{$spads->{values}->{welcomeMsgInGame}} if($lobby->{users}->{$conf{lobbyLogin}}->{status}->{inGame});
   foreach my $welcomeMsg (@welcomeMsgs) {
     if($welcomeMsg) {
-      $welcomeMsg=~s/\%u/$user/g;
-      $welcomeMsg=~s/\%l/$level/g;
-      $welcomeMsg=~s/\%d/$levelDescription/g;
-      $welcomeMsg=~s/\%m/$mapName/g;
-      $welcomeMsg=~s/\%n/$conf{lobbyLogin}/g;
-      $welcomeMsg=~s/\%v/$spadsVer/g;
-      $welcomeMsg=~s/\%h/$mapHash/g;
-      $welcomeMsg=~s/\%a/$mapLink/g;
-      $welcomeMsg=~s/\%t/$gameAge/g;
+      my %placeholders=(u => $user,
+                        l => $level,
+                        d => $levelDescription,
+                        m => $mapName,
+                        n => $conf{lobbyLogin},
+                        v => $spadsVer,
+                        h => $mapHash,
+                        a => $mapLink,
+                        t => $gameAge,
+                        p => $conf{preset},
+                        P => $conf{description});
+      foreach my $placeholder (keys %placeholders) {
+        $welcomeMsg=~s/\%$placeholder/$placeholders{$placeholder}/g;
+      }
       if($welcomeMsg =~ /^!(.+)$/) {
         sayBattleUser($user,$1);
       }else{

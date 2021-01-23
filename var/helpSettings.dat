@@ -1694,6 +1694,8 @@ Lines prefixed with '!' are only sent to the user joining the battle (only suppo
 %h is replaced by the unsigned map hash
 %a is replaced by the map link as specified by [set:mapLink] or [set:ghostMapLink]
 %t is replaced by the time elapsed since last game start
+%p is replaced by the currently active global preset
+%P is replaced by the description of the currently active global preset
 This is a special preset setting: it cannot be changed by using !set command.
 -
 <null> (no welcome message)
@@ -1715,6 +1717,8 @@ Lines prefixed with '!' are only sent to the user joining the battle (only suppo
 %h is replaced by the unsigned map hash
 %a is replaced by the map link as specified by [set:mapLink] or [set:ghostMapLink]
 %t is replaced by the duration of current game in progress
+%p is replaced by the currently active global preset
+%P is replaced by the description of the currently active global preset
 This is a special preset setting: it cannot be changed by using !set command.
 -
 <null> (no welcome message)
