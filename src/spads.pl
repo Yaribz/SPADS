@@ -53,7 +53,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.28';
+our $spadsVer='0.12.29';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -613,6 +613,17 @@ if($win) {
 }
 
 # Subfunctions ################################################################
+
+sub getPerlModuleVersion {
+  my @moduleParts=split(/::/,shift);
+  my $r_symtab=\%::;
+  while (my $nextModulePart=shift(@moduleParts)) {
+    return undef unless(exists $r_symtab->{"$nextModulePart\::"});
+    $r_symtab=$r_symtab->{"$nextModulePart\::"};
+  }
+  return undef unless(exists $r_symtab->{VERSION});
+  return ${$r_symtab->{VERSION}};
+}
 
 sub onSpringProcessExit {
   my (undef,$exitCode,$signalNb,$hasCoreDump)=@_;
@@ -1929,6 +1940,11 @@ sub applyMapBoxes {
   my $p_boxes=$spads->getMapBoxes($smfMapName,$conf{nbTeams},$conf{extraBox});
   foreach my $pluginName (@pluginsOrder) {
     my $overwritten=$plugins{$pluginName}->setMapStartBoxes($p_boxes,$conf{map},$conf{nbTeams},$conf{extraBox}) if($plugins{$pluginName}->can('setMapStartBoxes'));
+    if(ref $overwritten) {
+      my $r_newBoxes;
+      ($overwritten,$r_newBoxes)=@{$overwritten};
+      $p_boxes=$r_newBoxes if(ref $r_newBoxes eq 'ARRAY');
+    }
     last if(defined $overwritten && $overwritten);
   }
   return unless(@{$p_boxes});
@@ -2625,7 +2641,8 @@ sub getCmdAliases {
                   w => ['whois'],
                   y => ['vote','y']);
   foreach my $pluginName (@pluginsOrder) {
-    $plugins{$pluginName}->updateCmdAliases(\%cmdAliases) if($plugins{$pluginName}->can('updateCmdAliases'));
+    my $r_newAliases=$plugins{$pluginName}->updateCmdAliases(\%cmdAliases) if($plugins{$pluginName}->can('updateCmdAliases'));
+    (map {$cmdAliases{$_}=$r_newAliases->{$_}} (keys %{$r_newAliases})) if(ref $r_newAliases eq 'HASH');
   }
   return \%cmdAliases;
 }
@@ -3960,6 +3977,20 @@ sub balanceBattle {
   foreach my $pluginName (@pluginsOrder) {
     if($plugins{$pluginName}->can('balanceBattle')) {
       $unbalanceIndicator=$plugins{$pluginName}->balanceBattle($p_players,$p_bots,$clanMode,$nbTeams,$teamSize);
+      if(ref $unbalanceIndicator) {
+        my ($r_playerAssignations,$r_botAssignations);
+        ($unbalanceIndicator,$r_playerAssignations,$r_botAssignations)=@{$unbalanceIndicator};
+        foreach my $playerName (keys %{$r_playerAssignations}) {
+          next unless(exists $p_players->{$playerName} && exists $r_playerAssignations->{$playerName}{team} && exists $r_playerAssignations->{$playerName}{id});
+          $p_players->{$playerName}{battleStatus}{team}=$r_playerAssignations->{$playerName}{team};
+          $p_players->{$playerName}{battleStatus}{id}=$r_playerAssignations->{$playerName}{id};
+        }
+        foreach my $botName (keys %{$r_botAssignations}) {
+          next unless(exists $p_bots->{$botName} && exists $r_botAssignations->{$botName}{team} && exists $r_botAssignations->{$botName}{id});
+          $p_bots->{$botName}{battleStatus}{team}=$r_botAssignations->{$botName}{team};
+          $p_bots->{$botName}{battleStatus}{id}=$r_botAssignations->{$botName}{id};
+        }
+      }
       next unless(defined $unbalanceIndicator && $unbalanceIndicator >= 0);
       srand($restoreRandSeed);
       return ($nbSmurfs,$unbalanceIndicator);
@@ -4626,7 +4657,8 @@ sub launchGame {
   }
 
   foreach my $pluginName (@pluginsOrder) {
-    $plugins{$pluginName}->addStartScriptTags(\%additionalData) if($plugins{$pluginName}->can('addStartScriptTags'));
+    my $r_newStartScriptTags=$plugins{$pluginName}->addStartScriptTags(\%additionalData) if($plugins{$pluginName}->can('addStartScriptTags'));
+    (map {$additionalData{$_}=$r_newStartScriptTags->{$_}} (keys %{$r_newStartScriptTags})) if(ref($r_newStartScriptTags) eq 'HASH');
   }
   my $p_modSides=getModSides($lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod});
   my ($p_startData,$p_teamsMap,$p_allyTeamsMap)=$lobby->generateStartData(\%additionalData,$p_modSides,undef,$springServerType eq 'dedicated' ? 1 : 2,$conf{idShareMode} eq 'off');
@@ -7099,6 +7131,7 @@ sub hCallVote {
     my $voteCallAllowed=1;
     foreach my $pluginName (@pluginsOrder) {
       $voteCallAllowed=$plugins{$pluginName}->onVoteRequest($source,$user,$p_params,\%remainingVoters) if($plugins{$pluginName}->can('onVoteRequest'));
+      delete @remainingVoters{@{$voteCallAllowed}} if(ref $voteCallAllowed eq 'ARRAY');
       last unless($voteCallAllowed && %remainingVoters);
     }
     return unless($voteCallAllowed);
@@ -8941,6 +8974,15 @@ sub hLoadBoxes {
     $smfMapName=$p_matchingsSavedBoxesMaps->[0];
     $p_boxes=$spads->getMapBoxes($smfMapName,$nbTeams,$nbExtraBox);
   }
+  foreach my $pluginName (@pluginsOrder) {
+    my $overwritten=$plugins{$pluginName}->setMapStartBoxes($p_boxes,$mapName,$nbTeams,$nbExtraBox) if($plugins{$pluginName}->can('setMapStartBoxes'));
+    if(ref $overwritten) {
+      my $r_newBoxes;
+      ($overwritten,$r_newBoxes)=@{$overwritten};
+      $p_boxes=$r_newBoxes if(ref $r_newBoxes eq 'ARRAY');
+    }
+    last if(defined $overwritten && $overwritten);
+  }
 
   my $printedMapName;
   if($smfMapName =~ /^(.*)\.smf$/) {
@@ -10665,6 +10707,11 @@ sub hStatus {
             foreach my $pluginName (@pluginsOrder) {
               if($plugins{$pluginName}->can('updateGameStatusInfo')) {
                 my $p_pluginColumns=$plugins{$pluginName}->updateGameStatusInfo(\%clientStatus,$userLevel);
+                if(ref($p_pluginColumns) eq 'HASH') {
+                  my @pluginColumns=keys %{$p_pluginColumns};
+                  map {$clientStatus{$_}=$p_pluginColumns->{$_}} @pluginColumns;
+                  $p_pluginColumns=\@pluginColumns;
+                }
                 foreach my $pluginColumn (@{$p_pluginColumns}) {
                   $pluginStatusInfo{$pluginColumn}=$pluginName unless(exists $pluginStatusInfo{$pluginColumn});
                 }
@@ -10709,6 +10756,11 @@ sub hStatus {
         foreach my $pluginName (@pluginsOrder) {
           if($plugins{$pluginName}->can('updateGameStatusInfo')) {
             my $p_pluginColumns=$plugins{$pluginName}->updateGameStatusInfo(\%clientStatus,$userLevel);
+            if(ref($p_pluginColumns) eq 'HASH') {
+              my @pluginColumns=keys %{$p_pluginColumns};
+              map {$clientStatus{$_}=$p_pluginColumns->{$_}} @pluginColumns;
+              $p_pluginColumns=\@pluginColumns;
+            }
             foreach my $pluginColumn (@{$p_pluginColumns}) {
               $pluginStatusInfo{$pluginColumn}=$pluginName unless(exists $pluginStatusInfo{$pluginColumn});
             }
@@ -10890,6 +10942,11 @@ sub hStatus {
                                                                               $lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod},
                                                                               $currentGameType,
                                                                               $userLevel);
+                  if(ref($p_pluginColumns) eq 'HASH') {
+                    my @pluginColumns=keys %{$p_pluginColumns};
+                    map {$clientStatus{$_}=$p_pluginColumns->{$_}} @pluginColumns;
+                    $p_pluginColumns=\@pluginColumns;
+                  }
                   foreach my $pluginColumn (@{$p_pluginColumns}) {
                     $pluginStatusInfo{$pluginColumn}=$pluginName unless(exists $pluginStatusInfo{$pluginColumn});
                   }
@@ -10979,6 +11036,11 @@ sub hStatus {
                                                                         $lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod},
                                                                         $currentGameType,
                                                                         $userLevel);
+            if(ref($p_pluginColumns) eq 'HASH') {
+              my @pluginColumns=keys %{$p_pluginColumns};
+              map {$clientStatus{$_}=$p_pluginColumns->{$_}} @pluginColumns;
+              $p_pluginColumns=\@pluginColumns;
+            }
             foreach my $pluginColumn (@{$p_pluginColumns}) {
               $pluginStatusInfo{$pluginColumn}=$pluginName unless(exists $pluginStatusInfo{$pluginColumn});
             }
@@ -11471,6 +11533,15 @@ sub hVersion {
   }
   $versionedComponents{'IO::Socket::SSL'}='v'.$ioSocketSslVer if(defined $ioSocketSslVer);
   $versionedComponents{'DBD::SQLite'}="v$DBD::SQLite::VERSION $C{1}(SQLite $spads->{preferences}{sqlite_version})" if($spads->{sharedDataTs}{preferences});
+  if(my $inlinePythonVer=getPerlModuleVersion('Inline::Python')) {
+    my $inlinePythonVer="v$inlinePythonVer";
+    my $r_pythonVer=eval "Inline::Python::py_eval('[sys.version_info[i] for i in range(0,3)]',0)";
+    if(! $@ && ref($r_pythonVer) eq 'ARRAY') {
+      my $pythonVer=join('.',@{$r_pythonVer}[0,1,2]);
+      $inlinePythonVer.=" $C{1}(Python $pythonVer)";
+    }
+    $versionedComponents{'Inline::Python'}=$inlinePythonVer;
+  }
   foreach my $component (sort keys %versionedComponents) {
     sayPrivate($user,"- $C{5}$component$C{10} $versionedComponents{$component}");
   }
@@ -13526,6 +13597,11 @@ sub pluginsUpdateSkill {
                                                                 $accountId,
                                                                 $lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod},
                                                                 $currentGameType);
+      if(ref $pluginResult eq 'ARRAY') {
+        my $newPlayerSkill;
+        ($pluginResult,$newPlayerSkill)=@{$pluginResult};
+        $p_userSkill->{skill}=$newPlayerSkill;
+      }
       if($pluginResult) {
         if($pluginResult == 2) {
           slog("Using degraded mode for skill retrieving by plugin $pluginName ($accountId, $lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod}, $currentGameType)",2);
@@ -14038,6 +14114,7 @@ if(! $abortSpadsStartForAutoUpdate) {
   fatalError('Unable to register Spring AutoHost interface socket') unless(SimpleEvent::registerSocket($autohost->{autoHostSock},sub { $autohost->receiveCommand() }));
   SimpleEvent::addAutoCloseOnFork(\$lockFh,\$auLockFh);
   SimpleEvent::addProxyPackage('SpadsPluginApi');
+  SimpleEvent::addProxyPackage('Inline');
 
   if($conf{autoLoadPlugins} ne '') {
     my @pluginNames=split(/;/,$conf{autoLoadPlugins});

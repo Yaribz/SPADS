@@ -43,7 +43,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.12.13';
+my $moduleVersion='0.12.14';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -1187,11 +1187,56 @@ sub loadPluginModule {
     $self->{log}->log("Unable to load module for plugin \"$pluginName\" (a package with same name is already loaded)",1);
     return 0;
   }
-  $self->{log}->log("Loading module for plugin \"$pluginName\"",5);
-  eval "use $pluginName";
-  if(hasEvalError()) {
-    $self->{log}->log("Unable to load module for plugin \"$pluginName\" : $@",1);
-    cancelModuleLoad($pluginName);
+  my $lowerCasePluginName=lc($pluginName);
+  if(any {"$lowerCasePluginName.pm" eq lc($_)} (keys %INC)) {
+    $self->{log}->log("Unable to load module for plugin \"$pluginName\" (a module with conflicting case is already loaded)",1);
+    return 0;
+  }
+  if(any {"${lowerCasePluginName}::" eq lc($_)} (keys %::)) {
+    $self->{log}->log("Unable to load module for plugin \"$pluginName\" (a package with conflicting case is already loaded)",1);
+    return 0;
+  }
+  my $pluginsDir=$self->{conf}{pluginsDir};
+  if(opendir(my $pluginsDirHdl,$pluginsDir)) {
+    my @pluginFiles=grep {-f "$pluginsDir/$_" && /^.*\.(pm|py)$/i} readdir($pluginsDirHdl);
+    close($pluginsDirHdl);
+    my %filesInPluginDir;
+    map {if(/^(.+)\.([^\.]+)$/) { $filesInPluginDir{"$1.".lc($2)}=1; }} @pluginFiles;
+    if(! exists $filesInPluginDir{"$pluginName.pm"}) {
+      if(-f "$pluginsDir/$pluginName.pm") {
+        $self->{log}->log("Unable to load module for plugin \"$pluginName\" (module exists with different case)",1);
+        return 0; 
+      }
+      if(exists $filesInPluginDir{"$lowerCasePluginName.py"}) {
+        $self->{log}->log("Loading Python module for plugin \"$pluginName\"",5);
+        my $pythonLoadRes=eval(<<"PYTHON_PLUGIN_WRAPPER_END");
+package $pluginName;
+use warnings;
+use strict;
+use SpadsPluginApi;
+loadPythonPlugin();
+PYTHON_PLUGIN_WRAPPER_END
+        if(hasEvalError() || ! $pythonLoadRes) {
+          $self->{log}->log("Unable to load Perl wrapper for Python plugin \"$pluginName\" : $@",1) if($@);
+          cancelModuleLoad($pluginName);
+          return 0;
+        }
+        $INC{"$pluginName.pm"}=File::Spec->catfile($pluginsDir,"$lowerCasePluginName.py");
+      }else{
+        $self->{log}->log("Unable to load module for plugin \"$pluginName\" (module not found in plugin directory)",1);
+        return 0;
+      }
+    }else{
+      $self->{log}->log("Loading module for plugin \"$pluginName\"",5);
+      eval "use $pluginName";
+      if(hasEvalError()) {
+        $self->{log}->log("Unable to load module for plugin \"$pluginName\" : $@",1);
+        cancelModuleLoad($pluginName);
+        return 0;
+      }
+    }
+  }else{
+    $self->{log}->log("Unable to load module for plugin \"$pluginName\" (failed to open plugin directory)",1);
     return 0;
   }
   my $cancelCause;
@@ -1242,7 +1287,10 @@ sub loadPluginConf {
       map {$p_pluginPresets->{$defaultPreset}{$_}//=$p_pluginPresets->{'_DEFAULT_'}{$_} if(exists $p_pluginPresets->{'_DEFAULT_'}{$_})} (keys %{$p_presetParams});
     }
   }
-  return 0 unless($self->checkPluginConfig($pluginName,$p_pluginPresets,$p_globalParams,$p_presetParams));
+  if(! $self->checkPluginConfig($pluginName,$p_pluginPresets,$p_globalParams,$p_presetParams)) {
+    $self->{log}->log("Unable to load configuration for plugin \"$pluginName\"",1);
+    return 0;
+  }
   my ($p_commands,$p_help)=({},{});
   if(exists $p_pluginPresets->{''}{commandsFile}) {
     my $commandsFile=$p_pluginPresets->{''}{commandsFile};

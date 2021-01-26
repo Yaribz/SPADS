@@ -45,6 +45,7 @@ PRE     {
   padding-bottom: 1em;
   white-space: pre;
   margin-left: 40px;
+  margin-bottom: 30px;
   width: 800px;
 }
 
@@ -56,12 +57,15 @@ H1      {
   background: #ADEBFF;
   color: #006699;
   font-size: large;
+  padding: 5px 5px 3px 5px;
+  margin-top: 60px;
 }
 
 H2      {
   background: transparent;
   color: #006699;
   font-size: medium;
+  margin-top: 40px;
 }
 
 LI {

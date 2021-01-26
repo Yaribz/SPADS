@@ -880,6 +880,10 @@ spads.pl:
 0.12.27: unitsync mod data management refactored to reduce start-up time (for servers keeping lots of mods in Spring data directory)
 0.12.28: show current preset and description of current preset in !status output
          support new placeholders in "welcomeMsg" and "welcomeMsgInGame" preset settings: "%p" for current global preset, "%P" for description of current global preset
+0.12.29: extend usage of following plugin callbacks for Python compatibility: onVoteRequest, addStartScriptTags, balanceBattle, setMapStartBoxes, updateCmdAliases, updatePlayerSkill, updateGameStatusInfo and updateStatusInfo
+         fix plugin function setMapStartBoxes not being called when loading map boxes manually using !loadBoxes command
+         show version of Inline::Python module and Python interpreter if used in !version command output
+         added Inline to SimpleEvent proxy packages list
 
 SpadsConf.pm:
 ============
@@ -1043,6 +1047,10 @@ SpadsConf.pm:
          only check for pluginsDir directory being in Perl include list when configuration is loaded (instead of everytime a plugin is loaded)
 0.12.13: the regular expression syntax is now checked when used for the "modName" hosting setting
          minor fix in hosting presets and battle presets error handling
+0.12.14: add support for Python plugins loading
+         improve protection against case conflicts in plugin module names
+         ensure plugin modules are loaded from SPADS plugins directory only
+         add log message when plugin config cannot be loaded
 
 spadsInstaller.pl:
 =================
@@ -1170,6 +1178,13 @@ SpadsPluginApi.pm:
       add the documentation of the "getlobbyInterface" plugin API function
 0.24: the "forkProcess" and "forkCall" plugin API functions now also return a handle in addition to the PID
       new plugin API function: "removeProcessCallback" (remove a process callback added with the "forkProcess" or "forkCall" plugin API function)
+0.25: add support for Python plugins loading
+      new Python specific plugin API functions: "get_flag" and "fix_string"
+      use "getOriginPackage" function from SimpleEvent module to determine caller plugin (allows skipping proxy classes when identifying caller plugins)
+      wrap non-code reference callbacks to keep origin information
+      extend usage of following plugin callbacks for Python compatibility: onVoteRequest, addStartScriptTags, balanceBattle, setMapStartBoxes, updateCmdAliases, updatePlayerSkill, updateGameStatusInfo and updateStatusInfo
+      add documentation for Python plugins
+      explicitely list the first parameter "$self" in callback descriptions to avoid confusion
 
 SpadsUpdater.pm:
 ===============

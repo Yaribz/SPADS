@@ -16,6 +16,13 @@
   <li><a href="#NAME">NAME</a></li>
   <li><a href="#SYNOPSIS">SYNOPSIS</a></li>
   <li><a href="#DESCRIPTION">DESCRIPTION</a></li>
+  <li><a href="#PYTHON-SPECIFIC-NOTES">PYTHON SPECIFIC NOTES</a>
+    <ul>
+      <li><a href="#How-to-read-the-documentation">How to read the documentation</a></li>
+      <li><a href="#Perl-strings-conversions">Perl strings conversions</a></li>
+      <li><a href="#Windows-limitations">Windows limitations</a></li>
+    </ul>
+  </li>
   <li><a href="#CALLBACK-FUNCTIONS">CALLBACK FUNCTIONS</a>
     <ul>
       <li><a href="#Mandatory-callbacks">Mandatory callbacks</a></li>
@@ -38,6 +45,7 @@
       <li><a href="#Forking-processes">Forking processes</a></li>
       <li><a href="#Timers-management">Timers management</a></li>
       <li><a href="#Sockets-management">Sockets management</a></li>
+      <li><a href="#Python-specific">Python specific</a></li>
     </ul>
   </li>
   <li><a href="#SHARED-DATA">SHARED DATA</a>
@@ -55,6 +63,8 @@
 <p>SpadsPluginApi - SPADS Plugin API</p>
 
 <h1 id="SYNOPSIS">SYNOPSIS</h1>
+
+<p>Perl:</p>
 
 <pre><code>  package MyPlugin;
 
@@ -76,15 +86,66 @@
 
   1;</code></pre>
 
+<p>Python:</p>
+
+<pre><code>  import perl
+  spads=perl.MyPlugin
+
+  pluginVersion = &#39;0.1&#39;
+  requiredSpadsVersion = &#39;0.12.29&#39;
+
+  def getVersion(pluginObject):
+      return pluginVersion
+
+  def getRequiredSpadsVersion(pluginName):
+      return requiredSpadsVersion
+
+
+  class MyPlugin:
+
+      def __init__(self,context):
+          spads.slog(&quot;MyPlugin plugin loaded (version %s)&quot; % pluginVersion,3)</code></pre>
+
 <h1 id="DESCRIPTION">DESCRIPTION</h1>
 
 <p><code>SpadsPluginApi</code> is a Perl module implementing the plugin API for SPADS. This API allows anyone to add new features as well as customize existing SPADS features (such as balancing algorithms, battle status presentation, players skills management, command aliases...).</p>
 
 <p>This API relies on plugin callback functions (implemented by SPADS plugins), which can in turn call plugin API functions (implemented by SPADS core) and access shared SPADS data.</p>
 
+<p>Plugins can be coded in Perl (since SPADS 0.11) or Python (since SPADS 0.12.29).</p>
+
+<h1 id="PYTHON-SPECIFIC-NOTES">PYTHON SPECIFIC NOTES</h1>
+
+<h2 id="How-to-read-the-documentation">How to read the documentation</h2>
+
+<p>This documentation was written when SPADS was only supporting plugins coded in Perl, so types for function parameters and return values are described using Perl terminology, with Perl sigils (<code>%</code> for hash, <code>@</code> for array, <code>$</code> for scalars). Python plugins just need to ignore these sigils and use their equivalent internal Python types instead (Python dictionaries instead of Perl hashes, Python lists instead of Perl arrays, Python tuples instead of Perl lists, Python None value instead of Perl undef value...).</p>
+
+<p>In order to call functions from the plugin API, Python plugin modules must first import the special <code>perl</code> module, and then use the global variable of this module named after the plugin name to call the functions (refer to the SYNOPSYS for an example of a Python plugin named <code>MyPlugin</code> calling the <code>slog</code> API function).</p>
+
+<h2 id="Perl-strings-conversions">Perl strings conversions</h2>
+
+<p>SPADS uses the <code>Inline::Python</code> Perl module to interface Perl code with Python code. Unfortunately, some versions of this module don&#39;t auto-convert Perl strings entirely when used with Python 3 (Python 2 is unaffected): depending on the version of Python and the version of the <code>Inline::Python</code> Perl module used by your system, it is possible that the Python plugin callbacks receive Python byte strings as parameters instead of normal Python strings. In order to mitigate this problem, the plugin API offers both a way to detect from the Python plugin code if current system is affected (by calling the <code>get_flag</code> function with parameter <code>&#39;use_byte_string&#39;</code>), and a way to workaround the problem by calling a dedicated <code>fix_string</code> function which fixes the string values if needed. For additional information regarding these Python specific functions of the plugin API, refer to the <a href="#Python-specific">API FUNCTIONS - Python specific</a> section. Python plugins can also choose to implement their own pure Python function which fixes strings coming from SPADS if needed like this for example:</p>
+
+<pre><code>  def fix_spads_string(spads_string):
+      if hasattr(spads_string,&#39;decode&#39;):
+          return spads_string.decode(&#39;utf-8&#39;)
+      return spads_string
+  
+  def fix_spads_strings(*spads_strings):
+      fixed_strings=[]
+      for spads_string in spads_strings:
+          fixed_strings.append(fix_spads_string(spads_string))
+      return fixed_strings</code></pre>
+
+<h2 id="Windows-limitations">Windows limitations</h2>
+
+<p>On Windows systems, Perl emulates the <code>fork</code> functionality using threads. As the <code>Inline::Python</code> Perl module used by SPADS to interface with Python code isn&#39;t thread-safe, the fork functions of the plugin API (<code>forkProcess</code> and <code>forkCall</code>) aren&#39;t available from Python plugins when running on a Windows system. On Windows systems, using native Win32 processes for parallel processing is recommended anyway. Plugins can check if the fork functions of the plugin API are available by calling the <code>get_flag</code> Python specific plugin API function with parameter <code>&#39;can_fork&#39;</code>, instead of checking by themselves if the current system is Windows. Refer to the <a href="#Python-specific">API FUNCTIONS - Python specific</a> section for more information regarding this function.</p>
+
+<p>Automatic asynchronous socket management (<code>addSocket</code> plugin API function) is also unavailable for Python plugins on Windows systems (this is due to the file descriptor numbers being thread-specific on Windows, preventing SPADS from accessing sockets opened in Python interpreter scope). However, it is still possible to manage asynchronous sockets manually, for example by hooking the SPADS event loop (<code>eventLoop</code> plugin callback) to perform non-blocking <code>select</code> with 0 timeout (refer to <a href="https://docs.python.org/3/library/select.html#select.select">Python select documentation</a>). Plugins can check if the <code>addSocket</code> function of the plugin API is available by calling the <code>get_flag</code> Python specific plugin API function with parameter <code>&#39;can_add_socket&#39;</code>, instead of checking by themselves if the current system is Windows. Refer to the <a href="#Python-specific">API FUNCTIONS - Python specific</a> section for more information regarding this function.</p>
+
 <h1 id="CALLBACK-FUNCTIONS">CALLBACK FUNCTIONS</h1>
 
-<p>The callback functions are called from SPADS core and implemented by SPADS plugins. SPADS plugins are actually Perl classes, which are instanciated as objects. So even if not indicated below, all callback functions receive a reference to the plugin object as first parameter (except the constructor, which receives the class name as first parameter).</p>
+<p>The callback functions are called from SPADS core and implemented by SPADS plugins. SPADS plugins are actually Perl or Python classes instanciated as objects. So most callback functions are called as object methods and receive a reference to the plugin object as first parameter. The exceptions are the constructor (Perl: <code>new</code> receives the class/plugin name as first parameter, Python: <code>__init__</code> receives the plugin object being created as first parameter), and a few other callbacks which are called/checked before the plugin object is actually created: <code>getVersion</code> and <code>getRequiredSpadsVersion</code> (mandatory callbacks), <code>getParams</code> and <code>getDependencies</code> (optional callbacks).</p>
 
 <h2 id="Mandatory-callbacks">Mandatory callbacks</h2>
 
@@ -92,21 +153,21 @@
 
 <dl>
 
-<dt id="new-context"><code>new($context)</code></dt>
+<dt id="Perl-new-pluginName-context-.-.-.-.-Python-__init__-self-context">[Perl] <code>new($pluginName,$context)</code> . . . . [Python] <code>__init__(self,context)</code></dt>
 <dd>
 
-<p>This is the plugin constructor, it is called when SPADS (re)loads the plugin. It must return the plugin object.</p>
+<p>This is the plugin constructor, it is called when SPADS (re)loads the plugin.</p>
 
 <p>The <code>$context</code> parameter is a string which indicates in which context the plugin constructor has been called: <code>&quot;autoload&quot;</code> means the plugin is being loaded automatically at startup, <code>&quot;load&quot;</code> means the plugin is being loaded manually using <code>!plugin &lt;pluginName&gt; load</code> command, <code>&quot;reload&quot;</code> means the plugin is being reloaded manually using <code>!plugin &lt;pluginName&gt; reload</code> command.</p>
 
 </dd>
-<dt id="getVersion"><code>getVersion()</code></dt>
+<dt id="getVersion-self"><code>getVersion($self)</code></dt>
 <dd>
 
 <p>returns the plugin version number (example: <code>&quot;0.1&quot;</code>).</p>
 
 </dd>
-<dt id="getRequiredSpadsVersion"><code>getRequiredSpadsVersion()</code></dt>
+<dt id="getRequiredSpadsVersion-pluginName"><code>getRequiredSpadsVersion($pluginName)</code></dt>
 <dd>
 
 <p>returns the required minimum SPADS version number (example: <code>&quot;0.11&quot;</code>).</p>
@@ -120,12 +181,12 @@
 
 <dl>
 
-<dt id="getParams"><code>getParams()</code></dt>
+<dt id="getParams-pluginName"><code>getParams($pluginName)</code></dt>
 <dd>
 
 <p>This callback must return a reference to an array containing 2 elements. The first element is a reference to a hash containing the global plugin settings declarations, the second one is the same but for plugin preset settings declarations. These hashes use setting names as keys, and references to array of allowed types as values. The types must match the keys of <code>%paramTypes</code> defined in SpadsConf.pm.</p>
 
-<p>Example of implementation:</p>
+<p>Example of implementation in Perl:</p>
 
 <pre><code>  my %globalPluginParams = ( MyGlobalSetting1 =&gt; [&#39;integer&#39;],
                              MyGlobalSetting2 =&gt; [&#39;ipAddr&#39;]);
@@ -133,6 +194,16 @@
                              MyPresetSetting2 =&gt; [&#39;bool&#39;] );
 
   sub getParams { return [\%globalPluginParams,\%presetPluginParams]; }</code></pre>
+
+<p>Example of implementation in Python:</p>
+
+<pre><code>  globalPluginParams = { &#39;MyGlobalSetting1&#39;: [&#39;integer&#39;],
+                         &#39;MyGlobalSetting2&#39;: [&#39;ipAddr&#39;] }
+  presetPluginParams = { &#39;MyPresetSetting1&#39;: [&#39;readableDir&#39;,&#39;null&#39;],
+                         &#39;MyPresetSetting2&#39;: [&#39;bool&#39;] };
+
+  def getParams(pluginName):
+      return [ globalPluginParams , presetPluginParams ]</code></pre>
 
 </dd>
 </dl>
@@ -143,14 +214,19 @@
 
 <dl>
 
-<dt id="getDependencies"><code>getDependencies()</code></dt>
+<dt id="getDependencies-pluginName"><code>getDependencies($pluginName)</code></dt>
 <dd>
 
-<p>returns the dependencies plugins names list</p>
+<p>This callback must return the plugin dependencies (list of plugin names).</p>
 
-<p>Example of implementation:</p>
+<p>Example of implementation in Perl:</p>
 
 <pre><code>  sub getDependencies { return (&#39;SpringForumInterface&#39;,&#39;MailAlerts&#39;); }</code></pre>
+
+<p>Example of implementation in Python:</p>
+
+<pre><code>  def getDependencies(pluginName):
+      return (&#39;SpringForumInterface&#39;,&#39;MailAlerts&#39;)</code></pre>
 
 </dd>
 </dl>
@@ -161,19 +237,19 @@
 
 <dl>
 
-<dt id="onBattleClosed"><code>onBattleClosed()</code></dt>
+<dt id="onBattleClosed-self"><code>onBattleClosed($self)</code></dt>
 <dd>
 
 <p>This callback is called when the battle lobby of the autohost is closed.</p>
 
 </dd>
-<dt id="onBattleOpened"><code>onBattleOpened()</code></dt>
+<dt id="onBattleOpened-self"><code>onBattleOpened($self)</code></dt>
 <dd>
 
 <p>This callback is called when the battle lobby of the autohost is opened.</p>
 
 </dd>
-<dt id="onGameEnd-endGameData"><code>onGameEnd(\%endGameData)</code></dt>
+<dt id="onGameEnd-self-endGameData"><code>onGameEnd($self,\%endGameData)</code></dt>
 <dd>
 
 <p>This callback is called each time a game hosted by the autohost ends.</p>
@@ -181,7 +257,7 @@
 <p>The <code>\%endGameData</code> parameter is a reference to a hash containing all the data stored by SPADS concerning the game that just ended. It is recommended to use a data printing function (such as the <code>Dumper</code> function from the standard <code>Data::Dumper</code> module included in Perl core) to check the content of this hash for the desired data.</p>
 
 </dd>
-<dt id="onJoinBattleRequest-userName-ipAddr"><code>onJoinBattleRequest($userName,$ipAddr)</code></dt>
+<dt id="onJoinBattleRequest-self-userName-ipAddr"><code>onJoinBattleRequest($self,$userName,$ipAddr)</code></dt>
 <dd>
 
 <p>This callback is called each time a client requests to join the battle lobby managed by the autohost.</p>
@@ -199,7 +275,7 @@
 <p><code>&quot;&lt;explicit reason string&gt;&quot;</code> if the user isn&#39;t allowed to join the battle, with explicit reason</p>
 
 </dd>
-<dt id="onLobbyConnected-lobbyInterface"><code>onLobbyConnected($lobbyInterface)</code></dt>
+<dt id="onLobbyConnected-self-lobbyInterface"><code>onLobbyConnected($self,$lobbyInterface)</code></dt>
 <dd>
 
 <p>This callback is called each time the autohost successfully logged in on the lobby server, after all login info has been received from lobby server (this callback is called after the <code>onLobbyLogin($lobbyInterface)</code> callback).</p>
@@ -207,13 +283,13 @@
 <p>The <code>$lobbyInterface</code> parameter is the instance of the <a href="https://github.com/Yaribz/SpringLobbyInterface">SpringLobbyInterface</a> module used by SPADS.</p>
 
 </dd>
-<dt id="onLobbyDisconnected"><code>onLobbyDisconnected()</code></dt>
+<dt id="onLobbyDisconnected-self"><code>onLobbyDisconnected($self)</code></dt>
 <dd>
 
 <p>This callback is called each time the autohost is disconnected from the lobby server.</p>
 
 </dd>
-<dt id="onLobbyLogin-lobbyInterface"><code>onLobbyLogin($lobbyInterface)</code></dt>
+<dt id="onLobbyLogin-self-lobbyInterface"><code>onLobbyLogin($self,$lobbyInterface)</code></dt>
 <dd>
 
 <p>This callback is called each time the autohost tries to login on the lobby server, just after the LOGIN command has been sent to the lobby server (this callback is called before the <code>onLobbyConnected($lobbyInterface)</code> callback).</p>
@@ -221,7 +297,7 @@
 <p>The <code>$lobbyInterface</code> parameter is the instance of the <a href="https://github.com/Yaribz/SpringLobbyInterface">SpringLobbyInterface</a> module used by SPADS.</p>
 
 </dd>
-<dt id="onPresetApplied-oldPresetName-newPresetName"><code>onPresetApplied($oldPresetName,$newPresetName)</code></dt>
+<dt id="onPresetApplied-self-oldPresetName-newPresetName"><code>onPresetApplied($self,$oldPresetName,$newPresetName)</code></dt>
 <dd>
 
 <p>This callback is called each time a global preset is applied.</p>
@@ -231,7 +307,7 @@
 <p><code>$newPresetName</code> is the name of the new global preset</p>
 
 </dd>
-<dt id="onPrivateMsg-userName-message"><code>onPrivateMsg($userName,$message)</code></dt>
+<dt id="onPrivateMsg-self-userName-message"><code>onPrivateMsg($self,$userName,$message)</code></dt>
 <dd>
 
 <p>This callback is called each time the autohost receives a private message.</p>
@@ -247,7 +323,7 @@
 <p><code>1</code> if the message must not be processed by other plugins and SPADS core (this prevents logging)</p>
 
 </dd>
-<dt id="onReloadConf-keepSettings"><code>onReloadConf($keepSettings)</code></dt>
+<dt id="onReloadConf-self-keepSettings"><code>onReloadConf($self,$keepSettings)</code></dt>
 <dd>
 
 <p>This callback is called each time the SPADS configuration is reloaded.</p>
@@ -261,7 +337,7 @@
 <p><code>1</code> if the plugin configuration has been reloaded correctly</p>
 
 </dd>
-<dt id="onSettingChange-settingName-oldValue-newValue"><code>onSettingChange($settingName,$oldValue,$newValue)</code></dt>
+<dt id="onSettingChange-self-settingName-oldValue-newValue"><code>onSettingChange($self,$settingName,$oldValue,$newValue)</code></dt>
 <dd>
 
 <p>This callback is called each time a setting of the plugin configuration is changed (using <code>!plugin &lt;pluginName&gt; set ...</code> command).</p>
@@ -273,7 +349,7 @@
 <p><code>$newValue</code> is the new value of the setting</p>
 
 </dd>
-<dt id="onSpringStart-springPid"><code>onSpringStart($springPid)</code></dt>
+<dt id="onSpringStart-self-springPid"><code>onSpringStart($self,$springPid)</code></dt>
 <dd>
 
 <p>This callback is called each time a Spring process is launched to host a game.</p>
@@ -281,7 +357,7 @@
 <p><code>$springPid</code> is the PID of the Spring process that has just been launched.</p>
 
 </dd>
-<dt id="onSpringStop-springPid"><code>onSpringStop($springPid)</code></dt>
+<dt id="onSpringStop-self-springPid"><code>onSpringStop($self,$springPid)</code></dt>
 <dd>
 
 <p>This callback is called each time the Spring process ends.</p>
@@ -289,15 +365,15 @@
 <p><code>$springPid</code> is the PID of the Spring process that just ended.</p>
 
 </dd>
-<dt id="onUnload-context"><code>onUnload($context)</code></dt>
+<dt id="onUnload-self-context"><code>onUnload($self,$context)</code></dt>
 <dd>
 
-<p>This callback is called when the plugin is unloaded. If the plugin has added handlers for SPADS command, lobby commands, or Spring commands, then they must be removed here. If the plugin has added timers or forked process callbacks, they must also be removed here. If the plugin handles persistent data, then these data must be serialized and written to persistent storage here.</p>
+<p>This callback is called when the plugin is unloaded. If the plugin has added handlers for SPADS command, lobby commands, or Spring commands, then they must be removed here. If the plugin has added timers or forked process callbacks, they should also be removed here. If the plugin handles persistent data, then these data must be serialized and written to persistent storage here.</p>
 
 <p>The <code>$context</code> parameter is a string which indicates in which context the callback has been called: <code>&quot;exiting&quot;</code> means the plugin is being unloaded because SPADS is exiting, <code>&quot;restarting&quot;</code> means the plugin is being unloaded because SPADS is restarting, <code>&quot;unload&quot;</code> means the plugin is being unloaded manually using <code>!plugin &lt;pluginName&gt; unload</code> command, <code>&quot;reload&quot;</code> means the plugin is being reloaded manually using <code>!plugin &lt;pluginName&gt; reload</code> command.</p>
 
 </dd>
-<dt id="onVoteRequest-source-user-command-remainingVoters"><code>onVoteRequest($source,$user,\@command,\%remainingVoters)</code></dt>
+<dt id="onVoteRequest-self-source-user-command-remainingVoters"><code>onVoteRequest($self,$source,$user,\@command,\%remainingVoters)</code></dt>
 <dd>
 
 <p>This callback is called each time a vote is requested by a player.</p>
@@ -308,12 +384,12 @@
 
 <p><code>\@command</code> is an array reference containing the command for which a vote is requested</p>
 
-<p><code>\%remainingVoters</code> is a reference to a hash containing the players allowed to vote. This hash is indexed by player names. The plugin can filter these players by simply removing the corresponding entries from the hash.</p>
+<p><code>\%remainingVoters</code> is a reference to a hash containing the players allowed to vote. This hash is indexed by player names. Perl plugins can filter these players by removing the corresponding entries from the hash directly, but Python plugins must use the alternate method based on the return value described below.</p>
 
-<p>This callback must return <code>0</code> to prevent the vote call from happening, or <code>1</code> to allow it.</p>
+<p>This callback must return <code>0</code> to prevent the vote call from happening, or <code>1</code> to allow it without changing the remaining voters list, or an array reference containing the player names that should be removed from the remaining voters list.</p>
 
 </dd>
-<dt id="onVoteStart-user-command"><code>onVoteStart($user,\@command)</code></dt>
+<dt id="onVoteStart-self-user-command"><code>onVoteStart($self,$user,\@command)</code></dt>
 <dd>
 
 <p>This callback is called each time a new vote poll is started.</p>
@@ -323,7 +399,7 @@
 <p><code>\@command</code> is an array reference containing the command for which a vote is started</p>
 
 </dd>
-<dt id="onVoteStop-voteResult"><code>onVoteStop($voteResult)</code></dt>
+<dt id="onVoteStop-self-voteResult"><code>onVoteStop($self,$voteResult)</code></dt>
 <dd>
 
 <p>This callback is called each time a vote poll is stoped.</p>
@@ -331,7 +407,7 @@
 <p><code>$voteResult</code> indicates the result of the vote: <code>-1</code> (vote failed), <code>0</code> (vote cancelled), <code>1</code> (vote passed)</p>
 
 </dd>
-<dt id="postSpadsCommand-command-source-user-params-commandResult"><code>postSpadsCommand($command,$source,$user,\@params,$commandResult)</code></dt>
+<dt id="postSpadsCommand-self-command-source-user-params-commandResult"><code>postSpadsCommand($self,$command,$source,$user,\@params,$commandResult)</code></dt>
 <dd>
 
 <p>This callback is called each time a SPADS command has been called.</p>
@@ -347,7 +423,7 @@
 <p><code>$commandResult</code> indicates the result of the command (if it is defined and set to <code>0</code> then the command failed, in all other cases the command succeeded)</p>
 
 </dd>
-<dt id="preGameCheck-force-checkOnly-automatic"><code>preGameCheck($force,$checkOnly,$automatic)</code></dt>
+<dt id="preGameCheck-self-force-checkOnly-automatic"><code>preGameCheck($self,$force,$checkOnly,$automatic)</code></dt>
 <dd>
 
 <p>This callback is called each time a game is going to be launched, to allow plugins to perform pre-game checks and prevent the game from starting if needed.</p>
@@ -361,7 +437,7 @@
 <p>The return value must be the reason for preventing the game from starting (for example <code>&quot;too many players for current map&quot;</code>), or <code>1</code> if no reason can be given, or undef to allow the game to start.</p>
 
 </dd>
-<dt id="preSpadsCommand-command-source-user-params"><code>preSpadsCommand($command,$source,$user,\@params)</code></dt>
+<dt id="preSpadsCommand-self-command-source-user-params"><code>preSpadsCommand($self,$command,$source,$user,\@params)</code></dt>
 <dd>
 
 <p>This callback is called each time a SPADS command is called, just before it is actually executed.</p>
@@ -385,42 +461,48 @@
 
 <dl>
 
-<dt id="addStartScriptTags-additionalData"><code>addStartScriptTags(\%additionalData)</code></dt>
+<dt id="addStartScriptTags-self-additionalData"><code>addStartScriptTags($self,\%additionalData)</code></dt>
 <dd>
 
 <p>This callback is called when a Spring start script is generated, just before launching the game. It allows plugins to declare additional scrip tags which will be written in the start script.</p>
 
-<p><code>\%additionalData</code> is a reference to a hash which must be updated by adding the desired keys/values. For example a plugin can add a modoption named &quot;hiddenoption&quot; with value &quot;test&quot; like this: <code>$additionalData{&quot;game/modoptions/hiddenoption&quot;}=&quot;test&quot;</code>. For tags to be added in player sections, the special key &quot;playerData&quot; must be used. This special key must point to a hash associating each account ID to a hash containing the tags to add in the corresponding player section.</p>
+<p><code>\%additionalData</code> is a reference to a hash which must be updated by Perl plugins by adding the desired keys/values. For example a Perl plugin can add a modoption named <code>hiddenoption</code> with value <code>test</code> like this: <code>$additionalData{&quot;game/modoptions/hiddenoption&quot;}=&quot;test&quot;</code>. For tags to be added in player sections, the special key <code>playerData</code> must be used. This special key must point to a hash associating each account ID to a hash containing the tags to add in the corresponding player section.</p>
+
+<p>Note for Python plugins: As Python plugins cannot modify the data structures passed as parameters to the callbacks, an alternate way to implement this callback is offered. Instead of modifying the <code>additionnalData</code> dictionary directly, the callback can return a new dictionary containing the entries which must be added. For example a Python plugin can add a tag named <code>CommanderLevel</code> set to value <code>8</code> in the player section of the player whose account ID is <code>1234</code> like this: <code>return {&#39;playerData&#39;: { &#39;1234&#39;: { &#39;CommanderLevel&#39;: 8 } } }</code></p>
 
 </dd>
-<dt id="balanceBattle-players-bots-clanMode-nbTeams-teamSize"><code>balanceBattle(\%players,\%bots,$clanMode,$nbTeams,$teamSize)</code></dt>
+<dt id="balanceBattle-self-players-bots-clanMode-nbTeams-teamSize"><code>balanceBattle($self,\%players,\%bots,$clanMode,$nbTeams,$teamSize)</code></dt>
 <dd>
 
 <p>This callback is called each time SPADS needs to balance a battle and evaluate the resulting balance quality. It allows plugins to replace the built-in balance algorithm.</p>
 
 <p><code>\%players</code> is a reference to a hash containing the players in the battle lobby. This hash is indexed by player names, and the values are references to a hash containing player data. For balancing, you should only need to access the players skill as follows: <code>$players-&gt;{&lt;playerName&gt;}-&gt;{skill}</code></p>
 
-<p><code>\%bots</code> is a reference to a hash containing the bots in the battle lobby. This hash has exact same structure has <code>\%players</code>.</p>
+<p><code>\%bots</code> is a reference to a hash containing the bots in the battle lobby. This hash has the exact same structure has <code>\%players</code>.</p>
 
 <p><code>$clanMode</code> is the current clan mode which must be applied to the balance. Clan modes are specified <a href="http://planetspads.free.fr/spads/doc/spadsDoc_All.html#set:clanMode">here</a>. <code>&lt;maxUnbalance&gt;</code> thresholds are automatically managed by SPADS, plugins don&#39;t need to handle them. So basically, plugins only need to check if <code>tag</code> and/or <code>pref</code> clan modes are enabled and apply them to their balance algorithm.</p>
 
 <p><code>$nbTeams</code> and <code>$teamSize</code> are the target battle structue computed by SPADS. The number of entities to balance is the number of entries in <code>\%players</code> + number of entries in <code>\%bots</code>. The number of entities to balance is always <code>&gt; $nbTeams*($teamSize-1)</code>, and <code>&lt;= $nbTeams*$teamSize</code>.</p>
 
-<p>If the plugin is able to balance the battle, it must update the <code>\%players</code> and <code>\%bots</code> hash references with the team and id information. Assigned player teams must be written in <code>$players-&gt;{&lt;playerName&gt;}-&gt;{battleStatus}-&gt;{team}</code>, and assigned player ids must be written in <code>$players-&gt;{&lt;playerName&gt;}-&gt;{battleStatus}-&gt;{id}</code>. <code>\%bots</code> works the same way. The return value is the unbalance indicator, defined as follows: <code>standardDeviationOfTeamSkills * 100 / averageTeamSkill</code>.</p>
+<p>If the plugin is unable to balance the battle, it must not update <code>\%players</code> and <code>\%bots</code>. The callback must return undef or a negative value so that SPADS knows it has to use another plugin or the internal balance algorithm instead.</p>
 
-<p>If the plugin is unable to balance the battle, it must not update <code>\%players</code> and <code>\%bots</code>. The callback must return undef or a negative value so that SPADS knows it has to use another plugin or internal balance algorithm instead.</p>
+<p>If the plugin is able to balance the battle, it can use two methods to transmit the desired balance to SPADS (Python plugins can only use the second method):</p>
+
+<p>The first method consists in updating directly the <code>\%players</code> and <code>\%bots</code> hash references with the team and id information. Assigned player teams must be written in <code>$players-&gt;{&lt;playerName&gt;}-&gt;{battleStatus}-&gt;{team}</code>, and assigned player ids must be written in <code>$players-&gt;{&lt;playerName&gt;}-&gt;{battleStatus}-&gt;{id}</code>. The <code>\%bots</code> hash reference works the same way. The return value is the unbalance indicator, defined as follows: <code>standardDeviationOfTeamSkills * 100 / averageTeamSkill</code>.</p>
+
+<p>The second method consists in returning an array reference containing the balance information instead of directly editing the <code>\%players</code> and <code>\%bots</code> parameters. The returned array must contain 3 items: the unbalance indicator (as defined in first method description above), the player assignation hash and the bot assignation hash. The player assignation hash and the bot assignation hash have exactly the same structure: the keys are the player/bot names and the values are hashes containing <code>team</code> and <code>id</code> items with the corresponding values for the balanced battle.</p>
 
 </dd>
-<dt id="canBalanceNow"><code>canBalanceNow()</code></dt>
+<dt id="canBalanceNow-self"><code>canBalanceNow($self)</code></dt>
 <dd>
 
 <p>This callback allows plugins to delay the battle balance operation. It is called each time a battle balance operation is required (either automatic if autoBalance is enabled, either manual if <code>!balance</code> command is called). If the plugin is ready for balance, it must return <code>1</code>. Else, it can delay the operation by returning <code>0</code> (the balance algorithm won&#39;t be launched as long as the plugin didn&#39;t return <code>1</code>).</p>
 
 </dd>
-<dt id="changeUserAccessLevel-userName-userData-isAuthenticated-currentAccessLevel"><code>changeUserAccessLevel($userName,\%userData,$isAuthenticated,$currentAccessLevel)</code></dt>
+<dt id="changeUserAccessLevel-self-userName-userData-isAuthenticated-currentAccessLevel"><code>changeUserAccessLevel($self,$userName,\%userData,$isAuthenticated,$currentAccessLevel)</code></dt>
 <dd>
 
-<p>This callback is called by SPADS each time it needs to get the access level of a user. It allows plugins to overwrite this level. Don&#39;t call the <code>getUserAccessLevel($user)</code> function from this callback, or the program will be locked in recusrive loop! (and it would give you the same value as <code>$currentAccessLevel</code> anyway).</p>
+<p>This callback is called by SPADS each time it needs to get the access level of a user. It allows plugins to overwrite this level. Don&#39;t call the <code>getUserAccessLevel($user)</code> function from this callback, or the program will be locked in recursive loop! (and it would give you the same value as <code>$currentAccessLevel</code> anyway).</p>
 
 <p><code>\%userData</code> is a reference to a hash containing the lobby data of the user</p>
 
@@ -429,7 +511,7 @@
 <p>The callback must return the new access level value if changed, or undef if not changed.</p>
 
 </dd>
-<dt id="filterRotationMaps-rotationMaps"><code>filterRotationMaps(\@rotationMaps)</code></dt>
+<dt id="filterRotationMaps-self-rotationMaps"><code>filterRotationMaps($self,\@rotationMaps)</code></dt>
 <dd>
 
 <p>This callback is called by SPADS each time a new map must be picked up for rotation. It allows plugins to remove some maps from the rotation maps list just before the new map is picked up.</p>
@@ -439,19 +521,29 @@
 <p>The callback must return a reference to a new array containing the filtered map names.</p>
 
 </dd>
-<dt id="setMapStartBoxes-boxes-mapName-nbTeams-nbExtraBox"><code>setMapStartBoxes(\@boxes,$mapName,$nbTeams,$nbExtraBox)</code></dt>
+<dt id="setMapStartBoxes-self-boxes-mapName-nbTeams-nbExtraBox"><code>setMapStartBoxes($self,\@boxes,$mapName,$nbTeams,$nbExtraBox)</code></dt>
 <dd>
 
 <p>This callback allows plugins to set map start boxes (for &quot;Choose in game&quot; start position type).</p>
 
-<p><code>\@boxes</code> is a reference to an array containing the start boxes definitions. A start box definition is a string containing the box coordinates separated by spaces, in following order: left, top, right, bottom (0,0 is top left corner and 200,200 is bottom right corner). If the array already contains box definitions, it means SPADS already knows boxes for this map. In this case the plugin can choose to override them by replacing the array content, or simply leave it unmodified.</p>
+<p><code>\@boxes</code> is a reference to an array containing the start boxes definitions. A start box definition is a string containing the box coordinates separated by spaces, in following order: left, top, right, bottom (0,0 is top left corner and 200,200 is bottom right corner). If the array already contains box definitions, it means SPADS already knows boxes for this map.</p>
+
+<p><code>$mapName</code> is the name of the map for which start boxes are requested</p>
+
+<p><code>$nbTeams</code> is the current number of teams configured (at least this number of start boxes must be provided)</p>
 
 <p><code>$nbExtraBox</code> is the number of extra box required. Usually this is 0, unless a special game mode is enabled such as King Of The Hill.</p>
 
-<p>The callback must return <code>1</code> to prevent start boxes from being replaced by other plugins, <code>0</code> else.</p>
+<p>If the plugin isn&#39;t able or doesn&#39;t need to provide/override start boxes, it must not update the <code>\@boxes</code> array. It must return <code>0</code> so that SPADS knows it has to check other plugins for possible start boxes.</p>
+
+<p>If the plugin needs to provide/override start boxes, it can use two methods to transmit the start box definitions (Python plugins can only use the second method):</p>
+
+<p>The first method consists in replacing the <code>\@boxes</code> array content directly with the new desired start box definitions. If other plugins should be allowed to replace the start box definitions, the callback must return <code>0</code>, else it must return <code>1</code>.</p>
+
+<p>The second method consists in returning an array reference containing the new start box definitions instead of directly updating the <code>\@boxes</code> parameter. The returned array must contain 2 items: the normal return value as first item (<code>0</code> to allow other plugins to replace the start boxes, or <code>1</code> else), and an array reference containg the new start box definitions as second item.</p>
 
 </dd>
-<dt id="setVoteMsg-reqYesVotes-maxReqYesVotes-reqNoVotes-maxReqNoVotes-nbRequiredManualVotes"><code>setVoteMsg($reqYesVotes,$maxReqYesVotes,$reqNoVotes,$maxReqNoVotes,$nbRequiredManualVotes)</code></dt>
+<dt id="setVoteMsg-self-reqYesVotes-maxReqYesVotes-reqNoVotes-maxReqNoVotes-nbRequiredManualVotes"><code>setVoteMsg($self,$reqYesVotes,$maxReqYesVotes,$reqNoVotes,$maxReqNoVotes,$nbRequiredManualVotes)</code></dt>
 <dd>
 
 <p>This callback allows plugins to customize the vote status messages.</p>
@@ -469,20 +561,22 @@
 <p>The callback must return a list containing following 2 elements: the lobby vote message, and the in-game vote message (undef values can be used to keep default messages).</p>
 
 </dd>
-<dt id="updateCmdAliases-aliases"><code>updateCmdAliases(\%aliases)</code></dt>
+<dt id="updateCmdAliases-self-aliases"><code>updateCmdAliases($self,\%aliases)</code></dt>
 <dd>
 
-<p>This callback allows plugins to add new SPADS command aliases by adding new entries in the <code>\%aliases</code> hash reference. This hash is indexed by alias names and the values are references to an array containing the associated command. For example, a plugin can add an alias &quot;<code>!cvmap ...</code>&quot; for &quot;<code>!callVote map ...</code>&quot; like this: <code>$aliases-&gt;{cvmap}=[&#39;callVote&#39;,&#39;map&#39;]</code></p>
+<p>This callback allows plugins to add new SPADS command aliases by adding new entries in the <code>\%aliases</code> hash reference. This hash is indexed by alias names and the values are references to an array containing the associated command. For example, a Perl plugin can add an alias &quot;<code>!cvmap ...</code>&quot; for &quot;<code>!callVote map ...</code>&quot; like this: <code>$aliases-&gt;{cvmap}=[&#39;callVote&#39;,&#39;map&#39;]</code></p>
 
-<p><code>&quot;%&lt;N&gt;%&quot;</code> can be used as placeholders for original alias command parameters. For example, a plugin can add an alias &quot;<code>!iprank &lt;playerName&gt;</code>&quot; for &quot;<code>!chrank &lt;playerName&gt; ip</code>&quot; like this: <code>$aliases-&gt;{iprank}=[&#39;chrank&#39;,&#39;%1%&#39;,&#39;ip&#39;]</code></p>
+<p><code>&quot;%&lt;N&gt;%&quot;</code> can be used as placeholders for original alias command parameters. For example, a Perl plugin can add an alias &quot;<code>!iprank &lt;playerName&gt;</code>&quot; for &quot;<code>!chrank &lt;playerName&gt; ip</code>&quot; like this: <code>$aliases-&gt;{iprank}=[&#39;chrank&#39;,&#39;%1%&#39;,&#39;ip&#39;]</code></p>
+
+<p>Note for Python plugins: As Python plugins cannot modify the data structures passed as parameters to the callbacks, an alternate way to implement this callback is offered. Instead of modifying the <code>aliases</code> dictionary directly, the callback can return a new dictionary containing the alias entries which must be added.</p>
 
 </dd>
-<dt id="updatePlayerSkill-playerSkill-accountId-modName-gameType"><code>updatePlayerSkill(\%playerSkill,$accountId,$modName,$gameType)</code></dt>
+<dt id="updatePlayerSkill-self-playerSkill-accountId-modName-gameType"><code>updatePlayerSkill($self,\%playerSkill,$accountId,$modName,$gameType)</code></dt>
 <dd>
 
 <p>This callback is called by SPADS each time it needs to get or update the skill of a player (on battle join, on game type change...). This allows plugins to replace the built-in skill estimations (rank, TrueSkill...) with custom skill estimations (ELO, Glicko ...).</p>
 
-<p><code>\%playerSkill</code> is a reference to a hash containing the skill data of the player. The plugin must update the <code>skill</code> entry as follows: <code>$playerSkill-&gt;{skill}=&lt;skillValue&gt;</code></p>
+<p><code>\%playerSkill</code> is a reference to a hash containing the skill data of the player. A Perl plugin can update the <code>skill</code> entry as follows: <code>$playerSkill-&gt;{skill}=&lt;skillValue&gt;</code></p>
 
 <p><code>$accountId</code> is the account ID of the player for whom skill value is requested.</p>
 
@@ -492,25 +586,29 @@
 
 <p>The return value is the skill update status: <code>0</code> (skill not updated by the plugin), <code>1</code> (skill updated by the plugin), <code>2</code> (skill updated by the plugin in degraded mode)</p>
 
+<p>Note for Python plugins: As Python plugins cannot modify the data structures passed as parameters to the callbacks, an alternate way to implement this callback is offered. Instead of modifying the <code>playerSkill</code> dictionary directly, the callback can return a list contaning the normal return value as first item (described above), and the new skill value as second item.</p>
+
 </dd>
-<dt id="updateGameStatusInfo-playerStatus-accessLevel"><code>updateGameStatusInfo(\%playerStatus,$accessLevel)</code></dt>
+<dt id="updateGameStatusInfo-self-playerStatus-accessLevel"><code>updateGameStatusInfo($self,\%playerStatus,$accessLevel)</code></dt>
 <dd>
 
-<p>This callback is called by SPADS for each player in game when the <code>!status</code> command is called, to allow plugins to update and/or add data which will be presented to the user.</p>
+<p>This callback is called by SPADS for each player in game when the <code>!status</code> command is called, to allow plugins to update and/or add data which will be presented to the user issuing the command.</p>
 
-<p><code>\%playerStatus</code> is a reference to the hash containing current player status data. The plugin must update existing data or add new data in this hash. For example: <code>$playerStatus-&gt;{myPluginData}=&lt;myPluginValue&gt;</code></p>
+<p><code>\%playerStatus</code> is a reference to the hash containing current player status data. A Perl plugin can update existing data or add new data in this hash. For example: <code>$playerStatus-&gt;{myPluginData}=&lt;myPluginValue&gt;</code></p>
 
 <p><code>$accessLevel</code> is the autohost access level of the user issuing the <code>!status</code> command.</p>
 
 <p>The return value must be a reference to an array containing the names of the status information updated or added by the plugin.</p>
 
+<p>Note for Python plugins: As Python plugins cannot modify the data structures passed as parameters to the callbacks, an alternate way to implement this callback is offered. Instead of modifying the <code>playerStatus</code> dictionary directly, the callback can return a new dictionary containing the data to add/modify in the <code>playerStatus</code> dictionary.</p>
+
 </dd>
-<dt id="updateStatusInfo-playerStatus-accountId-modName-gameType-accessLevel"><code>updateStatusInfo(\%playerStatus,$accountId,$modName,$gameType,$accessLevel)</code></dt>
+<dt id="updateStatusInfo-self-playerStatus-accountId-modName-gameType-accessLevel"><code>updateStatusInfo($self,\%playerStatus,$accountId,$modName,$gameType,$accessLevel)</code></dt>
 <dd>
 
-<p>This callback is called by SPADS for each player in the battle lobby when the <code>!status</code> command is called, to allow plugins to update and/or add data which will be presented to the user.</p>
+<p>This callback is called by SPADS for each player in the battle lobby when the <code>!status</code> command is called, to allow plugins to update and/or add data which will be presented to the user issuing the command.</p>
 
-<p><code>\%playerStatus</code> is a reference to the hash containing current player status data. The plugin must update existing data or add new data in this hash. For example: <code>$playerStatus-&gt;{myPluginData}=&lt;myPluginValue&gt;</code></p>
+<p><code>\%playerStatus</code> is a reference to the hash containing current player status data. A Perl plugin can update existing data or add new data in this hash. For example: <code>$playerStatus-&gt;{myPluginData}=&lt;myPluginValue&gt;</code></p>
 
 <p><code>$accountId</code> is the account ID of the player for whom status data update is requested.</p>
 
@@ -522,6 +620,8 @@
 
 <p>The return value must be a reference to an array containing the names of the status information updated or added by the plugin.</p>
 
+<p>Note for Python plugins: As Python plugins cannot modify the data structures passed as parameters to the callbacks, an alternate way to implement this callback is offered. Instead of modifying the <code>playerStatus</code> dictionary directly, the callback can return a new dictionary containing the data to add/modify in the <code>playerStatus</code> dictionary.</p>
+
 </dd>
 </dl>
 
@@ -531,7 +631,7 @@
 
 <dl>
 
-<dt id="eventLoop"><code>eventLoop()</code></dt>
+<dt id="eventLoop-self"><code>eventLoop($self)</code></dt>
 <dd>
 
 <p>Warning: this callback is called very frequently (during each iteration of SPADS main event loop), so performing complex operations here can be very intensive on the CPU. It is recommended to use timers (<code>addTimer</code>/<code>removeTimer</code> functions) instead for all time related operations (timeouts, scheduled actions, regular serialization of persistent data to avoid data loss...). This callback shouldn&#39;t be blocking, otherwise SPADS may become unstable.</p>
@@ -541,7 +641,7 @@
 
 <h1 id="API-FUNCTIONS">API FUNCTIONS</h1>
 
-<p>The API functions are implemented by SPADS core and can be called by SPADS plugins.</p>
+<p>The API functions are implemented by SPADS core and can be called by SPADS plugins (directly from Perl plugins, or via <code>spads.[...]</code> from Python plugins).</p>
 
 <h2 id="Accessors">Accessors</h2>
 
@@ -854,6 +954,8 @@
 
 <p>This function allows plugins to fork a process from main SPADS process, for parallel processing. In scalar context it returns the PID of the forked process on success, <code>-1</code> if the fork request has been queued, or <code>0</code> if the fork request failed. In list context it returns the PID as first parameter and a handle as second parameter. This handle can be passed as parameter to the <code>removeProcessCallback</code> function to remove the <code>endProcessCallback</code> callback.</p>
 
+<p>Note: this function cannot be used by Python plugins on Windows system (refer to section <a href="#Windows-limitations">PYTHON SPECIFIC NOTES - Windows limitations</a> for details).</p>
+
 <p><code>\&amp;processFunction</code> is a reference to a function containing the code to be executed in the forked process (no parameter is passed to this function). This function can call <code>exit</code> to end the forked process with a specific exit code. If it returns without calling exit, then the exit code <code>0</code> will be used.</p>
 
 <p><code>\&amp;endProcessCallback</code> is a reference to a function containing the code to be executed in main SPADS process, once the forked process exited. Following parameters are passed to this function: <code>$exitCode</code> (exit code of the forked process), <code>$signalNb</code> (signal number responsible for forked process termination if any), <code>$hasCoreDump</code> (boolean flag indicating if a core dump occured in the forked process), <code>$pid</code> (PID of the forked process that just exited).</p>
@@ -865,6 +967,8 @@
 <dd>
 
 <p>This function allows plugins to call a function asynchronously and retrieve the data returned by this function (this is done internally by forking a process to execute the function and use a socketpair to transmit the result back to the parent process). In scalar context it returns the PID of the forked process on success, <code>-1</code> if the fork request has been queued, or <code>0</code> on error. In list context it returns the PID as first parameter and a handle as second parameter. This handle can be passed as parameter to the <code>removeProcessCallback</code> function to remove the <code>endProcessCallback</code> callback.</p>
+
+<p>Note: this function cannot be used by Python plugins on Windows system (refer to section <a href="#Windows-limitations">PYTHON SPECIFIC NOTES - Windows limitations</a> for details).</p>
 
 <p><code>\&amp;processFunction</code> is a reference to a function containing the code to be executed in the forked process (no parameter is passed to this function). This function must not call <code>exit</code>, it should use <code>return</code> instead to return values (scalars, arrays, hashes...) that will be passed to the callback.</p>
 
@@ -920,9 +1024,11 @@
 
 <p>This function allows plugins to add sockets to SPADS asynchronous network system. It returns <code>1</code> if the socket has correctly been added, <code>0</code> else.</p>
 
+<p>Note: this function cannot be used by Python plugins on Windows system (refer to section <a href="#Windows-limitations">PYTHON SPECIFIC NOTES - Windows limitations</a> for details).</p>
+
 <p><code>\$socketObject</code> is a reference to a socket object created by the plugin</p>
 
-<p><code>\&amp;readCallback</code> is a reference to a plugin function containing the code to read the data received on the socket. This function will be called automatically every time data are received on the socket, with the socket object as unique parameter. It must not block, and only unbuffered Perl functions must be used to read data from the socket (<code>sysread()</code> or <code>recv()</code> for example).</p>
+<p><code>\&amp;readCallback</code> is a reference to a plugin function containing the code to read the data received on the socket. This function will be called automatically every time data are received on the socket, with the socket object as unique parameter. It must not block, and only unbuffered functions must be used to read data from the socket (<code>sysread()</code> or <code>recv()</code> for example).</p>
 
 </dd>
 <dt id="removeSocket-socketObject"><code>removeSocket(\$socketObject)</code></dt>
@@ -935,11 +1041,76 @@
 </dd>
 </dl>
 
+<h2 id="Python-specific">Python specific</h2>
+
+<dl>
+
+<dt id="fix_string-spads_string"><code>fix_string(spads_string[,...])</code></dt>
+<dd>
+
+<p>This function allows Python plugins to automatically convert byte strings to normal strings if needed. The function takes any number of byte strings or normal strings as parameters, and returns them converted to normal strings if needed (parameters which are already normal strings are returned without any modification). Refer to section <a href="#Perl-strings-conversions">PYTHON SPECIFIC NOTES - Perl strings conversions</a> for the use case of this function. Here is an example of usage:</p>
+
+<pre><code>  import perl
+  spads=perl.ExamplePlugin
+  
+  [...]
+  
+  class ExamplePlugin:
+
+  [...]
+  
+      def onPrivateMsg(self,userName,message):
+          (userName,message)=spads.fix_string(userName,message)
+
+  [...]
+  
+  def hMyCommand(source,user,params,checkOnly):
+      user=spads.fix_string(user)
+      for i in range(len(params)):
+          params[i]=spads.fix_string(params[i])</code></pre>
+
+</dd>
+<dt id="get_flag-flag_name"><code>get_flag(flag_name)</code></dt>
+<dd>
+
+<p>This function allows Python plugins to retrieve indicators (boolean flags) regarding the behavior of the plugin API and the availability of functionalities on current system.</p>
+
+<p>Currently 3 flags are supported:</p>
+
+<ul>
+
+<li><p><code>can_add_socket</code> : indicates if the <code>addSocket</code> function of the plugin API is available from Python plugin on this system</p>
+
+</li>
+<li><p><code>can_fork</code> : indicates if the fork functions of the plugin API (<code>forkProcess</code> and <code>forkCall</code>) are available from Python plugins on this system</p>
+
+</li>
+<li><p><code>use_byte_string</code> : indicates if the strings passed as parameters to Python plugin callbacks on this system are Python byte strings or normal Python strings</p>
+
+</li>
+</ul>
+
+<p>Here is an example of usage:</p>
+
+<pre><code>  import perl
+  spads=perl.ExamplePlugin
+  
+  [...]
+  
+      if spads.get_flag(&#39;can_add_socket&#39;):
+          spads.addSocket(socket,readSocketCallback)
+      else:
+          spads.slog(&quot;This plugin requires the addSocket function&quot;,1)
+          return False</code></pre>
+
+</dd>
+</dl>
+
 <h1 id="SHARED-DATA">SHARED DATA</h1>
 
 <h2 id="Constants">Constants</h2>
 
-<p>Following constants are directly accessible from plugin modules:</p>
+<p>Following constants are directly accessible from Perl plugin modules (accessible via <code>perl.eval(&#39;$::SpadsPluginApi::...&#39;)</code> from Python plugin modules):</p>
 
 <dl>
 
@@ -955,7 +1126,7 @@
 
 <h2 id="Variables">Variables</h2>
 
-<p>Following variables are directly accessible from plugin modules, but it is strongly recommended to use the accessors from the API instead:</p>
+<p>Following variables are directly accessible from Perl plugin modules (accessible via <code>perl.eval(&#39;...&#39;)</code> from Python plugin modules), but it is strongly recommended to use the accessors from the API instead:</p>
 
 <dl>
 
@@ -1015,9 +1186,13 @@
 
 <h1 id="SEE-ALSO">SEE ALSO</h1>
 
-<p><a href="http://springrts.com/wiki/SPADS_plugin_development">SPADS plugin development tutorials</a></p>
+<p><a href="http://springrts.com/wiki/SPADS_plugin_development">SPADS plugin development tutorials (Perl)</a></p>
 
-<p>Commented SPADS plugin templates: <a href="http://planetspads.free.fr/spads/plugins/templates/commented/MySimplePlugin.pm">Simple plugin</a>, <a href="http://planetspads.free.fr/spads/plugins/templates/commented/MyConfigurablePlugin.pm">Configurable plugin</a>, <a href="http://planetspads.free.fr/spads/plugins/templates/commented/MyNewCommandPlugin.pm">New command plugin</a></p>
+<p><a href="http://springrts.com/wiki/SPADS_plugin_development_(Python)">SPADS plugin development tutorials (Python)</a></p>
+
+<p>Commented SPADS plugin templates (Perl): <a href="http://planetspads.free.fr/spads/plugins/templates/commented/MySimplePlugin.pm">Simple plugin</a>, <a href="http://planetspads.free.fr/spads/plugins/templates/commented/MyConfigurablePlugin.pm">Configurable plugin</a>, <a href="http://planetspads.free.fr/spads/plugins/templates/commented/MyNewCommandPlugin.pm">New command plugin</a></p>
+
+<p>Commented SPADS plugin templates (Python): <a href="http://planetspads.free.fr/spads/plugins/templates/commented/mysimpleplugin.py">Simple plugin</a>, <a href="http://planetspads.free.fr/spads/plugins/templates/commented/myconfigurableplugin.py">Configurable plugin</a>, <a href="http://planetspads.free.fr/spads/plugins/templates/commented/mynewcommandPlugin.py">New command plugin</a></p>
 
 <p><a href="http://planetspads.free.fr/spads/doc/spadsDoc.html">SPADS documentation</a>, especially regarding plugins management: <a href="http://planetspads.free.fr/spads/doc/spadsDoc_All.html#global:pluginsDir">pluginsDir setting</a>, <a href="http://planetspads.free.fr/spads/doc/spadsDoc_All.html#global:autoLoadPlugins">autoLoadPlugins setting</a>, <a href="http://planetspads.free.fr/spads/doc/spadsDoc_All.html#command:plugin">plugin command</a></p>
 
@@ -1026,6 +1201,8 @@
 <p><a href="https://raw.github.com/spring/spring/master/rts/Net/AutohostInterface.cpp">Spring autohost protocol specifications (from source comments)</a></p>
 
 <p><a href="http://perldoc.perl.org/perlintro.html">Introduction to Perl</a></p>
+
+<p>Inline::Python Perl module (the bridge between Perl and Python): <a href="https://metacpan.org/pod/Inline::Python">documentation from meta::cpan</a>, <a href="https://github.com/niner/inline-python-pm">GitHub repository</a></p>
 
 <h1 id="COPYRIGHT">COPYRIGHT</h1>
 

@@ -18,10 +18,13 @@
 
 package SpadsPluginApi;
 
-use Exporter 'import';
-@EXPORT=qw/$spadsVersion $spadsDir getLobbyState getSpringPid getSpringServerType getTimestamps getRunningBattle getConfMacros getCurrentVote getPlugin addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess forkCall removeProcessCallback createDetachedProcess addTimer removeTimer addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives/;
+use File::Spec::Functions qw'catdir';
+use List::Util qw'any';
 
-my $apiVersion='0.24';
+use Exporter 'import';
+@EXPORT=qw/$spadsVersion $spadsDir loadPythonPlugin get_flag fix_string getLobbyState getSpringPid getSpringServerType getTimestamps getRunningBattle getConfMacros getCurrentVote getPlugin addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess forkCall removeProcessCallback createDetachedProcess addTimer removeTimer addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives/;
+
+my $apiVersion='0.25';
 
 our $spadsVersion=$::spadsVer;
 our $spadsDir=$::cwd;
@@ -29,6 +32,110 @@ our $spadsDir=$::cwd;
 sub getVersion {
   return $apiVersion;
 }
+
+sub hasEvalError {
+  if($@) {
+    chomp($@);
+    return 1;
+  }else{
+    return 0;
+  }
+}
+
+*getCallerPlugin=\&SimpleEvent::getOriginPackage;
+
+################################
+# Python plugins specific
+################################
+
+my $pythonReloadPrefix;
+my $inlinePythonUseByteString;
+sub initPythonInterpreter {
+  my $inlinePythonTmpDir=catdir($::conf{instanceDir},'.InlinePython.tmp');
+  if(! -d $inlinePythonTmpDir && ! mkdir($inlinePythonTmpDir)) {
+    ::slog("Unable to create temporary directory \"$inlinePythonTmpDir\" for Inline::Python used by plugin ".getCallerPlugin().": $!",1);
+    return 0;
+  }
+  my ($escapedPluginsDir,$escapedInlinePythonTmpDir)=map {quotemeta($_)} ($::conf{pluginsDir},$inlinePythonTmpDir);
+  my $pythonBootstrap=<<"PYTHON_BOOTSTRAP_END";
+import sys,signal,perl
+sys.path.append(r'$escapedPluginsDir')
+signal.signal(signal.SIGINT,signal.SIG_DFL)
+PYTHON_BOOTSTRAP_END
+  eval "use Inline Python => \"$pythonBootstrap\", directory => \"$escapedInlinePythonTmpDir\"";
+  if(hasEvalError()) {
+    ::slog('Unable to initialize Python environement for plugin '.getCallerPlugin().": $@",1);
+    return 0;
+  }
+  $pythonApiFlags{can_fork}=$^O eq 'MSWin32' ? $Inline::Python::Boolean::false : $Inline::Python::Boolean::true;
+  $pythonApiFlags{can_add_socket}=$^O eq 'MSWin32' ? $Inline::Python::Boolean::false : $Inline::Python::Boolean::true;
+  $inlinePythonUseByteString=Inline::Python::py_eval('hasattr(perl.eval("$0"),"decode")',0)?$Inline::Python::Boolean::true:$Inline::Python::Boolean::false;
+  ::slog('The version of Inline::Python currently in use converts Perl strings to Python byte strings',2) if($inlinePythonUseByteString);
+  my $r_pythonVersion=Inline::Python::py_eval('[sys.version_info[i] for i in range(0,3)]',0);
+  if(! defined $r_pythonVersion->[0] || ! defined $r_pythonVersion->[1]) {
+    ::slog('Unable to initialize Python environement for plugin '.getCallerPlugin().': failed to determine Python version',1);
+    return 0;
+  }
+  if($r_pythonVersion->[0] > 2) {
+    $pythonReloadPrefix=$r_pythonVersion->[1]>3?'importlib':'imp';
+    Inline::Python::py_eval("import $pythonReloadPrefix");
+    $pythonReloadPrefix.='.';
+  }else{
+    $pythonReloadPrefix='';
+  }
+  my $pythonGetAttrSub=sub { my ($s,$a)=@_; return $s->{$a}; };
+  ${SpadsConf::}{__getattr__}=$pythonGetAttrSub;
+  ${SpringAutoHostInterface::}{__getattr__}=$pythonGetAttrSub;
+  ${SpringLobbyInterface::}{__getattr__}=$pythonGetAttrSub;
+  ::slog('Initialized Python interpreter v'.join('.',@{$r_pythonVersion}[0,1,2]),3);
+  return 1;
+}
+
+sub loadPythonPlugin {
+  return 0 unless(defined($pythonReloadPrefix) || initPythonInterpreter());
+  my $pluginName=getCallerPlugin();
+  my $pythonModule=lc($pluginName);
+  my $pythonLoadModule=<<"PYTHON_LOADMODULE_END";
+if '$pythonModule' in dir():
+    for attr in dir($pythonModule):
+        if attr not in ('__name__', '__file__'):
+            delattr($pythonModule, attr)
+    $pythonModule = ${pythonReloadPrefix}reload($pythonModule)
+else:
+    import $pythonModule
+PYTHON_LOADMODULE_END
+  my $escapedInlinePythonTmpDir=quotemeta(catdir($::conf{instanceDir},'.InlinePython.tmp'));
+  eval "use Inline Python => \"$pythonLoadModule\", directory => \"$escapedInlinePythonTmpDir\", force_build => 1";
+  if(hasEvalError()) {
+    ::slog("Unable to load Python module for plugin $pluginName: $@",1);
+    return 0;
+  }
+  my %pythonModuleNamespace = Inline::Python::py_study_package($pythonModule);
+  if(! exists $pythonModuleNamespace{classes}{$pluginName}) {
+    ::slog("Unable to load Python module for plugin $pluginName: Python class \"$pluginName\" not found",1);
+    return 0;
+  }
+  foreach my $function (@{$pythonModuleNamespace{functions}}) {
+    next unless(any {$function eq $_} (qw'getVersion getRequiredSpadsVersion getParams getDependencies'));
+    Inline::Python::py_bind_func("${pluginName}::$function",$pythonModule,$function);
+  }
+  Inline::Python::py_bind_class($pluginName,$pythonModule,$pluginName,@{$pythonModuleNamespace{classes}{$pluginName}});
+  return 1;
+}
+
+sub get_flag {
+  my $flag=shift;
+  if($flag eq 'can_fork' || $flag eq 'can_add_socket') {
+    return $^O eq 'MSWin32' ? $Inline::Python::Boolean::false : $Inline::Python::Boolean::true;
+  }elsif($flag eq 'use_byte_string') {
+    return $inlinePythonUseByteString ? $Inline::Python::Boolean::true : $Inline::Python::Boolean::false;
+  }else{
+    ::slog("SpadsPluginApi::get_flag() called with unknown flag: $flag",2);
+    return undef;
+  }
+}
+
+sub fix_string { map {utf8::upgrade($_)} @_; return @_ }
 
 ################################
 # Accessors
@@ -84,13 +191,13 @@ sub getTimestamps {
 
 sub getPlugin {
   my $pluginName=shift;
-  $pluginName=caller() unless(defined $pluginName);
-  return $::plugins{$pluginName} if(exists $::plugins{$pluginName});
+  $pluginName=getCallerPlugin() unless(defined $pluginName);
+  return $::plugins{$pluginName};
 }
 
 sub getPluginConf {
   my $plugin=shift;
-  $plugin=caller() unless(defined $plugin);
+  $plugin=getCallerPlugin() unless(defined $plugin);
   return $::spads->{pluginsConf}->{$plugin}->{conf} if(exists $::spads->{pluginsConf}->{$plugin});
 }
 
@@ -100,13 +207,16 @@ sub getPluginConf {
 
 sub addLobbyCommandHandler {
   my ($p_handlers,$priority)=@_;
-  $priority=caller() unless(defined $priority);
+  my $plugin=getCallerPlugin();
+  map {$_=SimpleEvent::encapsulateCallback($_,$plugin) unless(ref $_ eq 'CODE')} (values %{$p_handlers});
+  $priority//=$plugin;
   $::lobby->addCallbacks($p_handlers,0,$priority);
 }
 
 sub addSpadsCommandHandler {
   my ($p_handlers,$replace)=@_;
-  my $plugin=caller();
+  my $plugin=getCallerPlugin();
+  map {$_=SimpleEvent::encapsulateCallback($_,$plugin) unless(ref $_ eq 'CODE')} (values %{$p_handlers});
   $replace=0 unless(defined $replace);
   foreach my $commandName (keys %{$p_handlers}) {
     my $lcName=lc($commandName);
@@ -120,19 +230,21 @@ sub addSpadsCommandHandler {
 
 sub addSpringCommandHandler {
   my ($p_handlers,$priority)=@_;
-  $priority=caller() unless(defined $priority);
+  my $plugin=getCallerPlugin();
+  map {$_=SimpleEvent::encapsulateCallback($_,$plugin) unless(ref $_ eq 'CODE')} (values %{$p_handlers});
+  $priority//=$plugin;
   $::autohost->addCallbacks($p_handlers,0,$priority);
 }
 
 sub removeLobbyCommandHandler {
   my ($p_commands,$priority)=@_;
-  $priority=caller() unless(defined $priority);
+  $priority//=getCallerPlugin();
   $::lobby->removeCallbacks($p_commands,$priority);
 }
 
 sub removeSpadsCommandHandler {
   my $p_commands=shift;
-  my $plugin=caller();
+  my $plugin=getCallerPlugin();
   foreach my $commandName (@{$p_commands}) {
     my $lcName=lc($commandName);
     delete $::spadsHandlers{$lcName};
@@ -141,7 +253,7 @@ sub removeSpadsCommandHandler {
 
 sub removeSpringCommandHandler {
   my ($p_commands,$priority)=@_;
-  $priority=caller() unless(defined $priority);
+  $priority//=getCallerPlugin();
   $::autohost->removeCallbacks($p_commands,$priority);
 }
 
@@ -153,25 +265,25 @@ sub forkProcess {
   my ($p_processFunction,$p_endCallback,$preventQueuing)=@_;
   $preventQueuing//=1;
   my ($childPid,$procHdl) = SimpleEvent::forkProcess($p_processFunction, sub { &{$p_endCallback}($_[1],$_[2],$_[3],$_[0]) },$preventQueuing);
-  ::slog('Failed to fork process for plugin '.caller().' !',1) if($childPid == 0);
+  ::slog('Failed to fork process for plugin '.getCallerPlugin().' !',1) if($childPid == 0);
   return wantarray() ? ($childPid,$procHdl) : $childPid;
 }
 
 sub forkCall {
   my ($childPid,$procHdl) = SimpleEvent::forkCall(@_);
-  ::slog('Failed to fork process for function call by plugin '.caller().' !',1) if($childPid == 0);
+  ::slog('Failed to fork process for function call by plugin '.getCallerPlugin().' !',1) if($childPid == 0);
   return wantarray() ? ($childPid,$procHdl) : $childPid;
 }
 
 sub removeProcessCallback {
   my $res=SimpleEvent::removeProcessCallback(@_);
-  ::slog('Failed to remove process callback for plugin '.caller().' !',1) unless($res);
+  ::slog('Failed to remove process callback for plugin '.getCallerPlugin().' !',1) unless($res);
   return $res;
 }
 
 sub createDetachedProcess {
   my $res = SimpleEvent::createDetachedProcess(@_);
-  ::slog('Failed to create detached process for plugin '.caller().' !',1) unless($res);
+  ::slog('Failed to create detached process for plugin '.getCallerPlugin().' !',1) unless($res);
   return $res;
 }
 
@@ -181,13 +293,13 @@ sub createDetachedProcess {
 
 sub addTimer {
   my ($name,$delay,$interval,$p_callback)=@_;
-  $name=caller().'::'.$name;
+  $name=getCallerPlugin().'::'.$name;
   return SimpleEvent::addTimer($name,$delay,$interval,$p_callback);
 }
 
 sub removeTimer {
   my $name=shift;
-  $name=caller().'::'.$name;
+  $name=getCallerPlugin().'::'.$name;
   return SimpleEvent::removeTimer($name);
 }
 
@@ -196,10 +308,10 @@ sub removeTimer {
 ################################
 
 sub addSocket {
-  if(SimpleEvent::registerSocket(@_)) {
-    return 1;
+  if(my $rc=SimpleEvent::registerSocket(@_)) {
+    return $rc;
   }else{
-    ::slog('Unable to add socket for plugin '.caller().' !',2);
+    ::slog('Unable to add socket for plugin '.getCallerPlugin().' !',2);
     return 0;
   }
 }
@@ -208,7 +320,7 @@ sub removeSocket {
   if(SimpleEvent::unregisterSocket(@_)) {
     return 1;
   }else{
-    ::slog('Unable to remove socket for plugin '.caller().' !',2);
+    ::slog('Unable to remove socket for plugin '.getCallerPlugin().' !',2);
     return 0;
   }
 }
@@ -263,7 +375,7 @@ sub rehost {
 
 sub slog {
   my($m,$l)=@_;
-  my $plugin=caller();
+  my $plugin=getCallerPlugin();
   $m="<$plugin> $m";
   ::slog($m,$l);
 }
@@ -354,6 +466,8 @@ SpadsPluginApi - SPADS Plugin API
 
 =head1 SYNOPSIS
 
+Perl:
+
   package MyPlugin;
 
   use SpadsPluginApi;
@@ -374,6 +488,26 @@ SpadsPluginApi - SPADS Plugin API
 
   1;
 
+Python:
+
+  import perl
+  spads=perl.MyPlugin
+
+  pluginVersion = '0.1'
+  requiredSpadsVersion = '0.12.29'
+
+  def getVersion(pluginObject):
+      return pluginVersion
+
+  def getRequiredSpadsVersion(pluginName):
+      return requiredSpadsVersion
+
+
+  class MyPlugin:
+
+      def __init__(self,context):
+          spads.slog("MyPlugin plugin loaded (version %s)" % pluginVersion,3)
+
 =head1 DESCRIPTION
 
 C<SpadsPluginApi> is a Perl module implementing the plugin API for SPADS. This
@@ -385,13 +519,91 @@ This API relies on plugin callback functions (implemented by SPADS plugins),
 which can in turn call plugin API functions (implemented by SPADS core) and
 access shared SPADS data.
 
+Plugins can be coded in Perl (since SPADS 0.11) or Python (since SPADS 0.12.29).
+
+=head1 PYTHON SPECIFIC NOTES
+
+=head2 How to read the documentation
+
+This documentation was written when SPADS was only supporting plugins coded in
+Perl, so types for function parameters and return values are described using
+Perl terminology, with Perl sigils (C<%> for hash, C<@> for array, C<$>  for
+scalars). Python plugins just need to ignore these sigils and use their
+equivalent internal Python types instead (Python dictionaries instead of Perl
+hashes, Python lists instead of Perl arrays, Python tuples instead of Perl
+lists, Python None value instead of Perl undef value...).
+
+In order to call functions from the plugin API, Python plugin modules must first
+import the special C<perl> module, and then use the global variable of this
+module named after the plugin name to call the functions (refer to the SYNOPSYS
+for an example of a Python plugin named C<MyPlugin> calling the C<slog> API
+function).
+
+=head2 Perl strings conversions
+
+SPADS uses the C<Inline::Python> Perl module to interface Perl code with Python
+code. Unfortunately, some versions of this module don't auto-convert Perl
+strings entirely when used with Python 3 (Python 2 is unaffected): depending on
+the version of Python and the version of the C<Inline::Python> Perl module used
+by your system, it is possible that the Python plugin callbacks receive Python
+byte strings as parameters instead of normal Python strings. In order to
+mitigate this problem, the plugin API offers both a way to detect from the
+Python plugin code if current system is affected (by calling the C<get_flag>
+function with parameter C<'use_byte_string'>), and a way to workaround the
+problem by calling a dedicated C<fix_string> function which fixes the string
+values if needed. For additional information regarding these Python specific
+functions of the plugin API, refer to the L<API FUNCTIONS - Python specific|/"Python specific">
+section. Python plugins can also choose to implement their own pure Python function which
+fixes strings coming from SPADS if needed like this for example:
+
+  def fix_spads_string(spads_string):
+      if hasattr(spads_string,'decode'):
+          return spads_string.decode('utf-8')
+      return spads_string
+  
+  def fix_spads_strings(*spads_strings):
+      fixed_strings=[]
+      for spads_string in spads_strings:
+          fixed_strings.append(fix_spads_string(spads_string))
+      return fixed_strings
+
+=head2 Windows limitations
+
+On Windows systems, Perl emulates the C<fork> functionality using threads. As
+the C<Inline::Python> Perl module used by SPADS to interface with Python code
+isn't thread-safe, the fork functions of the plugin API (C<forkProcess> and
+C<forkCall>) aren't available from Python plugins when running on a Windows
+system. On Windows systems, using native Win32 processes for parallel processing
+is recommended anyway. Plugins can check if the fork functions of the plugin API
+are available by calling the C<get_flag> Python specific plugin API function
+with parameter C<'can_fork'>, instead of checking by themselves if the current
+system is Windows. Refer to the L<API FUNCTIONS - Python specific|/"Python specific">
+section for more information regarding this function.
+
+Automatic asynchronous socket management (C<addSocket> plugin API function) is
+also unavailable for Python plugins on Windows systems (this is due to the file
+descriptor numbers being thread-specific on Windows, preventing SPADS from
+accessing sockets opened in Python interpreter scope). However, it is still
+possible to manage asynchronous sockets manually, for example by hooking the
+SPADS event loop (C<eventLoop> plugin callback) to perform non-blocking
+C<select> with 0 timeout (refer to L<Python select documentation|https://docs.python.org/3/library/select.html#select.select>).
+Plugins can check if the C<addSocket> function of the plugin API is available by
+calling the C<get_flag> Python specific plugin API function with parameter
+C<'can_add_socket'>, instead of checking by themselves if the current system is
+Windows. Refer to the L<API FUNCTIONS - Python specific|/"Python specific">
+section for more information regarding this function.
+
 =head1 CALLBACK FUNCTIONS
 
 The callback functions are called from SPADS core and implemented by SPADS
-plugins. SPADS plugins are actually Perl classes, which are instanciated as
-objects. So even if not indicated below, all callback functions receive a
-reference to the plugin object as first parameter (except the constructor,
-which receives the class name as first parameter).
+plugins. SPADS plugins are actually Perl or Python classes instanciated as
+objects. So most callback functions are called as object methods and receive a
+reference to the plugin object as first parameter. The exceptions are the
+constructor (Perl: C<new> receives the class/plugin name as first parameter,
+Python: C<__init__> receives the plugin object being created as first
+parameter), and a few other callbacks which are called/checked before the plugin
+object is actually created: C<getVersion> and C<getRequiredSpadsVersion>
+(mandatory callbacks), C<getParams> and C<getDependencies> (optional callbacks).
 
 =head2 Mandatory callbacks
 
@@ -399,10 +611,9 @@ To be valid, a SPADS plugin must implement at least these 3 callbacks:
 
 =over 2
 
-=item C<new($context)>
+=item [Perl] C<new($pluginName,$context)> . . . . [Python] C<__init__(self,context)>
 
-This is the plugin constructor, it is called when SPADS (re)loads the plugin. It
-must return the plugin object.
+This is the plugin constructor, it is called when SPADS (re)loads the plugin.
 
 The C<$context> parameter is a string which indicates in which context the
 plugin constructor has been called: C<"autoload"> means the plugin is being
@@ -411,11 +622,11 @@ manually using C<< !plugin <pluginName> load >> command, C<"reload"> means the
 plugin is being reloaded manually using C<< !plugin <pluginName> reload >>
 command.
 
-=item C<getVersion()>
+=item C<getVersion($self)>
 
 returns the plugin version number (example: C<"0.1">).
 
-=item C<getRequiredSpadsVersion()>
+=item C<getRequiredSpadsVersion($pluginName)>
 
 returns the required minimum SPADS version number (example: C<"0.11">).
 
@@ -430,7 +641,7 @@ do so, the plugin must implement following configuration callback:
 
 =over 2
 
-=item C<getParams()>
+=item C<getParams($pluginName)>
 
 This callback must return a reference to an array containing 2 elements. The
 first element is a reference to a hash containing the global plugin settings
@@ -439,7 +650,7 @@ declarations. These hashes use setting names as keys, and references to array of
 allowed types as values. The types must match the keys of C<%paramTypes> defined
 in SpadsConf.pm.
 
-Example of implementation:
+Example of implementation in Perl:
 
   my %globalPluginParams = ( MyGlobalSetting1 => ['integer'],
                              MyGlobalSetting2 => ['ipAddr']);
@@ -447,6 +658,16 @@ Example of implementation:
                              MyPresetSetting2 => ['bool'] );
 
   sub getParams { return [\%globalPluginParams,\%presetPluginParams]; }
+
+Example of implementation in Python:
+
+  globalPluginParams = { 'MyGlobalSetting1': ['integer'],
+                         'MyGlobalSetting2': ['ipAddr'] }
+  presetPluginParams = { 'MyPresetSetting1': ['readableDir','null'],
+                         'MyPresetSetting2': ['bool'] };
+
+  def getParams(pluginName):
+      return [ globalPluginParams , presetPluginParams ]
 
 =back
 
@@ -462,13 +683,18 @@ dependencies is unloaded.
 
 =over 2
 
-=item C<getDependencies()>
+=item C<getDependencies($pluginName)>
 
-returns the dependencies plugins names list
+This callback must return the plugin dependencies (list of plugin names).
 
-Example of implementation:
+Example of implementation in Perl:
 
   sub getDependencies { return ('SpringForumInterface','MailAlerts'); }
+
+Example of implementation in Python:
+
+  def getDependencies(pluginName):
+      return ('SpringForumInterface','MailAlerts')
 
 =back
 
@@ -479,15 +705,15 @@ lobby, Spring server...):
 
 =over 2
 
-=item C<onBattleClosed()>
+=item C<onBattleClosed($self)>
 
 This callback is called when the battle lobby of the autohost is closed.
 
-=item C<onBattleOpened()>
+=item C<onBattleOpened($self)>
 
 This callback is called when the battle lobby of the autohost is opened.
 
-=item C<onGameEnd(\%endGameData)>
+=item C<onGameEnd($self,\%endGameData)>
 
 This callback is called each time a game hosted by the autohost ends.
 
@@ -497,7 +723,7 @@ data printing function (such as the C<Dumper> function from the standard
 C<Data::Dumper> module included in Perl core) to check the content of this hash
 for the desired data.
 
-=item C<onJoinBattleRequest($userName,$ipAddr)>
+=item C<onJoinBattleRequest($self,$userName,$ipAddr)>
 
 This callback is called each time a client requests to join the battle lobby
 managed by the autohost.
@@ -515,7 +741,7 @@ C<1> if the user isn't allowed to join the battle (without explicit reason)
 C<< "<explicit reason string>" >> if the user isn't allowed to join the battle,
 with explicit reason
 
-=item C<onLobbyConnected($lobbyInterface)>
+=item C<onLobbyConnected($self,$lobbyInterface)>
 
 This callback is called each time the autohost successfully logged in on the
 lobby server, after all login info has been received from lobby server (this
@@ -525,12 +751,12 @@ The C<$lobbyInterface> parameter is the instance of the
  L<SpringLobbyInterface|https://github.com/Yaribz/SpringLobbyInterface> module
 used by SPADS.
 
-=item C<onLobbyDisconnected()>
+=item C<onLobbyDisconnected($self)>
 
 This callback is called each time the autohost is disconnected from the lobby
 server.
 
-=item C<onLobbyLogin($lobbyInterface)>
+=item C<onLobbyLogin($self,$lobbyInterface)>
 
 This callback is called each time the autohost tries to login on the lobby
 server, just after the LOGIN command has been sent to the lobby server (this
@@ -540,7 +766,7 @@ The C<$lobbyInterface> parameter is the instance of the
  L<SpringLobbyInterface|https://github.com/Yaribz/SpringLobbyInterface> module
 used by SPADS.
 
-=item C<onPresetApplied($oldPresetName,$newPresetName)>
+=item C<onPresetApplied($self,$oldPresetName,$newPresetName)>
 
 This callback is called each time a global preset is applied.
 
@@ -548,7 +774,7 @@ C<$oldPresetName> is the name of the previous global preset
 
 C<$newPresetName> is the name of the new global preset
 
-=item C<onPrivateMsg($userName,$message)>
+=item C<onPrivateMsg($self,$userName,$message)>
 
 This callback is called each time the autohost receives a private message.
 
@@ -563,7 +789,7 @@ C<0> if the message can be processed by other plugins and SPADS core
 C<1> if the message must not be processed by other plugins and SPADS core (this
 prevents logging)
 
-=item C<onReloadConf($keepSettings)>
+=item C<onReloadConf($self,$keepSettings)>
 
 This callback is called each time the SPADS configuration is reloaded.
 
@@ -576,7 +802,7 @@ C<0> if an error occured while reloading the plugin configuration
 
 C<1> if the plugin configuration has been reloaded correctly
 
-=item C<onSettingChange($settingName,$oldValue,$newValue)>
+=item C<onSettingChange($self,$settingName,$oldValue,$newValue)>
 
 This callback is called each time a setting of the plugin configuration is
 changed (using C<< !plugin <pluginName> set ... >> command).
@@ -587,24 +813,24 @@ C<$oldValue> is the previous value of the setting
 
 C<$newValue> is the new value of the setting
 
-=item C<onSpringStart($springPid)>
+=item C<onSpringStart($self,$springPid)>
 
 This callback is called each time a Spring process is launched to host a game.
 
 C<$springPid> is the PID of the Spring process that has just been launched.
 
-=item C<onSpringStop($springPid)>
+=item C<onSpringStop($self,$springPid)>
 
 This callback is called each time the Spring process ends.
 
 C<$springPid> is the PID of the Spring process that just ended.
 
-=item C<onUnload($context)>
+=item C<onUnload($self,$context)>
 
 This callback is called when the plugin is unloaded. If the plugin has added
 handlers for SPADS command, lobby commands, or Spring commands, then they must
 be removed here. If the plugin has added timers or forked process callbacks,
-they must also be removed here. If the plugin handles persistent data, then
+they should also be removed here. If the plugin handles persistent data, then
 these data must be serialized and written to persistent storage here.
 
 The C<$context> parameter is a string which indicates in which context the
@@ -615,7 +841,7 @@ manually using C<< !plugin <pluginName> unload >> command, C<"reload"> means the
 plugin is being reloaded manually using C<< !plugin <pluginName> reload >>
 command.
 
-=item C<onVoteRequest($source,$user,\@command,\%remainingVoters)>
+=item C<onVoteRequest($self,$source,$user,\@command,\%remainingVoters)>
 
 This callback is called each time a vote is requested by a player.
 
@@ -629,13 +855,16 @@ C<\@command> is an array reference containing the command for which a vote is
 requested
 
 C<\%remainingVoters> is a reference to a hash containing the players allowed to
-vote. This hash is indexed by player names. The plugin can filter these players
-by simply removing the corresponding entries from the hash.
+vote. This hash is indexed by player names. Perl plugins can filter these
+players by removing the corresponding entries from the hash directly, but Python
+plugins must use the alternate method based on the return value described below.
 
 This callback must return C<0> to prevent the vote call from happening, or C<1>
-to allow it.
+to allow it without changing the remaining voters list, or an array reference
+containing the player names that should be removed from the remaining voters
+list.
 
-=item C<onVoteStart($user,\@command)>
+=item C<onVoteStart($self,$user,\@command)>
 
 This callback is called each time a new vote poll is started.
 
@@ -644,14 +873,14 @@ C<$user> is the name of the user who started the vote poll
 C<\@command> is an array reference containing the command for which a vote is
 started
 
-=item C<onVoteStop($voteResult)>
+=item C<onVoteStop($self,$voteResult)>
 
 This callback is called each time a vote poll is stoped.
 
 C<$voteResult> indicates the result of the vote: C<-1> (vote failed), C<0> (vote
 cancelled), C<1> (vote passed)
 
-=item C<postSpadsCommand($command,$source,$user,\@params,$commandResult)>
+=item C<postSpadsCommand($self,$command,$source,$user,\@params,$commandResult)>
 
 This callback is called each time a SPADS command has been called.
 
@@ -668,7 +897,7 @@ C<\@params> is a reference to an array containing the parameters of the command
 C<$commandResult> indicates the result of the command (if it is defined and set
 to C<0> then the command failed, in all other cases the command succeeded)
 
-=item C<preGameCheck($force,$checkOnly,$automatic)>
+=item C<preGameCheck($self,$force,$checkOnly,$automatic)>
 
 This callback is called each time a game is going to be launched, to allow
 plugins to perform pre-game checks and prevent the game from starting if needed.
@@ -686,7 +915,7 @@ The return value must be the reason for preventing the game from starting (for
 example C<"too many players for current map">), or C<1> if no reason can be given,
 or undef to allow the game to start.
 
-=item C<preSpadsCommand($command,$source,$user,\@params)>
+=item C<preSpadsCommand($self,$command,$source,$user,\@params)>
 
 This callback is called each time a SPADS command is called, just before it is
 actually executed.
@@ -713,20 +942,29 @@ plugins to customize features (more callbacks can be added on request):
 
 =over 2
 
-=item C<addStartScriptTags(\%additionalData)>
+=item C<addStartScriptTags($self,\%additionalData)>
 
 This callback is called when a Spring start script is generated, just before
 launching the game. It allows plugins to declare additional scrip tags which
 will be written in the start script.
 
-C<\%additionalData> is a reference to a hash which must be updated by adding the
-desired keys/values. For example a plugin can add a modoption named
-"hiddenoption" with value "test" like this: C<$additionalData{"game/modoptions/hiddenoption"}="test">.
-For tags to be added in player sections, the special key "playerData" must be
-used. This special key must point to a hash associating each account ID to a
-hash containing the tags to add in the corresponding player section.
+C<\%additionalData> is a reference to a hash which must be updated by Perl
+plugins by adding the desired keys/values. For example a Perl plugin can add a
+modoption named C<hiddenoption> with value C<test> like this:
+C<$additionalData{"game/modoptions/hiddenoption"}="test">. For tags to be added
+in player sections, the special key C<playerData> must be used. This special key
+must point to a hash associating each account ID to a hash containing the tags
+to add in the corresponding player section.
 
-=item C<balanceBattle(\%players,\%bots,$clanMode,$nbTeams,$teamSize)>
+Note for Python plugins: As Python plugins cannot modify the data structures
+passed as parameters to the callbacks, an alternate way to implement this
+callback is offered. Instead of modifying the C<additionnalData> dictionary
+directly, the callback can return a new dictionary containing the entries which
+must be added. For example a Python plugin can add a tag named C<CommanderLevel>
+set to value C<8> in the player section of the player whose account ID is
+C<1234> like this: C<return {'playerData': { '1234': { 'CommanderLevel': 8 } } }>
+
+=item C<balanceBattle($self,\%players,\%bots,$clanMode,$nbTeams,$teamSize)>
 
 This callback is called each time SPADS needs to balance a battle and evaluate
 the resulting balance quality. It allows plugins to replace the built-in balance
@@ -738,7 +976,7 @@ hash containing player data. For balancing, you should only need to access the
 players skill as follows: C<< $players->{<playerName>}->{skill} >>
 
 C<\%bots> is a reference to a hash containing the bots in the battle lobby. This
-hash has exact same structure has C<\%players>.
+hash has the exact same structure has C<\%players>.
 
 C<$clanMode> is the current clan mode which must be applied to the balance. Clan
 modes are specified L<here|http://planetspads.free.fr/spads/doc/spadsDoc_All.html#set:clanMode>.
@@ -751,19 +989,31 @@ The number of entities to balance is the number of entries in C<\%players> +
 number of entries in C<\%bots>. The number of entities to balance is always
 C<< > $nbTeams*($teamSize-1) >>, and C<< <= $nbTeams*$teamSize >>.
 
-If the plugin is able to balance the battle, it must update the C<\%players> and
-C<\%bots> hash references with the team and id information. Assigned player
-teams must be written in
-C<< $players->{<playerName>}->{battleStatus}->{team} >>, and assigned player ids
-must be written in C<< $players->{<playerName>}->{battleStatus}->{id} >>.
-C<\%bots> works the same way. The return value is the unbalance indicator,
-defined as follows: C<standardDeviationOfTeamSkills * 100 / averageTeamSkill>.
-
 If the plugin is unable to balance the battle, it must not update C<\%players>
 and C<\%bots>. The callback must return undef or a negative value so that SPADS
-knows it has to use another plugin or internal balance algorithm instead.
+knows it has to use another plugin or the internal balance algorithm instead.
 
-=item C<canBalanceNow()>
+If the plugin is able to balance the battle, it can use two methods to transmit
+the desired balance to SPADS (Python plugins can only use the second method):
+
+The first method consists in updating directly the C<\%players> and C<\%bots>
+hash references with the team and id information. Assigned player teams must be
+written in C<< $players->{<playerName>}->{battleStatus}->{team} >>, and assigned
+player ids must be written in C<< $players->{<playerName>}->{battleStatus}->{id} >>.
+The C<\%bots> hash reference works the same way. The return value is the
+unbalance indicator, defined as follows:
+C<standardDeviationOfTeamSkills * 100 / averageTeamSkill>.
+
+The second method consists in returning an array reference containing the
+balance information instead of directly editing the C<\%players> and C<\%bots>
+parameters. The returned array must contain 3 items: the unbalance indicator (as
+defined in first method description above), the player assignation hash and the
+bot assignation hash. The player assignation hash and the bot assignation hash
+have exactly the same structure: the keys are the player/bot names and the
+values are hashes containing C<team> and C<id> items with the corresponding
+values for the  balanced battle.
+
+=item C<canBalanceNow($self)>
 
 This callback allows plugins to delay the battle balance operation. It is called
 each time a battle balance operation is required (either automatic if
@@ -772,12 +1022,12 @@ plugin is ready for balance, it must return C<1>. Else, it can delay the
 operation by returning C<0> (the balance algorithm won't be launched as long as
 the plugin didn't return C<1>).
 
-=item C<changeUserAccessLevel($userName,\%userData,$isAuthenticated,$currentAccessLevel)>
+=item C<changeUserAccessLevel($self,$userName,\%userData,$isAuthenticated,$currentAccessLevel)>
 
 This callback is called by SPADS each time it needs to get the access level of a
 user. It allows plugins to overwrite this level. Don't call the
 C<getUserAccessLevel($user)> function from this callback, or the program will be
-locked in recusrive loop! (and it would give you the same value as
+locked in recursive loop! (and it would give you the same value as
 C<$currentAccessLevel> anyway).
 
 C<\%userData> is a reference to a hash containing the lobby data of the user
@@ -789,7 +1039,7 @@ lobby server only, 2: authenticated by autohost)
 The callback must return the new access level value if changed, or undef if not
 changed.
 
-=item C<filterRotationMaps(\@rotationMaps)>
+=item C<filterRotationMaps($self,\@rotationMaps)>
 
 This callback is called by SPADS each time a new map must be picked up for
 rotation. It allows plugins to remove some maps from the rotation maps list
@@ -801,7 +1051,7 @@ currently allowed for rotation.
 The callback must return a reference to a new array containing the filtered map
 names.
 
-=item C<setMapStartBoxes(\@boxes,$mapName,$nbTeams,$nbExtraBox)>
+=item C<setMapStartBoxes($self,\@boxes,$mapName,$nbTeams,$nbExtraBox)>
 
 This callback allows plugins to set map start boxes (for "Choose in game" start
 position type).
@@ -810,17 +1060,36 @@ C<\@boxes> is a reference to an array containing the start boxes definitions.
 A start box definition is a string containing the box coordinates separated by
 spaces, in following order: left, top, right, bottom (0,0 is top left corner
 and 200,200 is bottom right corner). If the array already contains box
-definitions, it means SPADS already knows boxes for this map. In this case the
-plugin can choose to override them by replacing the array content, or simply
-leave it unmodified.
+definitions, it means SPADS already knows boxes for this map.
+
+C<$mapName> is the name of the map for which start boxes are requested
+
+C<$nbTeams> is the current number of teams configured (at least this number of
+start boxes must be provided)
 
 C<$nbExtraBox> is the number of extra box required. Usually this is 0, unless a
 special game mode is enabled such as King Of The Hill.
 
-The callback must return C<1> to prevent start boxes from being replaced by
-other plugins, C<0> else.
+If the plugin isn't able or doesn't need to provide/override start boxes, it must
+not update the C<\@boxes> array. It must return C<0> so that SPADS knows it has
+to check other plugins for possible start boxes.
 
-=item C<setVoteMsg($reqYesVotes,$maxReqYesVotes,$reqNoVotes,$maxReqNoVotes,$nbRequiredManualVotes)>
+If the plugin needs to provide/override start boxes, it can use two methods to
+transmit the start box definitions (Python plugins can only use the second
+method):
+
+The first method consists in replacing the C<\@boxes> array content directly
+with the new desired start box definitions. If other plugins should be allowed
+to replace the start box definitions, the callback must return C<0>, else it
+must return C<1>.
+
+The second method consists in returning an array reference containing the new
+start box definitions instead of directly updating the C<\@boxes> parameter. The
+returned array must contain 2 items: the normal return value as first item (C<0>
+to allow other plugins to replace the start boxes, or C<1> else), and an array
+reference containg the new start box definitions as second item.
+
+=item C<setVoteMsg($self,$reqYesVotes,$maxReqYesVotes,$reqNoVotes,$maxReqNoVotes,$nbRequiredManualVotes)>
 
 This callback allows plugins to customize the vote status messages.
 
@@ -843,20 +1112,26 @@ The callback must return a list containing following 2 elements: the lobby vote
 message, and the in-game vote message (undef values can be used to keep default
 messages).
 
-=item C<updateCmdAliases(\%aliases)>
+=item C<updateCmdAliases($self,\%aliases)>
 
 This callback allows plugins to add new SPADS command aliases by adding new
 entries in the C<\%aliases> hash reference. This hash is indexed by alias names
 and the values are references to an array containing the associated command. For
-example, a plugin can add an alias "C<!cvmap ...>" for "C<!callVote map ...>"
+example, a Perl plugin can add an alias "C<!cvmap ...>" for "C<!callVote map ...>"
 like this: C<< $aliases->{cvmap}=['callVote','map'] >>
 
 C<< "%<N>%" >> can be used as placeholders for original alias command
-parameters. For example, a plugin can add an alias "C<< !iprank <playerName> >>"
+parameters. For example, a Perl plugin can add an alias "C<< !iprank <playerName> >>"
 for "C<< !chrank <playerName> ip >>" like this:
 C<< $aliases->{iprank}=['chrank','%1%','ip'] >>
 
-=item C<updatePlayerSkill(\%playerSkill,$accountId,$modName,$gameType)>
+Note for Python plugins: As Python plugins cannot modify the data structures
+passed as parameters to the callbacks, an alternate way to implement this
+callback is offered. Instead of modifying the C<aliases> dictionary directly,
+the callback can return a new dictionary containing the alias entries which must
+be added.
+
+=item C<updatePlayerSkill($self,\%playerSkill,$accountId,$modName,$gameType)>
 
 This callback is called by SPADS each time it needs to get or update the skill
 of a player (on battle join, on game type change...). This allows plugins to
@@ -864,7 +1139,7 @@ replace the built-in skill estimations (rank, TrueSkill...) with custom skill
 estimations (ELO, Glicko ...).
 
 C<\%playerSkill> is a reference to a hash containing the skill data of the
-player. The plugin must update the C<skill> entry as follows:
+player. A Perl plugin can update the C<skill> entry as follows:
 C<< $playerSkill->{skill}=<skillValue> >>
 
 C<$accountId> is the account ID of the player for whom skill value is requested.
@@ -879,14 +1154,20 @@ The return value is the skill update status: C<0> (skill not updated by the
 plugin), C<1> (skill updated by the plugin), C<2> (skill updated by the plugin
 in degraded mode)
 
-=item C<updateGameStatusInfo(\%playerStatus,$accessLevel)>
+Note for Python plugins: As Python plugins cannot modify the data structures
+passed as parameters to the callbacks, an alternate way to implement this
+callback is offered. Instead of modifying the C<playerSkill> dictionary
+directly, the callback can return a list contaning the normal return value as
+first item (described above), and the new skill value as second item.
+
+=item C<updateGameStatusInfo($self,\%playerStatus,$accessLevel)>
 
 This callback is called by SPADS for each player in game when the C<!status>
 command is called, to allow plugins to update and/or add data which will be
-presented to the user.
+presented to the user issuing the command.
 
 C<\%playerStatus> is a reference to the hash containing current player status
-data. The plugin must update existing data or add new data in this hash. For
+data. A Perl plugin can update existing data or add new data in this hash. For
 example: C<< $playerStatus->{myPluginData}=<myPluginValue> >>
 
 C<$accessLevel> is the autohost access level of the user issuing the C<!status>
@@ -895,14 +1176,20 @@ command.
 The return value must be a reference to an array containing the names of the
 status information updated or added by the plugin.
 
-=item C<updateStatusInfo(\%playerStatus,$accountId,$modName,$gameType,$accessLevel)>
+Note for Python plugins: As Python plugins cannot modify the data structures
+passed as parameters to the callbacks, an alternate way to implement this
+callback is offered. Instead of modifying the C<playerStatus> dictionary
+directly, the callback can return a new dictionary containing the data to
+add/modify in the C<playerStatus> dictionary.
+
+=item C<updateStatusInfo($self,\%playerStatus,$accountId,$modName,$gameType,$accessLevel)>
 
 This callback is called by SPADS for each player in the battle lobby when the
 C<!status> command is called, to allow plugins to update and/or add data which
-will be presented to the user.
+will be presented to the user issuing the command.
 
 C<\%playerStatus> is a reference to the hash containing current player status
-data. The plugin must update existing data or add new data in this hash. For
+data. A Perl plugin can update existing data or add new data in this hash. For
 example: C<< $playerStatus->{myPluginData}=<myPluginValue> >>
 
 C<$accountId> is the account ID of the player for whom status data update is
@@ -920,6 +1207,12 @@ command.
 The return value must be a reference to an array containing the names of the
 status information updated or added by the plugin.
 
+Note for Python plugins: As Python plugins cannot modify the data structures
+passed as parameters to the callbacks, an alternate way to implement this
+callback is offered. Instead of modifying the C<playerStatus> dictionary
+directly, the callback can return a new dictionary containing the data to
+add/modify in the C<playerStatus> dictionary.
+
 =back
 
 =head2 Event loop callback
@@ -929,7 +1222,7 @@ loop. The following callback is called during each iteration of this event loop:
 
 =over 2
 
-=item C<eventLoop()>
+=item C<eventLoop($self)>
 
 Warning: this callback is called very frequently (during each iteration of SPADS
 main event loop), so performing complex operations here can be very intensive on
@@ -943,7 +1236,7 @@ be blocking, otherwise SPADS may become unstable.
 =head1 API FUNCTIONS
 
 The API functions are implemented by SPADS core and can be called by SPADS
-plugins.
+plugins (directly from Perl plugins, or via C<spads.[...]> from Python plugins).
 
 =head2 Accessors
 
@@ -1072,7 +1365,9 @@ values of C<%commandCodes> defined in SpringAutoHostInterface.pm. For example,
 with C<< { SERVER_STARTED => \&hSpringServerStarted } >>, the plugin has to
 implement the function C<hSpringServerStarted>. The parameters passed to the
 handlers are the command tokens: the command name followed by command
-parameters. Refer to L<Spring autohost protocol specifications (from source comments)|https://raw.github.com/spring/spring/master/rts/Net/AutohostInterface.cpp> for more information.
+parameters. Refer to L<Spring autohost protocol specifications
+(from source comments)|https://raw.github.com/spring/spring/master/rts/Net/AutohostInterface.cpp>
+for more information.
 
 C<$priority> is the priority of the handlers. Lowest priority number actually
 means higher priority. If not provided, the plugin name is used as priority,
@@ -1117,8 +1412,8 @@ names for which the handlers must be removed.
 
 C<$priority> is the priority of the handlers to remove. It must be the same as
 the priority used when adding the handlers. If not provided, the plugin name is
-used as priority. Usually you don't need to provide priority, unless you use data
-managed by other handlers.
+used as priority. Usually you don't need to provide priority, unless you use
+data managed by other handlers.
 
 =back
 
@@ -1247,6 +1542,10 @@ request failed. In list context it returns the PID as first parameter and a
 handle as second parameter. This handle can be passed as parameter to the
 C<removeProcessCallback> function to remove the C<endProcessCallback> callback.
 
+Note: this function cannot be used by Python plugins on Windows system (refer to
+section L<PYTHON SPECIFIC NOTES - Windows limitations|/"Windows limitations">
+for details).
+
 C<\&processFunction> is a reference to a function containing the code to be
 executed in the forked process (no parameter is passed to this function). This
 function can call C<exit> to end the forked process with a specific exit code.
@@ -1273,6 +1572,10 @@ success, C<-1> if the fork request has been queued, or C<0> on error. In list
 context it returns the PID as first parameter and a handle as second parameter.
 This handle can be passed as parameter to the C<removeProcessCallback> function
 to remove the C<endProcessCallback> callback.
+
+Note: this function cannot be used by Python plugins on Windows system (refer to
+section L<PYTHON SPECIFIC NOTES - Windows limitations|/"Windows limitations">
+for details).
 
 C<\&processFunction> is a reference to a function containing the code to be
 executed in the forked process (no parameter is passed to this function). This
@@ -1343,13 +1646,17 @@ using the C<addTimer> function.
 This function allows plugins to add sockets to SPADS asynchronous network
 system. It returns C<1> if the socket has correctly been added, C<0> else.
 
+Note: this function cannot be used by Python plugins on Windows system (refer to
+section L<PYTHON SPECIFIC NOTES - Windows limitations|/"Windows limitations">
+for details).
+
 C<\$socketObject> is a reference to a socket object created by the plugin
 
 C<\&readCallback> is a reference to a plugin function containing the code to
 read the data received on the socket. This function will be called automatically
 every time data are received on the socket, with the socket object as unique
-parameter. It must not block, and only unbuffered Perl functions must be used to
-read data from the socket (C<sysread()> or C<recv()> for example).
+parameter. It must not block, and only unbuffered functions must be used to read
+data from the socket (C<sysread()> or C<recv()> for example).
 
 =item C<removeSocket(\$socketObject)>
 
@@ -1361,11 +1668,77 @@ plugin
 
 =back
 
+=head2 Python specific
+
+=over 2
+
+=item C<fix_string(spads_string[,...])>
+
+This function allows Python plugins to automatically convert byte strings to
+normal strings if needed. The function takes any number of byte strings or
+normal strings as parameters, and returns them converted to normal strings if
+needed (parameters which are already normal strings are returned without any
+modification). Refer to section L<PYTHON SPECIFIC NOTES - Perl strings conversions|/"Perl strings conversions">
+for the use case of this function. Here is an example of usage:
+
+  import perl
+  spads=perl.ExamplePlugin
+  
+  [...]
+  
+  class ExamplePlugin:
+
+  [...]
+  
+      def onPrivateMsg(self,userName,message):
+          (userName,message)=spads.fix_string(userName,message)
+
+  [...]
+  
+  def hMyCommand(source,user,params,checkOnly):
+      user=spads.fix_string(user)
+      for i in range(len(params)):
+          params[i]=spads.fix_string(params[i])
+
+=item C<get_flag(flag_name)>
+
+This function allows Python plugins to retrieve indicators (boolean flags)
+regarding the behavior of the plugin API and the availability of
+functionalities on current system.
+
+Currently 3 flags are supported:
+
+=over 3
+
+=item * C<can_add_socket> : indicates if the C<addSocket> function of the plugin API is available from Python plugin on this system
+
+=item * C<can_fork> : indicates if the fork functions of the plugin API (C<forkProcess> and C<forkCall>) are available from Python plugins on this system
+
+=item * C<use_byte_string> : indicates if the strings passed as parameters to Python plugin callbacks on this system are Python byte strings or normal Python strings
+
+=back
+
+Here is an example of usage:
+
+  import perl
+  spads=perl.ExamplePlugin
+  
+  [...]
+  
+      if spads.get_flag('can_add_socket'):
+          spads.addSocket(socket,readSocketCallback)
+      else:
+          spads.slog("This plugin requires the addSocket function",1)
+          return False
+
+=back
+
 =head1 SHARED DATA
 
 =head2 Constants
 
-Following constants are directly accessible from plugin modules:
+Following constants are directly accessible from Perl plugin modules (accessible
+via C<perl.eval('$::SpadsPluginApi::...')> from Python plugin modules):
 
 =over 2
 
@@ -1377,8 +1750,9 @@ Following constants are directly accessible from plugin modules:
 
 =head2 Variables
 
-Following variables are directly accessible from plugin modules, but it is
-strongly recommended to use the accessors from the API instead:
+Following variables are directly accessible from Perl plugin modules (accessible
+via C<perl.eval('...')> from Python plugin modules), but it is strongly
+recommended to use the accessors from the API instead:
 
 =over 2
 
@@ -1412,9 +1786,13 @@ strongly recommended to use the accessors from the API instead:
 
 =head1 SEE ALSO
 
-L<SPADS plugin development tutorials|http://springrts.com/wiki/SPADS_plugin_development>
+L<SPADS plugin development tutorials (Perl)|http://springrts.com/wiki/SPADS_plugin_development>
 
-Commented SPADS plugin templates: L<Simple plugin|http://planetspads.free.fr/spads/plugins/templates/commented/MySimplePlugin.pm>, L<Configurable plugin|http://planetspads.free.fr/spads/plugins/templates/commented/MyConfigurablePlugin.pm>, L<New command plugin|http://planetspads.free.fr/spads/plugins/templates/commented/MyNewCommandPlugin.pm>
+L<SPADS plugin development tutorials (Python)|http://springrts.com/wiki/SPADS_plugin_development_(Python)>
+
+Commented SPADS plugin templates (Perl): L<Simple plugin|http://planetspads.free.fr/spads/plugins/templates/commented/MySimplePlugin.pm>, L<Configurable plugin|http://planetspads.free.fr/spads/plugins/templates/commented/MyConfigurablePlugin.pm>, L<New command plugin|http://planetspads.free.fr/spads/plugins/templates/commented/MyNewCommandPlugin.pm>
+
+Commented SPADS plugin templates (Python): L<Simple plugin|http://planetspads.free.fr/spads/plugins/templates/commented/mysimpleplugin.py>, L<Configurable plugin|http://planetspads.free.fr/spads/plugins/templates/commented/myconfigurableplugin.py>, L<New command plugin|http://planetspads.free.fr/spads/plugins/templates/commented/mynewcommandPlugin.py>
 
 L<SPADS documentation|http://planetspads.free.fr/spads/doc/spadsDoc.html>, especially regarding plugins management: L<pluginsDir setting|http://planetspads.free.fr/spads/doc/spadsDoc_All.html#global:pluginsDir>, L<autoLoadPlugins setting|http://planetspads.free.fr/spads/doc/spadsDoc_All.html#global:autoLoadPlugins>, L<plugin command|http://planetspads.free.fr/spads/doc/spadsDoc_All.html#command:plugin>
 
@@ -1423,6 +1801,8 @@ L<Spring lobby protocol specifications|http://springrts.com/dl/LobbyProtocol/Pro
 L<Spring autohost protocol specifications (from source comments)|https://raw.github.com/spring/spring/master/rts/Net/AutohostInterface.cpp>
 
 L<Introduction to Perl|http://perldoc.perl.org/perlintro.html>
+
+Inline::Python Perl module (the bridge between Perl and Python): L<documentation from meta::cpan|https://metacpan.org/pod/Inline::Python>, L<GitHub repository|https://github.com/niner/inline-python-pm>
 
 =head1 COPYRIGHT
 
