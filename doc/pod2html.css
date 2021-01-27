@@ -2,8 +2,11 @@ BODY {
   background: white;
   color: black;
   font-family: arial,sans-serif;
-  margin: 0;
-  padding: 1ex;
+  padding: 2ex;
+  min-width: 900px;
+  max-width: 1200px;
+  margin: 5px auto;
+  border: 2px dotted darkblue;
 }
 
 TABLE {
@@ -75,7 +78,7 @@ LI {
  
 UL#index {
   width: 300px;
-  margin: 20px 0 30px 20px;
+  margin: 16px 0 30px 20px;
   padding: 10px 0px 10px 40px;
   background: #FFFFCE;
   -moz-border-radius: 30px 30px 30px 30px;
