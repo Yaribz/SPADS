@@ -1,10 +1,12 @@
 # Import the perl module so we can call the SPADS Plugin API
 import perl
 
-# perl.MyNewCommandPlugin is the Perl representation of the MyNewCommandPlugin plugin module
-# We will use this object to call the plugin API
-spads=perl.MyNewCommandPlugin
+# Import the datetime module so we can get current time for our !time command
+import datetime
 
+# perl.TimePlugin is the Perl representation of the TimePlugin plugin module
+# We will use this object to call the plugin API
+spads=perl.TimePlugin
 
 # This is the first version of the plugin
 pluginVersion='0.1'
@@ -36,13 +38,13 @@ def getParams(pluginName):
 
 
 # This is the class implementing the plugin
-class MyNewCommandPlugin:
+class TimePlugin:
 
     # This is our constructor, called when the plugin is loaded by SPADS (mandatory callback)
     def __init__(self,context):
         
         # We declare our new command and the associated handler
-        spads.addSpadsCommandHandler({'myCommand': hMyCommand})
+        spads.addSpadsCommandHandler({'time': hSpadsTime})
         
         # We call the API function "slog" to log a notice message (level 3) when the plugin is loaded
         spads.slog("Plugin loaded (version %s)" % pluginVersion,3)
@@ -52,7 +54,7 @@ class MyNewCommandPlugin:
     def onUnload(self,reason):
 
         # We remove our new command handler
-        spads.removeSpadsCommandHandler(['myCommand'])
+        spads.removeSpadsCommandHandler(['time'])
 
         # We log a notice message when the plugin is unloaded
         spads.slog("Plugin unloaded",3)
@@ -60,23 +62,18 @@ class MyNewCommandPlugin:
 
 
 # This is the handler for our new command
-def hMyCommand(source,user,params,checkOnly):
+def hSpadsTime(source,user,params,checkOnly):
 
     # checkOnly is true if this is just a check for callVote command, not a real command execution
     if checkOnly :
         
-        # MyCommand is a basic command, we have nothing to check in case of callvote
+        # time is a basic command, we have nothing to check in case of callvote
         return 1
-    
-    # Fix strings received from Perl if needed
-    # This is in case Inline::Python handles Perl strings as byte strings instead of normal strings
-    # (this step can be skipped if your Inline::Python version isn't afffected by this bug)
-    user=spads.fix_string(user)
-    for i in range(len(params)):
-        params[i]=spads.fix_string(params[i])
-        
-    # We join the parameters provided (if any), using ',' as delimiter
-    paramsString = ','.join(params)
 
-    # We log the command call as notice message
-    spads.slog("User %s called command myCommand with parameter(s) \"%s\"" % (user,paramsString),3)
+    # We get current time using "now" function of datetime class from datetime module
+    current_time = datetime.datetime.now()
+    current_time_string = current_time.strftime("%H:%M:%S")
+
+    # We call the API function "answer" to send back the response to the user who called the command
+    # using same canal as he used (private message, battle lobby, in game message...)
+    spads.answer("Current local time: %s" % current_time_string)

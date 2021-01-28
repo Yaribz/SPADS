@@ -16,8 +16,8 @@ requiredSpadsVersion='0.12.29'
 # We define one global setting "MyGlobalSetting" and one preset setting "MyPresetSetting".
 # Both are of type "notNull", which means any non-null value is allowed
 # (check %paramTypes hash in SpadsConf.pm for a complete list of allowed setting types)
-globalPluginParams = { 'MyGlobalSetting': ['notNull'] };
-presetPluginParams = { 'MyPresetSetting': ['notNull'] };
+globalPluginParams = { 'MyGlobalSetting': ['notNull'] }
+presetPluginParams = { 'MyPresetSetting': ['notNull'] }
 
 
 # This is how SPADS gets our version number (mandatory callback)

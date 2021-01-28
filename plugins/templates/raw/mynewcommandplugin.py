@@ -6,7 +6,7 @@ pluginVersion='0.1'
 requiredSpadsVersion='0.12.29'
 
 globalPluginParams = { 'commandsFile': ['notNull'],
-                       'helpFile': ['notNull'] };
+                       'helpFile': ['notNull'] }
 presetPluginParams = None
 
 
@@ -27,8 +27,8 @@ class MyNewCommandPlugin:
         spads.slog("Plugin loaded (version %s)" % pluginVersion,3)
 
     def onUnload(self,reason):
-        spads.removeSpadsCommandHandler(['myCommand']);
-        spads.slog("Plugin unloaded",3);
+        spads.removeSpadsCommandHandler(['myCommand'])
+        spads.slog("Plugin unloaded",3)
 
 
 def hMyCommand(source,user,params,checkOnly):
@@ -38,4 +38,4 @@ def hMyCommand(source,user,params,checkOnly):
     for i in range(len(params)):
         params[i]=spads.fix_string(params[i])
     paramsString = ','.join(params)
-    spads.slog("User %s called command myCommand with parameter(s) \"%s\"" % (user,paramsString),3);
+    spads.slog("User %s called command myCommand with parameter(s) \"%s\"" % (user,paramsString),3)

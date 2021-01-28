@@ -5,8 +5,8 @@ spads=perl.MyConfigurablePlugin
 pluginVersion='0.1'
 requiredSpadsVersion='0.12.29'
 
-globalPluginParams = { 'MyGlobalSetting': ['notNull'] };
-presetPluginParams = { 'MyPresetSetting': ['notNull'] };
+globalPluginParams = { 'MyGlobalSetting': ['notNull'] }
+presetPluginParams = { 'MyPresetSetting': ['notNull'] }
 
 
 def getVersion(pluginObject):
