@@ -53,7 +53,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.29';
+our $spadsVer='0.12.30';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -10586,57 +10586,34 @@ sub getRoundedSkill {
   return $roundedSkill;
 }
 
-sub hStatus {
-  my ($source,$user,$p_params,$checkOnly)=@_;
-
-  if($#{$p_params} == -1) {
-    if($springPid && $autohost->getState()) {
-      $p_params->[0]="game";
-    }else{
-      $p_params->[0]="battle";
-    }
-  }
-
-  if($#{$p_params} != 0) {
-    invalidSyntax($user,"status");
-    return 0;
-  }
-  if($p_params->[0] eq "game") {
-    if(! ($springPid && $autohost->getState())) {
-      answer("Unable to retrieve game status, game is not running");
-      return 0;
-    }
-  }elsif($p_params->[0] eq "battle") {
-    if($lobbyState < 6 || ! %{$lobby->{battle}}) {
-      answer("Unable to retrieve battle status, battle is closed");
-      return 0;
-    }
+sub getGameStatus {
+  my $user=shift;
+  
+  my $ahState=$autohost->getState();
+  return undef unless($springPid && $ahState);
+  
+  my ($userLevel,$p_C,$B);
+  if(ref $user) {
+    $userLevel=$user->{accessLevel};
+    ($p_C,$B) = $user->{ircColors} ? @{$user->{ircColors}} : @noIrcStyle;
   }else{
-    invalidSyntax($user,"status");
-    return 0;
+    $userLevel=getUserAccessLevel($user);
+    ($p_C,$B)=initUserIrcColors($user);
   }
-  return 1 if($checkOnly);
-
-  my $userLevel=getUserAccessLevel($user);
-
-  my ($p_C,$B)=initUserIrcColors($user);
   my %C=%{$p_C};
   
-  my %pluginStatusInfo;
-  if($p_params->[0] eq "game") {
+  my @clientsStatus;
+  my %statusDataFromPlugin;
+  {
+    my %battleStructure;
     my @spectators;
-    my %runningBattleStatus;
-    my @clientsStatus;
-    my $startPosType=2;
-    $startPosType=$p_runningBattle->{scriptTags}->{"game/startpostype"} if(exists($p_runningBattle->{scriptTags}->{"game/startpostype"}));
-    my $ahState=$autohost->getState();
     foreach my $player (keys %{$p_runningBattle->{users}}) {
       if(defined $p_runningBattle->{users}->{$player}->{battleStatus} && $p_runningBattle->{users}->{$player}->{battleStatus}->{mode}) {
         my $playerTeam=$p_runningBattle->{users}->{$player}->{battleStatus}->{team};
         my $playerId=$p_runningBattle->{users}->{$player}->{battleStatus}->{id};
-        $runningBattleStatus{$playerTeam}={} unless(exists $runningBattleStatus{$playerTeam});
-        $runningBattleStatus{$playerTeam}->{$playerId}=[] unless(exists $runningBattleStatus{$playerTeam}->{$playerId});
-        push(@{$runningBattleStatus{$playerTeam}->{$playerId}},$player);
+        $battleStructure{$playerTeam}={} unless(exists $battleStructure{$playerTeam});
+        $battleStructure{$playerTeam}->{$playerId}=[] unless(exists $battleStructure{$playerTeam}->{$playerId});
+        push(@{$battleStructure{$playerTeam}->{$playerId}},$player);
       }else{
         push(@spectators,$player) unless($springServerType eq 'dedicated' && $player eq $conf{lobbyLogin});
       }
@@ -10644,9 +10621,9 @@ sub hStatus {
     foreach my $bot (keys %{$p_runningBattle->{bots}}) {
       my $botTeam=$p_runningBattle->{bots}->{$bot}->{battleStatus}->{team};
       my $botId=$p_runningBattle->{bots}->{$bot}->{battleStatus}->{id};
-      $runningBattleStatus{$botTeam}={} unless(exists $runningBattleStatus{$botTeam});
-      $runningBattleStatus{$botTeam}->{$botId}=[] unless(exists $runningBattleStatus{$botTeam}->{$botId});
-      push(@{$runningBattleStatus{$botTeam}->{$botId}},$bot." (bot)");
+      $battleStructure{$botTeam}={} unless(exists $battleStructure{$botTeam});
+      $battleStructure{$botTeam}->{$botId}=[] unless(exists $battleStructure{$botTeam}->{$botId});
+      push(@{$battleStructure{$botTeam}->{$botId}},$bot." (bot)");
     }
     my $p_ahPlayers=$autohost->getPlayersByNames();
     my @midGamePlayers=grep {! exists $p_runningBattle->{users}->{$_} && exists $inGameAddedPlayers{$_}} (keys %{$p_ahPlayers});
@@ -10655,12 +10632,12 @@ sub hStatus {
       $midGamePlayersById{$inGameAddedPlayers{$midGamePlayer}}=[] unless(exists $midGamePlayersById{$inGameAddedPlayers{$midGamePlayer}});
       push(@{$midGamePlayersById{$inGameAddedPlayers{$midGamePlayer}}},$midGamePlayer);
     }
-    foreach my $teamNb (sort {$a <=> $b} keys %runningBattleStatus) {
-      foreach my $idNb (sort {$a <=> $b} keys %{$runningBattleStatus{$teamNb}}) {
+    foreach my $teamNb (sort {$a <=> $b} keys %battleStructure) {
+      foreach my $idNb (sort {$a <=> $b} keys %{$battleStructure{$teamNb}}) {
         my $internalIdNb=$runningBattleMapping{teams}->{$idNb};
         my @midGameIdPlayers;
         @midGameIdPlayers=@{$midGamePlayersById{$internalIdNb}} if(exists $midGamePlayersById{$internalIdNb});
-        foreach my $player (sort (@{$runningBattleStatus{$teamNb}->{$idNb}},@midGameIdPlayers)) {
+        foreach my $player (sort (@{$battleStructure{$teamNb}->{$idNb}},@midGameIdPlayers)) {
           my %clientStatus=(Name => $player,
                             Team => $runningBattleMapping{allyTeams}->{$teamNb},
                             Id => $internalIdNb);
@@ -10702,8 +10679,10 @@ sub hStatus {
               $clientStatus{Status}="$C{6}Unknown$C{1}";
             }
             $clientStatus{Version}=$p_ahPlayer->{version};
-            $clientStatus{IP}=$p_ahPlayer->{address};
-            $clientStatus{IP}=$1 if($clientStatus{IP} =~ /^\[(?:::ffff:)?(\d+(?:\.\d+){3})\]:\d+$/);
+            if($userLevel >= $conf{privacyTrustLevel}) {
+              $clientStatus{IP}=$p_ahPlayer->{address};
+              $clientStatus{IP}=$1 if($clientStatus{IP} =~ /^\[(?:::ffff:)?(\d+(?:\.\d+){3})\]:\d+$/);
+            }
             foreach my $pluginName (@pluginsOrder) {
               if($plugins{$pluginName}->can('updateGameStatusInfo')) {
                 my $p_pluginColumns=$plugins{$pluginName}->updateGameStatusInfo(\%clientStatus,$userLevel);
@@ -10713,14 +10692,14 @@ sub hStatus {
                   $p_pluginColumns=\@pluginColumns;
                 }
                 foreach my $pluginColumn (@{$p_pluginColumns}) {
-                  $pluginStatusInfo{$pluginColumn}=$pluginName unless(exists $pluginStatusInfo{$pluginColumn});
+                  $statusDataFromPlugin{$pluginColumn}=$pluginName unless(exists $statusDataFromPlugin{$pluginColumn});
                 }
               }
             }
           }
           my %coloredStatus;
           foreach my $k (keys %clientStatus) {
-            if(exists $pluginStatusInfo{$k}) {
+            if(exists $statusDataFromPlugin{$k}) {
               $coloredStatus{"$C{6}$k$C{1}"}=$clientStatus{$k};
             }else{
               $coloredStatus{"$C{5}$k$C{1}"}=$clientStatus{$k};
@@ -10751,8 +10730,10 @@ sub hStatus {
           $clientStatus{Status}="$C{6}Unknown$C{1}";
         }
         $clientStatus{Version}=$p_ahPlayer->{version};
-        $clientStatus{IP}=$p_ahPlayer->{address};
-        $clientStatus{IP}=$1 if($clientStatus{IP} =~ /^\[(?:::ffff:)?(\d+(?:\.\d+){3})\]:\d+$/);
+        if($userLevel >= $conf{privacyTrustLevel}) {
+          $clientStatus{IP}=$p_ahPlayer->{address};
+          $clientStatus{IP}=$1 if($clientStatus{IP} =~ /^\[(?:::ffff:)?(\d+(?:\.\d+){3})\]:\d+$/);
+        }
         foreach my $pluginName (@pluginsOrder) {
           if($plugins{$pluginName}->can('updateGameStatusInfo')) {
             my $p_pluginColumns=$plugins{$pluginName}->updateGameStatusInfo(\%clientStatus,$userLevel);
@@ -10762,14 +10743,14 @@ sub hStatus {
               $p_pluginColumns=\@pluginColumns;
             }
             foreach my $pluginColumn (@{$p_pluginColumns}) {
-              $pluginStatusInfo{$pluginColumn}=$pluginName unless(exists $pluginStatusInfo{$pluginColumn});
+              $statusDataFromPlugin{$pluginColumn}=$pluginName unless(exists $statusDataFromPlugin{$pluginColumn});
             }
           }
         }
       }
       my %coloredStatus;
       foreach my $k (keys %clientStatus) {
-        if(exists $pluginStatusInfo{$k}) {
+        if(exists $statusDataFromPlugin{$k}) {
           $coloredStatus{"$C{6}$k$C{1}"}=$clientStatus{$k};
         }else{
           $coloredStatus{"$C{5}$k$C{1}"}=$clientStatus{$k};
@@ -10777,38 +10758,41 @@ sub hStatus {
       }
       push(@clientsStatus,\%coloredStatus) if(exists $p_runningBattle->{users}->{$spec} || (%{$p_ahPlayer} && $p_ahPlayer->{disconnectCause} < 0));
     }
-    my @defaultStatusColumns=qw'Name Team Id Ready Status Version';
-    @defaultStatusColumns=qw'Name Team Id Status Version' if($startPosType != 2);
-    my @newPluginStatusColumns;
-    foreach my $pluginColumn (keys %pluginStatusInfo) {
-      push(@newPluginStatusColumns,$pluginColumn) unless(any {$pluginColumn eq $_} (@defaultStatusColumns,'IP'));
-    }
-    my @statusFields;
-    foreach my $statusField (@defaultStatusColumns,@newPluginStatusColumns,'IP') {
-      next if($statusField eq 'IP' && $userLevel < $conf{privacyTrustLevel});
-      if(exists $pluginStatusInfo{$statusField}) {
-        push(@statusFields,"$C{6}$statusField$C{1}");
-      }else{
-        push(@statusFields,"$C{5}$statusField$C{1}");
-      }
-    }
-    my $p_statusLines=formatArray(\@statusFields,\@clientsStatus);
-    foreach my $statusLine (@{$p_statusLines}) {
-      sayPrivate($user,$statusLine);
-    }
-    if($ahState == 1) {
-      my $gameRunningTime=secToTime(time-$timestamps{lastGameStart});
-      sayPrivate($user,"$B$C{10}Game state:$B$C{1} waiting for ready in game (since $gameRunningTime)");
-    }else{
-      my $gameRunningTime=secToTime(time-$timestamps{lastGameStartPlaying});
-      sayPrivate($user,"$B$C{10}Game state:$B$C{1} running since $gameRunningTime");
-    }
-    sayPrivate($user,"$B$C{10}Map:$B$C{1} $p_runningBattle->{map}");
-    sayPrivate($user,"$B$C{10}Mod:$B$C{1} $p_runningBattle->{mod}");
+  }
+  my %globalStatus = ("$B$C{10}Game status$B$C{1}" => $ahState == 1 ? 'waiting for ready in game (since '.secToTime(time-$timestamps{lastGameStart}).')' : 'running since '.secToTime(time-$timestamps{lastGameStartPlaying}),
+                      "$B$C{10}Map$B$C{1}" => $p_runningBattle->{map},
+                      "$B$C{10}Mod$B$C{1}" => $p_runningBattle->{mod});
+  return (\@clientsStatus,\%statusDataFromPlugin,\%globalStatus);
+}
+
+sub getBattleLobbyStatus {
+  my $user=shift;
+  
+  return undef unless($lobbyState > 5 && %{$lobby->{battle}});
+  
+  my ($userLevel,$p_C,$B);
+  if(ref $user) {
+    $userLevel=$user->{accessLevel};
+    ($p_C,$B) = defined $user->{ircColors} ? @{$user->{ircColors}} : @noIrcStyle;
   }else{
+    $userLevel=getUserAccessLevel($user);
+    ($p_C,$B)=initUserIrcColors($user);
+  }
+  my %C=%{$p_C};
+
+  my $battleStatus = ($springPid && $autohost->getState()) ? 'in-game' : 'waiting for ready players in battle lobby';
+  $battleStatus.=' (last game finished '.secToTime(time-$timestamps{lastGameEnd}).' ago)' if($timestamps{lastGameEnd});
+  my %globalStatus = ("$B$C{10}Battle status$B$C{1}" => $battleStatus,
+                      "$B$C{10}Game type$B$C{1}" => $currentGameType,
+                      "$B$C{10}Map$B$C{1}" => $currentMap,
+                      "$B$C{10}Mod$B$C{1}" => $lobby->{battles}{$lobby->{battle}{battleId}}{mod},
+                      "$B$C{10}Preset$B$C{1}" => "$conf{preset} ($conf{description})");
+  
+  my @clientsStatus;
+  my %statusDataFromPlugin;
+  {
+    my %battleStructure;
     my @spectators;
-    my %currentBattleStatus;
-    my @clientsStatus;
     my $p_bUsers=$lobby->{battle}->{users};
     my $p_bBots=$lobby->{battle}->{bots};
     my $nextRemappedId=0;
@@ -10824,7 +10808,7 @@ sub hStatus {
     }
     my %usedIds;
     my %clansId=('' => '');
-    my $userClanPref=getUserPref($user,'clan');
+    my $userClanPref = ref $user ? '' : getUserPref($user,'clan');
     $clansId{$userClanPref}=$userClanPref if($userClanPref ne '');
     my $nextClanId=1;
     foreach my $player (keys %{$p_bUsers}) {
@@ -10835,261 +10819,309 @@ sub hStatus {
           $playerId=$nextRemappedId++ if(exists $usedIds{$playerId});
           $usedIds{$playerId}=1;
         }
-        $currentBattleStatus{$playerTeam}={} unless(exists $currentBattleStatus{$playerTeam});
-        $currentBattleStatus{$playerTeam}->{$playerId}=[] unless(exists $currentBattleStatus{$playerTeam}->{$playerId});
-        push(@{$currentBattleStatus{$playerTeam}->{$playerId}},$player);
+        $battleStructure{$playerTeam}={} unless(exists $battleStructure{$playerTeam});
+        $battleStructure{$playerTeam}->{$playerId}=[] unless(exists $battleStructure{$playerTeam}->{$playerId});
+        push(@{$battleStructure{$playerTeam}->{$playerId}},$player);
       }else{
         push(@spectators,$player) unless($springServerType eq 'dedicated' && $player eq $conf{lobbyLogin});
       }
       my $clanPref=getUserPref($player,'clan');
       $clansId{$clanPref}=':'.$nextClanId++.':' unless(exists $clansId{$clanPref});
     }
-    if(! %currentBattleStatus && ! @spectators) {
-      sayPrivate($user,"$C{7}Battle is empty");
-      sayPrivate($user,"===============");
-    }else{
-      foreach my $bot (keys %{$p_bBots}) {
-        my $botTeam=$p_bBots->{$bot}->{battleStatus}->{team};
-        my $botId=$p_bBots->{$bot}->{battleStatus}->{id};
-        if($conf{idShareMode} eq 'off') {
-          $botId=$nextRemappedId++ if(exists $usedIds{$botId});
-          $usedIds{$botId}=1;
-        }
-        $currentBattleStatus{$botTeam}={} unless(exists $currentBattleStatus{$botTeam});
-        $currentBattleStatus{$botTeam}->{$botId}=[] unless(exists $currentBattleStatus{$botTeam}->{$botId});
-        push(@{$currentBattleStatus{$botTeam}->{$botId}},$bot." (bot)");
+    return (\@clientsStatus,\%statusDataFromPlugin,\%globalStatus) unless(%battleStructure || @spectators);
+    foreach my $bot (keys %{$p_bBots}) {
+      my $botTeam=$p_bBots->{$bot}->{battleStatus}->{team};
+      my $botId=$p_bBots->{$bot}->{battleStatus}->{id};
+      if($conf{idShareMode} eq 'off') {
+        $botId=$nextRemappedId++ if(exists $usedIds{$botId});
+        $usedIds{$botId}=1;
       }
-      foreach my $teamNb (sort {$a <=> $b} keys %currentBattleStatus) {
-        foreach my $idNb (sort {$a <=> $b} keys %{$currentBattleStatus{$teamNb}}) {
-          foreach my $player (sort @{$currentBattleStatus{$teamNb}->{$idNb}}) {
-            my %clientStatus=(Name => $player,
-                              Team => $teamNb+1,
-                              Id => $idNb+1);
-            if($player =~ /^(.+) \(bot\)$/) {
-              my $botName=$1;
-              $clientStatus{Rank}=$conf{botsRank};
-              $clientStatus{Skill}="($rankSkill{$conf{botsRank}})";
-              $clientStatus{ID}="$p_bBots->{$botName}->{aiDll} ($p_bBots->{$botName}->{owner})";
-            }else{
-              $clientStatus{Ready}="$C{4}No$C{1}";
-              $clientStatus{Ready}="$C{3}Yes$C{1}" if($p_bUsers->{$player}->{battleStatus}->{ready});
+      $battleStructure{$botTeam}={} unless(exists $battleStructure{$botTeam});
+      $battleStructure{$botTeam}->{$botId}=[] unless(exists $battleStructure{$botTeam}->{$botId});
+      push(@{$battleStructure{$botTeam}->{$botId}},$bot." (bot)");
+    }
+    foreach my $teamNb (sort {$a <=> $b} keys %battleStructure) {
+      foreach my $idNb (sort {$a <=> $b} keys %{$battleStructure{$teamNb}}) {
+        foreach my $player (sort @{$battleStructure{$teamNb}->{$idNb}}) {
+          my %clientStatus=(Name => $player,
+                            Team => $teamNb+1,
+                            Id => $idNb+1);
+          if($player =~ /^(.+) \(bot\)$/) {
+            my $botName=$1;
+            $clientStatus{Rank}=$conf{botsRank};
+            $clientStatus{Skill}="($rankSkill{$conf{botsRank}})";
+            $clientStatus{ID}="$p_bBots->{$botName}->{aiDll} ($p_bBots->{$botName}->{owner})";
+          }else{
+            $clientStatus{Ready}="$C{4}No$C{1}";
+            $clientStatus{Ready}="$C{3}Yes$C{1}" if($p_bUsers->{$player}->{battleStatus}->{ready});
+            if($userLevel >= $conf{privacyTrustLevel}) {
               if(defined $lobby->{users}->{$player}->{ip}) {
                 $clientStatus{IP}=$lobby->{users}->{$player}->{ip};
               }elsif(defined $p_bUsers->{$player}->{ip}) {
                 $clientStatus{IP}=$p_bUsers->{$player}->{ip};
               }
-              my $rank=$lobby->{users}->{$player}->{status}->{rank};
-              my $skill="$C{13}!$rankSkill{$rank}!$C{1}";
-              if(exists $battleSkills{$player}) {
-                if($rank != $battleSkills{$player}->{rank}) {
-                  my $diffRank=$battleSkills{$player}->{rank}-$rank;
-                  $diffRank="+$diffRank" if($diffRank > 0);
-                  if($battleSkills{$player}->{rankOrigin} eq 'ip') {
-                    $diffRank="[$diffRank]";
-                  }elsif($battleSkills{$player}->{rankOrigin} eq 'manual') {
-                    $diffRank="($diffRank)";
-                  }elsif($battleSkills{$player}->{rankOrigin} eq 'ipManual') {
-                    $diffRank="{$diffRank}";
-                  }else{
-                    $diffRank="<$diffRank>";
-                  }
-                  $rank="$rank$C{12}$diffRank$C{1}";
-                }
-                if($battleSkills{$player}->{skillOrigin} eq 'rank') {
-                  $skill="($battleSkills{$player}->{skill})";
-                }elsif($battleSkills{$player}->{skillOrigin} eq 'TrueSkill') {
-                  if(exists $battleSkills{$player}->{skillPrivacy}
-                     && ($battleSkills{$player}->{skillPrivacy} == 0
-                         || ($battleSkills{$player}->{skillPrivacy} == 1 && $userLevel >= $conf{privacyTrustLevel}))) {
-                    $skill=$battleSkills{$player}->{skill};
-                  }else{
-                    $skill=getRoundedSkill($battleSkills{$player}->{skill});
-                    $skill="~$skill";
-                  }
-                  if(exists $battleSkills{$player}->{sigma}) {
-                    if($battleSkills{$player}->{sigma} > 3) {
-                      $skill.=' ???';
-                    }elsif($battleSkills{$player}->{sigma} > 2) {
-                      $skill.=' ??';
-                    }elsif($battleSkills{$player}->{sigma} > 1.5) {
-                      $skill.=' ?';
-                    }
-                  }
-                  $skill="$C{6}$skill$C{1}";
-                }elsif($battleSkills{$player}->{skillOrigin} eq 'TrueSkillDegraded') {
-                  $skill="$C{4}\#$battleSkills{$player}->{skill}\#$C{1}";
-                }elsif($battleSkills{$player}->{skillOrigin} eq 'Plugin') {
-                  $skill="$C{10}\[$battleSkills{$player}->{skill}\]$C{1}";
-                }elsif($battleSkills{$player}->{skillOrigin} eq 'PluginDegraded') {
-                  $skill="$C{4}\[\#$battleSkills{$player}->{skill}\#\]$C{1}";
+            }
+            my $rank=$lobby->{users}->{$player}->{status}->{rank};
+            my $skill="$C{13}!$rankSkill{$rank}!$C{1}";
+            if(exists $battleSkills{$player}) {
+              if($rank != $battleSkills{$player}->{rank}) {
+                my $diffRank=$battleSkills{$player}->{rank}-$rank;
+                $diffRank="+$diffRank" if($diffRank > 0);
+                if($battleSkills{$player}->{rankOrigin} eq 'ip') {
+                  $diffRank="[$diffRank]";
+                }elsif($battleSkills{$player}->{rankOrigin} eq 'manual') {
+                  $diffRank="($diffRank)";
+                }elsif($battleSkills{$player}->{rankOrigin} eq 'ipManual') {
+                  $diffRank="{$diffRank}";
                 }else{
-                  $skill="$C{13}?$battleSkills{$player}->{skill}?$C{1}";
+                  $diffRank="<$diffRank>";
                 }
-              }elsif($player eq $conf{lobbyLogin}) {
-                $skill='';
-              }else{
-                slog("Undefined skill for player $player, using lobby rank instead in status command output!",1);
+                $rank="$rank$C{12}$diffRank$C{1}";
               }
-              $clientStatus{Rank}=$rank;
-              $clientStatus{Skill}=$skill;
-              $clientStatus{ID}=$lobby->{users}->{$player}->{accountId};
-              my $clanPref=getUserPref($player,'clan');
-              $clientStatus{Clan}=$clansId{$clanPref} if($clanPref ne '');
-              foreach my $pluginName (@pluginsOrder) {
-                if($plugins{$pluginName}->can('updateStatusInfo')) {
-                  my $p_pluginColumns=$plugins{$pluginName}->updateStatusInfo(\%clientStatus,
-                                                                              $lobby->{users}->{$player}->{accountId},
-                                                                              $lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod},
-                                                                              $currentGameType,
-                                                                              $userLevel);
-                  if(ref($p_pluginColumns) eq 'HASH') {
-                    my @pluginColumns=keys %{$p_pluginColumns};
-                    map {$clientStatus{$_}=$p_pluginColumns->{$_}} @pluginColumns;
-                    $p_pluginColumns=\@pluginColumns;
+              if($battleSkills{$player}->{skillOrigin} eq 'rank') {
+                $skill="($battleSkills{$player}->{skill})";
+              }elsif($battleSkills{$player}->{skillOrigin} eq 'TrueSkill') {
+                if(exists $battleSkills{$player}->{skillPrivacy}
+                   && ($battleSkills{$player}->{skillPrivacy} == 0
+                       || ($battleSkills{$player}->{skillPrivacy} == 1 && $userLevel >= $conf{privacyTrustLevel}))) {
+                  $skill=$battleSkills{$player}->{skill};
+                }else{
+                  $skill=getRoundedSkill($battleSkills{$player}->{skill});
+                  $skill="~$skill";
+                }
+                if(exists $battleSkills{$player}->{sigma}) {
+                  if($battleSkills{$player}->{sigma} > 3) {
+                    $skill.=' ???';
+                  }elsif($battleSkills{$player}->{sigma} > 2) {
+                    $skill.=' ??';
+                  }elsif($battleSkills{$player}->{sigma} > 1.5) {
+                    $skill.=' ?';
                   }
-                  foreach my $pluginColumn (@{$p_pluginColumns}) {
-                    $pluginStatusInfo{$pluginColumn}=$pluginName unless(exists $pluginStatusInfo{$pluginColumn});
-                  }
+                }
+                $skill="$C{6}$skill$C{1}";
+              }elsif($battleSkills{$player}->{skillOrigin} eq 'TrueSkillDegraded') {
+                $skill="$C{4}\#$battleSkills{$player}->{skill}\#$C{1}";
+              }elsif($battleSkills{$player}->{skillOrigin} eq 'Plugin') {
+                $skill="$C{10}\[$battleSkills{$player}->{skill}\]$C{1}";
+              }elsif($battleSkills{$player}->{skillOrigin} eq 'PluginDegraded') {
+                $skill="$C{4}\[\#$battleSkills{$player}->{skill}\#\]$C{1}";
+              }else{
+                $skill="$C{13}?$battleSkills{$player}->{skill}?$C{1}";
+              }
+            }elsif($player eq $conf{lobbyLogin}) {
+              $skill='';
+            }else{
+              slog("Undefined skill for player $player, using lobby rank instead in status command output!",1);
+            }
+            $clientStatus{Rank}=$rank;
+            $clientStatus{Skill}=$skill;
+            $clientStatus{ID}=$lobby->{users}->{$player}->{accountId};
+            my $clanPref=getUserPref($player,'clan');
+            $clientStatus{Clan}=$clansId{$clanPref} if($clanPref ne '');
+            foreach my $pluginName (@pluginsOrder) {
+              if($plugins{$pluginName}->can('updateStatusInfo')) {
+                my $p_pluginColumns=$plugins{$pluginName}->updateStatusInfo(\%clientStatus,
+                                                                            $lobby->{users}->{$player}->{accountId},
+                                                                            $lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod},
+                                                                            $currentGameType,
+                                                                            $userLevel);
+                if(ref($p_pluginColumns) eq 'HASH') {
+                  my @pluginColumns=keys %{$p_pluginColumns};
+                  map {$clientStatus{$_}=$p_pluginColumns->{$_}} @pluginColumns;
+                  $p_pluginColumns=\@pluginColumns;
+                }
+                foreach my $pluginColumn (@{$p_pluginColumns}) {
+                  $statusDataFromPlugin{$pluginColumn}=$pluginName unless(exists $statusDataFromPlugin{$pluginColumn});
                 }
               }
             }
-            my %coloredStatus;
-            foreach my $k (keys %clientStatus) {
-              if(exists $pluginStatusInfo{$k}) {
-                $coloredStatus{"$C{6}$k$C{1}"}=$clientStatus{$k};
-              }else{
-                $coloredStatus{"$C{5}$k$C{1}"}=$clientStatus{$k};
-              }
-            }
-            push(@clientsStatus,\%coloredStatus);
           }
+          my %coloredStatus;
+          foreach my $k (keys %clientStatus) {
+            if(exists $statusDataFromPlugin{$k}) {
+              $coloredStatus{"$C{6}$k$C{1}"}=$clientStatus{$k};
+            }else{
+              $coloredStatus{"$C{5}$k$C{1}"}=$clientStatus{$k};
+            }
+          }
+          push(@clientsStatus,\%coloredStatus);
         }
       }
-      foreach my $spec (sort @spectators) {
-        my %clientStatus=(Name => $spec);
+    }
+    foreach my $spec (sort @spectators) {
+      my %clientStatus=(Name => $spec);
+      if($userLevel >= $conf{privacyTrustLevel}) {
         if(defined $lobby->{users}->{$spec}->{ip}) {
           $clientStatus{IP}=$lobby->{users}->{$spec}->{ip};
         }elsif(defined $p_bUsers->{$spec}->{ip}) {
           $clientStatus{IP}=$p_bUsers->{$spec}->{ip};
         }
-        my $rank=$lobby->{users}->{$spec}->{status}->{rank};
-        my $skill="$C{13}!$rankSkill{$rank}!$C{1}";
-        if(exists $battleSkills{$spec}) {
-          if($rank != $battleSkills{$spec}->{rank}) {
-            my $diffRank=$battleSkills{$spec}->{rank}-$rank;
-            $diffRank="+$diffRank" if($diffRank > 0);
-            if($battleSkills{$spec}->{rankOrigin} eq 'ip') {
-              $diffRank="[$diffRank]";
-            }elsif($battleSkills{$spec}->{rankOrigin} eq 'manual') {
-              $diffRank="($diffRank)";
-            }elsif($battleSkills{$spec}->{rankOrigin} eq 'ipManual') {
-              $diffRank="{$diffRank}";
-            }else{
-              $diffRank="<$diffRank>";
-            }
-            $rank="$rank$C{12}$diffRank$C{1}";
-          }
-          if($battleSkills{$spec}->{skillOrigin} eq 'rank') {
-            $skill="($rankSkill{$battleSkills{$spec}->{rank}})";
-          }elsif($battleSkills{$spec}->{skillOrigin} eq 'TrueSkill') {
-            if(exists $battleSkills{$spec}->{skillPrivacy}
-               && ($battleSkills{$spec}->{skillPrivacy} == 0
-                   || ($battleSkills{$spec}->{skillPrivacy} == 1 && $userLevel >= $conf{privacyTrustLevel}))) {
-              $skill=$battleSkills{$spec}->{skill};
-            }else{
-              $skill=getRoundedSkill($battleSkills{$spec}->{skill});
-              $skill="~$skill";
-            }
-            if(exists $battleSkills{$spec}->{sigma}) {
-              if($battleSkills{$spec}->{sigma} > 3) {
-                $skill.=' ???';
-              }elsif($battleSkills{$spec}->{sigma} > 2) {
-                $skill.=' ??';
-              }elsif($battleSkills{$spec}->{sigma} > 1.5) {
-                $skill.=' ?';
-              }
-            }
-            $skill="$C{6}$skill$C{1}";
-          }elsif($battleSkills{$spec}->{skillOrigin} eq 'TrueSkillDegraded') {
-            $skill="$C{4}\#$battleSkills{$spec}->{skill}\#$C{1}";
-          }elsif($battleSkills{$spec}->{skillOrigin} eq 'Plugin') {
-            $skill="$C{10}\[$battleSkills{$spec}->{skill}\]$C{1}";
-          }elsif($battleSkills{$spec}->{skillOrigin} eq 'PluginDegraded') {
-            $skill="$C{4}\[\#$battleSkills{$spec}->{skill}\#\]$C{1}";
+      }
+      my $rank=$lobby->{users}->{$spec}->{status}->{rank};
+      my $skill="$C{13}!$rankSkill{$rank}!$C{1}";
+      if(exists $battleSkills{$spec}) {
+        if($rank != $battleSkills{$spec}->{rank}) {
+          my $diffRank=$battleSkills{$spec}->{rank}-$rank;
+          $diffRank="+$diffRank" if($diffRank > 0);
+          if($battleSkills{$spec}->{rankOrigin} eq 'ip') {
+            $diffRank="[$diffRank]";
+          }elsif($battleSkills{$spec}->{rankOrigin} eq 'manual') {
+            $diffRank="($diffRank)";
+          }elsif($battleSkills{$spec}->{rankOrigin} eq 'ipManual') {
+            $diffRank="{$diffRank}";
           }else{
-            $skill="$C{13}?$battleSkills{$spec}->{skill}?$C{1}";
+            $diffRank="<$diffRank>";
           }
-        }elsif($spec eq $conf{lobbyLogin}) {
-          $skill='';
-        }else{
-          slog("Undefined skill for spectator $spec, using lobby rank instead in status command output!",1);
+          $rank="$rank$C{12}$diffRank$C{1}";
         }
-        $clientStatus{Rank}=$rank;
-        $clientStatus{Skill}=$skill;
-        $clientStatus{ID}=$lobby->{users}->{$spec}->{accountId};
-        my $clanPref=getUserPref($spec,'clan');
-        $clientStatus{Clan}=$clansId{$clanPref} if($clanPref ne '');
-        foreach my $pluginName (@pluginsOrder) {
-          if($plugins{$pluginName}->can('updateStatusInfo')) {
-            my $p_pluginColumns=$plugins{$pluginName}->updateStatusInfo(\%clientStatus,
-                                                                        $lobby->{users}->{$spec}->{accountId},
-                                                                        $lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod},
-                                                                        $currentGameType,
-                                                                        $userLevel);
-            if(ref($p_pluginColumns) eq 'HASH') {
-              my @pluginColumns=keys %{$p_pluginColumns};
-              map {$clientStatus{$_}=$p_pluginColumns->{$_}} @pluginColumns;
-              $p_pluginColumns=\@pluginColumns;
-            }
-            foreach my $pluginColumn (@{$p_pluginColumns}) {
-              $pluginStatusInfo{$pluginColumn}=$pluginName unless(exists $pluginStatusInfo{$pluginColumn});
-            }
-          }
-        }
-        my %coloredStatus;
-        foreach my $k (keys %clientStatus) {
-          if(exists $pluginStatusInfo{$k}) {
-            $coloredStatus{"$C{6}$k$C{1}"}=$clientStatus{$k};
+        if($battleSkills{$spec}->{skillOrigin} eq 'rank') {
+          $skill="($rankSkill{$battleSkills{$spec}->{rank}})";
+        }elsif($battleSkills{$spec}->{skillOrigin} eq 'TrueSkill') {
+          if(exists $battleSkills{$spec}->{skillPrivacy}
+             && ($battleSkills{$spec}->{skillPrivacy} == 0
+                 || ($battleSkills{$spec}->{skillPrivacy} == 1 && $userLevel >= $conf{privacyTrustLevel}))) {
+            $skill=$battleSkills{$spec}->{skill};
           }else{
-            $coloredStatus{"$C{5}$k$C{1}"}=$clientStatus{$k};
+            $skill=getRoundedSkill($battleSkills{$spec}->{skill});
+            $skill="~$skill";
+          }
+          if(exists $battleSkills{$spec}->{sigma}) {
+            if($battleSkills{$spec}->{sigma} > 3) {
+              $skill.=' ???';
+            }elsif($battleSkills{$spec}->{sigma} > 2) {
+              $skill.=' ??';
+            }elsif($battleSkills{$spec}->{sigma} > 1.5) {
+              $skill.=' ?';
+            }
+          }
+          $skill="$C{6}$skill$C{1}";
+        }elsif($battleSkills{$spec}->{skillOrigin} eq 'TrueSkillDegraded') {
+          $skill="$C{4}\#$battleSkills{$spec}->{skill}\#$C{1}";
+        }elsif($battleSkills{$spec}->{skillOrigin} eq 'Plugin') {
+          $skill="$C{10}\[$battleSkills{$spec}->{skill}\]$C{1}";
+        }elsif($battleSkills{$spec}->{skillOrigin} eq 'PluginDegraded') {
+          $skill="$C{4}\[\#$battleSkills{$spec}->{skill}\#\]$C{1}";
+        }else{
+          $skill="$C{13}?$battleSkills{$spec}->{skill}?$C{1}";
+        }
+      }elsif($spec eq $conf{lobbyLogin}) {
+        $skill='';
+      }else{
+        slog("Undefined skill for spectator $spec, using lobby rank instead in status command output!",1);
+      }
+      $clientStatus{Rank}=$rank;
+      $clientStatus{Skill}=$skill;
+      $clientStatus{ID}=$lobby->{users}->{$spec}->{accountId};
+      my $clanPref=getUserPref($spec,'clan');
+      $clientStatus{Clan}=$clansId{$clanPref} if($clanPref ne '');
+      foreach my $pluginName (@pluginsOrder) {
+        if($plugins{$pluginName}->can('updateStatusInfo')) {
+          my $p_pluginColumns=$plugins{$pluginName}->updateStatusInfo(\%clientStatus,
+                                                                      $lobby->{users}->{$spec}->{accountId},
+                                                                      $lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod},
+                                                                      $currentGameType,
+                                                                      $userLevel);
+          if(ref($p_pluginColumns) eq 'HASH') {
+            my @pluginColumns=keys %{$p_pluginColumns};
+            map {$clientStatus{$_}=$p_pluginColumns->{$_}} @pluginColumns;
+            $p_pluginColumns=\@pluginColumns;
+          }
+          foreach my $pluginColumn (@{$p_pluginColumns}) {
+            $statusDataFromPlugin{$pluginColumn}=$pluginName unless(exists $statusDataFromPlugin{$pluginColumn});
           }
         }
-        push(@clientsStatus,\%coloredStatus);
       }
-      my @defaultStatusColumns=qw'Name Team Id Clan Ready Rank Skill ID';
-      my @newPluginStatusColumns;
-      foreach my $pluginColumn (keys %pluginStatusInfo) {
-        push(@newPluginStatusColumns,$pluginColumn) unless(any {$pluginColumn eq $_} (@defaultStatusColumns,'IP'));
-      }
-      my @statusFields;
-      foreach my $statusField (@defaultStatusColumns,@newPluginStatusColumns,'IP') {
-        next if($statusField eq 'IP' && $userLevel < $conf{privacyTrustLevel});
-        if(exists $pluginStatusInfo{$statusField}) {
-          push(@statusFields,"$C{6}$statusField$C{1}");
+      my %coloredStatus;
+      foreach my $k (keys %clientStatus) {
+        if(exists $statusDataFromPlugin{$k}) {
+          $coloredStatus{"$C{6}$k$C{1}"}=$clientStatus{$k};
         }else{
-          push(@statusFields,"$C{5}$statusField$C{1}");
+          $coloredStatus{"$C{5}$k$C{1}"}=$clientStatus{$k};
         }
       }
-      my $p_statusLines=formatArray(\@statusFields,\@clientsStatus);
-      foreach my $statusLine (@{$p_statusLines}) {
-        sayPrivate($user,$statusLine);
-      }
+      push(@clientsStatus,\%coloredStatus);
     }
-    my $battleStateMsg="$B$C{10}Battle state:$B$C{1} ";
+  }
+  return (\@clientsStatus,\%statusDataFromPlugin,\%globalStatus);
+}
+
+sub hStatus {
+  my ($source,$user,$p_params,$checkOnly)=@_;
+
+  if($#{$p_params} == -1) {
     if($springPid && $autohost->getState()) {
-      $battleStateMsg.="in-game";
+      $p_params->[0]="game";
     }else{
-      $battleStateMsg.="waiting for ready players in battle lobby";
+      $p_params->[0]="battle";
     }
-    if($timestamps{lastGameEnd}) {
-      my $lastGameEndTime=secToTime(time-$timestamps{lastGameEnd});
-      $battleStateMsg.=" (last game finished $lastGameEndTime ago)";
+  }
+
+  if($#{$p_params} != 0) {
+    invalidSyntax($user,"status");
+    return 0;
+  }
+  if($p_params->[0] eq "game") {
+    if(! ($springPid && $autohost->getState())) {
+      answer("Unable to retrieve game status, game is not running");
+      return 0;
     }
-    sayPrivate($user,$battleStateMsg);
-    sayPrivate($user,"$B$C{10}Map:$B$C{1} $currentMap");
-    sayPrivate($user,"$B$C{10}Mod:$B$C{1} $lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod}");
-    sayPrivate($user,"$B$C{10}Game type:$B$C{1} $currentGameType");
-    sayPrivate($user,"$B$C{10}Preset:$B$C{1} $conf{preset} ($conf{description})");
+  }elsif($p_params->[0] eq "battle") {
+    if($lobbyState < 6 || ! %{$lobby->{battle}}) {
+      answer("Unable to retrieve battle status, battle is closed");
+      return 0;
+    }
+  }else{
+    invalidSyntax($user,"status");
+    return 0;
+  }
+  return 1 if($checkOnly);
+
+  my $userLevel=getUserAccessLevel($user);
+
+  my ($p_C,$B)=initUserIrcColors($user);
+  my %C=%{$p_C};
+
+  my ($r_clientsStatus,$r_statusDataFromPlugin,$r_globalStatus,@defaultStatusColumns);
+  if($p_params->[0] eq 'game') {
+    ($r_clientsStatus,$r_statusDataFromPlugin,$r_globalStatus)=getGameStatus($user);
+    if(@{$r_clientsStatus}) {
+      @defaultStatusColumns=qw'Name Team Id';
+      push(@defaultStatusColumns,'Ready') if(($p_runningBattle->{scriptTags}{'game/startpostype'} // 2) == 2);
+      push(@defaultStatusColumns,'Status','Version');
+    }else{
+      sayPrivate($user,"$C{7}Game is empty");
+      sayPrivate($user,"=============");
+    }
+  }else{
+    ($r_clientsStatus,$r_statusDataFromPlugin,$r_globalStatus)=getBattleLobbyStatus($user);
+    if(@{$r_clientsStatus}) {
+      @defaultStatusColumns=qw'Name Team Id Clan Ready Rank Skill ID';
+    }else{
+      sayPrivate($user,"$C{7}Battle lobby is empty");
+      sayPrivate($user,"=====================");
+    }
+  }
+  if(@defaultStatusColumns) {
+    my @newPluginStatusColumns;
+    foreach my $pluginColumn (keys %{$r_statusDataFromPlugin}) {
+      push(@newPluginStatusColumns,$pluginColumn) unless(any {$pluginColumn eq $_} (@defaultStatusColumns,'IP'));
+    }
+    my @statusFields;
+    foreach my $statusField (@defaultStatusColumns,@newPluginStatusColumns,'IP') {
+      next if($statusField eq 'IP' && $userLevel < $conf{privacyTrustLevel});
+      if(exists $r_statusDataFromPlugin->{$statusField}) {
+        push(@statusFields,"$C{6}$statusField$C{1}");
+      }else{
+        push(@statusFields,"$C{5}$statusField$C{1}");
+      }
+    }
+    my $p_statusLines=formatArray(\@statusFields,$r_clientsStatus);
+    foreach my $statusLine (@{$p_statusLines}) {
+      sayPrivate($user,$statusLine);
+    }
+  }
+  foreach my $globalStatusField (sort keys %{$r_globalStatus}) {
+    sayPrivate($user,"$globalStatusField: $r_globalStatus->{$globalStatusField}");
   }
   if(%bosses) {
     my $bossList=join(",",keys %bosses);

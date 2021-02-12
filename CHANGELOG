@@ -884,6 +884,7 @@ spads.pl:
          fix plugin function setMapStartBoxes not being called when loading map boxes manually using !loadBoxes command
          show version of Inline::Python module and Python interpreter if used in !version command output
          added Inline to SimpleEvent proxy packages list
+0.12.30: refactor SPADS status retrieving code
 
 SpadsConf.pm:
 ============
