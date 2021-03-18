@@ -886,6 +886,8 @@ spads.pl:
          added Inline to SimpleEvent proxy packages list
 0.12.30: refactor SPADS status retrieving code
 0.12.31: declare proxy packages sooner (fix plugin name not included in error messages during Python plugin auto-loading)
+0.12.32: improve workarounds for lobby protocol limitations
+         support maximum number of teams and IDs allowed by engine (251)
 
 SpadsConf.pm:
 ============

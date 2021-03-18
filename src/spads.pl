@@ -53,7 +53,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.31';
+our $spadsVer='0.12.32';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -3607,12 +3607,12 @@ sub areColorsApplied {
   foreach my $player (keys %{$p_players}) {
     return 0 unless(defined $p_players->{$player}->{battleStatus});
     next unless($p_players->{$player}->{battleStatus}->{mode});
-    my $colorId=$conf{idShareMode} eq "off" ? $player : $p_players->{$player}->{battleStatus}->{id};
+    my $colorId=$p_players->{$player}->{battleStatus}->{id};
     return 0 unless exists($colorsTarget{$colorId});
     return 0 unless(colorDistance($colorsTarget{$colorId},$p_players->{$player}->{color}) == 0);
   }
   foreach my $bot (keys %{$p_bots}) {
-    my $colorId=$conf{idShareMode} eq "off" ? $bot.' (bot)' : $p_bots->{$bot}->{battleStatus}->{id};
+    my $colorId=$p_bots->{$bot}->{battleStatus}->{id};
     return 0 unless exists($colorsTarget{$colorId});
     return 0 unless(colorDistance($colorsTarget{$colorId},$p_bots->{$bot}->{color}) == 0);
   }
@@ -3685,14 +3685,14 @@ sub applyColorsTarget {
       next;
     }
     next unless($p_players->{$player}->{battleStatus}->{mode});
-    my $colorId=$conf{idShareMode} eq "off" ? $player : $p_targetPlayers->{$player}->{battleStatus}->{id};
+    my $colorId=$p_targetPlayers->{$player}->{battleStatus}->{id};
     if(colorDistance($colorsTarget{$colorId},$p_players->{$player}->{color}) != 0) {
       $newColorsState=0;
       queueLobbyCommand(["FORCETEAMCOLOR",$player,$lobby->marshallColor($colorsTarget{$colorId})]);
     }
   }
   foreach my $bot (keys %{$p_bots}) {
-    my $colorId=$conf{idShareMode} eq "off" ? $bot.' (bot)' : $p_targetBots->{$bot}->{battleStatus}->{id};
+    my $colorId=$p_targetBots->{$bot}->{battleStatus}->{id};
     if(colorDistance($colorsTarget{$colorId},$p_bots->{$bot}->{color}) != 0) {
       $newColorsState=0;
       queueLobbyCommand(["UPDATEBOT",
@@ -3728,9 +3728,8 @@ sub balance {
     }
     foreach my $b (keys %{$p_bots}) {
       $p_bots->{$b}->{battleStatus}->{team}=1;
-      $p_bots->{$b}->{battleStatus}->{id}=++$maxId % 16;
+      $p_bots->{$b}->{battleStatus}->{id}=++$maxId;
     }
-    slog("Too many IDs for chicken-mode balancing",2) if($maxId > 15 && $conf{idShareMode} ne "off");
   }elsif($conf{balanceMode} eq 'clan;skill' && $conf{clanMode} =~ /\(\d+\)/) {
     slog("Balance mode is set to \"clan;skill\" and clan mode \"$conf{clanMode}\" contains unbalance threshold(s)",5);
     my @currentClanModes;
@@ -3894,28 +3893,16 @@ sub getTargetBattleStructure {
 
   my $nbTeams=$conf{nbTeams};
   my $teamSize=$conf{teamSize};
-  my $nbPlayerById=$conf{nbPlayerById};
-  $nbPlayerById=1 if($conf{idShareMode} ne 'auto');
-  $nbTeams=16 if($nbTeams > 16);
-  $nbTeams=1 if($nbTeams < 1);
-  $teamSize=16 if($teamSize > 16);
-  $teamSize=1 if($teamSize < 1);
-  $nbPlayerById=1 if($nbPlayerById < 1);
+  my $nbPlayerById = $conf{idShareMode} eq 'auto' ? $conf{nbPlayerById} : 1;
 
   my $minTeamSize=$conf{minTeamSize};
   $minTeamSize=$teamSize if($minTeamSize > $teamSize || $minTeamSize == 0);
-
-  if($teamSize*$nbTeams > 16) {
-    $teamSize=int(16/$nbTeams);
-    $teamSize=$minTeamSize if($teamSize < $minTeamSize);
-  }
 
   if($nbPlayers <= $nbTeams*$teamSize) {
     $nbTeams=ceil($nbPlayers/$minTeamSize) if($nbPlayers < $nbTeams*$minTeamSize);
     $teamSize=ceil($nbPlayers/$nbTeams);
   }elsif($nbPlayers > $nbTeams*$teamSize*$nbPlayerById) {
     $teamSize=ceil($nbPlayers/($nbTeams*$nbPlayerById));
-    $teamSize=int(16/$nbTeams) if($teamSize*$nbTeams > 16);
   }
 
   my $gameType;
@@ -4028,10 +4015,10 @@ sub balanceBattle {
           $userShareId=$1;
         }
         if($userShareId ne '') {
-          $manualSharedIds{$userShareId}=$idNb++ % 16 unless(exists $manualSharedIds{$userShareId});
+          $manualSharedIds{$userShareId}=$idNb++ unless(exists $manualSharedIds{$userShareId});
           $p_players->{$player}->{battleStatus}->{id}=$manualSharedIds{$userShareId};
         }else{
-          $p_players->{$player}->{battleStatus}->{id}=$idNb++ % 16;
+          $p_players->{$player}->{battleStatus}->{id}=$idNb++;
         }
       }
     }
@@ -4040,24 +4027,22 @@ sub balanceBattle {
       if($conf{idShareMode} eq 'all') {
         $p_bots->{$bot}->{battleStatus}->{id}=$teamNb;
       }elsif($conf{idShareMode} ne 'auto' && $conf{idShareMode} ne 'off') {
-        $p_bots->{$bot}->{battleStatus}->{id}=$idNb++ % 16;
+        $p_bots->{$bot}->{battleStatus}->{id}=$idNb++;
       }
     }
     if($conf{idShareMode} eq 'auto' || $conf{idShareMode} eq 'off') {
       for my $subIdNb (0..($#{$ids[$teamNb]})) {
         foreach my $player (keys %{$ids[$teamNb]->[$subIdNb]->{players}}) {
-          $p_players->{$player}->{battleStatus}->{id}=$idNb % 16;
+          $p_players->{$player}->{battleStatus}->{id}=$idNb;
         }
         foreach my $bot (keys %{$ids[$teamNb]->[$subIdNb]->{bots}}) {
-          $p_bots->{$bot}->{battleStatus}->{id}=$idNb % 16;
+          $p_bots->{$bot}->{battleStatus}->{id}=$idNb;
         }
         $idNb++;
       }
     }
   }
   
-  slog("Too many IDs required ($idNb) to balance current battle [nbPlayers=$nbPlayers,nbTeams=$conf{nbTeams},teamSize=$conf{teamSize},nbPlayerById=$conf{nbPlayerById},idShareMode=$conf{idShareMode}]",2) if($idNb > 16);
-
   srand($restoreRandSeed);
   return ($nbSmurfs,$unbalanceIndicator);
 }
@@ -4397,7 +4382,7 @@ sub getFixedColorsOf {
   if($conf{colorSensitivity}) {
     for my $bot (keys %{$p_bots}) {
       next unless($p_bots->{$bot}->{owner} eq $conf{lobbyLogin});
-      my $colorId=$conf{idShareMode} eq "off" ? $bot.' (bot)' : $p_bots->{$bot}->{battleStatus}->{id};
+      my $colorId=$p_bots->{$bot}->{battleStatus}->{id};
       if(! exists $idColors{$colorId}) {
         if(minDistance($p_bots->{$bot}->{color},\%idColors) > $conf{colorSensitivity}*1000 && colorDistance($p_bots->{$bot}->{color},{red => 255, blue => 255, green => 255}) > 7000) {
           $idColors{$colorId}=$p_bots->{$bot}->{color};
@@ -4407,7 +4392,7 @@ sub getFixedColorsOf {
     for my $player (keys %{$p_players}) {
       next unless(defined $p_players->{$player}->{battleStatus});
       next unless($p_players->{$player}->{battleStatus}->{mode});
-      my $colorId=$conf{idShareMode} eq "off" ? $player : $p_players->{$player}->{battleStatus}->{id};
+      my $colorId=$p_players->{$player}->{battleStatus}->{id};
       if(! exists $idColors{$colorId}) {
         if(minDistance($p_players->{$player}->{color},\%idColors) > $conf{colorSensitivity}*1000 && colorDistance($p_players->{$player}->{color},{red => 255, blue => 255, green => 255}) > 7000) {
           $idColors{$colorId}=$p_players->{$player}->{color};
@@ -4416,7 +4401,7 @@ sub getFixedColorsOf {
     }
     for my $bot (keys %{$p_bots}) {
       next if($p_bots->{$bot}->{owner} eq $conf{lobbyLogin});
-      my $colorId=$conf{idShareMode} eq "off" ? $bot.' (bot)' : $p_bots->{$bot}->{battleStatus}->{id};
+      my $colorId=$p_bots->{$bot}->{battleStatus}->{id};
       if(! exists $idColors{$colorId}) {
         if(minDistance($p_bots->{$bot}->{color},\%idColors) > $conf{colorSensitivity}*1000 && colorDistance($p_bots->{$bot}->{color},{red => 255, blue => 255, green => 255}) > 7000) {
           $idColors{$colorId}=$p_bots->{$bot}->{color};
@@ -4428,11 +4413,11 @@ sub getFixedColorsOf {
   for my $player (keys %{$p_players}) {
     next unless(defined $p_players->{$player}->{battleStatus});
     next unless($p_players->{$player}->{battleStatus}->{mode});
-    my $colorId=$conf{idShareMode} eq "off" ? $player : $p_players->{$player}->{battleStatus}->{id};
+    my $colorId=$p_players->{$player}->{battleStatus}->{id};
     $idColors{$colorId}=nextColor(\%idColors) unless(exists $idColors{$colorId});
   }
   for my $bot (keys %{$p_bots}) {
-    my $colorId=$conf{idShareMode} eq "off" ? $bot.' (bot)' : $p_bots->{$bot}->{battleStatus}->{id};
+    my $colorId=$p_bots->{$bot}->{battleStatus}->{id};
     $idColors{$colorId}=nextColor(\%idColors) unless(exists $idColors{$colorId});
   }
 
@@ -4446,7 +4431,7 @@ sub getBattleState {
   my @unreadyPlayers;
   my %teams; # used only when idShareMode is set to auto
   my %teamCount;
-  my %ids; # used only when idShareMode is not set to off
+  my %ids;
   my $nbIds; #  to determine the number of required start pos on map when startPosType != 2
   my $p_bUsers=$lobby->{battle}->{users};
   my @bUsers=keys %{$p_bUsers};
@@ -4497,11 +4482,7 @@ sub getBattleState {
     }
   }
 
-  if($conf{idShareMode} eq 'off') {
-    $nbIds=$nbPlayers;
-  }else{
-    $nbIds=keys %ids;
-  }
+  $nbIds=keys %ids;
 
   my @warnings;
   if($nbPlayers < $conf{minPlayers}) {
@@ -4663,7 +4644,7 @@ sub launchGame {
     (map {$additionalData{$_}=$r_newStartScriptTags->{$_}} (keys %{$r_newStartScriptTags})) if(ref($r_newStartScriptTags) eq 'HASH');
   }
   my $p_modSides=getModSides($lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod});
-  my ($p_startData,$p_teamsMap,$p_allyTeamsMap)=$lobby->generateStartData(\%additionalData,$p_modSides,undef,$springServerType eq 'dedicated' ? 1 : 2,$conf{idShareMode} eq 'off');
+  my ($p_startData,$p_teamsMap,$p_allyTeamsMap)=$lobby->generateStartData(\%additionalData,$p_modSides,undef,$springServerType eq 'dedicated' ? 1 : 2);
   if(! $p_startData) {
     slog("Unable to start game: start script generation failed",1);
     closeBattleAfterGame("Unable to start game (start script generation failed)");
@@ -5344,7 +5325,7 @@ sub applySettingChange {
     $balanceState=0;
     %balanceTarget=();
   }
-  if("autofixcolors" =~ /^$settingRegExp$/ || "idsharemode" =~ /^$settingRegExp$/) {
+  if("autofixcolors" =~ /^$settingRegExp$/) {
     $colorsState=0;
     %colorsTarget=();
   }
@@ -6317,14 +6298,14 @@ sub hAddBox {
   }
 
   if(defined $teamNb) {
-    if($teamNb !~ /^\d+$/ || $teamNb < 1 || $teamNb > 16) {
+    if($teamNb !~ /^\d+$/ || $teamNb < 1 || $teamNb > 251) {
       invalidSyntax($user,"addbox","invalid team number");
       return 0;
     }
     $teamNb-=1;
     queueLobbyCommand(["REMOVESTARTRECT",$teamNb]) if(exists $lobby->{battle}->{startRects}->{$teamNb});
   }else{
-    for my $i (0..15) {
+    for my $i (0..250) {
       if(! exists $lobby->{battle}->{startRects}->{$i}) {
         $teamNb=$i;
         last;
@@ -7346,7 +7327,7 @@ sub hClearBox {
     if($teamNb =~ /^extra$/i) {
       return 1 if($checkOnly);
       $minNb=$conf{nbTeams};
-    }elsif($teamNb !~ /^\d+$/ || $teamNb < 1 || $teamNb > 16) {
+    }elsif($teamNb !~ /^\d+$/ || $teamNb < 1 || $teamNb > 251) {
       invalidSyntax($user,"clearbox","invalid team number");
       return 0;
     }else{
@@ -7454,7 +7435,7 @@ sub hForce {
       invalidSyntax($user,'force',"invalid parameter \"$balanceString\"");
       return 0;
     }
-    if($#teamsStrings > 15) {
+    if($#teamsStrings > 249) {
       answer('Unable to force manual balance, too many teams required');
       return 0;
     }
@@ -7470,7 +7451,7 @@ sub hForce {
         $idNb++;
       }
     }
-    if($idNb > 16) {
+    if($idNb > 252) {
       answer('Unable to force manual balance, too many ids required');
       return 0;
     }
@@ -7494,7 +7475,7 @@ sub hForce {
         answer('Cannot force id/team, teams have been balanced and autoBlockBalance is enabled');
         return 0;
       }else{
-        if(! defined $nb || $nb !~ /^\d+$/ || $nb > 16) {
+        if(! defined $nb || $nb !~ /^\d+$/ || $nb > 251 || $nb < 1) {
           invalidSyntax($user,'force');
           return 0;
         }
@@ -7559,8 +7540,8 @@ sub hForce {
     for my $playerIdx (0..(($#fixedForceOrders-1)/2)) {
       my $orderIdx=$playerIdx*2;
       if($fixedForceOrders[$orderIdx][1] ne 'team' || $fixedForceOrders[$orderIdx+1][1] ne 'id' || $fixedForceOrders[$orderIdx][0] ne $fixedForceOrders[$orderIdx+1][0]) {
-        answer('Unable to call vote for manual balance (internal error)');
-        slog("Unable to process vote call for manual balance (internal error, debug data: $fixedForceOrders[$orderIdx][1],$fixedForceOrders[$orderIdx+1][1],$fixedForceOrders[$orderIdx][0],$fixedForceOrders[$orderIdx+1][0])",1);
+        answer('Unable to process manual balance (internal error)');
+        slog("Unable to process manual balance (internal error, debug data: $fixedForceOrders[$orderIdx][1],$fixedForceOrders[$orderIdx+1][1],$fixedForceOrders[$orderIdx][0],$fixedForceOrders[$orderIdx+1][0])",1);
         return 0;
       }
       my ($player,$team,$id)=($fixedForceOrders[$orderIdx][0],$fixedForceOrders[$orderIdx][2],$fixedForceOrders[$orderIdx+1][2]);
@@ -10797,18 +10778,6 @@ sub getBattleLobbyStatus {
     my @spectators;
     my $p_bUsers=$lobby->{battle}->{users};
     my $p_bBots=$lobby->{battle}->{bots};
-    my $nextRemappedId=0;
-    if($conf{idShareMode} eq 'off') {
-      foreach my $player (keys %{$p_bUsers}) {
-        if(defined $p_bUsers->{$player}->{battleStatus} && $p_bUsers->{$player}->{battleStatus}->{mode}) {
-          $nextRemappedId=$p_bUsers->{$player}->{battleStatus}->{id}+1 if($p_bUsers->{$player}->{battleStatus}->{id} >= $nextRemappedId);
-        }
-      }
-      foreach my $bot (keys %{$p_bBots}) {
-        $nextRemappedId=$p_bBots->{$bot}->{battleStatus}->{id}+1 if($p_bBots->{$bot}->{battleStatus}->{id} >= $nextRemappedId);
-      }
-    }
-    my %usedIds;
     my %clansId=('' => '');
     my $userClanPref = ref $user ? '' : getUserPref($user,'clan');
     $clansId{$userClanPref}=$userClanPref if($userClanPref ne '');
@@ -10817,10 +10786,6 @@ sub getBattleLobbyStatus {
       if(defined $p_bUsers->{$player}->{battleStatus} && $p_bUsers->{$player}->{battleStatus}->{mode}) {
         my $playerTeam=$p_bUsers->{$player}->{battleStatus}->{team};
         my $playerId=$p_bUsers->{$player}->{battleStatus}->{id};
-        if($conf{idShareMode} eq 'off') {
-          $playerId=$nextRemappedId++ if(exists $usedIds{$playerId});
-          $usedIds{$playerId}=1;
-        }
         $battleStructure{$playerTeam}={} unless(exists $battleStructure{$playerTeam});
         $battleStructure{$playerTeam}->{$playerId}=[] unless(exists $battleStructure{$playerTeam}->{$playerId});
         push(@{$battleStructure{$playerTeam}->{$playerId}},$player);
@@ -10834,10 +10799,6 @@ sub getBattleLobbyStatus {
     foreach my $bot (keys %{$p_bBots}) {
       my $botTeam=$p_bBots->{$bot}->{battleStatus}->{team};
       my $botId=$p_bBots->{$bot}->{battleStatus}->{id};
-      if($conf{idShareMode} eq 'off') {
-        $botId=$nextRemappedId++ if(exists $usedIds{$botId});
-        $usedIds{$botId}=1;
-      }
       $battleStructure{$botTeam}={} unless(exists $battleStructure{$botTeam});
       $battleStructure{$botTeam}->{$botId}=[] unless(exists $battleStructure{$botTeam}->{$botId});
       push(@{$battleStructure{$botTeam}->{$botId}},$bot." (bot)");
@@ -12326,7 +12287,7 @@ sub cbClientBattleStatus {
       }
       if($conf{autoBlockColors}) {
         if($colorsState) {
-          my $colorId=$conf{idShareMode} eq "off" ? $user : $p_battleStatus->{id};
+          my $colorId=$p_battleStatus->{id};
           if(! exists $colorsTarget{$colorId}) {
             $colorsState=0;
           }else{
@@ -12401,7 +12362,7 @@ sub cbUpdateBot {
   }
   if($conf{autoBlockColors}) {
     if($colorsState) {
-      my $colorId=$conf{idShareMode} eq "off" ? $bot.' (bot)' : $p_battleStatus->{id};
+      my $colorId=$p_battleStatus->{id};
       if(! exists $colorsTarget{$colorId}) {
         $colorsState=0;
       }else{
