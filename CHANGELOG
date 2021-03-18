@@ -885,6 +885,7 @@ spads.pl:
          show version of Inline::Python module and Python interpreter if used in !version command output
          added Inline to SimpleEvent proxy packages list
 0.12.30: refactor SPADS status retrieving code
+0.12.31: declare proxy packages sooner (fix plugin name not included in error messages during Python plugin auto-loading)
 
 SpadsConf.pm:
 ============
@@ -1052,6 +1053,7 @@ SpadsConf.pm:
          improve protection against case conflicts in plugin module names
          ensure plugin modules are loaded from SPADS plugins directory only
          add log message when plugin config cannot be loaded
+0.12.15: provide current configuration as parameter to the Python plugin loading function (fix auto-load for Python plugins)
 
 spadsInstaller.pl:
 =================
@@ -1186,6 +1188,7 @@ SpadsPluginApi.pm:
       extend usage of following plugin callbacks for Python compatibility: onVoteRequest, addStartScriptTags, balanceBattle, setMapStartBoxes, updateCmdAliases, updatePlayerSkill, updateGameStatusInfo and updateStatusInfo
       add documentation for Python plugins
       explicitely list the first parameter "$self" in callback descriptions to avoid confusion
+0.26: fix auto-load for Python plugins
 
 SpadsUpdater.pm:
 ===============

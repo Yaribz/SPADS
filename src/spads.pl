@@ -2,7 +2,7 @@
 #
 # SPADS: Spring Perl Autohost for Dedicated Server
 #
-# Copyright (C) 2008-2020  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2021  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -53,7 +53,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.30';
+our $spadsVer='0.12.31';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -297,6 +297,8 @@ my $p_macroData=parseMacroTokens(@macroDefinitions);
 invalidUsage() unless(defined $p_macroData);
 our %confMacros=%{$p_macroData};
 
+SimpleEvent::addProxyPackage('SpadsPluginApi');
+SimpleEvent::addProxyPackage('Inline');
 
 my $sLog=SimpleLog->new(prefix => "[SPADS] ");
 our $spads=SpadsConf->new($confFile,$sLog,\%confMacros);
@@ -14145,8 +14147,6 @@ if(! $abortSpadsStartForAutoUpdate) {
   fatalError('Unable to create socket for Spring AutoHost interface') unless($autohost->open());
   fatalError('Unable to register Spring AutoHost interface socket') unless(SimpleEvent::registerSocket($autohost->{autoHostSock},sub { $autohost->receiveCommand() }));
   SimpleEvent::addAutoCloseOnFork(\$lockFh,\$auLockFh);
-  SimpleEvent::addProxyPackage('SpadsPluginApi');
-  SimpleEvent::addProxyPackage('Inline');
 
   if($conf{autoLoadPlugins} ne '') {
     my @pluginNames=split(/;/,$conf{autoLoadPlugins});

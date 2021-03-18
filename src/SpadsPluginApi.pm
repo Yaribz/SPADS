@@ -1,6 +1,6 @@
 # SpadsPluginApi: SPADS plugin API
 #
-# Copyright (C) 2013-2020  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2013-2021  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -24,7 +24,7 @@ use List::Util qw'any';
 use Exporter 'import';
 @EXPORT=qw/$spadsVersion $spadsDir loadPythonPlugin get_flag fix_string getLobbyState getSpringPid getSpringServerType getTimestamps getRunningBattle getConfMacros getCurrentVote getPlugin addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess forkCall removeProcessCallback createDetachedProcess addTimer removeTimer addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives/;
 
-my $apiVersion='0.25';
+my $apiVersion='0.26';
 
 our $spadsVersion=$::spadsVer;
 our $spadsDir=$::cwd;
@@ -51,12 +51,13 @@ sub hasEvalError {
 my $pythonReloadPrefix;
 my $inlinePythonUseByteString;
 sub initPythonInterpreter {
-  my $inlinePythonTmpDir=catdir($::conf{instanceDir},'.InlinePython.tmp');
+  my $spadsConf=shift;
+  my $inlinePythonTmpDir=catdir($spadsConf->{conf}{instanceDir},'.InlinePython.tmp');
   if(! -d $inlinePythonTmpDir && ! mkdir($inlinePythonTmpDir)) {
-    ::slog("Unable to create temporary directory \"$inlinePythonTmpDir\" for Inline::Python used by plugin ".getCallerPlugin().": $!",1);
+    $spadsConf->{log}->log("Unable to create temporary directory \"$inlinePythonTmpDir\" for Inline::Python used by plugin ".getCallerPlugin().": $!",1);
     return 0;
   }
-  my ($escapedPluginsDir,$escapedInlinePythonTmpDir)=map {quotemeta($_)} ($::conf{pluginsDir},$inlinePythonTmpDir);
+  my ($escapedPluginsDir,$escapedInlinePythonTmpDir)=map {quotemeta($_)} ($spadsConf->{conf}{pluginsDir},$inlinePythonTmpDir);
   my $pythonBootstrap=<<"PYTHON_BOOTSTRAP_END";
 import sys,signal,perl
 sys.path.append(r'$escapedPluginsDir')
@@ -64,16 +65,16 @@ signal.signal(signal.SIGINT,signal.SIG_DFL)
 PYTHON_BOOTSTRAP_END
   eval "use Inline Python => \"$pythonBootstrap\", directory => \"$escapedInlinePythonTmpDir\"";
   if(hasEvalError()) {
-    ::slog('Unable to initialize Python environement for plugin '.getCallerPlugin().": $@",1);
+    $spadsConf->{log}->log('Unable to initialize Python environement for plugin '.getCallerPlugin().": $@",1);
     return 0;
   }
   $pythonApiFlags{can_fork}=$^O eq 'MSWin32' ? $Inline::Python::Boolean::false : $Inline::Python::Boolean::true;
   $pythonApiFlags{can_add_socket}=$^O eq 'MSWin32' ? $Inline::Python::Boolean::false : $Inline::Python::Boolean::true;
   $inlinePythonUseByteString=Inline::Python::py_eval('hasattr(perl.eval("$0"),"decode")',0)?$Inline::Python::Boolean::true:$Inline::Python::Boolean::false;
-  ::slog('The version of Inline::Python currently in use converts Perl strings to Python byte strings',2) if($inlinePythonUseByteString);
+  $spadsConf->{log}->log('The version of Inline::Python currently in use converts Perl strings to Python byte strings',2) if($inlinePythonUseByteString);
   my $r_pythonVersion=Inline::Python::py_eval('[sys.version_info[i] for i in range(0,3)]',0);
   if(! defined $r_pythonVersion->[0] || ! defined $r_pythonVersion->[1]) {
-    ::slog('Unable to initialize Python environement for plugin '.getCallerPlugin().': failed to determine Python version',1);
+    $spadsConf->{log}->log('Unable to initialize Python environement for plugin '.getCallerPlugin().': failed to determine Python version',1);
     return 0;
   }
   if($r_pythonVersion->[0] > 2) {
@@ -87,12 +88,13 @@ PYTHON_BOOTSTRAP_END
   ${SpadsConf::}{__getattr__}=$pythonGetAttrSub;
   ${SpringAutoHostInterface::}{__getattr__}=$pythonGetAttrSub;
   ${SpringLobbyInterface::}{__getattr__}=$pythonGetAttrSub;
-  ::slog('Initialized Python interpreter v'.join('.',@{$r_pythonVersion}[0,1,2]),3);
+  $spadsConf->{log}->log('Initialized Python interpreter v'.join('.',@{$r_pythonVersion}[0,1,2]),3);
   return 1;
 }
 
 sub loadPythonPlugin {
-  return 0 unless(defined($pythonReloadPrefix) || initPythonInterpreter());
+  my $spadsConf=shift;
+  return 0 unless(defined($pythonReloadPrefix) || initPythonInterpreter($spadsConf));
   my $pluginName=getCallerPlugin();
   my $pythonModule=lc($pluginName);
   my $pythonLoadModule=<<"PYTHON_LOADMODULE_END";
@@ -104,15 +106,15 @@ if '$pythonModule' in dir():
 else:
     import $pythonModule
 PYTHON_LOADMODULE_END
-  my $escapedInlinePythonTmpDir=quotemeta(catdir($::conf{instanceDir},'.InlinePython.tmp'));
+  my $escapedInlinePythonTmpDir=quotemeta(catdir($spadsConf->{conf}{instanceDir},'.InlinePython.tmp'));
   eval "use Inline Python => \"$pythonLoadModule\", directory => \"$escapedInlinePythonTmpDir\", force_build => 1";
   if(hasEvalError()) {
-    ::slog("Unable to load Python module for plugin $pluginName: $@",1);
+    $spadsConf->{log}->log("Unable to load Python module for plugin $pluginName: $@",1);
     return 0;
   }
   my %pythonModuleNamespace = Inline::Python::py_study_package($pythonModule);
   if(! exists $pythonModuleNamespace{classes}{$pluginName}) {
-    ::slog("Unable to load Python module for plugin $pluginName: Python class \"$pluginName\" not found",1);
+    $spadsConf->{log}->log("Unable to load Python module for plugin $pluginName: Python class \"$pluginName\" not found",1);
     return 0;
   }
   foreach my $function (@{$pythonModuleNamespace{functions}}) {

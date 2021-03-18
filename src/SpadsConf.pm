@@ -1,6 +1,6 @@
 # Object-oriented Perl module handling SPADS configuration files
 #
-# Copyright (C) 2008-2020  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2021  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -43,7 +43,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.12.14';
+my $moduleVersion='0.12.15';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -1214,7 +1214,7 @@ package $pluginName;
 use warnings;
 use strict;
 use SpadsPluginApi;
-loadPythonPlugin();
+loadPythonPlugin(\$self);
 PYTHON_PLUGIN_WRAPPER_END
         if(hasEvalError() || ! $pythonLoadRes) {
           $self->{log}->log("Unable to load Perl wrapper for Python plugin \"$pluginName\" : $@",1) if($@);
