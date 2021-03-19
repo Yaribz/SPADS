@@ -19,12 +19,12 @@
 package SpadsPluginApi;
 
 use File::Spec::Functions qw'catdir';
-use List::Util qw'any';
+use List::Util qw'any none';
 
 use Exporter 'import';
-@EXPORT=qw/$spadsVersion $spadsDir loadPythonPlugin get_flag fix_string getLobbyState getSpringPid getSpringServerType getTimestamps getRunningBattle getConfMacros getCurrentVote getPlugin addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess forkCall removeProcessCallback createDetachedProcess addTimer removeTimer addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives/;
+@EXPORT=qw/$spadsVersion $spadsDir loadPythonPlugin get_flag fix_string getLobbyState getSpringPid getSpringServerType getTimestamps getRunningBattle getConfMacros getCurrentVote getPlugin addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess forkCall removeProcessCallback createDetachedProcess addTimer removeTimer addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog updateSetting secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives/;
 
-my $apiVersion='0.26';
+my $apiVersion='0.27';
 
 our $spadsVersion=$::spadsVer;
 our $spadsDir=$::cwd;
@@ -376,10 +376,46 @@ sub rehost {
 }
 
 sub slog {
-  my($m,$l)=@_;
+  my ($m,$l)=@_;
   my $plugin=getCallerPlugin();
   $m="<$plugin> $m";
   ::slog($m,$l);
+}
+
+sub updateSetting {
+  my ($type,$name,$value)=@_;
+  my $plugin=getCallerPlugin();
+  if(none {$type eq $_} (qw'set bSet hSet')) {
+    ::slog("Ignoring updateSetting call from plugin $plugin: unknown setting type \"$type\"",2);
+    return 0;
+  }
+  if($type eq 'set') {
+    if(! exists $::spads->{conf}{$name}) {
+      ::slog("Ignoring updateSetting call from plugin $plugin: unknown setting \"$name\"",2);
+      return 0;
+    }
+    $::spads->{conf}{$name}=$value;
+    %::conf=%{$::spads->{conf}};
+    ::applySettingChange($name);
+  }elsif($type eq 'bSet') {
+    my $lcName=lc($name);
+    $::spads->{bSettings}{$lcName}=$value;
+    if($::lobbyState >= 6) {
+      ::sendBattleSetting($lcName);
+      ::applyMapBoxes() if($lcName eq 'startpostype');
+    }
+  }elsif($type eq 'hSet') {
+    if(! exists $::spads->{hSettings}{$name}) {
+      ::slog("Ignoring updateSetting call from plugin $plugin: unknown hosting setting \"$name\"",2);
+      return 0;
+    }
+    $::spads->{hSettings}{$name}=$value;
+    ::updateTargetMod() if($name eq 'modName');
+  }else{
+    return 0;
+  }
+  $::timestamps{autoRestore}=time;
+  return 1;
 }
 
 ################################
@@ -956,7 +992,11 @@ modoption named C<hiddenoption> with value C<test> like this:
 C<$additionalData{"game/modoptions/hiddenoption"}="test">. For tags to be added
 in player sections, the special key C<playerData> must be used. This special key
 must point to a hash associating each account ID to a hash containing the tags
-to add in the corresponding player section.
+to add in the corresponding player section (subsections can be created by using
+nested hashes). For tags to be added in AI bot sections, the special key
+C<aiData> must be used. This special key must point to a hash associating each
+AI bot name to a hash containing the tags to add in the corresponding AI bot
+section (subsections can be created by using nested hashes).
 
 Note for Python plugins: As Python plugins cannot modify the data structures
 passed as parameters to the callbacks, an alternate way to implement this
@@ -1459,6 +1499,20 @@ C<$message> is the log message
 
 C<$level> is the log level of the message: C<0> (critical), C<1> (error), C<2>
 (warning), C<3> (notice), C<4> (info), C<5> (debug)
+
+=item C<updateSetting($type,$name,$value)>
+
+This function updates current SPADS configuration in memory by changing the
+value of a setting and applying it immediatly. This function does not modify
+configuration files on disk. The new value provided by the plugin is not
+checked: the plugin is reponsible for providing only correct values.
+
+C<$type> is the type of setting to update (C<"set"> for preset setting,
+C<"hSet"> for hosting setting, or C<"bSet"> for battle setting)
+
+C<$name> is the name of the setting to update
+
+C<$value> is the new value of the setting
 
 =back
 

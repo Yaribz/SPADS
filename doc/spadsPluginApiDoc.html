@@ -466,7 +466,7 @@
 
 <p>This callback is called when a Spring start script is generated, just before launching the game. It allows plugins to declare additional scrip tags which will be written in the start script.</p>
 
-<p><code>\%additionalData</code> is a reference to a hash which must be updated by Perl plugins by adding the desired keys/values. For example a Perl plugin can add a modoption named <code>hiddenoption</code> with value <code>test</code> like this: <code>$additionalData{&quot;game/modoptions/hiddenoption&quot;}=&quot;test&quot;</code>. For tags to be added in player sections, the special key <code>playerData</code> must be used. This special key must point to a hash associating each account ID to a hash containing the tags to add in the corresponding player section.</p>
+<p><code>\%additionalData</code> is a reference to a hash which must be updated by Perl plugins by adding the desired keys/values. For example a Perl plugin can add a modoption named <code>hiddenoption</code> with value <code>test</code> like this: <code>$additionalData{&quot;game/modoptions/hiddenoption&quot;}=&quot;test&quot;</code>. For tags to be added in player sections, the special key <code>playerData</code> must be used. This special key must point to a hash associating each account ID to a hash containing the tags to add in the corresponding player section (subsections can be created by using nested hashes). For tags to be added in AI bot sections, the special key <code>aiData</code> must be used. This special key must point to a hash associating each AI bot name to a hash containing the tags to add in the corresponding AI bot section (subsections can be created by using nested hashes).</p>
 
 <p>Note for Python plugins: As Python plugins cannot modify the data structures passed as parameters to the callbacks, an alternate way to implement this callback is offered. Instead of modifying the <code>additionnalData</code> dictionary directly, the callback can return a new dictionary containing the entries which must be added. For example a Python plugin can add a tag named <code>CommanderLevel</code> set to value <code>8</code> in the player section of the player whose account ID is <code>1234</code> like this: <code>return {&#39;playerData&#39;: { &#39;1234&#39;: { &#39;CommanderLevel&#39;: 8 } } }</code></p>
 
@@ -845,6 +845,18 @@
 <p><code>$message</code> is the log message</p>
 
 <p><code>$level</code> is the log level of the message: <code>0</code> (critical), <code>1</code> (error), <code>2</code> (warning), <code>3</code> (notice), <code>4</code> (info), <code>5</code> (debug)</p>
+
+</dd>
+<dt id="updateSetting-type-name-value"><code>updateSetting($type,$name,$value)</code></dt>
+<dd>
+
+<p>This function updates current SPADS configuration in memory by changing the value of a setting and applying it immediatly. This function does not modify configuration files on disk. The new value provided by the plugin is not checked: the plugin is reponsible for providing only correct values.</p>
+
+<p><code>$type</code> is the type of setting to update (<code>&quot;set&quot;</code> for preset setting, <code>&quot;hSet&quot;</code> for hosting setting, or <code>&quot;bSet&quot;</code> for battle setting)</p>
+
+<p><code>$name</code> is the name of the setting to update</p>
+
+<p><code>$value</code> is the new value of the setting</p>
 
 </dd>
 </dl>

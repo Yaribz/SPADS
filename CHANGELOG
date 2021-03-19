@@ -1191,6 +1191,9 @@ SpadsPluginApi.pm:
       add documentation for Python plugins
       explicitely list the first parameter "$self" in callback descriptions to avoid confusion
 0.26: fix auto-load for Python plugins
+0.27: new plugin API function: "updateSetting"
+      additional start script tags can now be inserted in AI sections
+      additional start script subsections can now be inserted in players and AI sections
 
 SpadsUpdater.pm:
 ===============
