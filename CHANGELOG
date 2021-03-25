@@ -175,6 +175,7 @@ helpSettings.dat:
        clarify "autoLockClients" and "autoLock" settings differences
 0.6.3: event loop time slice is now configurable (extended format of "eventModel" global setting)
 0.6.4: support new placeholders in "welcomeMsg" and "welcomeMsgInGame" preset settings: "%p" for current global preset, "%P" for description of current global preset
+0.6.5: update documentation for "idShareMode" (it is no longer required to set "idShareMode" to "off" to enable workarounds for lobby protocol limitations regarding maximum team and ID numbers)
 
 PerlUnitSync.pm:
 ===============
@@ -888,6 +889,7 @@ spads.pl:
 0.12.31: declare proxy packages sooner (fix plugin name not included in error messages during Python plugin auto-loading)
 0.12.32: improve workarounds for lobby protocol limitations
          support maximum number of teams and IDs allowed by engine (251)
+0.12.33: fix team balancing not being fully deterministic in some specific conditions (random balance mode, or AI bots in battle with idShareMode set to "clan" or "manual")
 
 SpadsConf.pm:
 ============

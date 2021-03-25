@@ -53,7 +53,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.32';
+our $spadsVer='0.12.33';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -3940,7 +3940,7 @@ sub balanceBattle {
   my $nbSmurfs=0;
   my $restoreRandSeed=intRand();
   srand($balRandSeed);
-  foreach my $player (keys %{$p_players}) {
+  foreach my $player (sort keys %{$p_players}) {
     if($conf{balanceMode} =~ /skill$/) {
       if(exists $battleSkills{$player}) {
         $p_players->{$player}->{skill}=$battleSkills{$player}->{skill};
@@ -3954,7 +3954,7 @@ sub balanceBattle {
       $p_players->{$player}->{skill}=int(rand(39));
     }
   }
-  foreach my $bot (keys %{$p_bots}) {
+  foreach my $bot (sort keys %{$p_bots}) {
     if($conf{balanceMode} =~ /skill$/) {
       $p_bots->{$bot}->{skill}=$rankSkill{$conf{botsRank}};
     }else{
@@ -4022,7 +4022,7 @@ sub balanceBattle {
         }
       }
     }
-    foreach my $bot (keys %{$p_teams->[$teamNb]->{bots}}) {
+    foreach my $bot (sort keys %{$p_teams->[$teamNb]->{bots}}) {
       $p_bots->{$bot}->{battleStatus}->{team}=$teamNb;
       if($conf{idShareMode} eq 'all') {
         $p_bots->{$bot}->{battleStatus}->{id}=$teamNb;

@@ -1246,7 +1246,7 @@ all: all players of each team are sharing ID (SPADS counts the number of players
 auto: [set:nbPlayerById] and [set:balanceMode] are used to determine shared IDs (SPADS counts the number of IDs in each team to know if teams are even)
 manual: [pSet:shareId] (coop group) is used to determine shared IDs (SPADS counts the number of players in each team to know if teams are even)
 clan: same as "manual", except that the clan tag is used as default [pSet:shareId] (coop group) value for clan players
-off: ID sharing is totally disabled, even if players are sharing IDs in battle lobby (workaround for 16 IDs limit in lobby protocol)
+off: ID sharing is disabled (SPADS counts the number of players in each team to know if teams are even)
 -
 auto
 
