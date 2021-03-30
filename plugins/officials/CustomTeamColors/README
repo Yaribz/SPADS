@@ -1,0 +1,14 @@
+This plugin makes it possible to customize the team colors applied by SPADS.
+
+The CustomTeamColors.colors.conf file contains colors declarations, associating
+each color name with the corresponding color defintion. By default this file
+contains all the standard HTML/CSS colors (additional custom colors can be
+added there if needed).
+
+The CustomTeamColors.rules.conf file contains the rules to determine the set
+of colors which must be used for each team, depending on the battle structure
+(number of teams, team sizes...). By default this file only contains one basic
+example rule which provides colors for 1v1 to 3v3 games.
+As for all table-type SPADS configuration files, the first line is the template
+declaration, which indicates all fields which can be used in your rules (these
+fields are explained in detail in the file header).

@@ -43,7 +43,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.12.15';
+my $moduleVersion='0.12.16';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -124,7 +124,7 @@ my %globalParameters = (lobbyLogin => ['login'],
                         promoteMsg => [],
                         promoteChannels => ['channelList','null'],
                         springieEmulation => ['onOffWarnType'],
-                        colorSensitivity => ['integer'],
+                        colorSensitivity => ['integer','minus1'],
                         dataDumpDelay => ['integer'],
                         allowSettingsShortcut => ['bool'],
                         kickBanDuration => ['kickBanDurationType'],
@@ -227,6 +227,7 @@ my %paramTypes = (login => '[\w\[\]]{2,20}',
                   hostname => '\w[\w\-\.]*',
                   port => sub { return ($_[0] =~ /^\d+$/ && $_[0] < 65536) },
                   integer => '\d+',
+                  minus1 => '-1',
                   nonNullInteger => '[1-9]\d*',
                   ipAddr => '\d+\.\d+\.\d+\.\d+',
                   star => '\*',

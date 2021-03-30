@@ -478,7 +478,7 @@
 
 <p><code>\%players</code> is a reference to a hash containing the players in the battle lobby. This hash is indexed by player names, and the values are references to a hash containing player data. For balancing, you should only need to access the players skill as follows: <code>$players-&gt;{&lt;playerName&gt;}-&gt;{skill}</code></p>
 
-<p><code>\%bots</code> is a reference to a hash containing the bots in the battle lobby. This hash has the exact same structure has <code>\%players</code>.</p>
+<p><code>\%bots</code> is a reference to a hash containing the bots in the battle lobby. This hash has the exact same structure as <code>\%players</code>.</p>
 
 <p><code>$clanMode</code> is the current clan mode which must be applied to the balance. Clan modes are specified <a href="http://planetspads.free.fr/spads/doc/spadsDoc_All.html#set:clanMode">here</a>. <code>&lt;maxUnbalance&gt;</code> thresholds are automatically managed by SPADS, plugins don&#39;t need to handle them. So basically, plugins only need to check if <code>tag</code> and/or <code>pref</code> clan modes are enabled and apply them to their balance algorithm.</p>
 
@@ -519,6 +519,22 @@
 <p><code>\@rotationMaps</code> is a reference to an array containing the names of the maps currently allowed for rotation.</p>
 
 <p>The callback must return a reference to a new array containing the filtered map names.</p>
+
+</dd>
+<dt id="fixColors-self-players-bots-battleStructure"><code>fixColors($self,\%players,\%bots,\%battleStructure)</code></dt>
+<dd>
+
+<p>This callback is called each time SPADS needs to fix the teams colors. It allows plugins to replace the built-in color fixing algorithm.</p>
+
+<p><code>\%players</code> is a reference to a hash containing the players currently in the battle lobby. This hash is indexed by player names, and the values are references to hashes containing following player data: <code>team</code> (team number), <code>id</code> (id number) and <code>color</code> (current color configured in lobby, i.e. a hash containing keys <code>&quot;red&quot;</code>, <code>&quot;green&quot;</code>, <code>&quot;blue&quot;</code> and whose values are numbers between 0 and 255 included).</p>
+
+<p><code>\%bots</code> is a reference to a hash containing the bots currently in the battle lobby. This hash has the exact same structure as <code>\%players</code>.</p>
+
+<p><code>\%battleStructure</code> is a reference to a hash containing data concerning the battle structure. This parameter is provided to plugins for ease of use but actually these data are redundant with the data already provided in the two previous parameters (the <code>%players</code> and <code>%bots</code> hashes), they are just organized in a different way. The <code>%battleStructure</code> hash is indexed by team numbers. For each team number, the associated value is a reference to a hash indexed by the ID numbers contained in the team. For each ID number, the associated value is a reference to a hash containing the two following keys: <code>players</code> (the associated value is a reference to an array containing the names of the players belonging to this ID) and <code>bots</code> (the associated value is a reference to an array containing the names of the AI bots belonging to this ID).</p>
+
+<p>If the plugin is unable to fix colors, then it must return <code>undef</code> so that SPADS knows it has to use another plugin or the internal color fixing algorithm instead.</p>
+
+<p>If the plugin is able to fix the players and AI bots colors, then it must return a reference to a hash containing all colors assignations, indexed by ID numbers. The keys must be the ID numbers and the values are references to hash whose keys are <code>&quot;red&quot;</code>, <code>&quot;green&quot;</code> and <code>&quot;blue&quot;</code> and values are the corresponding RGB values (between 0 and 255 included) of the color assigned to the ID.</p>
 
 </dd>
 <dt id="setMapStartBoxes-self-boxes-mapName-nbTeams-nbExtraBox"><code>setMapStartBoxes($self,\@boxes,$mapName,$nbTeams,$nbExtraBox)</code></dt>

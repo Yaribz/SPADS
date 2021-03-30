@@ -24,7 +24,7 @@ use List::Util qw'any none';
 use Exporter 'import';
 @EXPORT=qw/$spadsVersion $spadsDir loadPythonPlugin get_flag fix_string getLobbyState getSpringPid getSpringServerType getTimestamps getRunningBattle getConfMacros getCurrentVote getPlugin addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess forkCall removeProcessCallback createDetachedProcess addTimer removeTimer addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog updateSetting secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives/;
 
-my $apiVersion='0.27';
+my $apiVersion='0.28';
 
 our $spadsVersion=$::spadsVer;
 our $spadsDir=$::cwd;
@@ -1018,7 +1018,7 @@ hash containing player data. For balancing, you should only need to access the
 players skill as follows: C<< $players->{<playerName>}->{skill} >>
 
 C<\%bots> is a reference to a hash containing the bots in the battle lobby. This
-hash has the exact same structure has C<\%players>.
+hash has the exact same structure as C<\%players>.
 
 C<$clanMode> is the current clan mode which must be applied to the balance. Clan
 modes are specified L<here|http://planetspads.free.fr/spads/doc/spadsDoc_All.html#set:clanMode>.
@@ -1092,6 +1092,43 @@ currently allowed for rotation.
 
 The callback must return a reference to a new array containing the filtered map
 names.
+
+=item C<fixColors($self,\%players,\%bots,\%battleStructure)>
+
+This callback is called each time SPADS needs to fix the teams colors. It allows
+plugins to replace the built-in color fixing algorithm.
+
+C<\%players> is a reference to a hash containing the players currently in the
+battle lobby. This hash is indexed by player names, and the values are
+references to hashes containing following player data: C<team> (team number),
+C<id> (id number) and C<color> (current color configured in lobby, i.e. a hash
+containing keys C<"red">, C<"green">, C<"blue"> and whose values are numbers
+between 0 and 255 included).
+
+C<\%bots> is a reference to a hash containing the bots currently in the battle
+lobby. This hash has the exact same structure as C<\%players>.
+
+C<\%battleStructure> is a reference to a hash containing data concerning the
+battle structure. This parameter is provided to plugins for ease of use but
+actually these data are redundant with the data already provided in the two
+previous parameters (the C<%players> and C<%bots> hashes), they are just
+organized in a different way. The C<%battleStructure> hash is indexed by team
+numbers. For each team number, the associated value is a reference to a hash
+indexed by the ID numbers contained in the team. For each ID number, the
+associated value is a reference to a hash containing the two following keys:
+C<players> (the associated value is a reference to an array containing the names
+of the players belonging to this ID) and C<bots> (the associated value is a
+reference to an array containing the names of the AI bots belonging to this ID).
+
+If the plugin is unable to fix colors, then it must return C<undef> so that
+SPADS knows it has to use another plugin or the internal color fixing algorithm
+instead.
+
+If the plugin is able to fix the players and AI bots colors, then it must return
+a reference to a hash containing all colors assignations, indexed by ID numbers.
+The keys must be the ID numbers and the values are references to hash whose keys
+are C<"red">, C<"green"> and C<"blue"> and values are the corresponding RGB
+values (between 0 and 255 included) of the color assigned to the ID.
 
 =item C<setMapStartBoxes($self,\@boxes,$mapName,$nbTeams,$nbExtraBox)>
 

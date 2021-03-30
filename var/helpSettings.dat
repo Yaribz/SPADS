@@ -768,9 +768,12 @@ When auto-fixing players colors, SPADS uses a formula to evaluate how much diffe
 If the computed color difference is below the value of this setting, SPADS tries to change the offending colors.
 Using a very low value for this setting would allow players to use very similar colors.
 Using a very high value for this setting would change players colors almost every time, even if they seem really different.
-If set to 0, SPADS prevents players from choosing their colors (16 hard-coded colors are used instead)
+If set to 0, players colors are always forced using hard-coded colors (players can't choose their colors)
+If set to -1, players colors are always forced using an advanced color assignment algorithm, taking game mode and battle structure into account (players can't choose their colors)
 -
-Integer
+Positive integer: players colors are automatically changed if too similar
+0: players colors are always forced using hard-coded values
+-1: players colors are always forced using an advanced color assignment algorithm
 -
 55 (some colors may seem similar in battle lobby, but usually they are different enough in game)
 

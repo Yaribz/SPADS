@@ -53,7 +53,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.33';
+our $spadsVer='0.12.34';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -414,6 +414,7 @@ my %ignoredUsers;
 my $balanceState=0; # (0: not balanced, 1: balanced)
 my $colorsState=0; # (0: not fixed, 1: fixed)
 my @predefinedColors;
+my %advColors;
 my %balanceTarget;
 my %colorsTarget;
 my $manualLockedStatus=0;
@@ -1117,7 +1118,31 @@ sub hsvToRgb {
   return (int(($r+$m)*255+0.5),int(($g+$m)*255+0.5),int(($b+$m)*255+0.5));
 }
 
-sub generateColorPanel {
+sub hslToRgb {
+  my ($h,$s,$l)=@_;
+  return (0,0,0) if($h < 0 || $h > 359 || $s < 0 || $s > 1 || $l < 0 || $l > 1);
+  my $c=(1-abs(2*$l-1))*$s;
+  my $h1=$h/60;
+  my $x=$c*(1-abs($h1 - int($h1/2)*2 - 1));
+  my ($r,$g,$b);
+  if($h1<1) {
+    ($r,$g,$b)=($c,$x,0);
+  }elsif($h1<2) {
+    ($r,$g,$b)=($x,$c,0);
+  }elsif($h1<3) {
+    ($r,$g,$b)=(0,$c,$x);
+  }elsif($h1<4) {
+    ($r,$g,$b)=(0,$x,$c);
+  }elsif($h1<5) {
+    ($r,$g,$b)=($x,0,$c);
+  }else{
+    ($r,$g,$b)=($c,0,$x);
+  }
+  my $m=$l-$c/2;
+  return (int(($r+$m)*255+0.5),int(($g+$m)*255+0.5),int(($b+$m)*255+0.5));
+}
+
+sub generateBaseColorPanel {
   my ($s,$v)=@_;
   my @predefinedHues=(240,120,0,60,180,300,30,270,200,80,330,45,160,285);
   my @colors;
@@ -1127,6 +1152,145 @@ sub generateColorPanel {
   }
   return @colors;
 } 
+
+sub generateAdvancedColorPanel {
+  my %colorDefs=( S => { red => {hue => 0,
+                                 sv => { 1 => [[1,1]],
+                                         2 => [[1,0.8],[0.6,1]],
+                                         3 => [[1,1],[0.5,1],[1,0.6]]}},
+                         yellow => {hue => 60,
+                                    sv => { 1 => [[1,1]],
+                                            2 => [[0.85,1],[1,0.7]],
+                                            3 => [[0.8,1],[1,0.73],[1,0.49]]}},
+                         green => {hue => 120,
+                                   sv => { 1 => [[1,1]],
+                                           2 => [[1,1],[1,0.65]],
+                                           3 => [[1,0.85],[0.45,1],[1,0.55]]}},
+                         cyan => {hue => 180,
+                                  sv => { 1 => [[1,1]],
+                                          2 => [[0.85,1],[1,0.65]],
+                                          3 => [[0.7,1],[1,0.72],[1,0.51]]}},
+                         blue => {hue => 220,
+                                  sv => { 1 => [[1,1]],
+                                          2 => [[1,0.7],[0.6,1]],
+                                          3 => [[0.95,1],[0.5,1],[1,0.6]]}},
+                         magenta => {hue => 300,
+                                     sv => { 1 => [[1,1]],
+                                             2 => [[1,0.75],[0.45,1]],
+                                             3 => [[1,0.95],[0.45,1],[1,0.6]]}} },
+                  M => { red => {hue => 0,
+                                 sv => { 1 => [[1,1]],
+                                         2 => [[1,0.8],[0.6,1]],
+                                         3 => [[1,1],[0.55,1],[1,0.65]]}},
+                         orange => {hue => 32,
+                                    sv => { 1 => [[1,1]],
+                                            2 => [[1,0.9],[0.65,1]],
+                                            3 => [[1,1],[0.55,1],[1,0.67]]}},
+                         yellow => {hue => 60,
+                                    sv => { 1 => [[1,0.95]],
+                                            2 => [[1,1],[1,0.73]],
+                                            3 => [[0.85,1],[1,0.78],[1,0.5]]}},
+                         green => {hue => 105,
+                                   sv => { 1 => [[1,0.95]],
+                                           2 => [[1,1],[1,0.65]],
+                                           3 => [[1,0.93],[0.47,1],[1,0.65]]}},
+                         teal => {hue => 165,
+                                  sv => { 1 => [[1,0.7]],
+                                          2 => [[1,0.85],[1,0.5]],
+                                          3 => [[1,1],[1,0.75],[1,0.5]]}},
+                         cyan => {hue => 190,
+                                  sv => { 1 => [[1,1]],
+                                          2 => [[0.85,1],[1,0.7]],
+                                          3 => [[0.85,1],[1,0.77],[1,0.5]]}},
+                         blue => {hue => 220,
+                                  sv => { 1 => [[0.9,1]],
+                                          2 => [[1,0.86],[0.6,1]],
+                                          3 => [[1,1],[0.5,1],[1,0.7]]}},
+                         purple => {hue => 272,
+                                    sv => { 1 => [[0.95,1]],
+                                            2 => [[1,0.85],[0.6,1]],
+                                            3 => [[0.8,1],[0.45,1],[1,0.7]]}},
+                         magenta => {hue => 310,
+                                     sv => { 1 => [[1,1]],
+                                             2 => [[1,0.85],[0.5,1]],
+                                             3 => [[1,1],[0.45,1],[1,0.65]]}} },
+                  L => { red => {hue => 0,
+                                 sv => { 1 => [[1,1]],
+                                         2 => [[1,0.8],[0.6,1]],
+                                         3 => [[1,1],[0.55,1],[1,0.65]]}},
+                         orange => {hue => 27,
+                                    sv => { 1 => [[1,1]],
+                                            2 => [[1,0.85],[0.65,1]],
+                                            3 => [[1,1],[0.55,1],[1,0.67]]}},
+                         gold => {hue => 45,
+                                  sv => { 1 => [[1,1]],
+                                          2 => [[1,0.8],[0.65,1]],
+                                          3 => [[1,1],[0.55,1],[1,0.65]]}},
+                         yellow => {hue => 60,
+                                    sv => { 1 => [[1,1]],
+                                            2 => [[0.85,1],[1,0.75]],
+                                            3 => [[0.85,1],[1,0.78],[1,0.5]]}},
+                         lime => {hue => 80,
+                                  sv => { 1 => [[1,0.8]],
+                                          2 => [[0.85,1],[1,0.8]],
+                                          3 => [[0.85,1],[1,0.8],[1,0.5]]}},
+                         green => {hue => 120,
+                                   sv => { 1 => [[1,1]],
+                                           2 => [[1,1],[1,0.65]],
+                                           3 => [[1,0.93],[0.47,1],[1,0.65]]}},
+                         teal => {hue => 160,
+                                  sv => { 1 => [[1,0.7]],
+                                          2 => [[1,0.85],[1,0.5]],
+                                          3 => [[1,1],[1,0.75],[1,0.5]]}},
+                         cyan => {hue => 185,
+                                  sv => { 1 => [[1,1]],
+                                          2 => [[0.85,1],[1,0.7]],
+                                          3 => [[0.85,1],[1,0.77],[1,0.5]]}},
+                         azure => {hue => 205,
+                                   sv => { 1 => [[1,1]],
+                                           2 => [[0.85,1],[1,0.65]],
+                                           3 => [[1,0.95],[0.65,1],[1,0.65]]}},
+                         blue => {hue => 240,
+                                  sv => { 1 => [[1,1]],
+                                          2 => [[1,0.8],[0.6,1]],
+                                          3 => [[1,1],[0.55,1],[1,0.65]]}},
+                         purple => {hue => 270,
+                                    sv => { 1 => [[1,1]],
+                                            2 => [[1,0.85],[0.6,1]],
+                                            3 => [[1,1],[0.5,1],[1,0.65,275]]}},
+                         magenta => {hue => 298,
+                                     sv => { 1 => [[1,1]],
+                                             2 => [[1,0.85],[0.5,1],],
+                                             3 => [[1,1],[0.45,1],[1,0.65]]}},
+                         pink => {hue => 325,
+                                  sv => { 1 => [[0.9,0.85]],
+                                          2 => [[1,0.85],[0.65,1]],
+                                          3 => [[1,1],[0.55,1],[1,0.7]]}} } );
+  my %grayDefs=(1 => [140],
+                2 => [165,100],
+                3 => [180,125,75]);
+
+  foreach my $panelSize (qw'S M L') {
+    for my $nbShades (1..3) {
+      foreach my $colorName (keys %{$colorDefs{$panelSize}}) {
+        my $r_colorDef=$colorDefs{$panelSize}{$colorName};
+        for my $shadeNb (0..($nbShades-1)) {
+          my ($hue,$s,$v,$hueOverride)=($r_colorDef->{hue},@{$r_colorDef->{sv}{$nbShades}[$shadeNb]});
+          $hue=$hueOverride if(defined $hueOverride);
+          my ($r,$g,$b)=hsvToRgb($hue,$s,$v);
+          $advColors{$panelSize.$nbShades}{$colorName.($shadeNb+1)}={red => $r, green => $g, blue => $b};
+        }
+      }
+    }
+  }
+  for my $nbShades (1..3) {
+    for my $shadeNb (0..($nbShades-1)) {
+      my $grayValue=$grayDefs{$nbShades}[$shadeNb];
+      $advColors{'G'.$nbShades}{'gray'.($shadeNb+1)}={red => $grayValue, green => $grayValue, blue => $grayValue};
+    }
+  }
+
+}
 
 sub getTargetModFromList {
   my $r_availableModNames=shift;
@@ -3658,6 +3822,7 @@ sub applyBalanceTarget {
   
   $timestamps{balance}=time unless($newBalanceState);
   $balanceState=$newBalanceState;
+  $colorsState=0 unless($balanceState);
 
 }
 
@@ -3697,7 +3862,7 @@ sub applyColorsTarget {
       $newColorsState=0;
       queueLobbyCommand(["UPDATEBOT",
                          $bot,
-                         $lobby->marshallBattleStatus($p_bots->{$bot}->{battleStatus}),
+                         $lobby->marshallBattleStatus($p_targetBots->{$bot}->{battleStatus}),
                          $lobby->marshallColor($colorsTarget{$colorId})]);
     }
   }
@@ -4340,7 +4505,7 @@ sub nextColor {
   my @minDistances;
   foreach my $p_color (@predefinedColors) {
     my $minDistance=minDistance($p_color,$p_idColors);
-    return $p_color if($conf{colorSensitivity} && $minDistance > $conf{colorSensitivity}*1000);
+    return $p_color if($conf{colorSensitivity} > 0 && $minDistance > $conf{colorSensitivity}*1000);
     push(@minDistances,$minDistance);
   }
 
@@ -4360,7 +4525,7 @@ sub nextColor {
     my @minRandomDistances;
     foreach my $p_color (@randomColors) {
       my $minDistance=minDistance($p_color,$p_idColors);
-      return $p_color if($conf{colorSensitivity} && $minDistance > $conf{colorSensitivity}*1000);
+      return $p_color if($conf{colorSensitivity} > 0 && $minDistance > $conf{colorSensitivity}*1000);
       push(@minRandomDistances,$minDistance);
     }
     
@@ -4375,50 +4540,315 @@ sub nextColor {
   }
 }
 
+my @DEFAULT_COLOR_ORDER=(qw'red blue green yellow cyan magenta orange purple teal gold azure pink lime gray');
+sub getTeamAdvancedColors {
+  my ($teamSize,$r_colorPanels,$r_colorsSortedByTeamOrder,$r_colorsSortedBySelectionOrder)=@_;
+  return [] unless($teamSize);
+  $r_colorsSortedBySelectionOrder//=\@DEFAULT_COLOR_ORDER;
+      
+  my %colorsTeamPriority;
+  for my $colorIdx (0..$#{$r_colorsSortedByTeamOrder}) {
+    $colorsTeamPriority{$r_colorsSortedByTeamOrder->[$colorIdx]}=$colorIdx;
+  }
+  my %colorsSelectionPriority;
+  for my $colorIdx (0..$#{$r_colorsSortedBySelectionOrder}) {
+    $colorsSelectionPriority{$r_colorsSortedBySelectionOrder->[$colorIdx]}=$colorIdx;
+  }
+  
+  my ($panelSize,$selectedNbShades,@selectedColorsSortedBySelectionOrder);
+  PANEL_LOOP: foreach my $colorPanel (@{$r_colorPanels}) {
+    if($colorPanel=~/^([SML])(g?)([1-3]?)$/) {
+      my ($grayAllowed,$maxNbShades);
+      ($panelSize,$grayAllowed,$maxNbShades)=($1,$2 ? 1 : 0,$3 || 3);
+      @selectedColorsSortedBySelectionOrder=sort {$colorsSelectionPriority{$a} <=> $colorsSelectionPriority{$b}} (grep {exists $advColors{$panelSize.1}{$_.1} || ($grayAllowed && $_ eq 'gray')} @{$r_colorsSortedByTeamOrder});
+      for my $nbShades (1..$maxNbShades) {
+        $selectedNbShades=$nbShades;
+        last PANEL_LOOP if($teamSize <= @selectedColorsSortedBySelectionOrder * $nbShades);
+      }
+    }else{
+      slog("Invalid color panel format in getTeamAdvancedColors() call: $colorPanel",0);
+      return [];
+    }
+  }
+
+  $teamSize = @selectedColorsSortedBySelectionOrder * $selectedNbShades if($teamSize > @selectedColorsSortedBySelectionOrder * $selectedNbShades);
+  
+  my %colorsNbShades = map {$_ => $selectedNbShades} @selectedColorsSortedBySelectionOrder;
+  my $nbColorsWithAdditionalShade = $teamSize % @selectedColorsSortedBySelectionOrder;
+  my @colorsWithAdditionalShade;
+  if($nbColorsWithAdditionalShade) {
+    my @patchedSelectedColorsSortedBySelectionOrder;
+    if($selectedNbShades > 1) {
+      foreach my $selectedColor (@selectedColorsSortedBySelectionOrder) {
+        push(@patchedSelectedColorsSortedBySelectionOrder,$selectedColor) unless($selectedColor eq 'yellow');
+      }
+    }else{
+      @patchedSelectedColorsSortedBySelectionOrder=@selectedColorsSortedBySelectionOrder;
+    }
+    @colorsWithAdditionalShade=@patchedSelectedColorsSortedBySelectionOrder[0..($nbColorsWithAdditionalShade-1)];
+    foreach my $color (keys %colorsNbShades) {
+      if(none {$color eq $_} @colorsWithAdditionalShade) {
+        $colorsNbShades{$color}--;
+      }
+    }
+  }
+  
+  my @selectedColorsSortedByTeamOrder=sort {$colorsTeamPriority{$a} <=> $colorsTeamPriority{$b}} @selectedColorsSortedBySelectionOrder;
+
+  my @teamColors;
+  for my $shadeNb (1..$selectedNbShades) {
+    my @colorsToAdd;
+    if($shadeNb < $selectedNbShades || ! $nbColorsWithAdditionalShade) {
+      @colorsToAdd=@selectedColorsSortedByTeamOrder;
+    }else{
+      @colorsToAdd=sort {$colorsTeamPriority{$a} <=> $colorsTeamPriority{$b}} @colorsWithAdditionalShade;
+    }
+    foreach my $colorName (@colorsToAdd) {
+      if($colorName eq 'gray') {
+        push(@teamColors,$advColors{'G'.$colorsNbShades{'gray'}}{'gray'.$shadeNb});
+      }else{
+        push(@teamColors,$advColors{$panelSize.$colorsNbShades{$colorName}}{$colorName.$shadeNb});
+      }
+    }
+  }
+
+  return \@teamColors;
+}
+
+sub getTeamsColorPanel {
+  my ($r_teamsSizes,$r_colorPanels,$r_teamsColors)=@_;
+  my $selectedPanel;
+  PANEL_LOOP: foreach my $colorPanel (@{$r_colorPanels}) {
+    $selectedPanel=$colorPanel;
+    if($colorPanel=~/^([SML])(g?)([1-3]?)$/) {
+      my ($panelSize,$grayAllowed,$maxNbShades)=($1,$2 ? 1 : 0,$3 || 3);
+      for my $teamIdx (0..$#{$r_teamsSizes}) {
+        my @allowedColors = grep {exists $advColors{$panelSize.1}{$_.1} || ($grayAllowed && $_ eq 'gray')} @{$r_teamsColors->[$teamIdx]};
+        next PANEL_LOOP if($r_teamsSizes->[$teamIdx] > @allowedColors * $maxNbShades);
+      }
+      return $selectedPanel;
+    }else{
+      slog("Invalid color panel format in getTeamsColorPanel() call: $colorPanel",0);
+      return undef;
+    }
+  }
+  return $selectedPanel;
+}
+
+sub getTeamsAdvancedColors {
+  my ($r_teamsSizes,$r_colorPanels,$r_teamsColors)=@_;
+  my $colorPanelForTeams=getTeamsColorPanel($r_teamsSizes,$r_colorPanels,$r_teamsColors);
+  my @teamsColors;
+  for my $teamIdx (0..$#{$r_teamsSizes}) {
+    push(@teamsColors,getTeamAdvancedColors($r_teamsSizes->[$teamIdx],[$colorPanelForTeams],$r_teamsColors->[$teamIdx]));
+  }
+  return \@teamsColors; 
+}
+
 sub getFixedColorsOf {
   my ($p_players,$p_bots)=@_;
 
+  my %idsTeam;
+  my %battleStructure;
+  
+  my $r_players={};
+  foreach my $player (keys %{$p_players}) {
+    next unless(defined $p_players->{$player}{battleStatus});
+    next unless($p_players->{$player}{battleStatus}{mode});
+    my ($pId,$pTeam)=@{$p_players->{$player}{battleStatus}}{qw'id team'};
+    $idsTeam{$pId}//=$pTeam;
+    $r_players->{$player}={id => $pId,
+                           team => $idsTeam{$pId},
+                           color => $p_players->{$player}{color}};
+    $battleStructure{$idsTeam{$pId}}{$pId}//={players => [], bots => []};
+    push(@{$battleStructure{$idsTeam{$pId}}{$pId}{players}},$player);
+  }
+  my $r_bots={};
+  for my $bot (keys %{$p_bots}) {
+    my ($bId,$bTeam)=@{$p_bots->{$bot}{battleStatus}}{qw'id team'};
+    $idsTeam{$bId}//=$bTeam;
+    $r_bots->{$bot}={id => $bId,
+                     team => $idsTeam{$bId},
+                     color => $p_bots->{$bot}{color}};
+    $battleStructure{$idsTeam{$bId}}{$bId}//={players => [], bots => []};
+    push(@{$battleStructure{$idsTeam{$bId}}{$bId}{bots}},$bot);
+  }
+  
   my %idColors;
-  if($conf{colorSensitivity}) {
-    for my $bot (keys %{$p_bots}) {
-      next unless($p_bots->{$bot}->{owner} eq $conf{lobbyLogin});
-      my $colorId=$p_bots->{$bot}->{battleStatus}->{id};
-      if(! exists $idColors{$colorId}) {
-        if(minDistance($p_bots->{$bot}->{color},\%idColors) > $conf{colorSensitivity}*1000 && colorDistance($p_bots->{$bot}->{color},{red => 255, blue => 255, green => 255}) > 7000) {
-          $idColors{$colorId}=$p_bots->{$bot}->{color};
+  foreach my $pluginName (@pluginsOrder) {
+    my $r_idColors=$plugins{$pluginName}->fixColors($r_players,$r_bots,\%battleStructure) if($plugins{$pluginName}->can('fixColors'));
+    if(defined $r_idColors) {
+      %idColors=%{$r_idColors};
+      last;
+    }
+  }
+  if(! %idColors && $conf{colorSensitivity} == -1) {
+    my @orderedTeamNbs = sort {$a <=> $b} keys %battleStructure;
+    my $nbTeams = @orderedTeamNbs;
+    my @teamSizes=map {scalar keys %{$battleStructure{$_}}} @orderedTeamNbs;
+    if($nbTeams == 2) {
+      my ($playerTeam,$aiBotTeam);
+      foreach my $teamNb (@orderedTeamNbs) {
+        my $r_idsInTeam=$battleStructure{$teamNb};
+        if(all {@{$r_idsInTeam->{$_}{players}} && ! @{$r_idsInTeam->{$_}{bots}} } (keys %{$r_idsInTeam})) {
+          $playerTeam=$teamNb;
+        }elsif(all {@{$r_idsInTeam->{$_}{bots}} && ! @{$r_idsInTeam->{$_}{players}} } (keys %{$r_idsInTeam})) {
+          $aiBotTeam=$teamNb;
+        }
+      }
+      if(defined $playerTeam && defined $aiBotTeam) {
+        # Player(s) VS AI bot(s)
+        my $r_aiColors=getTeamAdvancedColors(scalar keys %{$battleStructure{$aiBotTeam}},[qw'S M L'],[qw'magenta purple pink']);
+        foreach my $aiId (sort {$a <=> $b} keys %{$battleStructure{$aiBotTeam}}) {
+          last unless(@{$r_aiColors});
+          $idColors{$aiId}=shift @{$r_aiColors};
+        }
+        my $r_playerColors=getTeamAdvancedColors(scalar keys %{$battleStructure{$playerTeam}},[qw'S1 M L Lg'],[qw'red blue green yellow cyan orange teal gold azure lime gray'],[qw'green yellow cyan blue red orange teal gold azure lime gray']);
+        foreach my $pId (sort {$a <=> $b} keys %{$battleStructure{$playerTeam}}) {
+          last unless(@{$r_playerColors});
+          $idColors{$pId}=shift @{$r_playerColors};
+        }
+      }else{
+        # 1v1 or team game
+        my @colorsTeam1 = $teamSizes[0] < 19 ? (qw'red pink magenta orange gold yellow') : (qw'red pink magenta purple orange gold yellow');
+        my @colorsTeam2 = $teamSizes[1] < 19 ? (qw'blue azure cyan teal green gray') : (qw'blue azure cyan teal green lime gray');
+        my $r_teamsColors=getTeamsAdvancedColors(\@teamSizes,[qw'S1 M Lg'],[\@colorsTeam1,\@colorsTeam2]);
+        for my $team (@orderedTeamNbs) {
+          my $r_teamColors=shift @{$r_teamsColors};
+          foreach my $id (sort {$a <=> $b} keys %{$battleStructure{$team}}) {
+            last unless(@{$r_teamColors});
+            $idColors{$id}=shift @{$r_teamColors};
+          }
+        }
+      }
+    }elsif(all {$_ == 1} @teamSizes) {
+      # FFA
+      my $r_ffaColors=getTeamAdvancedColors($nbTeams,[qw'S1 M1 L Lg'],\@DEFAULT_COLOR_ORDER);
+      foreach my $team (@orderedTeamNbs) {
+        last unless(@{$r_ffaColors});
+        $idColors{(keys %{$battleStructure{$team}})[0]}=shift @{$r_ffaColors};
+      }
+    }elsif($nbTeams > 2) {
+      # Team FFA
+      my $r_teamsColors;
+      if($nbTeams == 3) {
+        $r_teamsColors=getTeamsAdvancedColors(\@teamSizes,[qw'S1 M L'],[[qw'red pink magenta orange'],[qw'blue purple azure cyan'],[qw'green teal lime yellow']]);
+      }elsif($nbTeams == 4) {
+        $r_teamsColors=getTeamsAdvancedColors(\@teamSizes,[qw'M L'],[[qw'red pink magenta'],[qw'blue azure cyan'],[qw'green teal'],[qw'yellow gold orange']]);
+      }elsif($nbTeams == 5) {
+        my @colorsTeam1 = $teamSizes[0] < 4 ? ('red') : ('red','magenta');
+        my @colorsTeam2 = $teamSizes[1] < 4 ? ('blue') : ('blue','cyan');
+        my @colorsTeam3 = $teamSizes[2] < 4 ? ('green') : ('green','teal');
+        my @colorsTeam4 = $teamSizes[3] < 4 ? ('yellow') : ('yellow','orange');
+        my @colorsTeam5 = ($teamSizes[4] < 4 && $teamSizes[1] < 4) ? ('cyan') : ('purple','gray');
+        $r_teamsColors=getTeamsAdvancedColors(\@teamSizes,[qw'S M Mg'],[\@colorsTeam1,\@colorsTeam2,\@colorsTeam3,\@colorsTeam4,\@colorsTeam5]);
+      }elsif($nbTeams == 6) {
+        my @colorsTeam1 = $teamSizes[0] < 4 ? ('red') : ('red','orange');
+        my @colorsTeam2 = $teamSizes[1] < 4 ? ('blue') : ('blue','purple');
+        my @colorsTeam3 = $teamSizes[2] < 4 ? ('green') : ('green','teal');
+        my @colorsTeam4 = $teamSizes[3] < 4 ? ('yellow') : ('yellow','gold');
+        my @colorsTeam5 = $teamSizes[4] < 4 ? ('cyan') : ('cyan','azure');
+        my @colorsTeam6 = $teamSizes[5] < 4 ? ('magenta') : ('magenta','pink');
+        $r_teamsColors=getTeamsAdvancedColors(\@teamSizes,[qw'S L'],[\@colorsTeam1,\@colorsTeam2,\@colorsTeam3,\@colorsTeam4,\@colorsTeam5,\@colorsTeam6]);
+      }elsif($nbTeams == 7) {
+        my @colorsTeam1 = $teamSizes[0] < 4 ? ('red') : ('red','orange');
+        my @colorsTeam2 = $teamSizes[1] < 4 ? ('blue') : ('blue','azure');
+        my @colorsTeam3 = $teamSizes[2] < 4 ? ('green') : ('green','lime');
+        my @colorsTeam4 = $teamSizes[3] < 4 ? ('yellow') : ('yellow','gold');
+        my @colorsTeam5 = $teamSizes[4] < 4 ? ('cyan') : ('cyan','teal');
+        my @colorsTeam6 = $teamSizes[5] < 4 ? ('magenta') : ('magenta','pink');
+        my @colorsTeam7 = ($teamSizes[6] < 4 && $teamSizes[0] < 4) ? ('orange') : ('purple','gray');
+        $r_teamsColors=getTeamsAdvancedColors(\@teamSizes,[qw'M L Lg'],[\@colorsTeam1,\@colorsTeam2,\@colorsTeam3,\@colorsTeam4,\@colorsTeam5,\@colorsTeam6,\@colorsTeam7]);
+      }elsif($nbTeams == 8) {
+        if(all {$_ < 4} @teamSizes) {
+          $r_teamsColors=getTeamsAdvancedColors(\@teamSizes,['M'],[['red'],['blue'],['green'],['yellow'],['cyan'],['magenta'],['orange'],['purple']]);
+        }else{
+          $r_teamsColors=getTeamsAdvancedColors(\@teamSizes,['L'],[['red'],['blue'],['green'],['yellow'],['cyan'],['magenta'],['orange'],['purple']]);
+          my @additionalColors=(['L2','pink2'],['L1','azure1'],['L1','teal1'],['L1','lime1'],['G2','gray1'],['L2','pink1'],['L1','gold1'],['G2','gray2']);
+          for my $teamIdx (0..$#{additionalColors}) {
+            push(@{$r_teamsColors->[$teamIdx]},$advColors{$additionalColors[$teamIdx][0]}{$additionalColors[$teamIdx][1]});
+          }
+        }
+      }elsif($nbTeams == 9) {
+        $r_teamsColors=getTeamsAdvancedColors(\@teamSizes,['M'],[['red'],['blue'],['green'],['yellow'],['cyan'],['magenta'],['orange'],['purple'],['teal']]);
+      }elsif($nbTeams < 15) {
+        $r_teamsColors=getTeamsAdvancedColors(\@teamSizes,['Lg'],[['red'],['blue'],['green'],['yellow'],['cyan'],['magenta'],['orange'],['purple'],['teal'],['gold'],['azure'],['pink'],['lime'],['gray']]);
+      }elsif($nbTeams == 15) {
+        my @teamsColors = map { [map {$advColors{$_->[0]}{$_->[1]}} @{$_}] } ([['L2','red1'],['L2','red2']],
+                                                                              [['L3','blue1'],['L3','blue3']],
+                                                                              [['L2','green1'],['L2','green2']],
+                                                                              [['L2','yellow1'],['L2','yellow2']],
+                                                                              [['L2','cyan1'],['L2','cyan2']],
+                                                                              [['L2','magenta1'],['L2','magenta2']],
+                                                                              [['L2','orange1'],['L2','orange2']],
+                                                                              [['L2','purple1'],['L2','purple2']],
+                                                                              [['L2','teal1'],['L2','teal2']],
+                                                                              [['L2','gold1'],['L2','gold2']],
+                                                                              [['L3','azure1'],['L3','azure3']],
+                                                                              [['L2','pink1'],['L2','pink2']],
+                                                                              [['L2','lime1'],['L2','lime2']],
+                                                                              [['G2','gray1'],['G2','gray2']],
+                                                                              [['L3','blue2'],['L3','azure2']]);
+        $r_teamsColors=\@teamsColors;
+      }elsif($nbTeams == 16) {
+        my @teamsColors = map { [map {$advColors{$_->[0]}{$_->[1]}} @{$_}] } ([['L2','red1'],['L2','red2']],
+                                                                              [['L3','blue1'],['L3','blue3']],
+                                                                              [['L2','green1'],['L2','green2']],
+                                                                              [['L2','yellow1'],['L2','yellow2']],
+                                                                              [['L2','cyan1'],['L2','cyan2']],
+                                                                              [['L2','magenta1'],['L2','magenta2']],
+                                                                              [['L3','orange1'],['L3','orange3']],
+                                                                              [['L2','purple1'],['L2','purple2']],
+                                                                              [['L2','teal1'],['L2','teal2']],
+                                                                              [['L3','gold1'],['L3','gold3']],
+                                                                              [['L3','azure1'],['L3','azure3']],
+                                                                              [['L2','pink1'],['L2','pink2']],
+                                                                              [['L2','lime1'],['L2','lime2']],
+                                                                              [['G2','gray1'],['G2','gray2']],
+                                                                              [['L3','blue2'],['L3','azure2']],
+                                                                              [['L3','orange2'],['L3','gold2']]);
+        $r_teamsColors=\@teamsColors;
+      }
+      if(defined $r_teamsColors) {
+        foreach my $team (@orderedTeamNbs) {
+          my $r_teamColors=shift @{$r_teamsColors};
+          last unless(defined $r_teamColors);
+          foreach my $id (sort {$a <=> $b} keys %{$battleStructure{$team}}) {
+            last unless(@{$r_teamColors});
+            $idColors{$id}=shift @{$r_teamColors};
+          }
         }
       }
     }
-    for my $player (keys %{$p_players}) {
-      next unless(defined $p_players->{$player}->{battleStatus});
-      next unless($p_players->{$player}->{battleStatus}->{mode});
-      my $colorId=$p_players->{$player}->{battleStatus}->{id};
-      if(! exists $idColors{$colorId}) {
-        if(minDistance($p_players->{$player}->{color},\%idColors) > $conf{colorSensitivity}*1000 && colorDistance($p_players->{$player}->{color},{red => 255, blue => 255, green => 255}) > 7000) {
-          $idColors{$colorId}=$p_players->{$player}->{color};
-        }
+  }
+  if($conf{colorSensitivity} > 0) {
+    foreach my $bot (sort {$r_bots->{$a}{id} <=> $r_bots->{$b}{id}} keys %{$r_bots}) {
+      next unless($p_bots->{$bot}{owner} eq $conf{lobbyLogin});
+      next if(exists $idColors{$r_bots->{$bot}{id}});
+      if(minDistance($r_bots->{$bot}{color},\%idColors) > $conf{colorSensitivity}*1000 && colorDistance($r_bots->{$bot}{color},{red => 255, blue => 255, green => 255}) > 7000) {
+        $idColors{$r_bots->{$bot}{id}}=$r_bots->{$bot}{color};
       }
     }
-    for my $bot (keys %{$p_bots}) {
-      next if($p_bots->{$bot}->{owner} eq $conf{lobbyLogin});
-      my $colorId=$p_bots->{$bot}->{battleStatus}->{id};
-      if(! exists $idColors{$colorId}) {
-        if(minDistance($p_bots->{$bot}->{color},\%idColors) > $conf{colorSensitivity}*1000 && colorDistance($p_bots->{$bot}->{color},{red => 255, blue => 255, green => 255}) > 7000) {
-          $idColors{$colorId}=$p_bots->{$bot}->{color};
-        }
+    foreach my $player (sort {$r_players->{$a}{id} <=> $r_players->{$b}{id}} keys %{$r_players}) {
+      next if(exists $idColors{$r_players->{$player}{id}});
+      if(minDistance($r_players->{$player}{color},\%idColors) > $conf{colorSensitivity}*1000 && colorDistance($r_players->{$player}{color},{red => 255, blue => 255, green => 255}) > 7000) {
+        $idColors{$r_players->{$player}{id}}=$r_players->{$player}{color};
+      }
+    }
+    foreach my $bot (sort {$r_bots->{$a}{id} <=> $r_bots->{$b}{id}} keys %{$r_bots}) {
+      next if($p_bots->{$bot}{owner} eq $conf{lobbyLogin});
+      next if(exists $idColors{$r_bots->{$bot}{id}});
+      if(minDistance($r_bots->{$bot}{color},\%idColors) > $conf{colorSensitivity}*1000 && colorDistance($r_bots->{$bot}{color},{red => 255, blue => 255, green => 255}) > 7000) {
+        $idColors{$r_bots->{$bot}{id}}=$r_bots->{$bot}{color};
       }
     }
   }
 
-  for my $player (keys %{$p_players}) {
-    next unless(defined $p_players->{$player}->{battleStatus});
-    next unless($p_players->{$player}->{battleStatus}->{mode});
-    my $colorId=$p_players->{$player}->{battleStatus}->{id};
-    $idColors{$colorId}=nextColor(\%idColors) unless(exists $idColors{$colorId});
+  foreach my $player (sort {$r_players->{$a}{id} <=> $r_players->{$b}{id}} keys %{$r_players}) {
+    $idColors{$r_players->{$player}{id}}=nextColor(\%idColors) unless(exists $idColors{$r_players->{$player}{id}});
   }
-  for my $bot (keys %{$p_bots}) {
-    my $colorId=$p_bots->{$bot}->{battleStatus}->{id};
-    $idColors{$colorId}=nextColor(\%idColors) unless(exists $idColors{$colorId});
+  foreach my $bot (sort {$r_bots->{$a}{id} <=> $r_bots->{$b}{id}} keys %{$r_bots}) {
+    $idColors{$r_bots->{$bot}{id}}=nextColor(\%idColors) unless(exists $idColors{$r_bots->{$bot}{id}});
   }
 
   return \%idColors;
@@ -4448,12 +4878,17 @@ sub getBattleState {
       }else{
         $nbPlayers++;
         push(@unreadyPlayers,$bUser) unless($p_bUsers->{$bUser}->{battleStatus}->{ready});
-        $ids{$p_bUsers->{$bUser}->{battleStatus}->{id}}=1;
-        if($conf{idShareMode} eq "auto") {
-          $teams{$p_bUsers->{$bUser}->{battleStatus}->{id}}=$p_bUsers->{$bUser}->{battleStatus}->{team};
+        my ($id,$team)=@{$p_bUsers->{$bUser}{battleStatus}}{'id','team'};
+        if(exists $ids{$id}) {
+          return { battleState => -5 } unless($ids{$id} == $team);
         }else{
-          $teamCount{$p_bUsers->{$bUser}->{battleStatus}->{team}}=0 unless(exists $teamCount{$p_bUsers->{$bUser}->{battleStatus}->{team}});
-          $teamCount{$p_bUsers->{$bUser}->{battleStatus}->{team}}++;
+          $ids{$id}=$team;
+        }
+        if($conf{idShareMode} eq "auto") {
+          $teams{$id}=$team;
+        }else{
+          $teamCount{$team}=0 unless(exists $teamCount{$team});
+          $teamCount{$team}++;
         }
       }
     }
@@ -4466,12 +4901,17 @@ sub getBattleState {
   my $p_bBots=$lobby->{battle}->{bots};
   foreach my $bBot (keys %{$p_bBots}) {
     $nbPlayers++;
-    $ids{$p_bBots->{$bBot}->{battleStatus}->{id}}=1;
-    if($conf{idShareMode} eq "auto") {
-      $teams{$p_bBots->{$bBot}->{battleStatus}->{id}}=$p_bBots->{$bBot}->{battleStatus}->{team};
+    my ($id,$team)=@{$p_bBots->{$bBot}{battleStatus}}{'id','team'};
+    if(exists $ids{$id}) {
+      return { battleState => -5 } unless($ids{$id} == $team);
     }else{
-      $teamCount{$p_bBots->{$bBot}->{battleStatus}->{team}}=0 unless(exists $teamCount{$p_bBots->{$bBot}->{battleStatus}->{team}});
-      $teamCount{$p_bBots->{$bBot}->{battleStatus}->{team}}++;
+      $ids{$id}=$team;
+    }
+    if($conf{idShareMode} eq "auto") {
+      $teams{$id}=$team;
+    }else{
+      $teamCount{$team}=0 unless(exists $teamCount{$team});
+      $teamCount{$team}++;
     }
   }
 
@@ -4518,6 +4958,11 @@ sub launchGame {
   my $p_battleState = getBattleState();
 
   if($p_battleState->{battleState} < -$checkBypassLevel) {
+    if($p_battleState->{battleState} == -5) {
+      answer('Unable to start game, inconsistent team/ID configuration for player or AI bot') unless($automatic);
+      return 0;
+    }
+    
     if($p_battleState->{battleState} == -4) {
       answer("Unable to start game, Spring engine does not support more than 251 clients") unless($automatic);
       return 0;
@@ -5349,8 +5794,8 @@ sub applySettingChange {
                              || 'idsharemode' =~ /^$settingRegExp$/ || 'minteamSize' =~ /^$settingRegExp$/);
   if('rankmode' =~ /^$settingRegExp$/ || 'skillmode' =~ /^$settingRegExp$/) {
     updateBattleSkillsForNewSkillAndRankModes();
-    $colorsState=0;
-    %colorsTarget=();
+    $balanceState=0;
+    %balanceTarget=();
   }
   applyBattleBans() if('banlist' =~ /^$settingRegExp$/ || 'nbteams' =~ /^$settingRegExp$/ || 'teamsize' =~ /^$settingRegExp$/);
 }
@@ -14078,15 +14523,17 @@ if(! $abortSpadsStartForAutoUpdate) {
   }
   slog("Spring server mode: $springServerType",3);
 
-  @predefinedColors=(generateColorPanel(1,1),
+  @predefinedColors=(generateBaseColorPanel(1,1),
                      {red => 100, green => 100, blue => 100},
-                     generateColorPanel(0.45,1),
+                     generateBaseColorPanel(0.45,1),
                      {red => 150, green => 150, blue => 150},
-                     generateColorPanel(1,0.6),
+                     generateBaseColorPanel(1,0.6),
                      {red => 50, green => 50, blue => 50},
-                     generateColorPanel(0.25,1),
+                     generateBaseColorPanel(0.25,1),
                      {red => 200, green => 200, blue => 200},
-                     generateColorPanel(1,0.25));
+                     generateBaseColorPanel(1,0.25));
+
+  generateAdvancedColorPanel();
 
   $autohost->addCallbacks({SERVER_STARTED => \&cbAhServerStarted,
                            SERVER_GAMEOVER => \&cbAhServerGameOver,

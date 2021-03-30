@@ -176,6 +176,7 @@ helpSettings.dat:
 0.6.3: event loop time slice is now configurable (extended format of "eventModel" global setting)
 0.6.4: support new placeholders in "welcomeMsg" and "welcomeMsgInGame" preset settings: "%p" for current global preset, "%P" for description of current global preset
 0.6.5: update documentation for "idShareMode" (it is no longer required to set "idShareMode" to "off" to enable workarounds for lobby protocol limitations regarding maximum team and ID numbers)
+0.6.6: the "colorSensitivity" global setting now also accepts value "-1" to use a new color assignment algorithm taking game mode and battle structure into account
 
 PerlUnitSync.pm:
 ===============
@@ -890,6 +891,12 @@ spads.pl:
 0.12.32: improve workarounds for lobby protocol limitations
          support maximum number of teams and IDs allowed by engine (251)
 0.12.33: fix team balancing not being fully deterministic in some specific conditions (random balance mode, or AI bots in battle with idShareMode set to "clan" or "manual")
+0.12.34: added new optional color assignment algorithm, taking game mode and battle structure into account
+         trigger color check when balance is modified (allows color fixing algorithms depending on battle structure)
+         fix minor bug triggering duplicate UPDATEBOT commands when assigning AI bot colors while auto-balance is being applied
+         new plugin API customization callback "fixColors" (allows implementing new color assignment algorithms)
+         added protection against inconsistent team/ID configuration in battle lobby (prevents launching game)
+         fix color fixing being triggered instead of auto-balance when "rankMode" or "skillMode" settings are modified
 
 SpadsConf.pm:
 ============
@@ -1058,6 +1065,7 @@ SpadsConf.pm:
          ensure plugin modules are loaded from SPADS plugins directory only
          add log message when plugin config cannot be loaded
 0.12.15: provide current configuration as parameter to the Python plugin loading function (fix auto-load for Python plugins)
+0.12.16: the "colorSensitivity" global setting now also accepts value "-1" to use a new color assignment algorithm taking game mode and battle structure into account
 
 spadsInstaller.pl:
 =================
@@ -1196,6 +1204,7 @@ SpadsPluginApi.pm:
 0.27: new plugin API function: "updateSetting"
       additional start script tags can now be inserted in AI sections
       additional start script subsections can now be inserted in players and AI sections
+0.28: new plugin API customization callback "fixColors" (allows implementing new color assignment algorithms)
 
 SpadsUpdater.pm:
 ===============
