@@ -1,0 +1,20 @@
+version: '3.6'
+
+services:
+
+  spads:
+    image: spads
+    environment:
+     - "SPADS_LOBBY_LOGIN="
+     - "SPADS_LOBBY_PASSWORD="
+     - "SPADS_OWNER_LOBBY_LOGIN="
+    volumes:
+     - spads-config:/opt/spads/etc
+     - spads-data:/opt/spads/var
+    network_mode: host
+    restart: always
+
+volumes:
+  spads-config: {}
+  spads-data: {}
+
