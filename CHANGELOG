@@ -897,6 +897,7 @@ spads.pl:
          new plugin API customization callback "fixColors" (allows implementing new color assignment algorithms)
          added protection against inconsistent team/ID configuration in battle lobby (prevents launching game)
          fix color fixing being triggered instead of auto-balance when "rankMode" or "skillMode" settings are modified
+0.12.35: new plugin event callbacks: "onJoinedBattle" and "onLeftBattle"
 
 SpadsConf.pm:
 ============
@@ -1205,6 +1206,7 @@ SpadsPluginApi.pm:
       additional start script tags can now be inserted in AI sections
       additional start script subsections can now be inserted in players and AI sections
 0.28: new plugin API customization callback "fixColors" (allows implementing new color assignment algorithms)
+0.29: new plugin event callbacks: "onJoinedBattle" and "onLeftBattle"
 
 SpadsUpdater.pm:
 ===============

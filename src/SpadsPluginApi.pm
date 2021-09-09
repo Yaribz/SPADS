@@ -24,7 +24,7 @@ use List::Util qw'any none';
 use Exporter 'import';
 @EXPORT=qw/$spadsVersion $spadsDir loadPythonPlugin get_flag fix_string getLobbyState getSpringPid getSpringServerType getTimestamps getRunningBattle getConfMacros getCurrentVote getPlugin addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess forkCall removeProcessCallback createDetachedProcess addTimer removeTimer addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog updateSetting secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives/;
 
-my $apiVersion='0.28';
+my $apiVersion='0.29';
 
 our $spadsVersion=$::spadsVer;
 our $spadsDir=$::cwd;
@@ -778,6 +778,18 @@ C<1> if the user isn't allowed to join the battle (without explicit reason)
 
 C<< "<explicit reason string>" >> if the user isn't allowed to join the battle,
 with explicit reason
+
+=item C<onJoinedBattle($self,$userName)>
+
+This callback is called each time a user joins the battle lobby of the autohost.
+
+C<$userName> is the name of the user who just joined the battle lobby
+
+=item C<onLeftBattle($self,$userName)>
+
+This callback is called each time a user leaves the battle lobby of the autohost.
+
+C<$userName> is the name of the user who just left the battle lobby
 
 =item C<onLobbyConnected($self,$lobbyInterface)>
 

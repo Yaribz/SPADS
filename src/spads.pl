@@ -53,7 +53,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.34';
+our $spadsVer='0.12.35';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -12862,6 +12862,10 @@ sub cbJoinedBattle {
 
   return unless(%{$lobby->{battle}} && $battleId == $lobby->{battle}->{battleId});
 
+  foreach my $pluginName (@pluginsOrder) {
+    $plugins{$pluginName}->onJoinedBattle($user) if($plugins{$pluginName}->can('onJoinedBattle'));
+  }
+  
   delete $pendingSpecJoin{$user} if(exists $pendingSpecJoin{$user});
 
   my $p_ban=$spads->getUserBan($user,$lobby->{users}->{$user},isUserAuthenticated($user),undef,getPlayerSkillForBanCheck($user));
@@ -13007,6 +13011,10 @@ sub cbAddBot {
 sub cbLeftBattle {
   my (undef,$battleId,$user)=@_;
   if(%{$lobby->{battle}} && $battleId == $lobby->{battle}->{battleId}) {
+    foreach my $pluginName (@pluginsOrder) {
+      $plugins{$pluginName}->onLeftBattle($user) if($plugins{$pluginName}->can('onLeftBattle'));
+    }
+  
     $timestamps{battleChange}=time;
     $timestamps{rotationEmpty}=time;
     updateBattleInfoIfNeeded();
