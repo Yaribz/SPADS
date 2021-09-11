@@ -688,11 +688,258 @@
 <dt id="getCurrentVote"><code>getCurrentVote()</code></dt>
 <dd>
 
+<p>This accessor returns a reference to a hash containing information regarding votes.</p>
+
+<p>If there is no vote in progress and the last vote succeeded, then the returned hash is always empty.</p>
+
+<p>If there is no vote in progress and the last vote failed, then the content of the returned hash depends on the delay since the last vote ended. If the delay is greater than the <a href="http://planetspads.free.fr/spads/doc/spadsDoc_All.html#global:reCallVoteDelay">reCallVoteDelay</a>, then the returned hash is empty, else it contains the two following keys:</p>
+
+<ul>
+
+<li><p><code>user</code>: the name of the user who started the last vote</p>
+
+</li>
+<li><p><code>expireTime</code>: the time when the last vote failed (in UNIX timestamp format)</p>
+
+</li>
+</ul>
+
+<p>If there is a vote in progress, then the returned hash contains following keys:</p>
+
+<ul>
+
+<li><p><code>user</code>: the name of the user who started the vote</p>
+
+</li>
+<li><p><code>expireTime</code>: the time when the vote will timeout, in UNIX timestamp format</p>
+
+</li>
+<li><p><code>awayVoteTime</code>: the time when the automatic votes for away users (see <a href="http://planetspads.free.fr/spads/doc/spadsDoc_Preferences.html#pset:voteMode">voteMode</a> preference) will be taken into account, in UNIX timestamp format</p>
+
+</li>
+<li><p><code>source</code>: the source of the message which started the vote (either <code>&quot;pv&quot;</code>, <code>&quot;chan&quot;</code>, <code>&quot;game&quot;</code> or <code>&quot;battle&quot;</code>)</p>
+
+</li>
+<li><p><code>command</code>: a reference to an array containg the command being voted (the first element is the command name, the other elements are the command parameters)</p>
+
+</li>
+<li><p><code>remainingVoters</code>: a reference to a hash whose keys are the names of the players allowed to vote who didn&#39;t vote yet</p>
+
+</li>
+<li><p><code>yesCount</code>: current number of &quot;yes&quot; votes</p>
+
+</li>
+<li><p><code>noCount</code>: current number of &quot;no&quot; votes</p>
+
+</li>
+<li><p><code>blankCount</code>: current number of &quot;blank&quot; votes</p>
+
+</li>
+<li><p><code>awayVoters</code>: a reference to a hash whose keys are the names of the players who auto-voted blank due to being away (see <a href="http://planetspads.free.fr/spads/doc/spadsDoc_Preferences.html#pset:voteMode">voteMode</a> preference)</p>
+
+</li>
+<li><p><code>manualVoters</code>: a reference to a hash whose keys are the names of the players who voted manually, and the values are the actual votes (<code>&quot;yes&quot;</code>, <code>&quot;no&quot;</code> or <code>&quot;blank&quot;</code>)</p>
+
+</li>
+</ul>
+
+<p>Note: An easy way to check if a vote is currently in progress consists in calling <code>getCurrentVote()</code> and checking if the returned hash contains the <code>command</code> key. If the hash contains the <code>command</code> key then it means a vote is in progress, else it means no vote is in progress.</p>
+
 </dd>
 <dt id="getLobbyInterface"><code>getLobbyInterface()</code></dt>
 <dd>
 
 <p>This accessor returns the instance of the <a href="https://github.com/Yaribz/SpringLobbyInterface">SpringLobbyInterface</a> module used by SPADS.</p>
+
+<p>Following methods, called on the <code>SpringLobbyInterface</code> object, can be useful to plugins for accessing various lobby data:</p>
+
+<ul>
+
+<li><p>- <code>getUsers()</code></p>
+
+<p>This method returns a reference to a hash containing the data regarding all the online users. The hash is indexed by player names and the values are references to hashes with following content:</p>
+
+<ul>
+
+<li><p><code>accountId</code>: the lobby account ID of the user</p>
+
+</li>
+<li><p><code>country</code>: the country code of the user (2 characters)</p>
+
+</li>
+<li><p><code>ip</code>: the IP address of the user, if known (<code>undef</code> else)</p>
+
+</li>
+<li><p><code>lobbyClient</code>: the name of the lobby client software used by the user</p>
+
+</li>
+<li><p><code>status</code>: the lobby status of the user, which is itself a reference to another hash, containing following content: <code>access</code> (<code>0</code>: normal user, <code>1</code>: moderator), <code>away</code> (<code>0</code>: active, <code>1</code>: away), <code>bot</code> (<code>0</code>: human, <code>1</code>: bot), <code>inGame</code> (<code>0</code>: out of game, <code>1</code>: in game), <code>rank</code> (integer between 0 and 7 included)</p>
+
+</li>
+</ul>
+
+<p>Note 1: this method performs a deep copy of the data to prevent external code from corrupting internal data. However it is also possible to read the same data directly without triggering a deep copy by accessing the <code>users</code> field of the <code>SpringLobbyInterface</code> object.</p>
+
+<p>Note 2: if you need to retrieve users indexed by lobby account IDs instead of names, you can access the <code>accounts</code> field of the <code>SpringLobbyInterface</code> object. It contains a reference to a hash whose keys are the lobby account IDs and values are the lobby user names.</p>
+
+</li>
+<li><p>- <code>getChannels()</code></p>
+
+<p>This method returns a reference to a hash containing the data regarding all the lobby channels joined by SPADS. The hash is indexed by channel names and the values are references to hashes with following content:</p>
+
+<ul>
+
+<li><p><code>topic</code>: a reference to a hash with following content: <code>author</code> (the name of the user who set the topic), <code>content</code> (the topic content)</p>
+
+</li>
+<li><p><code>users</code>: a reference to a hash whose keys are the names of the users in the lobby channel</p>
+
+</li>
+</ul>
+
+<p>Note: this method performs a deep copy of the data to prevent external code from corrupting internal data. However it is also possible to read the same data directly without triggering a deep copy by accessing the <code>channels</code> field of the <code>SpringLobbyInterface</code> object.</p>
+
+</li>
+<li><p>- <code>getBattles()</code></p>
+
+<p>This method returns a reference to a hash containing the data regarding all the battle lobbies currently hosted on the lobby server. The hash is indexed by battle ID and the values are references to hashes with following content:</p>
+
+<ul>
+
+<li><p><code>engineName</code>: the name of the engine used by the battle lobby (usually <code>&quot;spring&quot;</code>)</p>
+
+</li>
+<li><p><code>engineVersion</code>: the version of the engine used by the battle lobby (example: <code>&quot;105.0&quot;</code>)</p>
+
+</li>
+<li><p><code>founder</code>: the name of the user who created the battle lobby</p>
+
+</li>
+<li><p><code>ip</code>: the IP address used by the battle lobby for game hosting</p>
+
+</li>
+<li><p><code>locked</code>: the lock status of the battle lobby (<code>0</code>: unlocked, <code>1</code>: locked)</p>
+
+</li>
+<li><p><code>map</code>: the map currently selected in the battle lobby</p>
+
+</li>
+<li><p><code>mapHash</code>: the hash of the map currently selected in the battle lobby (computed by the unitsync library)</p>
+
+</li>
+<li><p><code>maxPlayers</code>: the battle lobby size (maximum number of players who can be in the battle lobby, ignoring spectators)</p>
+
+</li>
+<li><p><code>mod</code>: the mod (game name) used by the battle lobby</p>
+
+</li>
+<li><p><code>natType</code>: the type of NAT traversal method used by the host (<code>0</code>: none, <code>1</code>: hole punching, <code>2</code>: fixed source ports)</p>
+
+</li>
+<li><p><code>nbSpec</code>: the number of spectators currently in the battle lobby</p>
+
+</li>
+<li><p><code>passworded</code>: the password status of the battle lobby (<code>0</code>: not password protected, <code>1</code>: password protected)</p>
+
+</li>
+<li><p><code>port</code>: the port used by the battle lobby for game hosting</p>
+
+</li>
+<li><p><code>rank</code>: the minimum rank limit used by the battle lobby</p>
+
+</li>
+<li><p><code>title</code>: the description of the battle lobby</p>
+
+</li>
+<li><p><code>userList</code>: a reference to an array containing the names of the users currently in the battle lobby</p>
+
+</li>
+</ul>
+
+<p>Note: this method performs a deep copy of the data to prevent external code from corrupting internal data. However it is also possible to read the same data directly without triggering a deep copy by accessing the <code>battles</code> field of the <code>SpringLobbyInterface</code> object.</p>
+
+</li>
+<li><p>- <code>getBattle()</code></p>
+
+<p>This method returns a reference to a hash containing the data regarding the battle lobby currently hosted by SPADS. This hash has following content:</p>
+
+<ul>
+
+<li><p><code>battleId</code>: the battle ID of the battle lobby</p>
+
+</li>
+<li><p><code>botList</code>: a reference to an array containing the names of the AI bots currently in the battle lobby</p>
+
+</li>
+<li><p><code>bots</code>: a reference to a hash containing the data regarding the AI bots currently in the battle lobby. This hash is indexed by AI bot names and the values are references to hashes with following content: <code>aiDll</code> (details regarding the AI bot, usually the AI name and version, or the AI DLL), <code>battleStatus</code> (data representing the status of the AI bot in the battle lobby, see BATTLESTATUS hash description below), <code>color</code> (data specifying the team color of the AI bot using RGB model, see COLOR hash description below), <code>owner</code> (name of the user hosting the AI bot)</p>
+
+</li>
+<li><p><code>disabledUnits</code>: a reference to an array containing the names of the game units currently disabled</p>
+
+</li>
+<li><p><code>modHash</code>: the hash of the mod (game) used by the battle lobby</p>
+
+</li>
+<li><p><code>password</code>: the password used to protect the battle lobby (<code>&quot;*&quot;</code> if no password is set)</p>
+
+</li>
+<li><p><code>scriptTags</code>: a reference to a hash containing all the script tags (in lower case) and their associated values (used to generate the start script)</p>
+
+</li>
+<li><p><code>startRects</code>: a reference to a hash containing the start box definitions. This hash is indexed by box numbers and the values are references to hashes containing the box coordinates (<code>top</code>, <code>left</code>, <code>bottom</code> and <code>right</code>) in the <code>0-200</code> range (<code>0,0</code> is the top left corner and <code>200,200</code> is the bottom right corner).</p>
+
+</li>
+<li><p><code>users</code>: a reference to a hash containing the data regarding the users currently in the battle lobby. This hash is indexed by user names and the values are references to hashes with following content: <code>battleStatus</code> (data representing the status of the player in the battle lobby, see BATTLESTATUS hash description below), <code>color</code> (data specifying the team color of the player using RGB model, see COLOR hash description below), <code>ip</code> (IP address of the user if known, <code>undef</code> else), <code>port</code> (client port of the user if known, <code>undef</code> else), and optionally <code>scriptPass</code> if the client provided a script password when joining the battle lobby.</p>
+
+</li>
+</ul>
+
+<p>BATTLESTATUS hash description:</p>
+
+<ul>
+
+<li><p><code>bonus</code>: resource bonus value (integer in <code>0-100</code> range, <code>0</code> means no bonus)</p>
+
+</li>
+<li><p><code>id</code>: player team number (starting at <code>0</code>)</p>
+
+</li>
+<li><p><code>mode</code>: player/spectator mode (<code>0</code>: spectator, <code>1</code>: player)</p>
+
+</li>
+<li><p><code>ready</code>: ready state (<code>0</code>: not ready, <code>1</code>: ready)</p>
+
+</li>
+<li><p><code>side</code>: game faction number</p>
+
+</li>
+<li><p><code>sync</code>: synchronization status (<code>0</code>: unsynchronized, <code>1</code>: synchronized)</p>
+
+</li>
+<li><p><code>team</code> (ally team number, starting at <code>0</code>)</p>
+
+</li>
+</ul>
+
+<p>COLOR hash description:</p>
+
+<ul>
+
+<li><p><code>red</code>: red component intensity (integer in <code>0-255</code> range)</p>
+
+</li>
+<li><p><code>green</code>: green component intensity (integer in <code>0-255</code> range)</p>
+
+</li>
+<li><p><code>blue</code>: blue component intensity (integer in <code>0-255</code> range)</p>
+
+</li>
+</ul>
+
+<p>Note: this method performs a deep copy of the data to prevent external code from corrupting internal data. However it is also possible to read the same data directly without triggering a deep copy by accessing the <code>battle</code> field of the <code>SpringLobbyInterface</code> object.</p>
+
+</li>
+</ul>
 
 </dd>
 <dt id="getLobbyState"><code>getLobbyState()</code></dt>
@@ -703,6 +950,12 @@
 </dd>
 <dt id="getRunningBattle"><code>getRunningBattle()</code></dt>
 <dd>
+
+<p>This accessor returns a reference to a hash representing the state of the battle lobby hosted by SPADS when the game currently running was launched. This is useful to find the actual characteristics of the currently running game (battle structure, settings...), because things might have changed in the battle lobby since the game started (players joined/left, map changed...) so the current battle lobby data aren&#39;t necessarily consistent with the game currently running.</p>
+
+<p>If no game is in progress, this hash is empty.</p>
+
+<p>If a game is in progress, the hash contains the same data as the data returned by the <code>getBattle()</code> and <code>getBattles()</code> methods of the <code>SpringLobbyInterface</code> object (see <code>getLobbyInterface()</code> accessor) when the game was launched. Concerning the <code>getBattles()</code> data, only the data related to the battle lobby hosted by SPADS are included in the hash.</p>
 
 </dd>
 <dt id="getSpadsConf"><code>getSpadsConf()</code></dt>

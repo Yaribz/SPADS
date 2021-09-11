@@ -1207,6 +1207,7 @@ SpadsPluginApi.pm:
       additional start script subsections can now be inserted in players and AI sections
 0.28: new plugin API customization callback "fixColors" (allows implementing new color assignment algorithms)
 0.29: new plugin event callbacks: "onJoinedBattle" and "onLeftBattle"
+0.30: update documentation for "getCurrentVote()", "getLobbyInterface()" and "getRunningBattle()" accessors
 
 SpadsUpdater.pm:
 ===============

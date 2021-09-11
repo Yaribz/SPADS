@@ -24,7 +24,7 @@ use List::Util qw'any none';
 use Exporter 'import';
 @EXPORT=qw/$spadsVersion $spadsDir loadPythonPlugin get_flag fix_string getLobbyState getSpringPid getSpringServerType getTimestamps getRunningBattle getConfMacros getCurrentVote getPlugin addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess forkCall removeProcessCallback createDetachedProcess addTimer removeTimer addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog updateSetting secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives/;
 
-my $apiVersion='0.29';
+my $apiVersion='0.30';
 
 our $spadsVersion=$::spadsVer;
 our $spadsDir=$::cwd;
@@ -1340,11 +1340,283 @@ macros used to (re)start SPADS.
 
 =item C<getCurrentVote()>
 
+This accessor returns a reference to a hash containing information regarding
+votes.
+
+If there is no vote in progress and the last vote succeeded, then the returned
+hash is always empty.
+
+If there is no vote in progress and the last vote failed, then the content of
+the returned hash depends on the delay since the last vote ended. If the delay
+is greater than the
+L<reCallVoteDelay|http://planetspads.free.fr/spads/doc/spadsDoc_All.html#global:reCallVoteDelay>,
+then the returned hash is empty, else it contains the two following keys:
+
+=over 3
+
+=item * C<user>: the name of the user who started the last vote
+
+=item * C<expireTime>: the time when the last vote failed (in UNIX timestamp
+format)
+
+=back
+
+If there is a vote in progress, then the returned hash contains following keys:
+
+=over 3
+
+=item * C<user>: the name of the user who started the vote
+
+=item * C<expireTime>: the time when the vote will timeout, in UNIX timestamp
+format
+
+=item * C<awayVoteTime>: the time when the automatic votes for away users (see
+L<voteMode|http://planetspads.free.fr/spads/doc/spadsDoc_Preferences.html#pset:voteMode>
+preference) will be taken into account, in UNIX timestamp format
+
+=item * C<source>: the source of the message which started the vote (either
+C<"pv">, C<"chan">, C<"game"> or C<"battle">)
+
+=item * C<command>: a reference to an array containg the command being voted
+(the first element is the command name, the other elements are the command
+parameters)
+
+=item * C<remainingVoters>: a reference to a hash whose keys are the names of
+the players allowed to vote who didn't vote yet
+
+=item * C<yesCount>: current number of "yes" votes
+
+=item * C<noCount>: current number of "no" votes
+
+=item * C<blankCount>: current number of "blank" votes
+
+=item * C<awayVoters>: a reference to a hash whose keys are the names of the
+players who auto-voted blank due to being away (see 
+L<voteMode|http://planetspads.free.fr/spads/doc/spadsDoc_Preferences.html#pset:voteMode>
+preference)
+
+=item * C<manualVoters>: a reference to a hash whose keys are the names of the
+players who voted manually, and the values are the actual votes (C<"yes">,
+C<"no"> or C<"blank">)
+
+=back
+
+Note: An easy way to check if a vote is currently in progress consists in
+calling C<getCurrentVote()> and checking if the returned hash contains the
+C<command> key. If the hash contains the C<command> key then it means a vote is
+in progress, else it means no vote is in progress.
+
 =item C<getLobbyInterface()>
 
 This accessor returns the instance of the
 L<SpringLobbyInterface|https://github.com/Yaribz/SpringLobbyInterface> module
 used by SPADS.
+
+Following methods, called on the C<SpringLobbyInterface> object, can be useful
+to plugins for accessing various lobby data:
+
+=over 3
+
+=item * - C<getUsers()>
+
+This method returns a reference to a hash containing the data regarding all the
+online users. The hash is indexed by player names and the values are references
+to hashes with following content:
+
+=over 4
+
+=item * C<accountId>: the lobby account ID of the user
+
+=item * C<country>: the country code of the user (2 characters)
+
+=item * C<ip>: the IP address of the user, if known (C<undef> else)
+
+=item * C<lobbyClient>: the name of the lobby client software used by the user
+
+=item * C<status>: the lobby status of the user, which is itself a reference to
+another hash, containing following content: C<access> (C<0>: normal user, C<1>:
+moderator), C<away> (C<0>: active, C<1>: away), C<bot> (C<0>: human, C<1>: bot),
+C<inGame> (C<0>: out of game, C<1>: in game), C<rank> (integer between 0 and 7
+included)
+
+=back
+
+Note 1: this method performs a deep copy of the data to prevent external code
+from corrupting internal data. However it is also possible to read the same data
+directly without triggering a deep copy by accessing the C<users> field of the
+C<SpringLobbyInterface> object.
+
+Note 2: if you need to retrieve users indexed by lobby account IDs instead of
+names, you can access the C<accounts> field of the C<SpringLobbyInterface>
+object. It contains a reference to a hash whose keys are the lobby account IDs
+and values are the lobby user names.
+
+=item * - C<getChannels()>
+
+This method returns a reference to a hash containing the data regarding all the
+lobby channels joined by SPADS. The hash is indexed by channel names and the
+values are references to hashes with following content:
+
+=over 4
+
+=item * C<topic>: a reference to a hash with following content: C<author> (the
+name of the user who set the topic), C<content> (the topic content)
+
+=item * C<users>: a reference to a hash whose keys are the names of the users in
+the lobby channel
+
+=back
+
+Note: this method performs a deep copy of the data to prevent external code from
+corrupting internal data. However it is also possible to read the same data
+directly without triggering a deep copy by accessing the C<channels> field of
+the C<SpringLobbyInterface> object.
+
+=item * - C<getBattles()>
+
+This method returns a reference to a hash containing the data regarding all the
+battle lobbies currently hosted on the lobby server. The hash is indexed by
+battle ID and the values are references to hashes with following content:
+
+=over 4
+
+=item * C<engineName>: the name of the engine used by the battle lobby (usually
+C<"spring">)
+
+=item * C<engineVersion>: the version of the engine used by the battle lobby
+(example: C<"105.0">)
+
+=item * C<founder>: the name of the user who created the battle lobby
+
+=item * C<ip>: the IP address used by the battle lobby for game hosting
+
+=item * C<locked>: the lock status of the battle lobby (C<0>: unlocked, C<1>:
+locked)
+
+=item * C<map>: the map currently selected in the battle lobby
+
+=item * C<mapHash>: the hash of the map currently selected in the battle lobby
+(computed by the unitsync library)
+
+=item * C<maxPlayers>: the battle lobby size (maximum number of players who can
+be in the battle lobby, ignoring spectators)
+
+=item * C<mod>: the mod (game name) used by the battle lobby
+
+=item * C<natType>: the type of NAT traversal method used by the host (C<0>:
+none, C<1>: hole punching, C<2>: fixed source ports)
+
+=item * C<nbSpec>: the number of spectators currently in the battle lobby
+
+=item * C<passworded>: the password status of the battle lobby (C<0>: not
+password protected, C<1>: password protected)
+
+=item * C<port>: the port used by the battle lobby for game hosting
+
+=item * C<rank>: the minimum rank limit used by the battle lobby
+
+=item * C<title>: the description of the battle lobby
+
+=item * C<userList>: a reference to an array containing the names of the users
+currently in the battle lobby
+
+=back
+
+Note: this method performs a deep copy of the data to prevent external code from
+corrupting internal data. However it is also possible to read the same data
+directly without triggering a deep copy by accessing the C<battles> field of the
+C<SpringLobbyInterface> object.
+
+=item * - C<getBattle()>
+
+This method returns a reference to a hash containing the data regarding the
+battle lobby currently hosted by SPADS. This hash has following content:
+
+=over 4
+
+=item * C<battleId>: the battle ID of the battle lobby
+
+=item * C<botList>: a reference to an array containing the names of the AI bots
+currently in the battle lobby
+
+=item * C<bots>: a reference to a hash containing the data regarding the AI bots
+currently in the battle lobby. This hash is indexed by AI bot names and the
+values are references to hashes with following content: C<aiDll> (details
+regarding the AI bot, usually the AI name and version, or the AI DLL),
+C<battleStatus> (data representing the status of the AI bot in the battle lobby,
+see BATTLESTATUS hash description below), C<color> (data specifying the team
+color of the AI bot using RGB model, see COLOR hash description below), C<owner>
+(name of the user hosting the AI bot)
+
+=item * C<disabledUnits>: a reference to an array containing the names of the
+game units currently disabled
+
+=item * C<modHash>: the hash of the mod (game) used by the battle lobby
+
+=item * C<password>: the password used to protect the battle lobby (C<"*"> if no
+password is set)
+
+=item * C<scriptTags>: a reference to a hash containing all the script tags (in
+lower case) and their associated values (used to generate the start script)
+
+=item * C<startRects>: a reference to a hash containing the start box
+definitions. This hash is indexed by box numbers and the values are references
+to hashes containing the box coordinates (C<top>, C<left>, C<bottom> and
+C<right>) in the C<0-200> range (C<0,0> is the top left corner and C<200,200> is
+the bottom right corner).
+
+=item * C<users>: a reference to a hash containing the data regarding the users
+currently in the battle lobby. This hash is indexed by user names and the values
+are references to hashes with following content: C<battleStatus> (data
+representing the status of the player in the battle lobby, see BATTLESTATUS hash
+description below), C<color> (data specifying the team color of the player using
+RGB model, see COLOR hash description below), C<ip> (IP address of the user if
+known, C<undef> else), C<port> (client port of the user if known, C<undef>
+else), and optionally C<scriptPass> if the client provided a script password
+when joining the battle lobby.
+
+=back
+
+BATTLESTATUS hash description:
+
+=over 4
+
+=item * C<bonus>: resource bonus value (integer in C<0-100> range, C<0> means no
+bonus)
+
+=item * C<id>: player team number (starting at C<0>)
+
+=item * C<mode>: player/spectator mode (C<0>: spectator, C<1>: player)
+
+=item * C<ready>: ready state (C<0>: not ready, C<1>: ready)
+
+=item * C<side>: game faction number
+
+=item * C<sync>: synchronization status (C<0>: unsynchronized, C<1>:
+synchronized)
+
+=item * C<team> (ally team number, starting at C<0>)
+
+=back
+
+COLOR hash description:
+
+=over 4
+
+=item * C<red>: red component intensity (integer in C<0-255> range)
+
+=item * C<green>: green component intensity (integer in C<0-255> range)
+
+=item * C<blue>: blue component intensity (integer in C<0-255> range)
+
+=back
+
+Note: this method performs a deep copy of the data to prevent external code from
+corrupting internal data. However it is also possible to read the same data
+directly without triggering a deep copy by accessing the C<battle> field of the
+C<SpringLobbyInterface> object.
+
+=back
 
 =item C<getLobbyState()>
 
@@ -1353,6 +1625,21 @@ connected, C<1>: connecting, C<2>: connected, C<3>: just logged in, C<4>:
 initial lobby data received, C<5>: opening battle, C<6>: battle opened)
 
 =item C<getRunningBattle()>
+
+This accessor returns a reference to a hash representing the state of the battle
+lobby hosted by SPADS when the game currently running was launched. This is
+useful to find the actual characteristics of the currently running game (battle
+structure, settings...), because things might have changed in the battle lobby
+since the game started (players joined/left, map changed...) so the current
+battle lobby data aren't necessarily consistent with the game currently running.
+
+If no game is in progress, this hash is empty.
+
+If a game is in progress, the hash contains the same data as the data returned
+by the C<getBattle()> and C<getBattles()> methods of the C<SpringLobbyInterface>
+object (see C<getLobbyInterface()> accessor) when the game was launched.
+Concerning the C<getBattles()> data, only the data related to the battle lobby
+hosted by SPADS are included in the hash.
 
 =item C<getSpadsConf()>
 
