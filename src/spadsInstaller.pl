@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.25 (2020/12/19)
+# Version 0.26 (2021/09/22)
 
 use strict;
 
@@ -779,10 +779,9 @@ if(! exists $conf{autoManagedSpringVersion}) {
 
   if($springBinariesType eq 'official') {
     my (%springVersions,%springReleasesVersion,%springVersionsReleases);
-    my @springBranches=(qw'dev maintenance release');
+    my @springBranches=(qw'dev release');
     my %springReleases=(stable => 'recommended release',
                         testing => 'next release candidate',
-                        maintenance => 'latest maintenance version',
                         unstable => 'latest develop version');
 
     slog('Checking available Spring versions...',3);
@@ -817,7 +816,7 @@ if(! exists $conf{autoManagedSpringVersion}) {
       }
     }
     print "\nPlease choose the Spring version which will be used by the autohost.\n";
-    print "If you choose \"stable\", \"testing\", \"maintenance\" or \"unstable\", SPADS will stay up to date with the corresponding official Spring release by automatically downloading and using new Spring binary files when needed.\n";
+    print "If you choose \"stable\", \"testing\" or \"unstable\", SPADS will stay up to date with the corresponding official Spring release by automatically downloading and using new Spring binary files when needed.\n";
     my @springVersionExamples=($springReleasesVersion{stable});
     push(@springVersionExamples,$springReleasesVersion{testing}) unless($springReleasesVersion{stable} eq $springReleasesVersion{testing});
     push(@springVersionExamples,$springReleasesVersion{unstable});
