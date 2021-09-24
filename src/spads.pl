@@ -53,7 +53,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.35';
+our $spadsVer='0.12.36';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -3900,6 +3900,7 @@ sub balance {
     my @currentClanModes;
     my $clanModesString='';
     my @remainingClanModes=split(';',$conf{clanMode});
+    my $unbalanceIndicatorRef;
     while(@remainingClanModes) {
       my $testClanMode=shift(@remainingClanModes);
       if($testClanMode =~ /^(\w+)\((\d+)\)$/) {
@@ -3911,6 +3912,7 @@ sub balance {
           $p_bots=$p_battle->{bots};
           $clanModesString=join(";",@currentClanModes);
           ($nbSmurfs,$unbalanceIndicator)=balanceBattle($p_players,$p_bots,$clanModesString);
+          $unbalanceIndicatorRef//=$unbalanceIndicator;
           slog("Current unbalance for clan mode \"$clanModesString\" is $unbalanceIndicator\% (wasn't processed yet)",5);
         }
         my $p_testBattle=$lobby->getBattle();
@@ -3918,12 +3920,12 @@ sub balance {
         my $p_testBots=$p_testBattle->{bots};
         $clanModesString=join(";",@currentClanModes,$mode);
         my (undef,$testUnbalance)=balanceBattle($p_testPlayers,$p_testBots,$clanModesString);
-        if($testUnbalance - $unbalanceIndicator <= $maxUnbalance) {
-          slog("Unbalance for clan mode \"$clanModesString\" is $testUnbalance\% ($testUnbalance-$unbalanceIndicator<=$maxUnbalance) => clan mode accepted",5);
+        if($testUnbalance - $unbalanceIndicatorRef <= $maxUnbalance) {
+          slog("Unbalance for clan mode \"$clanModesString\" is $testUnbalance\% ($testUnbalance-$unbalanceIndicatorRef<=$maxUnbalance) => clan mode accepted",5);
           ($unbalanceIndicator,$p_players,$p_bots)=($testUnbalance,$p_testPlayers,$p_testBots);
           push(@currentClanModes,$mode);
         }else{
-          slog("Unbalance for clan mode \"$clanModesString\" is $testUnbalance\% ($testUnbalance-$unbalanceIndicator>$maxUnbalance) => clan mode rejected",5);
+          slog("Unbalance for clan mode \"$clanModesString\" is $testUnbalance\% ($testUnbalance-$unbalanceIndicatorRef>$maxUnbalance) => clan mode rejected",5);
           last;
         }
       }else{
@@ -4432,11 +4434,25 @@ sub balancePlayers {
     my ($playerSkill,$botSkill);
     $playerSkill=$p_players->{$sortedPlayers[0]}->{skill} if(@sortedPlayers);
     $botSkill=$p_bots->{$sortedBots[0]}->{skill} if(@sortedBots);
+    my $clanEdgeCaseIdealSkill;
+    $clanEdgeCaseIdealSkill=$avgGroupSkill-$p_groups->[$groupNb]{skill} if(@{$p_groups} == 2 && $p_groups->[$groupNb]{freeSlots} == 1 && $p_groups->[1-$groupNb]{freeSlots} > 1);
     if(defined $playerSkill && (! defined $botSkill || $playerSkill > $botSkill)) {
       my $player=shift(@sortedPlayers);
+      if(defined $clanEdgeCaseIdealSkill) {
+        my $nextSkill;
+        $nextSkill=$p_players->{$sortedPlayers[0]}->{skill} if(@sortedPlayers);
+        $nextSkill=$botSkill if(defined $botSkill && (! defined $nextSkill || $botSkill > $nextSkill));
+        $groupNb=1-$groupNb if(abs($nextSkill-$clanEdgeCaseIdealSkill) < abs($playerSkill-$clanEdgeCaseIdealSkill));
+      }
       assignPlayer($player,$groupNb,$p_players,$p_groups);
     }else{
       my $bot=shift(@sortedBots);
+      if(defined $clanEdgeCaseIdealSkill) {
+        my $nextSkill;
+        $nextSkill=$p_bots->{$sortedBots[0]}->{skill} if(@sortedBots);
+        $nextSkill=$playerSkill if(defined $playerSkill && (! defined $nextSkill || $playerSkill > $nextSkill));
+        $groupNb=1-$groupNb if(abs($nextSkill-$clanEdgeCaseIdealSkill) < abs($botSkill-$clanEdgeCaseIdealSkill));
+      }
       assignBot($bot,$groupNb,$p_bots,$p_groups);
     }
     if($optim3v3 && $p_groups->[$groupNb]{freeSlots} == 2) {

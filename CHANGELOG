@@ -898,6 +898,8 @@ spads.pl:
          added protection against inconsistent team/ID configuration in battle lobby (prevents launching game)
          fix color fixing being triggered instead of auto-balance when "rankMode" or "skillMode" settings are modified
 0.12.35: new plugin event callbacks: "onJoinedBattle" and "onLeftBattle"
+0.12.36: minor improvements for some edge cases when balancing battles with clans
+         thresholds for allowed unbalance induced by clans are no longer cumulative ("clanMode" setting)
 
 SpadsConf.pm:
 ============
