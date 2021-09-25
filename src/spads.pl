@@ -53,7 +53,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.36';
+our $spadsVer='0.12.37';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -11206,6 +11206,10 @@ sub getGameStatus {
   my %globalStatus = ("$B$C{10}Game status$B$C{1}" => $ahState == 1 ? 'waiting for ready in game (since '.secToTime(time-$timestamps{lastGameStart}).')' : 'running since '.secToTime(time-$timestamps{lastGameStartPlaying}),
                       "$B$C{10}Map$B$C{1}" => $p_runningBattle->{map},
                       "$B$C{10}Mod$B$C{1}" => $p_runningBattle->{mod});
+  if(ref $user) {
+    $globalStatus{gameStatus} = $ahState == 1 ? 'waiting' : 'running';
+    $globalStatus{gameTime} = $ahState == 1 ? time-$timestamps{lastGameStart} : time-$timestamps{lastGameStartPlaying};
+  }
   return (\@clientsStatus,\%statusDataFromPlugin,\%globalStatus);
 }
 
@@ -11231,6 +11235,10 @@ sub getBattleLobbyStatus {
                       "$B$C{10}Map$B$C{1}" => $currentMap,
                       "$B$C{10}Mod$B$C{1}" => $lobby->{battles}{$lobby->{battle}{battleId}}{mod},
                       "$B$C{10}Preset$B$C{1}" => "$conf{preset} ($conf{description})");
+  if(ref $user) {
+    $globalStatus{battleStatus} = ($springPid && $autohost->getState()) ? 'running' : 'waiting';
+    $globalStatus{delaySinceLastGame} = $timestamps{lastGameEnd} ? time-$timestamps{lastGameEnd} : undef;
+  }
   
   my @clientsStatus;
   my %statusDataFromPlugin;

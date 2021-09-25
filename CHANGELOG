@@ -900,6 +900,7 @@ spads.pl:
 0.12.35: new plugin event callbacks: "onJoinedBattle" and "onLeftBattle"
 0.12.36: minor improvements for some edge cases when balancing battles with clans
          thresholds for allowed unbalance induced by clans are no longer cumulative ("clanMode" setting)
+0.12.37: added raw time data fields to SPADS status retrieving functions
 
 SpadsConf.pm:
 ============
