@@ -53,7 +53,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.37';
+our $spadsVer='0.12.38';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -1336,12 +1336,29 @@ sub pingIfNeeded {
 
 sub loadArchivesBlocking {
   my $full=shift;
+
+  my $usLockFh;
+  if($confMacros{sequentialUnitsync}) {
+    my $usLockFile="$conf{varDir}/unitsync.lock";
+    open($usLockFh,'>',$usLockFile)
+        or fatalError("Unable to write Unitsync library lock file \"$usLockFile\" ($!)");
+    if(! flock($usLockFh, LOCK_EX|LOCK_NB)) {
+      slog('Another process is using unitsync, waiting for lock... (sequential unitsync mode)',3);
+      if(! flock($usLockFh, LOCK_EX)) {
+        close($usLockFh);
+        fatalError("Unable to acquire Unitsync library lock ($!)");
+      }
+      slog('Unitsync library lock acquired',3);
+    }
+  }
+
   if(! PerlUnitSync::Init(0,0)) {
     while(my $unitSyncErr=PerlUnitSync::GetNextError()) {
       chomp($unitSyncErr);
       slog("UnitSync error: $unitSyncErr",1);
     }
     slog("Unable to initialize UnitSync library",1);
+    close($usLockFh) if($usLockFh);
     return ([],[],{});
   }
   my $nbMaps = PerlUnitSync::GetMapCount();
@@ -1350,6 +1367,7 @@ sub loadArchivesBlocking {
   if(! $nbMods) {
     slog("No Spring mod found",1);
     PerlUnitSync::UnInit();
+    close($usLockFh) if($usLockFh);
     return ([],[],{});
   }
   my @newAvailableMaps=();
@@ -1476,6 +1494,7 @@ sub loadArchivesBlocking {
     my $modChecksum = int32(PerlUnitSync::GetPrimaryModChecksum($modNb));
     if(defined $newAvailableMods[$modNb]{hash} && $modChecksum && $modChecksum == $newAvailableMods[$modNb]{hash}) {
       PerlUnitSync::UnInit();
+      close($usLockFh) if($usLockFh);
       return (\@newAvailableMaps,\@newAvailableMods,\%newCachedMaps);
     }
     $newAvailableMods[$modNb]{hash}=$modChecksum;
@@ -1528,6 +1547,7 @@ sub loadArchivesBlocking {
   }
 
   PerlUnitSync::UnInit();
+  close($usLockFh) if($usLockFh);
   return (\@newAvailableMaps,\@newAvailableMods,\%newCachedMaps);
 }
 
