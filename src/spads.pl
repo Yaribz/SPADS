@@ -53,7 +53,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.38';
+our $spadsVer='0.12.39';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -307,7 +307,20 @@ sub slog {
   $sLog->log(@_);
 }
 
-$SIG{__WARN__} = sub { my $msg=shift; chomp($msg); slog("PERL WARNING: $msg",1); };
+$SIG{__WARN__} = sub {
+  my $msg=shift;
+  chomp($msg);
+  slog("PERL WARNING: $msg",1);
+  my $nestLevel=1;
+  while(my @callerData=caller($nestLevel++)) {
+    if($nestLevel>9) {
+      slog("PERL WARNING:         ...",1);
+      last;
+    }else{
+      slog("PERL WARNING:         $callerData[3] called at $callerData[1] line $callerData[2]",1);
+    }
+  }
+};
 
 sub hasEvalError {
   if($@) {
@@ -1343,7 +1356,7 @@ sub loadArchivesBlocking {
     open($usLockFh,'>',$usLockFile)
         or fatalError("Unable to write Unitsync library lock file \"$usLockFile\" ($!)");
     if(! flock($usLockFh, LOCK_EX|LOCK_NB)) {
-      slog('Another process is using unitsync, waiting for lock... (sequential unitsync mode)',3);
+      slog('Another instance is using unitsync, waiting for lock... (sequential unitsync mode)',3);
       if(! flock($usLockFh, LOCK_EX)) {
         close($usLockFh);
         fatalError("Unable to acquire Unitsync library lock ($!)");
@@ -13923,6 +13936,11 @@ sub cbAhServerMessage {
   }
 }
 
+sub cbAhHookCheat {
+  my $cheatMode=$_[1];
+  $cheating=1 unless(defined $cheatMode && any {$cheatMode eq $_} (qw'0 n no f false off'));
+}
+
 # Plugins #####################################################################
 
 sub removePluginFromList {
@@ -14598,7 +14616,8 @@ if(! $abortSpadsStartForAutoUpdate) {
                            PLAYER_CHAT => \&cbAhPlayerChat,
                            SERVER_WARNING => \&cbAhServerWarning,
                            SERVER_MESSAGE => \&cbAhServerMessage,
-                           GAME_TEAMSTAT => \&cbAhGameTeamStat});
+                           GAME_TEAMSTAT => \&cbAhGameTeamStat,
+                           HOOK_CHEAT => \&cbAhHookCheat});
 
   $conf{eventModel}=~/^(auto|internal|AnyEvent)(?:\(([1-9]\d?\d?)\))?$/;
   my ($eventModel,$eventLoopTimeSlice)=($1,($2//50)/100);

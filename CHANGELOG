@@ -902,6 +902,8 @@ spads.pl:
          thresholds for allowed unbalance induced by clans are no longer cumulative ("clanMode" setting)
 0.12.37: added raw time data fields to SPADS status retrieving functions
 0.12.38: added experimental sequential mode for unitsync library (prevents concurrent calls from multiple SPADS intances)
+0.12.39: improve Perl warnings logs (provide stacktrace to help debugging)
+         improve cheat mode detection
 
 SpadsConf.pm:
 ============
