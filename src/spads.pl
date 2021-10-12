@@ -53,7 +53,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.39';
+our $spadsVer='0.12.40';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -5060,12 +5060,28 @@ sub launchGame {
   }
 
   my %additionalData=('game/AutohostPort' => $conf{autoHostPort},
-                      'playerData' => {});
+                      playerData => {},
+                      HOSTOPTIONS => {});
+  foreach my $hostOption (qw'autoAddBotNb autoBalance autoBlockBalance autoBlockColors autoFixColors autoSpecExtraPlayers autoStart autoStop balanceMode clanMode extraBox idShareMode maxSpecs minPlayers minTeamSize nbPlayerById nbTeams noSpecChat noSpecDraw rankMode skillMode speedControl teamSize botsRank colorSensitivity') {
+    $additionalData{HOSTOPTIONS}{$hostOption}=$conf{$hostOption};
+    $additionalData{HOSTOPTIONS}{$hostOption}=~tr/;/:/;
+  }
+  $additionalData{HOSTOPTIONS}{forceStarted}=$force?1:0;
+  $additionalData{HOSTOPTIONS}{springServerType}=$springServerType;
+  $additionalData{HOSTOPTIONS}{spadsVersion}=$spadsVer;
   $additionalData{'game/HostIP'}=$conf{forceHostIp};
-  foreach my $bUser (keys %{$lobby->{battle}->{users}}) {
-    next unless(exists $battleSkills{$bUser} && exists $battleSkills{$bUser}->{class}
-                && exists $lobby->{users}->{$bUser} && exists $lobby->{users}->{$bUser}->{accountId} && $lobby->{users}->{$bUser}->{accountId});
-    $additionalData{playerData}->{$lobby->{users}->{$bUser}->{accountId}}={skillclass => $battleSkills{$bUser}->{class}};
+  my %clansId;
+  my $nextClanId=1;
+  foreach my $bUser (keys %{$lobby->{battle}{users}}) {
+    next unless(exists $lobby->{users}{$bUser} && exists $lobby->{users}{$bUser}{accountId} && $lobby->{users}{$bUser}{accountId});
+    my $accountId=$lobby->{users}{$bUser}{accountId};
+    my $clanPref=getUserPref($bUser,'clan');
+    if($clanPref ne '') {
+      $clansId{$clanPref}=$nextClanId++ unless(exists $clansId{$clanPref});
+      $additionalData{playerData}{$accountId}{ClanId}=$clansId{$clanPref};
+    }
+    next unless(exists $battleSkills{$bUser} && exists $battleSkills{$bUser}{class});
+    $additionalData{playerData}{$accountId}{SkillClass}=$battleSkills{$bUser}{class};
   }
 
   my $mapAvailableLocally = exists $availableMapsNameToNb{$currentMap} ? 1 : 0;
@@ -5135,7 +5151,29 @@ sub launchGame {
 
   foreach my $pluginName (@pluginsOrder) {
     my $r_newStartScriptTags=$plugins{$pluginName}->addStartScriptTags(\%additionalData) if($plugins{$pluginName}->can('addStartScriptTags'));
-    (map {$additionalData{$_}=$r_newStartScriptTags->{$_}} (keys %{$r_newStartScriptTags})) if(ref($r_newStartScriptTags) eq 'HASH');
+    if(ref($r_newStartScriptTags) eq 'HASH') {
+      foreach my $startScriptTag (keys %{$r_newStartScriptTags}) {
+        if(exists $additionalData{$startScriptTag} && any {$startScriptTag eq $_} (qw'aiData playerData')) {
+          foreach my $entityId (keys %{$r_newStartScriptTags->{$startScriptTag}}) {
+            if(exists $additionalData{$startScriptTag}{$entityId}) {
+              foreach my $tag (keys %{$r_newStartScriptTags->{$startScriptTag}{$entityId}}) {
+                if(exists $additionalData{$startScriptTag}{$entityId}{$tag} && ref $r_newStartScriptTags->{$startScriptTag}{$entityId}{$tag} eq 'HASH' && ref $additionalData{$startScriptTag}{$entityId}{$tag} eq 'HASH') {
+                  foreach my $subTag (keys %{$r_newStartScriptTags->{$startScriptTag}{$entityId}{$tag}}) {
+                    $additionalData{$startScriptTag}{$entityId}{$tag}{$subTag}=$r_newStartScriptTags->{$startScriptTag}{$entityId}{$tag}{$subTag};
+                  }
+                }else{
+                  $additionalData{$startScriptTag}{$entityId}{$tag}=$r_newStartScriptTags->{$startScriptTag}{$entityId}{$tag};
+                }
+              }
+            }else{
+              $additionalData{$startScriptTag}{$entityId}=$r_newStartScriptTags->{$startScriptTag}{$entityId};
+            }
+          }
+        }else{
+          $additionalData{$startScriptTag}=$r_newStartScriptTags->{$startScriptTag};
+        }
+      }
+    }
   }
   my $p_modSides=getModSides($lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod});
   my ($p_startData,$p_teamsMap,$p_allyTeamsMap)=$lobby->generateStartData(\%additionalData,$p_modSides,undef,$springServerType eq 'dedicated' ? 1 : 2);
