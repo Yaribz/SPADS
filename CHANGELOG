@@ -906,6 +906,7 @@ spads.pl:
          improve cheat mode detection
 0.12.40: write SPADS configuration and clan data in startscript
          improve support of plugin customization callback "addStartScriptTags" for Python plugin (avoid overwriting data)
+0.12.41: add a cache for the preferences data of the players in the battle lobby (fix SQLite error "database is locked" when preferences data are shared between multiple busy instances)
 
 SpadsConf.pm:
 ============

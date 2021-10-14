@@ -53,7 +53,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.40';
+our $spadsVer='0.12.41';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -381,7 +381,8 @@ our %timestamps=(connectAttempt => 0,
                  autoStop => -1,
                  floodPurge => time,
                  advert => time,
-                 gameOver => 0);
+                 gameOver => 0,
+                 prefCachePurge => time);
 my $syncedSpringVersion='';
 my $fullSpringVersion='';
 our $lobbyState=0; # (0:not_connected, 1:connecting, 2:connected, 3:logged_in, 4:start_data_received, 5:opening_battle, 6:battle_opened)
@@ -463,6 +464,8 @@ our $springServerType=$conf{springServerType};
 my $springServerBin=$conf{springServer};
 my %autoManagedSpringData=(mode => 'off');
 my $failedSpringInstallVersion;
+my %prefCache;
+my %prefCacheTs;
 
 my $lobbySimpleLog=SimpleLog->new(logFiles => [$conf{logDir}."/spads.log",''],
                                   logLevels => [$conf{lobbyInterfaceLogLevel},3],
@@ -3070,6 +3073,7 @@ sub checkTimedEvents {
   checkAdvertMsg();
   pluginsEventLoop();
   checkPendingGetSkills();
+  checkPrefCachePurge();
 }
 
 sub checkSpringCrash {
@@ -3218,6 +3222,18 @@ sub checkDataDump {
     pingIfNeeded();
     $spads->dumpDynamicData();
     $timestamps{dataDump}=time;
+  }
+}
+
+sub checkPrefCachePurge {
+  if(time - $timestamps{prefCachePurge} > 5) {
+    foreach my $user (keys %prefCacheTs) {
+      if(time - $prefCacheTs{$user} > 60) {
+        delete $prefCacheTs{$user};
+        delete $prefCache{$user};
+      }
+    }
+    $timestamps{prefCachePurge}=time;
   }
 }
 
@@ -6163,8 +6179,17 @@ sub cleverSearch {
 
 sub getUserPref {
   my ($user,$pref)=@_;
-  my $aId=getLatestUserAccountId($user);
-  my $p_prefs=$spads->getUserPrefs($aId,$user);
+  my $p_prefs;
+  if(exists $prefCache{$user}) {
+    $p_prefs=$prefCache{$user};
+  }else{
+    my $aId=getLatestUserAccountId($user);
+    $p_prefs=$spads->getUserPrefs($aId,$user);
+    if($spads->{sharedDataTs}{preferences} && $lobbyState > 5 && %{$lobby->{battle}} && exists $lobby->{battle}{users}{$user}) {
+      $prefCache{$user}=$p_prefs;
+      $prefCacheTs{$user}=time;
+    }
+  }
   return $p_prefs->{$pref} if(exists $p_prefs->{$pref} && $p_prefs->{$pref} ne '');
   return $conf{$pref} if(exists $conf{$pref});
   return '';
@@ -6181,7 +6206,13 @@ sub getAccountPref {
 sub setUserPref {
   my ($user,$pref,$value)=@_;
   my $aId=getLatestUserAccountId($user);
+  setAccountUserPref($aId,$user,$pref,$value);
+}
+
+sub setAccountUserPref {
+  my ($aId,$user,$pref,$value)=@_;
   $spads->setUserPref($aId,$user,$pref,$value);
+  $prefCache{$user}{$pref}=$value if(exists $prefCache{$user});
 }
 
 sub getDefaultAndMaxAllowedValues {
@@ -7704,10 +7735,10 @@ sub hChpasswd {
   my $oldLevel=0;
   $oldLevel=getUserAccessLevel($passwdUser) if($lobbyState > 3 && exists $lobby->{users}->{$passwdUser});
   if($#{$p_params} == 0) {
-    $spads->setUserPref($aId,$passwdUser,'password','');
+    setAccountUserPref($aId,$passwdUser,'password','');
     answer("Password removed for user $passwdUser");
   }else{
-    $spads->setUserPref($aId,$passwdUser,'password',md5_base64($p_params->[1]));
+    setAccountUserPref($aId,$passwdUser,'password',md5_base64($p_params->[1]));
     answer("Password set to \"$p_params->[1]\" for user $passwdUser");
   }
   if($lobbyState > 3 && exists $lobby->{users}->{$passwdUser}) {
@@ -7734,7 +7765,7 @@ sub hChrank {
   return 1 if($checkOnly);
   if($#{$p_params} == 0) {
     return 1 if($checkOnly);
-    $spads->setUserPref($aId,$modifiedUser,"rankMode","");
+    setAccountUserPref($aId,$modifiedUser,"rankMode","");
     answer("Default rankMode restored for user $modifiedUser");
   }else{
     my $val=$p_params->[1];
@@ -7744,7 +7775,7 @@ sub hChrank {
       return 0;
     }
     return 1 if($checkOnly);
-    $spads->setUserPref($aId,$modifiedUser,"rankMode",$val);
+    setAccountUserPref($aId,$modifiedUser,"rankMode",$val);
     answer("RankMode set to \"$val\" for user $modifiedUser");
   }
   if($lobbyState > 5 && %{$lobby->{battle}} && exists $lobby->{battle}->{users}->{$modifiedUser}) {
@@ -7775,7 +7806,7 @@ sub hChskill {
   return 1 if($checkOnly);
   if($#{$p_params} == 0) {
     return 1 if($checkOnly);
-    $spads->setUserPref($aId,$modifiedUser,'skillMode','');
+    setAccountUserPref($aId,$modifiedUser,'skillMode','');
     answer("Default skillMode restored for user $modifiedUser");
   }else{
     my $val=$p_params->[1];
@@ -7785,7 +7816,7 @@ sub hChskill {
       return 0;
     }
     return 1 if($checkOnly);
-    $spads->setUserPref($aId,$modifiedUser,'skillMode',$val);
+    setAccountUserPref($aId,$modifiedUser,'skillMode',$val);
     answer("SkillMode set to \"$val\" for user $modifiedUser");
   }
   if($lobbyState > 5 && %{$lobby->{battle}} && exists $lobby->{battle}->{users}->{$modifiedUser}) {
