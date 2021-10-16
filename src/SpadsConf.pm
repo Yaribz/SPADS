@@ -43,7 +43,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.12.16';
+my $moduleVersion='0.12.17';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -355,7 +355,7 @@ sub new {
   my $commandsFile=$p_conf->{$defaultPreset}{commandsFile}[0];
   my $p_users=loadTableFile($sLog,$p_conf->{''}{etcDir}.'/users.conf',\@usersFields,$p_macros);
   my $p_levels=loadTableFile($sLog,$p_conf->{''}{etcDir}.'/levels.conf',\@levelsFields,$p_macros);
-  my $p_commands=loadTableFile($sLog,$p_conf->{''}{etcDir}."/$commandsFile",\@commandsFields,$p_macros,1);
+  my ($p_commands,$r_cmdAttribs)=loadTableFile($sLog,$p_conf->{''}{etcDir}."/$commandsFile",\@commandsFields,$p_macros,1);
   my $p_help=loadSimpleTableFile($sLog,"$spadsDir/help.dat",$p_macros,1);
   my $p_helpSettings=loadHelpSettingsFile($sLog,"$spadsDir/helpSettings.dat",$p_macros,1);
 
@@ -394,6 +394,10 @@ sub new {
 
   if(! checkNonEmptyHash($p_users,$p_levels,$p_commands,$p_help,$p_helpSettings,$p_bans)) {
     $sLog->log('Unable to load commands, help and permission system',1);
+    return 0;
+  }
+  if(! processCmdAttribs($sLog,$r_cmdAttribs)) {
+    $sLog->log('Unable to process commands attributes',1);
     return 0;
   }
 
@@ -505,6 +509,7 @@ sub new {
     banLists => $p_banLists,
     mapLists => $p_mapLists,
     commands => $p_commands,
+    commandsAttributes => $r_cmdAttribs,
     levels => $p_levels,
     mapBoxes => $p_mapBoxes->{''},
     savedBoxes => $p_savedBoxes->{''},
@@ -913,7 +918,9 @@ sub loadTableFile {
   my @pattern;
   my $section='';
   my %newConf=('' => []);
+  my %attribs;
 
+  my $attribRegexCnt=wantarray()?'?':'{0}';
   while(local $_ = shift(@confData)) {
     my $line=$_;
     chomp($line);
@@ -941,9 +948,10 @@ sub loadTableFile {
       next;
     }
     next if(/^\s*(\#.*)?$/);
-    if(/^\s*\[([^\]]+)\]\s*$/) {
+    if(/^\s*\[([^\]]+)\](?:\s*\((.*)\))$attribRegexCnt\s*$/) {
       $section=$1;
       $section=lc($section) if($caseInsensitive);
+      $attribs{$section}=$2 if(defined $2);
       if(exists $newConf{$section}) {
         $sLog->log("Duplicate section definitions in configuration file \"$cFile\" ($section)",2);
       }else{
@@ -964,8 +972,7 @@ sub loadTableFile {
     }
   }
 
-  return \%newConf;
-
+  return wantarray() ? (\%newConf,\%attribs) : \%newConf;
 }
 
 sub parseTableLine {
@@ -1292,10 +1299,10 @@ sub loadPluginConf {
     $self->{log}->log("Unable to load configuration for plugin \"$pluginName\"",1);
     return 0;
   }
-  my ($p_commands,$p_help)=({},{});
+  my ($p_commands,$p_help,$r_cmdAttribs)=({},{});
   if(exists $p_pluginPresets->{''}{commandsFile}) {
     my $commandsFile=$p_pluginPresets->{''}{commandsFile};
-    $p_commands=loadTableFile($self->{log},$self->{conf}{etcDir}."/$commandsFile",\@commandsFields,$self->{macros},1);
+    ($p_commands,$r_cmdAttribs)=loadTableFile($self->{log},$self->{conf}{etcDir}."/$commandsFile",\@commandsFields,$self->{macros},1);
     if(! exists $p_pluginPresets->{''}{helpFile}) {
       $self->{log}->log("Unable to load configuration for plugin \"$pluginName\" (the plugin command file has no associated help file)",1);
       return 0;
@@ -1306,10 +1313,15 @@ sub loadPluginConf {
       $self->{log}->log("Unable to load configuration for plugin \"$pluginName\" (failed to load commands, help and permission system)",1);
       return 0;
     }
+    if(! processCmdAttribs($self->{log},$r_cmdAttribs)) {
+      $self->{log}->log("Unable to load configuration for plugin \"$pluginName\" (invalid commands attributes)",1);
+      return 0;
+    }
   }
   $self->{log}->log("Reloading configuration of plugin \"$pluginName\"",4) if(exists $self->{pluginsConf}{$pluginName});
   $self->{pluginsConf}{$pluginName}={ presets => $p_pluginPresets,
                                       commands => $p_commands,
+                                      commandsAttributes => $r_cmdAttribs,
                                       help => $p_help,
                                       conf => $p_pluginPresets->{''},
                                       values => {} };
@@ -1547,6 +1559,37 @@ sub pruneExpiredBans {
     $p_banLists->{$section}=\@newFilters;
   }
   return $nbPrunedBans;
+}
+
+sub processCmdAttribs {
+  my ($sLog,$r_cmdAttribs)=@_;
+  foreach my $cmd (keys %{$r_cmdAttribs}) {
+    my %attrs;
+    my @attrDefs=split(',',$r_cmdAttribs->{$cmd});
+    foreach my $attrDef (@attrDefs) {
+      if($attrDef =~ /^\s*([^:]+):\s*((?:.*[^\s])?)\s*$/) {
+        my ($attr,$val)=($1,$2);
+        if(exists $attrs{$attr}) {
+          $sLog->log("Duplicate command attribute definition (attribute \"$attr\" for command \"$cmd\")",1);
+          return 0;
+        }
+        if(none {$attr eq $_} (qw'voteTime minVoteParticipation')) {
+          $sLog->log("Invalid command attribute \"$attr\" declared for command \"$cmd\"",1);
+          return 0;
+        }
+        if(! checkValue($val,$globalParameters{$attr})) {
+          $sLog->log("Invalid value \"$val\" for attribute \"$attr\" declared for command \"$cmd\"",1);
+          return 0;
+        }
+        $attrs{$attr}=$val;
+      }else{
+        $sLog->log("Invalid syntax for command attribute declaration: \"$attrDef\" (command \"$cmd\")",1);
+        return 0;
+      }
+    }
+    $r_cmdAttribs->{$cmd}=\%attrs;
+  }
+  return 1;
 }
 
 # Internal functions - Dynamic data ###########################################
@@ -2197,9 +2240,14 @@ sub applyPreset {
   }
   $self->{conf}{preset}=$preset;
   if(! $commandsAlreadyLoaded) {
-    my $p_commands=loadTableFile($self->{log},$self->{conf}{etcDir}.'/'.$self->{conf}{commandsFile},\@commandsFields,$self->{macros},1);
+    my ($p_commands,$r_cmdAttribs)=loadTableFile($self->{log},$self->{conf}{etcDir}.'/'.$self->{conf}{commandsFile},\@commandsFields,$self->{macros},1);
     if(%{$p_commands}) {
-      $self->{commands}=$p_commands;
+      if(processCmdAttribs($self->{log},$r_cmdAttribs)) {
+        $self->{commands}=$p_commands;
+        $self->{commandsAttributes}=$r_cmdAttribs;
+      }else{
+        $self->{log}->log('Unable to process commands attributes',1);
+      }
     }else{
       $self->{log}->log("Unable to load commands file \"$self->{conf}{commandsFile}\"",1);
     }
@@ -2386,6 +2434,15 @@ sub getCommandLevels {
         return dclone($p_rights->[0]) if(@{$p_rights});
       }
     }
+  }
+  return {};
+}
+
+sub getCommandAttributes {
+  my ($self,$command)=@_;
+  return $self->{commandsAttributes}{$command} if(exists $self->{commandsAttributes}{$command});
+  foreach my $pluginName (keys %{$self->{pluginsConf}}) {
+    return $self->{pluginsConf}{$pluginName}{commandsAttributes}{$command} if(exists $self->{pluginsConf}{$pluginName}{commandsAttributes}{$command});
   }
   return {};
 }

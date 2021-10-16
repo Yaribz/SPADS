@@ -53,7 +53,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.41';
+our $spadsVer='0.12.42';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -3135,7 +3135,7 @@ sub handleVote {
         $nbVotesForVotePart=$currentVote{yesCount}+$currentVote{noCount};
       }
       my $votePart=($nbVotesForVotePart+$currentVote{blankCount}-$nbAwayVoters)/($totalNbVotes+$currentVote{blankCount});
-      my $minVotePart=$conf{minVoteParticipation};
+      my $minVotePart=getCmdVoteSettings(lc($currentVote{command}[0]))->{minVoteParticipation};
       if($minVotePart =~ /^(\d+);(\d+)$/) {
         my ($minVotePartNoGame,$minVotePartRunningGame)=($1,$2);
         if($autohost->getState()) {
@@ -3490,7 +3490,7 @@ sub getVoteStateMsg {
   }else{
     $nbVotesForVotePart=$currentVote{yesCount}+$currentVote{noCount};
   }
-  my $minVotePart=$conf{minVoteParticipation};
+  my $minVotePart=getCmdVoteSettings(lc($currentVote{command}[0]))->{minVoteParticipation};
   if($minVotePart =~ /^(\d+);(\d+)$/) {
     my ($minVotePartNoGame,$minVotePartRunningGame)=($1,$2);
     if($autohost->getState()) {
@@ -6725,6 +6725,16 @@ sub endGameProcessing {
   }
 }
 
+sub getCmdVoteSettings {
+  my $cmd=shift;
+  my $r_cmdAttribs=$spads->getCommandAttributes($cmd);
+  my %voteSettings;
+  foreach my $setting (qw'voteTime minVoteParticipation') {
+    $voteSettings{$setting}=$r_cmdAttribs->{$setting}//$conf{$setting};
+  }
+  return \%voteSettings;
+}
+
 # SPADS commands handlers #####################################################
 
 sub hAddBot {
@@ -7685,7 +7695,7 @@ sub hCallVote {
       executeCommand($source,$user,$p_params);
       return;
     }
-    %currentVote = (expireTime => time + $conf{voteTime},
+    %currentVote = (expireTime => time + getCmdVoteSettings(lc($p_params->[0]))->{voteTime},
                     user => $user,
                     awayVoteTime => time + 20,
                     source => $source,

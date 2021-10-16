@@ -907,6 +907,7 @@ spads.pl:
 0.12.40: write SPADS configuration and clan data in startscript
          improve support of plugin customization callback "addStartScriptTags" for Python plugin (avoid overwriting data)
 0.12.41: add a cache for the preferences data of the players in the battle lobby (fix SQLite error "database is locked" when preferences data are shared between multiple busy instances)
+0.12.42: allow default "voteTime" and "minVoteParticipation" values to be overloaded for any command (in commands.conf)
 
 SpadsConf.pm:
 ============
@@ -1076,6 +1077,7 @@ SpadsConf.pm:
          add log message when plugin config cannot be loaded
 0.12.15: provide current configuration as parameter to the Python plugin loading function (fix auto-load for Python plugins)
 0.12.16: the "colorSensitivity" global setting now also accepts value "-1" to use a new color assignment algorithm taking game mode and battle structure into account
+0.12.17: allow default "voteTime" and "minVoteParticipation" values to be overloaded for any command (in commands.conf)
 
 spadsInstaller.pl:
 =================
