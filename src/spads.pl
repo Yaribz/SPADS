@@ -53,7 +53,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.42';
+our $spadsVer='0.12.43';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -3135,7 +3135,8 @@ sub handleVote {
         $nbVotesForVotePart=$currentVote{yesCount}+$currentVote{noCount};
       }
       my $votePart=($nbVotesForVotePart+$currentVote{blankCount}-$nbAwayVoters)/($totalNbVotes+$currentVote{blankCount});
-      my $minVotePart=getCmdVoteSettings(lc($currentVote{command}[0]))->{minVoteParticipation};
+      my $r_cmdVoteSettings=getCmdVoteSettings(lc($currentVote{command}[0]));
+      my $minVotePart=$r_cmdVoteSettings->{minVoteParticipation};
       if($minVotePart =~ /^(\d+);(\d+)$/) {
         my ($minVotePartNoGame,$minVotePartRunningGame)=($1,$2);
         if($autohost->getState()) {
@@ -3145,7 +3146,10 @@ sub handleVote {
         }
       }
       $minVotePart/=100;
-      if($votePart >= $minVotePart && $currentVote{yesCount} > $totalNbVotes / 2) {
+      my $majorityVoteMargin=$r_cmdVoteSettings->{majorityVoteMargin}//$confMacros{majorityVoteMargin}//0;
+      my $nbRequiredYesVotes = ($majorityVoteMargin =~ /^\d+$/ && $majorityVoteMargin > 0 && $majorityVoteMargin < 51) ? ceil($totalNbVotes*(50+$majorityVoteMargin)/100) : int($totalNbVotes/2)+1;
+      my $nbRequiredNoVotes = $totalNbVotes - $nbRequiredYesVotes + 1;
+      if($votePart >= $minVotePart && $currentVote{yesCount} >= $nbRequiredYesVotes) {
         sayBattleAndGame("Vote for command \"".join(" ",@{$currentVote{command}})."\" passed.");
         my ($voteSource,$voteUser,$voteCommand)=($currentVote{source},$currentVote{user},$currentVote{command});
         foreach my $pluginName (@pluginsOrder) {
@@ -3153,7 +3157,7 @@ sub handleVote {
         }
         %currentVote=();
         executeCommand($voteSource,$voteUser,$voteCommand);
-      }elsif($votePart >= $minVotePart && ($currentVote{noCount} >= $totalNbVotes / 2 || ! $nbRemainingVotes)) {
+      }elsif($votePart >= $minVotePart && ($currentVote{noCount} >= $nbRequiredNoVotes || ! $nbRemainingVotes)) {
         sayBattleAndGame("Vote for command \"".join(" ",@{$currentVote{command}})."\" failed.");
         foreach my $pluginName (@pluginsOrder) {
           $plugins{$pluginName}->onVoteStop(-1) if($plugins{$pluginName}->can('onVoteStop'));
@@ -3474,7 +3478,9 @@ sub getVoteStateMsg {
   my $nbRemainingVotes=$#remainingVoters+1;
   my $nbAwayVoters=$#awayVoters+1;
   my $totalNbVotes=$nbRemainingVotes+$currentVote{yesCount}+$currentVote{noCount};
-  my $reqYesVotes=int($totalNbVotes/2)+1;
+  my $r_cmdVoteSettings=getCmdVoteSettings(lc($currentVote{command}[0]));
+  my $majorityVoteMargin=$r_cmdVoteSettings->{majorityVoteMargin}//$confMacros{majorityVoteMargin}//0;
+  my $reqYesVotes = ($majorityVoteMargin =~ /^\d+$/ && $majorityVoteMargin > 0 && $majorityVoteMargin < 51) ? ceil($totalNbVotes*(50+$majorityVoteMargin)/100) : int($totalNbVotes/2)+1;
   my $reqNoVotes=$totalNbVotes-$reqYesVotes+1;
   my $maxReqYesVotes=int(($totalNbVotes+$nbAwayVoters)/2)+1;
   my $maxReqNoVotes=$totalNbVotes+$nbAwayVoters-$maxReqYesVotes+1;
@@ -3490,7 +3496,7 @@ sub getVoteStateMsg {
   }else{
     $nbVotesForVotePart=$currentVote{yesCount}+$currentVote{noCount};
   }
-  my $minVotePart=getCmdVoteSettings(lc($currentVote{command}[0]))->{minVoteParticipation};
+  my $minVotePart=$r_cmdVoteSettings->{minVoteParticipation};
   if($minVotePart =~ /^(\d+);(\d+)$/) {
     my ($minVotePartNoGame,$minVotePartRunningGame)=($1,$2);
     if($autohost->getState()) {
@@ -6729,7 +6735,7 @@ sub getCmdVoteSettings {
   my $cmd=shift;
   my $r_cmdAttribs=$spads->getCommandAttributes($cmd);
   my %voteSettings;
-  foreach my $setting (qw'voteTime minVoteParticipation') {
+  foreach my $setting (qw'voteTime minVoteParticipation majorityVoteMargin') {
     $voteSettings{$setting}=$r_cmdAttribs->{$setting}//$conf{$setting};
   }
   return \%voteSettings;

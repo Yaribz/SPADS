@@ -43,7 +43,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.12.17';
+my $moduleVersion='0.12.18';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -1573,13 +1573,20 @@ sub processCmdAttribs {
           $sLog->log("Duplicate command attribute definition (attribute \"$attr\" for command \"$cmd\")",1);
           return 0;
         }
-        if(none {$attr eq $_} (qw'voteTime minVoteParticipation')) {
-          $sLog->log("Invalid command attribute \"$attr\" declared for command \"$cmd\"",1);
-          return 0;
-        }
-        if(! checkValue($val,$globalParameters{$attr})) {
-          $sLog->log("Invalid value \"$val\" for attribute \"$attr\" declared for command \"$cmd\"",1);
-          return 0;
+        if($attr eq 'majorityVoteMargin') {
+          if($val !~ /^[1-5]?\d$/ || $val > 50) {
+            $sLog->log("Invalid value \"$val\" for attribute \"$attr\" declared for command \"$cmd\"",1);
+            return 0;
+          }
+        }else{
+          if(none {$attr eq $_} (qw'voteTime minVoteParticipation')) {
+            $sLog->log("Invalid command attribute \"$attr\" declared for command \"$cmd\"",1);
+            return 0;
+          }
+          if(! checkValue($val,$globalParameters{$attr})) {
+            $sLog->log("Invalid value \"$val\" for attribute \"$attr\" declared for command \"$cmd\"",1);
+            return 0;
+          }
         }
         $attrs{$attr}=$val;
       }else{
