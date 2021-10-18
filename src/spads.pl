@@ -53,7 +53,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.43';
+our $spadsVer='0.12.44';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -3166,11 +3166,13 @@ sub handleVote {
         $currentVote{expireTime}=time;
       }elsif(time >= $currentVote{expireTime}) {
         my @awayVoters;
-        foreach my $remainingVoter (@remainingVoters) {
-          my $autoSetVoteMode=getUserPref($remainingVoter,"autoSetVoteMode");
-          if($autoSetVoteMode) {
-            setUserPref($remainingVoter,"voteMode","away");
-            push(@awayVoters,$remainingVoter);
+        if($r_cmdVoteSettings->{awayVoteDelay} ne '') {
+          foreach my $remainingVoter (@remainingVoters) {
+            my $autoSetVoteMode=getUserPref($remainingVoter,"autoSetVoteMode");
+            if($autoSetVoteMode) {
+              setUserPref($remainingVoter,"voteMode","away");
+              push(@awayVoters,$remainingVoter);
+            }
           }
         }
         my $awayVotersString="";
@@ -6735,7 +6737,7 @@ sub getCmdVoteSettings {
   my $cmd=shift;
   my $r_cmdAttribs=$spads->getCommandAttributes($cmd);
   my %voteSettings;
-  foreach my $setting (qw'voteTime minVoteParticipation majorityVoteMargin') {
+  foreach my $setting (qw'voteTime minVoteParticipation majorityVoteMargin awayVoteDelay') {
     $voteSettings{$setting}=$r_cmdAttribs->{$setting}//$conf{$setting};
   }
   return \%voteSettings;
@@ -7701,9 +7703,17 @@ sub hCallVote {
       executeCommand($source,$user,$p_params);
       return;
     }
-    %currentVote = (expireTime => time + getCmdVoteSettings(lc($p_params->[0]))->{voteTime},
+    my $r_cmdVoteSettings=getCmdVoteSettings(lc($p_params->[0]));
+    my $awayVoteDelay=$r_cmdVoteSettings->{awayVoteDelay}//$confMacros{awayVoteDelay}//20;
+    my $awayVoteTime=0;
+    if($awayVoteDelay ne '') {
+      $awayVoteDelay=ceil($r_cmdVoteSettings->{voteTime}*$1/100) if($awayVoteDelay =~ /^(\d+)\%$/);
+      $awayVoteDelay=$r_cmdVoteSettings->{voteTime} if($awayVoteDelay > $r_cmdVoteSettings->{voteTime});
+      $awayVoteTime = time + $awayVoteDelay;
+    }
+    %currentVote = (expireTime => time + $r_cmdVoteSettings->{voteTime},
                     user => $user,
-                    awayVoteTime => time + 20,
+                    awayVoteTime => $awayVoteTime,
                     source => $source,
                     command => $p_params,
                     remainingVoters => \%remainingVoters,

@@ -909,6 +909,7 @@ spads.pl:
 0.12.41: add a cache for the preferences data of the players in the battle lobby (fix SQLite error "database is locked" when preferences data are shared between multiple busy instances)
 0.12.42: allow default "voteTime" and "minVoteParticipation" values to be overloaded for any command (in commands.conf)
 0.12.43: added experimental support of configurable supermajority (aka qualified majority) in vote system
+0.12.44: added experimental "awayVoteDelay" setting (configure the delay for automatic votes when players are in away mode, or disable the functionality)
 
 SpadsConf.pm:
 ============
@@ -1080,6 +1081,7 @@ SpadsConf.pm:
 0.12.16: the "colorSensitivity" global setting now also accepts value "-1" to use a new color assignment algorithm taking game mode and battle structure into account
 0.12.17: allow default "voteTime" and "minVoteParticipation" values to be overloaded for any command (in commands.conf)
 0.12.18: new experimental "majorityVoteMargin" setting to support configurable supermajority (aka qualified majority) in vote system
+0.12.19: added experimental "awayVoteDelay" setting (configure the delay for automatic votes when players are in away mode, or disable the functionality)
 
 spadsInstaller.pl:
 =================

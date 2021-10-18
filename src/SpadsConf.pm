@@ -43,7 +43,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.12.18';
+my $moduleVersion='0.12.19';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -227,8 +227,10 @@ my %paramTypes = (login => '[\w\[\]]{2,20}',
                   hostname => '\w[\w\-\.]*',
                   port => sub { return ($_[0] =~ /^\d+$/ && $_[0] < 65536) },
                   integer => '\d+',
+                  integerMax50 => sub { return $_[0] =~  /^[1-5]?\d$/ && $_[0] <= 50 },
                   minus1 => '-1',
                   nonNullInteger => '[1-9]\d*',
+                  percent => sub { return $_[0] =~ /^(\d{1,3})\%$/ && $1 <= 100 },
                   ipAddr => '\d+\.\d+\.\d+\.\d+',
                   star => '\*',
                   null => '',
@@ -1574,7 +1576,12 @@ sub processCmdAttribs {
           return 0;
         }
         if($attr eq 'majorityVoteMargin') {
-          if($val !~ /^[1-5]?\d$/ || $val > 50) {
+          if(! checkValue($val,['integerMax50'])) {
+            $sLog->log("Invalid value \"$val\" for attribute \"$attr\" declared for command \"$cmd\"",1);
+            return 0;
+          }
+        }elsif($attr eq 'awayVoteDelay') {
+          if(! checkValue($val,['integer','percent','null'])) {
             $sLog->log("Invalid value \"$val\" for attribute \"$attr\" declared for command \"$cmd\"",1);
             return 0;
           }
