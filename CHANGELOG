@@ -1082,6 +1082,7 @@ SpadsConf.pm:
 0.12.17: allow default "voteTime" and "minVoteParticipation" values to be overloaded for any command (in commands.conf)
 0.12.18: new experimental "majorityVoteMargin" setting to support configurable supermajority (aka qualified majority) in vote system
 0.12.19: added experimental "awayVoteDelay" setting (configure the delay for automatic votes when players are in away mode, or disable the functionality)
+0.12.20: added map list inheritance functionality (map list declaration syntax extension)
 
 spadsInstaller.pl:
 =================

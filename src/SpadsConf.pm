@@ -43,7 +43,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.12.19';
+my $moduleVersion='0.12.20';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -1036,6 +1036,41 @@ sub loadSimpleTableFile {
     }
   }
 
+  my %inheritedSections;
+  foreach my $section (keys %newConf) {
+    next unless($section =~ /^(.+)<(.+)>$/);
+    my ($sectionName,$inheritedSectionsString)=($1,$2);
+    if(exists $newConf{$sectionName}) {
+      $sLog->log("Configuration file \"$cFile\" contains multiple section declarations for section \"$sectionName\"",1);
+      return {};
+    }
+    my @inheritedSectionsList=split(',',$inheritedSectionsString);
+    $inheritedSections{$sectionName}=\@inheritedSectionsList;
+    $newConf{$sectionName}=delete $newConf{$section};
+  }
+
+  my %inheritedConf;
+  foreach my $section (keys %inheritedSections) {
+    my $r_inherits=flattenSectionInheritance(\%inheritedSections,$section);
+    shift(@{$r_inherits});
+    my @invalidInheritedSections;
+    foreach my $inheritedSection (@{$r_inherits}) {
+      if(! exists $newConf{$inheritedSection}) {
+        push(@invalidInheritedSections,$inheritedSection);
+        next;
+      }
+      push(@{$inheritedConf{$section}},@{$newConf{$inheritedSection}});
+    }
+    if(@invalidInheritedSections) {
+     $sLog->log("Configuration file \"$cFile\" contains invalid inheritance for section \"$section\": ".(join(', ',@invalidInheritedSections)),1);
+     return {};
+    }
+  }
+
+  foreach my $section (keys %inheritedConf) {
+    push(@{$newConf{$section}},@{$inheritedConf{$section}});
+  }
+  
   return \%newConf;
 }
 
