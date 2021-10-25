@@ -1,0 +1,35 @@
+This plugin extends the SPADS plugin API by adding the following new
+event-based callbacks:
+
+- Callbacks based on CLIENTSTATUS lobby command:
+  onClientStatusChange($self,$clientName,\%changes)
+  onClientInGame($self,$clientName)
+  onClientOutOfGame($self,$clientName)
+  onClientRankChange($self,$clientName,$oldRank,$newRank)
+  onClientAway($self,$clientName)
+  onClientBack($self,$clientName)
+
+- Callbacks based on CLIENTBATTLESTATUS lobby command:
+  onNewBattleClient($self,$clientName,\%battleStatus,\%color)
+  onClientBattleStatusChange($self,$clientName,\%changes)
+  onClientSideChange($self,$clientName,$oldSide,$newSide)
+  onClientSyncChange($self,$clientName,$oldSyncStatus,$newSyncStatus)
+  onClientBonusChange($self,$clientName,$oldBonusValue,$newBonusValue)
+  onClientUnspec($self,$clientName)
+  onClientSpec($self,$clientName)
+  onClientTeamChange($self,$clientName,$oldTeam,$newTeam)
+  onClientIdChange($self,$clientName,$oldId,$newId)
+  onClientReady($self,$clientName)
+  onClientUnready($self,$clientName)
+  onClientColorChange($self,$clientName,\%oldColor,\%newColor)
+
+- Callback based on ADDBOT lobby command:
+  onNewBattleAiBot($self,$aiBotName,\%battleStatus,\%color,$owner,$aiDll)
+
+- Callbacks based on UPDATEBOT lobby command:
+  onAiBotBattleStatusChange($self,$aiBotName,\%changes)
+  onAiBotSideChange($self,$aiBotName,$oldSide,$newSide)
+  onAiBotBonusChange($self,$aiBotName,$oldBonus,$newBonus)
+  onAiBotTeamChange($self,$aiBotName,$oldTeam,$newTeam)
+  onAiBotIdChange($self,$aiBotName,$oldId,$newId)
+  onAiBotColorChange($self,$aiBotName,\%oldColor,\%newColor)
