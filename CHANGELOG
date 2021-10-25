@@ -910,6 +910,7 @@ spads.pl:
 0.12.42: allow default "voteTime" and "minVoteParticipation" values to be overloaded for any command (in commands.conf)
 0.12.43: added experimental support of configurable supermajority (aka qualified majority) in vote system
 0.12.44: added experimental "awayVoteDelay" setting (configure the delay for automatic votes when players are in away mode, or disable the functionality)
+0.12.45: the loaded plugins list is now accessible from plugins
 
 SpadsConf.pm:
 ============
@@ -1225,6 +1226,8 @@ SpadsPluginApi.pm:
 0.28: new plugin API customization callback "fixColors" (allows implementing new color assignment algorithms)
 0.29: new plugin event callbacks: "onJoinedBattle" and "onLeftBattle"
 0.30: update documentation for "getCurrentVote()", "getLobbyInterface()" and "getRunningBattle()" accessors
+0.31: new plugin API accessor "getPluginList"
+      plugins can now declare lobby command callbacks which will be called before the lobby interface module callbacks (new optional parameter for "addLobbyCommandHandler" and "removeLobbyCommandHandler" plugin API functions)
 
 SpadsUpdater.pm:
 ===============

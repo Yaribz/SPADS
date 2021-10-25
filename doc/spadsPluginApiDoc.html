@@ -948,6 +948,12 @@
 <p>This accessor returns an integer describing current lobby state (<code>0</code>: not connected, <code>1</code>: connecting, <code>2</code>: connected, <code>3</code>: just logged in, <code>4</code>: initial lobby data received, <code>5</code>: opening battle, <code>6</code>: battle opened)</p>
 
 </dd>
+<dt id="getPluginList"><code>getPluginList()</code></dt>
+<dd>
+
+<p>This accessor returns a reference to an array containing the names of the plugins currently loaded (in load order).</p>
+
+</dd>
 <dt id="getRunningBattle"><code>getRunningBattle()</code></dt>
 <dd>
 
@@ -1006,7 +1012,7 @@
 
 <dl>
 
-<dt id="addLobbyCommandHandler-handlers-priority-caller"><code>addLobbyCommandHandler(\%handlers,$priority=caller())</code></dt>
+<dt id="addLobbyCommandHandler-handlers-priority-caller-isPreCallback"><code>addLobbyCommandHandler(\%handlers,$priority=caller(),$isPreCallback)</code></dt>
 <dd>
 
 <p>This function allows plugins to set up their own handlers for Spring lobby commands received by SPADS from lobby server.</p>
@@ -1014,6 +1020,8 @@
 <p><code>\%handlers</code> is a reference to a hash which contains the handlers to be added: each entry associates a lobby command (in uppercase) to a handler function implemented by the plugin. For example, with <code>{ JOINBATTLEREQUEST =&gt; \&amp;hLobbyJoinBattleRequest }</code>, the plugin has to implement the function <code>hLobbyJoinBattleRequest</code>. The parameters passed to the handlers are the command tokens: the command name followed by command parameters. Refer to <a href="http://springrts.com/dl/LobbyProtocol/ProtocolDescription.html">Spring lobby protocol specifications</a> for more information.</p>
 
 <p><code>$priority</code> is the priority of the handlers. Lowest priority number actually means higher priority. If not provided, the plugin name is used as priority, which means it is executed after handlers having priority &lt; 1000, and before handlers having priority &gt; 1000. Usually you don&#39;t need to provide priority, unless you use data managed by other handlers.</p>
+
+<p><code>$isPreCallback</code> specifies whether the command handlers must be called before or after the lobby interface module handlers. If this parameter is set to a true value, the command handlers will be called before the lobby interface module handlers. If this parameter is not provided or set to a false value, the command handlers will be called after the lobby interface module handlers.</p>
 
 </dd>
 <dt id="addSpadsCommandHandler-handlers-replace-0"><code>addSpadsCommandHandler(\%handlers,$replace=0)</code></dt>
@@ -1046,7 +1054,7 @@
 <p><code>$priority</code> is the priority of the handlers. Lowest priority number actually means higher priority. If not provided, the plugin name is used as priority, which means it is executed after handlers having priority &lt; 1000, and before handlers having priority &gt; 1000. Usually you don&#39;t need to provide priority, unless you use data managed by other handlers.</p>
 
 </dd>
-<dt id="removeLobbyCommandHandler-commands-priority-caller"><code>removeLobbyCommandHandler(\@commands,$priority=caller())</code></dt>
+<dt id="removeLobbyCommandHandler-commands-priority-caller-isPreCallback"><code>removeLobbyCommandHandler(\@commands,$priority=caller(),$isPreCallback)</code></dt>
 <dd>
 
 <p>This function must be called by plugins which added lobby command handlers previously using <code>addLobbyCommandHandler</code> function, when these handlers are no longer required (for example in the <code>onUnload</code> callback, when the plugin is unloaded).</p>
@@ -1054,6 +1062,8 @@
 <p><code>\@commands</code> is a reference to an array containing the lobby command names (in uppercase) for which the handlers must be removed.</p>
 
 <p><code>$priority</code> is the priority of the handlers to remove. It must be the same as the priority used when adding the handlers. If not provided, the plugin name is used as priority. Usually you don&#39;t need to provide priority, unless you use data managed by other handlers.</p>
+
+<p><code>$isPreCallback</code> specifies the type of command handlers to remove (must match the value used for the <code>addLobbyCommandHandler</code> function call for these handlers)</p>
 
 </dd>
 <dt id="removeSpadsCommandHandler-commands"><code>removeSpadsCommandHandler(\@commands)</code></dt>
@@ -1456,6 +1466,10 @@
 
 </dd>
 <dt id="plugins"><code>%::plugins</code></dt>
+<dd>
+
+</dd>
+<dt id="pluginsOrder"><code>@::pluginsOrder</code></dt>
 <dd>
 
 </dd>

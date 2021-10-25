@@ -22,9 +22,9 @@ use File::Spec::Functions qw'catdir';
 use List::Util qw'any none';
 
 use Exporter 'import';
-@EXPORT=qw/$spadsVersion $spadsDir loadPythonPlugin get_flag fix_string getLobbyState getSpringPid getSpringServerType getTimestamps getRunningBattle getConfMacros getCurrentVote getPlugin addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess forkCall removeProcessCallback createDetachedProcess addTimer removeTimer addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog updateSetting secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives/;
+@EXPORT=qw/$spadsVersion $spadsDir loadPythonPlugin get_flag fix_string getLobbyState getSpringPid getSpringServerType getTimestamps getRunningBattle getConfMacros getCurrentVote getPlugin getPluginList addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess forkCall removeProcessCallback createDetachedProcess addTimer removeTimer addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog updateSetting secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives/;
 
-my $apiVersion='0.30';
+my $apiVersion='0.31';
 
 our $spadsVersion=$::spadsVer;
 our $spadsDir=$::cwd;
@@ -203,16 +203,24 @@ sub getPluginConf {
   return $::spads->{pluginsConf}->{$plugin}->{conf} if(exists $::spads->{pluginsConf}->{$plugin});
 }
 
+sub getPluginList {
+  return \@::pluginsOrder;
+}
+
 ################################
 # Handlers management
 ################################
 
 sub addLobbyCommandHandler {
-  my ($p_handlers,$priority)=@_;
+  my ($p_handlers,$priority,$isPreCallback)=@_;
   my $plugin=getCallerPlugin();
   map {$_=SimpleEvent::encapsulateCallback($_,$plugin) unless(ref $_ eq 'CODE')} (values %{$p_handlers});
   $priority//=$plugin;
-  $::lobby->addCallbacks($p_handlers,0,$priority);
+  if($isPreCallback) {
+    $::lobby->addPreCallbacks($p_handlers,$priority);
+  }else{
+    $::lobby->addCallbacks($p_handlers,0,$priority);
+  }
 }
 
 sub addSpadsCommandHandler {
@@ -239,9 +247,13 @@ sub addSpringCommandHandler {
 }
 
 sub removeLobbyCommandHandler {
-  my ($p_commands,$priority)=@_;
+  my ($p_commands,$priority,$isPreCallback)=@_;
   $priority//=getCallerPlugin();
-  $::lobby->removeCallbacks($p_commands,$priority);
+  if($isPreCallback) {
+    $::lobby->removePreCallbacks($p_commands,$priority);
+  }else{
+    $::lobby->removeCallbacks($p_commands,$priority);
+  }
 }
 
 sub removeSpadsCommandHandler {
@@ -1624,6 +1636,11 @@ This accessor returns an integer describing current lobby state (C<0>: not
 connected, C<1>: connecting, C<2>: connected, C<3>: just logged in, C<4>:
 initial lobby data received, C<5>: opening battle, C<6>: battle opened)
 
+=item C<getPluginList()>
+
+This accessor returns a reference to an array containing the names of the
+plugins currently loaded (in load order).
+
 =item C<getRunningBattle()>
 
 This accessor returns a reference to a hash representing the state of the battle
@@ -1679,7 +1696,7 @@ plugin settings names as keys and plugin settings values as values.
 
 =over 2
 
-=item C<addLobbyCommandHandler(\%handlers,$priority=caller())>
+=item C<addLobbyCommandHandler(\%handlers,$priority=caller(),$isPreCallback)>
 
 This function allows plugins to set up their own handlers for Spring lobby
 commands received by SPADS from lobby server.
@@ -1698,6 +1715,12 @@ means higher priority. If not provided, the plugin name is used as priority,
 which means it is executed after handlers having priority < 1000, and before
 handlers having priority > 1000. Usually you don't need to provide priority,
 unless you use data managed by other handlers.
+
+C<$isPreCallback> specifies whether the command handlers must be called before
+or after the lobby interface module handlers. If this parameter is set to a true
+value, the command handlers will be called before the lobby interface module
+handlers. If this parameter is not provided or set to a false value, the command
+handlers will be called after the lobby interface module handlers.
 
 =item C<addSpadsCommandHandler(\%handlers,$replace=0)>
 
@@ -1753,7 +1776,7 @@ which means it is executed after handlers having priority < 1000, and before
 handlers having priority > 1000. Usually you don't need to provide priority,
 unless you use data managed by other handlers.
 
-=item C<removeLobbyCommandHandler(\@commands,$priority=caller())>
+=item C<removeLobbyCommandHandler(\@commands,$priority=caller(),$isPreCallback)>
 
 This function must be called by plugins which added lobby command handlers
 previously using C<addLobbyCommandHandler> function, when these handlers are no
@@ -1767,6 +1790,10 @@ C<$priority> is the priority of the handlers to remove. It must be the same as
 the priority used when adding the handlers. If not provided, the plugin name is
 used as priority. Usually you don't need to provide priority, unless you use
 data managed by other handlers.
+
+C<$isPreCallback> specifies the type of command handlers to remove (must match
+the value used for the C<addLobbyCommandHandler> function call for these
+handlers)
 
 =item C<removeSpadsCommandHandler(\@commands)>
 
@@ -2163,6 +2190,8 @@ recommended to use the accessors from the API instead:
 =item C<$::p_runningBattle>
 
 =item C<%::plugins>
+
+=item C<@::pluginsOrder>
 
 =item C<$::spads>
 
