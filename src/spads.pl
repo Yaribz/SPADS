@@ -29,6 +29,7 @@ use File::Copy;
 use File::Spec::Functions qw'catfile file_name_is_absolute';
 use FindBin;
 use IPC::Cmd 'can_run';
+use JSON::PP;
 use List::Util qw'first shuffle reduce';
 use MIME::Base64;
 use POSIX qw'ceil uname';
@@ -53,7 +54,7 @@ sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.45';
+our $spadsVer='0.12.46';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -216,6 +217,11 @@ our %spadsHandlers = (
   whois => \&hWhois,
   '#skill' => \&hSkill );
 
+our %ctcHandlers = ( getSettings => \&hCtcGetSettings,
+                     status => \&hCtcStatus );
+our %ctcCmdRights = ( getSettings => 'list',
+                      status => 'status');
+
 my %alerts=('UPD-001' => 'Unable to check for SPADS update',
             'UPD-002' => 'Major SPADS update available',
             'UPD-003' => 'Unable to apply SPADS update',
@@ -237,6 +243,25 @@ my %rankTrueSkill=(0 => 20,
                    5 => 26,
                    6 => 28,
                    7 => 30);
+
+our %JSONRPC_ERRORS = ( RATE_LIMIT_EXCEEDED => -1,
+                        INSUFFICIENT_PRIVILEGES => -2,
+                        UNKNOWN_ERROR => -3,
+                        PARSE_ERROR => -32700,
+                        INVALID_REQUEST => -32600,
+                        METHOD_NOT_FOUND => -32601,
+                        INVALID_PARAMS => -32602,
+                        INTERNAL_ERROR => -32603,
+                        SERVER_ERROR => -32000 );
+my %JSONRPC_ERRORMSGS = ( -1 => 'Rate limit exceeded',
+                          -2 => 'Insufficient privileges',
+                          -3 => 'Unknown error',
+                          -32700 => 'Parse error',
+                          -32600 => 'Invalid request',
+                          -32601 => 'Method not found',
+                          -32602 => 'Invalid params',
+                          -32603 => 'Internal error' );
+map {$JSONRPC_ERRORMSGS{$_}='Server error'} (-32099..-32000);
 
 # Basic checks ################################################################
 
@@ -466,6 +491,9 @@ my %autoManagedSpringData=(mode => 'off');
 my $failedSpringInstallVersion;
 my %prefCache;
 my %prefCacheTs;
+my %lastRctcCmds;
+my %ignoredRctcUsers;
+my %pendingRctcJsonRpcChunks;
 
 my $lobbySimpleLog=SimpleLog->new(logFiles => [$conf{logDir}."/spads.log",''],
                                   logLevels => [$conf{lobbyInterfaceLogLevel},3],
@@ -2533,7 +2561,7 @@ sub sayPrivate {
   my $p_messages=splitMsg($msg,$conf{maxChatMessageLength}-12-length($user));
   foreach my $mes (@{$p_messages}) {
     queueLobbyCommand(["SAYPRIVATE",$user,$mes]);
-    logMsg("pv_$user","<$conf{lobbyLogin}> $mes") if($conf{logPvChat} && $user ne $gdrLobbyBot && $user ne $sldbLobbyBot);
+    logMsg("pv_$user","<$conf{lobbyLogin}> $mes") if($conf{logPvChat} && $user ne $gdrLobbyBot && $user ne $sldbLobbyBot && $mes !~ /^!#/);
   }
 }
 
@@ -3044,6 +3072,188 @@ sub executeCommand {
 
 }
 
+sub handleRctcJsonRpcChunks {
+  my ($user,$chunkIndicator,$jsonString)=@_;
+  if($chunkIndicator ne '') {
+    $chunkIndicator =~ /^\((\d+)\/(\d+)\)$/;
+    my ($currentChunk,$lastChunk)=($1,$2);
+    if($currentChunk == 0 || $lastChunk == 0) {
+      slog("Ignoring invalid JSONRPC chunk from $user (invalid chunk indicator: $currentChunk/$lastChunk)",5);
+      delete $pendingRctcJsonRpcChunks{$user};
+      return;
+    }
+    if($currentChunk == 1) {
+      if($lastChunk != 1) {
+        $pendingRctcJsonRpcChunks{$user} = { data => $jsonString,
+                                          nextChunk => 2,
+                                          lastChunk => $lastChunk };
+        return;
+      }
+    }else{
+      if(! exists $pendingRctcJsonRpcChunks{$user}) {
+        slog("Ignoring invalid JSONRPC chunk from $user (continuation of an unknown request, chunk indicator: $currentChunk/$lastChunk",5);
+        return;
+      }
+      if($currentChunk != $pendingRctcJsonRpcChunks{$user}{nextChunk} || $lastChunk != $pendingRctcJsonRpcChunks{$user}{lastChunk}) {
+        slog("Ignoring invalid JSONRPC chunk from $user (inconsistent chunk indicator: $currentChunk/$lastChunk, expected $pendingRctcJsonRpcChunks{$user}{nextChunk}/$pendingRctcJsonRpcChunks{$user}{lastChunk})",5);
+        delete $pendingRctcJsonRpcChunks{$user};
+        return;
+      }
+      $pendingRctcJsonRpcChunks{$user}{data}.=$jsonString;
+      if($currentChunk == $lastChunk) {
+        $jsonString=$pendingRctcJsonRpcChunks{$user}{data};
+        delete $pendingRctcJsonRpcChunks{$user};
+      }else{
+        $pendingRctcJsonRpcChunks{$user}{nextChunk}++;
+        return;
+      }
+    }
+  }
+  delete $pendingRctcJsonRpcChunks{$user};
+
+  handleRctcJsonRpcRequest($user,$jsonString);
+}
+
+sub handleRctcJsonRpcRequest {
+  my ($user,$jsonString)=@_;
+  
+  my $floodCheckStatus=checkRctcCmdFlood($user);
+  return if($floodCheckStatus > 1);
+
+  my $jsonResponseString=processJsonRpcRequest('rctc',$user,$jsonString,$floodCheckStatus);
+  return unless(defined $jsonResponseString);
+
+  my $r_jsonResponseStrings=splitMsg($jsonResponseString,$conf{maxChatMessageLength}-length($user)-31);
+  my $nbChunks=@{$r_jsonResponseStrings};
+  if($nbChunks==1) {
+    sayPrivate($user,'!#JSONRPC '.$r_jsonResponseStrings->[0]);
+  }else{
+    for my $chunkNb (1..$nbChunks) {
+      sayPrivate($user,"!#JSONRPC($chunkNb/$nbChunks) ".$r_jsonResponseStrings->[$chunkNb-1]);
+    }
+  }
+}
+
+sub processJsonRpcRequest {
+  my ($source,$r_origin,$jsonString,$floodCheckStatus)=@_;
+
+  my ($user,$origin,$level);
+  if($source eq 'rctc') {
+    ($user,$origin)=($r_origin) x 2;
+  }else{
+    $r_origin->{user}//='UNAUTHENTICATED USER';
+    $r_origin->{accessLevel}//=0;
+    ($user,$level)=@{$r_origin}{qw'user accessLevel'};
+    $origin="$user [$r_origin->{ipAddr}]";
+  }
+  
+  my $r_jsonReq;
+  eval {
+    $r_jsonReq=decode_json($jsonString);
+  };
+
+  my ($errorCode,$errorData,$requestId);
+  if(hasEvalError()) {
+    $errorData=$@;
+    $errorData=$1 if($errorData =~ /^(.+) at [^\s]+ line \d+\.$/);
+    slog("Received an invalid JSONRPC request from $origin (JSON syntax error: $errorData)",5);
+    $errorCode='PARSE_ERROR';
+  }elsif($errorData=checkJsonRpcRequest($r_jsonReq)) {
+    slog("Received an invalid JSONRPC request from $origin ($errorData)",5);
+    $errorCode='INVALID_REQUEST';
+    $requestId=$r_jsonReq->{id} if(ref $r_jsonReq eq 'HASH' && exists $r_jsonReq->{id} && ref $r_jsonReq->{id} eq '');
+  }else{
+    $requestId=$r_jsonReq->{id} if(exists $r_jsonReq->{id});
+  }
+
+  return encodeJsonRpcError('RATE_LIMIT_EXCEEDED',$requestId) if($floodCheckStatus);
+  return encodeJsonRpcError($errorCode,$requestId,$errorData) if(defined $errorCode);
+  
+  my $cmd=$r_jsonReq->{method};
+  
+  return encodeJsonRpcError('METHOD_NOT_FOUND',$requestId) unless(exists $ctcHandlers{$cmd});
+  
+  my $requiredLevel=$ctcCmdRights{$cmd};
+  if(defined $requiredLevel && $requiredLevel !~ /^\d+$/) {
+    my $lcEquivCmd=lc($requiredLevel);
+    if(exists $spads->{commands}{$lcEquivCmd}) {
+      my $r_levels=getCommandLevels('pv',$user,$lcEquivCmd);
+      if(defined $r_levels->{directLevel} && $r_levels->{directLevel} ne '') {
+        $requiredLevel=$r_levels->{directLevel};
+      }else{
+        $requiredLevel=undef;
+      }
+    }else{
+      $requiredLevel=undef;
+    }
+  }
+
+  if($requiredLevel) {
+    $level//=getUserAccessLevel($user);
+    if(%bosses && ! exists $bosses{$user}) {
+      my $r_bossLevels=$spads->getCommandLevels('boss','battle','player','stopped');
+      $level=0 unless(defined $r_bossLevels->{directLevel} && $r_bossLevels->{directLevel} ne '' && $level >= $r_bossLevels->{directLevel});
+    }
+  }
+
+  return encodeJsonRpcError('INSUFFICIENT_PRIVILEGES',$requestId) if(! defined $requiredLevel || ($requiredLevel > 0 && $level < $requiredLevel));
+  
+  my ($r_result,$r_error)=&{$ctcHandlers{$cmd}}($source,$source eq 'rctc' ? $origin : $r_origin,$r_jsonReq->{params}); #grabu
+  if(defined $r_error) {
+    my $r_jsonRpcError = ref $r_error ? createJsonRpcError(@{$r_error}{qw'code message data'}) : createJsonRpcError($r_error);
+    return encodeJsonRpcResponse('error',$r_jsonRpcError,$requestId);
+  }elsif(defined $r_result) {
+    return encodeJsonRpcResult($r_result,$requestId);
+  }
+  return undef;
+}
+
+sub checkJsonRpcRequest {
+  my $r_jsonReq=shift;
+  return 'Request has invalid JSON type' unless(ref $r_jsonReq eq 'HASH');
+  return 'Missing or invalid value for "jsonrpc" member' unless(defined $r_jsonReq->{jsonrpc} && ref $r_jsonReq->{jsonrpc} eq '' && $r_jsonReq->{jsonrpc} eq '2.0');
+  return 'Missing or invalid value for "method" member' unless(defined $r_jsonReq->{method} && ref $r_jsonReq->{method} eq '' && $r_jsonReq->{method} ne '');
+  return 'Invalid type for "params" member' unless(! exists $r_jsonReq->{params} || (any {ref $r_jsonReq->{params} eq $_} (qw'ARRAY HASH')));
+  return 'Invalid type for "id" member' unless(! exists $r_jsonReq->{id} || ref $r_jsonReq->{id} eq '');
+  return 'Invalid members in request' unless(all {my $k=$_; any {$k eq $_} (qw'jsonrpc method params id')} (keys %{$r_jsonReq}));
+  return undef;
+}
+
+sub createJsonRpcError {
+  my ($code,$message,$data)=@_;
+  my %jsonError;
+  if(defined $code) {
+    if($code =~ /^\-?\d+$/) {
+      $jsonError{code}=$code;
+    }elsif(exists $JSONRPC_ERRORS{$code}) {
+      $jsonError{code}=$JSONRPC_ERRORS{$code};
+    }else{
+      slog("Invalid JSONRPC error \"$code\" requested, creating SERVER_ERROR instead",1);
+      $jsonError{code}=$JSONRPC_ERRORS{SERVER_ERROR};
+    }
+  }else{
+    $jsonError{code}=$JSONRPC_ERRORS{UNKNOWN_ERROR}
+  }
+  $jsonError{message}=$message//$JSONRPC_ERRORMSGS{$jsonError{code}}//'Unknown error';
+  $jsonError{data}=$data if(defined $data);
+  return \%jsonError;
+}
+
+sub encodeJsonRpcError {
+  my ($code,$id,$data,$message)=@_;
+  return encodeJsonRpcResponse('error',createJsonRpcError($code,$message,$data),$id);
+}
+
+sub encodeJsonRpcResult {
+  my ($result,$id)=@_;
+  return encodeJsonRpcResponse('result',$result,$id);
+}
+
+sub encodeJsonRpcResponse {
+  my ($type,$response,$id)=@_;
+  return encode_json({jsonrpc => '2.0', $type => $response, id => $id});
+}
+
 sub invalidSyntax {
   my ($user,$cmd,$reason)=@_;
   $reason//='';
@@ -3405,6 +3615,9 @@ sub checkAntiFloodDataPurge {
     }
     foreach my $u (keys %ignoredUsers) {
       delete $ignoredUsers{$u} if(time > $ignoredUsers{$u});
+    }
+    foreach my $u (keys %ignoredRctcUsers) {
+      delete $ignoredRctcUsers{$u} if(time > $ignoredRctcUsers{$u});
     }
   }
 }
@@ -5465,13 +5678,13 @@ sub checkKickFlood {
 sub checkCmdFlood {
   my $user=shift;
 
+  return 0 if(getUserAccessLevel($user) >= $conf{floodImmuneLevel} || $user eq $sldbLobbyBot);
+
   my $timestamp=time;
   $lastCmds{$user}={} unless(exists $lastCmds{$user});
   $lastCmds{$user}->{$timestamp}=0 unless(exists $lastCmds{$user}->{$timestamp});
   $lastCmds{$user}->{$timestamp}++;
   
-  return 0 if(getUserAccessLevel($user) >= $conf{floodImmuneLevel} || $user eq $sldbLobbyBot);
-
   if(exists $ignoredUsers{$user}) {
     if(time > $ignoredUsers{$user}) {
       delete $ignoredUsers{$user};
@@ -5494,6 +5707,46 @@ sub checkCmdFlood {
   if($autoIgnoreData[0] && $received >= $autoIgnoreData[0]) {
     broadcastMsg("Ignoring $user for $autoIgnoreData[2] minute(s) (command flood protection)");
     $ignoredUsers{$user}=time+($autoIgnoreData[2] * 60);
+    return 1;
+  }
+  
+  return 0;
+}
+
+sub checkRctcCmdFlood {
+  my $user=shift;
+
+  return 0 if(getUserAccessLevel($user) >= $conf{floodImmuneLevel});
+
+  my $currentTs=time;
+  if(exists $lastRctcCmds{$user}{$currentTs}) {
+    $lastRctcCmds{$user}{$currentTs}++;
+  }else{
+    $lastRctcCmds{$user}{$currentTs}=1;
+  }
+  
+  if(exists $ignoredRctcUsers{$user}) {
+    if(time > $ignoredRctcUsers{$user}) {
+      delete $ignoredRctcUsers{$user};
+    }else{
+      return 2;
+    }
+  }
+
+  my @autoIgnoreData=split(/;/,$conf{cmdFloodAutoIgnore});
+  return unless($autoIgnoreData[0]);
+
+  my $received=0;
+  foreach my $ts (keys %{$lastRctcCmds{$user}}) {
+    if($currentTs - $ts > $autoIgnoreData[1]) {
+      delete $lastRctcCmds{$user}{$ts};
+    }else{
+      $received+=$lastRctcCmds{$user}{$ts};
+    }
+  }
+
+  if($received >= $autoIgnoreData[0]) {
+    $ignoredRctcUsers{$user}=time+($autoIgnoreData[2] * 60);
     return 1;
   }
   
@@ -12479,6 +12732,87 @@ sub hSkill {
   }
 }
 
+# SPADS JSONRPC commands handlers #############################################
+
+sub hCtcGetSettings {
+  my ($source,$origin,$r_params)=@_;
+  
+  return (undef,'INVALID_PARAMS') unless(ref $r_params eq 'ARRAY');
+  
+  my @forbiddenSettings=qw'commandsFile endGameCommand endGameCommandEnv';
+  
+  my %result;
+  if(@{$r_params} == 1 && $r_params->[0] eq '*') {
+    foreach my $set (keys %{$spads->{values}}) {
+      $result{$set}=$conf{$set} unless(any {$set eq $_} @forbiddenSettings);
+    }
+    return (\%result,undef);
+  }
+  
+  my @invalidSettings;
+  foreach my $set (@{$r_params}) {
+    if(exists $spads->{values}{$set} && (none {$set eq $_} @forbiddenSettings)) {
+      $result{$set}=$conf{$set};
+    }else{
+      push(@invalidSettings,$set);
+    }
+  }
+  if(@invalidSettings) {
+    return (undef,{code => 'INVALID_PARAMS', data => 'Invalid setting'.(@invalidSettings>1?'s':'').' : '.join(', ',@invalidSettings)});
+  }
+  return (\%result,undef);
+}
+
+sub hCtcStatus {
+  my ($source,$origin,$r_params)=@_;
+  
+  return (undef,'INVALID_PARAMS') unless(ref $r_params eq 'ARRAY' && @{$r_params} == 1);
+  
+  my $mode=$r_params->[0];
+  return (undef,'INVALID_PARAMS') unless(defined $mode && ref $mode eq '');
+
+  my $battleLobbyStatusRequested = (any {$mode eq $_} (qw'battle full')) ? 1 : 0;
+  my $gameStatusRequested = (any {$mode eq $_} (qw'game full')) ? 1 : 0;
+  
+  return (undef,'INVALID_PARAMS') unless($battleLobbyStatusRequested || $gameStatusRequested);
+
+  my $r_user={accessLevel => $source eq 'rctc' ? getUserAccessLevel($origin) : 0};
+  
+  my %result;
+  if($battleLobbyStatusRequested) {
+    my ($r_clientsStatusBattle,undef,$r_globalStatusBattle)=getBattleLobbyStatus($r_user);
+    if(defined $r_globalStatusBattle) {
+      foreach my $r_client (@{$r_clientsStatusBattle}) {
+        if($r_client->{Name} =~ / \(bot\)$/) {
+          $r_client->{Version}=delete $r_client->{ID};
+        }else{
+          $r_client->{Country}=$lobby->{users}{$r_client->{Name}}{country};
+        }
+      }
+    }else{
+      $r_clientsStatusBattle=[];
+    }
+    $result{battleLobby} = { clients => $r_clientsStatusBattle, status => $r_globalStatusBattle };
+  }
+  if($gameStatusRequested) {
+    my ($r_clientsStatusGame,undef,$r_globalStatusGame)=getGameStatus($r_user);
+    if(defined $r_globalStatusGame) {
+      foreach my $r_client (@{$r_clientsStatusGame}) {
+        next if($r_client->{Name} =~ / \(bot\)$/ || ! exists $p_runningBattle->{users}{$r_client->{Name}});
+        $r_client->{ID}=$p_runningBattle->{users}{$r_client->{Name}}{accountId};
+        $r_client->{Rank}=$p_runningBattle->{users}{$r_client->{Name}}{status}{rank};
+        $r_client->{Skill}=$p_runningBattle->{scriptTags}{'game/players/'.lc($r_client->{Name}).'/skill'};
+        $r_client->{Country}=$p_runningBattle->{users}{$r_client->{Name}}{country};
+      }
+    }else{
+      $r_clientsStatusGame=[];
+    }
+    $result{game} = { clients => $r_clientsStatusGame, status => $r_globalStatusGame };
+  }
+
+  return (\%result,undef);
+}
+
 # Lobby interface callbacks ###################################################
 
 sub cbLobbyConnect {
@@ -12621,6 +12955,7 @@ sub cbLobbyDisconnect {
     }
   }
   %currentVote=();
+  %pendingRctcJsonRpcChunks=();
   foreach my $joinedChan (keys %{$lobby->{channels}}) {
     logMsg("channel_$joinedChan","=== $conf{lobbyLogin} left ===") if($conf{logChanJoinLeave});
   }
@@ -13285,6 +13620,7 @@ sub cbRemoveUser {
   my (undef,$user)=@_;
   delete $alertedUsers{$user};
   delete $authenticatedUsers{$user};
+  delete $pendingRctcJsonRpcChunks{$user};
   if($user eq $sldbLobbyBot) {
     slog("TrueSkill service unavailable!",2);
   }
@@ -13322,9 +13658,14 @@ sub cbSaidPrivate {
   foreach my $pluginName (@pluginsOrder) {
     return if($plugins{$pluginName}->can('onPrivateMsg') && $plugins{$pluginName}->onPrivateMsg($user,$msg) == 1);
   }
-  logMsg("pv_$user","<$user> $msg") if($conf{logPvChat} && $user ne $sldbLobbyBot);
+  logMsg("pv_$user","<$user> $msg") if($conf{logPvChat} && $user ne $sldbLobbyBot && $msg !~ /^!#/);
   if($msg =~ /^!([\#\w].*)$/) {
-    handleRequest("pv",$user,$1);
+    my $cmdMsg=$1;
+    if($cmdMsg =~ /^#JSONRPC((?:\(\d{1,3}\/\d{1,3}\))?) (.+)$/) {
+      handleRctcJsonRpcChunks($user,$1,$2);
+    }else{
+      handleRequest("pv",$user,$cmdMsg);
+    }
   }
 }
 

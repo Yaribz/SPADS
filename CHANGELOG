@@ -911,6 +911,8 @@ spads.pl:
 0.12.43: added experimental support of configurable supermajority (aka qualified majority) in vote system
 0.12.44: added experimental "awayVoteDelay" setting (configure the delay for automatic votes when players are in away mode, or disable the functionality)
 0.12.45: the loaded plugins list is now accessible from plugins
+0.12.46: add experimental support for RCTC (Relayed Client-To-Client) JSON-RPC protocol ("!#JSONRPC" commands sent in private messages)
+         new CTC (Client-To-Client) commands: "getSettings" and "status"
 
 SpadsConf.pm:
 ============
