@@ -2,7 +2,7 @@
 #
 # This program installs SPADS in current directory from remote repository.
 #
-# Copyright (C) 2008-2020  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2021  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.26 (2021/09/22)
+# Version 0.27 (2021/10/28)
 
 use strict;
 
@@ -29,17 +29,12 @@ use File::Path;
 use File::Spec;
 use FindBin;
 use HTTP::Tiny;
-use List::Util 'first';
+use List::Util qw'any all none notall';
 
 use lib $FindBin::Bin;
 
 use SimpleLog;
 use SpadsUpdater;
-
-sub any (&@) { my $c = shift; return defined first {&$c} @_; }
-sub all (&@) { my $c = shift; return ! defined first {! &$c} @_; }
-sub none (&@) { my $c = shift; return ! defined first {&$c} @_; }
-sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';

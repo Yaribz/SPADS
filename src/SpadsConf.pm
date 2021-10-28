@@ -27,7 +27,7 @@ use File::Basename;
 use File::Copy;
 use File::Spec;
 use FindBin;
-use List::Util 'first';
+use List::Util qw'any all none notall';
 use Storable qw'nstore retrieve dclone';
 use Symbol qw'delete_package';
 use Time::HiRes;
@@ -36,14 +36,9 @@ use constant LOCK_RE => LOCK_SH|LOCK_EX;
 
 use SimpleLog;
 
-sub any (&@) { my $c = shift; return defined first {&$c} @_; }
-sub all (&@) { my $c = shift; return ! defined first {! &$c} @_; }
-sub none (&@) { my $c = shift; return ! defined first {&$c} @_; }
-sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
-
 # Internal data ###############################################################
 
-my $moduleVersion='0.12.20';
+my $moduleVersion='0.12.21';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;

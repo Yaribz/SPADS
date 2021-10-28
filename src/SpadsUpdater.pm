@@ -1,6 +1,6 @@
 # Perl module used for Spads auto-updating functionnality
 #
-# Copyright (C) 2008-2020  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2021  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -28,18 +28,13 @@ use File::Spec::Functions qw'catdir catfile devnull';
 use FindBin;
 use HTTP::Tiny;
 use IO::Uncompress::Unzip qw'unzip $UnzipError';
-use List::Util qw'first max';
+use List::Util qw'any all none notall max';
 use Time::HiRes;
-
-sub any (&@) { my $c = shift; return defined first {&$c} @_; }
-sub all (&@) { my $c = shift; return ! defined first {! &$c} @_; }
-sub none (&@) { my $c = shift; return ! defined first {&$c} @_; }
-sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $archName=($win?'win':'linux').($Config{ptrsize} > 4 ? 64 : 32);
 
-my $moduleVersion='0.18';
+my $moduleVersion='0.19';
 
 my @constructorParams = qw'sLog repository release packages';
 my @optionalConstructorParams = qw'localDir springDir';

@@ -30,7 +30,7 @@ use File::Spec::Functions qw'catfile file_name_is_absolute';
 use FindBin;
 use IPC::Cmd 'can_run';
 use JSON::PP;
-use List::Util qw'first shuffle reduce';
+use List::Util qw'first any all none notall shuffle reduce';
 use MIME::Base64;
 use POSIX qw'ceil uname';
 use Storable qw'nfreeze dclone';
@@ -47,14 +47,10 @@ use SpadsUpdater;
 use SpringAutoHostInterface;
 use SpringLobbyInterface;
 
-sub any (&@) { my $c = shift; return defined first {&$c} @_; }
-sub all (&@) { my $c = shift; return ! defined first {! &$c} @_; }
-sub none (&@) { my $c = shift; return ! defined first {&$c} @_; }
-sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.46';
+our $spadsVer='0.12.47';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -3198,7 +3194,7 @@ sub processJsonRpcRequest {
 
   return encodeJsonRpcError('INSUFFICIENT_PRIVILEGES',$requestId) if(! defined $requiredLevel || ($requiredLevel > 0 && $level < $requiredLevel));
   
-  my ($r_result,$r_error)=&{$ctcHandlers{$cmd}}($source,$source eq 'rctc' ? $origin : $r_origin,$r_jsonReq->{params}); #grabu
+  my ($r_result,$r_error)=&{$ctcHandlers{$cmd}}($source,$source eq 'rctc' ? $origin : $r_origin,$r_jsonReq->{params});
   if(defined $r_error) {
     my $r_jsonRpcError = ref $r_error ? createJsonRpcError(@{$r_error}{qw'code message data'}) : createJsonRpcError($r_error);
     return encodeJsonRpcResponse('error',$r_jsonRpcError,$requestId);
@@ -12737,7 +12733,7 @@ sub hSkill {
 sub hCtcGetSettings {
   my ($source,$origin,$r_params)=@_;
   
-  return (undef,'INVALID_PARAMS') unless(ref $r_params eq 'ARRAY');
+  return (undef,'INVALID_PARAMS') unless(ref $r_params eq 'ARRAY' && @{$r_params} && (all {defined $_ && ref $_ eq ''} @{$r_params}));
   
   my @forbiddenSettings=qw'commandsFile endGameCommand endGameCommandEnv';
   

@@ -3,7 +3,7 @@
 # This program prints the default mod options of each Spring mod installed,
 # using the unitsync library.
 #
-# Copyright (C) 2008-2017  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2021  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -27,16 +27,11 @@ use File::Spec;
 use FileHandle;
 use FindBin;
 use Getopt::Long qw':config auto_version';
-use List::Util 'first';
+use List::Util qw'any all none notall';
 
 use lib $FindBin::Bin;
 
-sub any (&@) { my $c = shift; return defined first {&$c} @_; }
-sub all (&@) { my $c = shift; return ! defined first {! &$c} @_; }
-sub none (&@) { my $c = shift; return ! defined first {&$c} @_; }
-sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
-
-our $VERSION=0.6;
+our $VERSION=0.7;
 
 my %optionTypes = (
   0 => 'error',

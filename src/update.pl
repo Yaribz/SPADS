@@ -2,7 +2,7 @@
 #
 # This program update SPADS components in current directory from remote repository.
 #
-# Copyright (C) 2008-2019  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2021  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -18,22 +18,17 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.12 (2019/04/14)
+# Version 0.13 (2021/10/28)
 
 use strict;
 
 use FindBin;
-use List::Util 'first';
+use List::Util qw'any all none notall';
 
 use lib $FindBin::Bin;
 
 use SimpleLog;
 use SpadsUpdater;
-
-sub any (&@) { my $c = shift; return defined first {&$c} @_; }
-sub all (&@) { my $c = shift; return ! defined first {! &$c} @_; }
-sub none (&@) { my $c = shift; return ! defined first {&$c} @_; }
-sub notall (&@) { my $c = shift; return defined first {! &$c} @_; }
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
