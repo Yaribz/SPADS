@@ -50,7 +50,7 @@ use SpringLobbyInterface;
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.47';
+our $spadsVer='0.12.48';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -213,10 +213,9 @@ our %spadsHandlers = (
   whois => \&hWhois,
   '#skill' => \&hSkill );
 
-our %ctcHandlers = ( getSettings => \&hCtcGetSettings,
-                     status => \&hCtcStatus );
-our %ctcCmdRights = ( getSettings => 'list',
-                      status => 'status');
+our %apiHandlers = ( getSettings => \&hApiGetSettings,
+                     status => \&hApiStatus );
+our %apiCmdRights = ( getSettings => 'list' );
 
 my %alerts=('UPD-001' => 'Unable to check for SPADS update',
             'UPD-002' => 'Major SPADS update available',
@@ -487,9 +486,9 @@ my %autoManagedSpringData=(mode => 'off');
 my $failedSpringInstallVersion;
 my %prefCache;
 my %prefCacheTs;
-my %lastRctcCmds;
-my %ignoredRctcUsers;
-my %pendingRctcJsonRpcChunks;
+my %nbRelayedApiCalls;
+my %ignoredRelayedApiUsers;
+my %pendingRelayedJsonRpcChunks;
 
 my $lobbySimpleLog=SimpleLog->new(logFiles => [$conf{logDir}."/spads.log",''],
                                   logLevels => [$conf{lobbyInterfaceLogLevel},3],
@@ -3068,55 +3067,55 @@ sub executeCommand {
 
 }
 
-sub handleRctcJsonRpcChunks {
+sub handleRelayedJsonRpcChunk {
   my ($user,$chunkIndicator,$jsonString)=@_;
   if($chunkIndicator ne '') {
     $chunkIndicator =~ /^\((\d+)\/(\d+)\)$/;
     my ($currentChunk,$lastChunk)=($1,$2);
     if($currentChunk == 0 || $lastChunk == 0) {
       slog("Ignoring invalid JSONRPC chunk from $user (invalid chunk indicator: $currentChunk/$lastChunk)",5);
-      delete $pendingRctcJsonRpcChunks{$user};
+      delete $pendingRelayedJsonRpcChunks{$user};
       return;
     }
     if($currentChunk == 1) {
       if($lastChunk != 1) {
-        $pendingRctcJsonRpcChunks{$user} = { data => $jsonString,
-                                          nextChunk => 2,
-                                          lastChunk => $lastChunk };
+        $pendingRelayedJsonRpcChunks{$user} = { data => $jsonString,
+                                                nextChunk => 2,
+                                                lastChunk => $lastChunk };
         return;
       }
     }else{
-      if(! exists $pendingRctcJsonRpcChunks{$user}) {
+      if(! exists $pendingRelayedJsonRpcChunks{$user}) {
         slog("Ignoring invalid JSONRPC chunk from $user (continuation of an unknown request, chunk indicator: $currentChunk/$lastChunk",5);
         return;
       }
-      if($currentChunk != $pendingRctcJsonRpcChunks{$user}{nextChunk} || $lastChunk != $pendingRctcJsonRpcChunks{$user}{lastChunk}) {
-        slog("Ignoring invalid JSONRPC chunk from $user (inconsistent chunk indicator: $currentChunk/$lastChunk, expected $pendingRctcJsonRpcChunks{$user}{nextChunk}/$pendingRctcJsonRpcChunks{$user}{lastChunk})",5);
-        delete $pendingRctcJsonRpcChunks{$user};
+      if($currentChunk != $pendingRelayedJsonRpcChunks{$user}{nextChunk} || $lastChunk != $pendingRelayedJsonRpcChunks{$user}{lastChunk}) {
+        slog("Ignoring invalid JSONRPC chunk from $user (inconsistent chunk indicator: $currentChunk/$lastChunk, expected $pendingRelayedJsonRpcChunks{$user}{nextChunk}/$pendingRelayedJsonRpcChunks{$user}{lastChunk})",5);
+        delete $pendingRelayedJsonRpcChunks{$user};
         return;
       }
-      $pendingRctcJsonRpcChunks{$user}{data}.=$jsonString;
+      $pendingRelayedJsonRpcChunks{$user}{data}.=$jsonString;
       if($currentChunk == $lastChunk) {
-        $jsonString=$pendingRctcJsonRpcChunks{$user}{data};
-        delete $pendingRctcJsonRpcChunks{$user};
+        $jsonString=$pendingRelayedJsonRpcChunks{$user}{data};
+        delete $pendingRelayedJsonRpcChunks{$user};
       }else{
-        $pendingRctcJsonRpcChunks{$user}{nextChunk}++;
+        $pendingRelayedJsonRpcChunks{$user}{nextChunk}++;
         return;
       }
     }
   }
-  delete $pendingRctcJsonRpcChunks{$user};
+  delete $pendingRelayedJsonRpcChunks{$user};
 
-  handleRctcJsonRpcRequest($user,$jsonString);
+  handleRelayedJsonRpcRequest($user,$jsonString);
 }
 
-sub handleRctcJsonRpcRequest {
+sub handleRelayedJsonRpcRequest {
   my ($user,$jsonString)=@_;
   
-  my $floodCheckStatus=checkRctcCmdFlood($user);
+  my $floodCheckStatus=checkRelayedApiFlood($user);
   return if($floodCheckStatus > 1);
 
-  my $jsonResponseString=processJsonRpcRequest('rctc',$user,$jsonString,$floodCheckStatus);
+  my $jsonResponseString=processJsonRpcRequest({source => 'pv',user => $user},$jsonString,$floodCheckStatus);
   return unless(defined $jsonResponseString);
 
   my $r_jsonResponseStrings=splitMsg($jsonResponseString,$conf{maxChatMessageLength}-length($user)-31);
@@ -3131,17 +3130,16 @@ sub handleRctcJsonRpcRequest {
 }
 
 sub processJsonRpcRequest {
-  my ($source,$r_origin,$jsonString,$floodCheckStatus)=@_;
+  my ($r_origin,$jsonString,$floodCheckStatus)=@_;
 
-  my ($user,$origin,$level);
-  if($source eq 'rctc') {
-    ($user,$origin)=($r_origin) x 2;
-  }else{
-    $r_origin->{user}//='UNAUTHENTICATED USER';
+  $r_origin->{user}//='UNAUTHENTICATED USER';
+  if($r_origin->{source} eq 'tcp') {
     $r_origin->{accessLevel}//=0;
-    ($user,$level)=@{$r_origin}{qw'user accessLevel'};
-    $origin="$user [$r_origin->{ipAddr}]";
+    $r_origin->{origin}="$r_origin->{user} [$r_origin->{ipAddr}:$r_origin->{tcpPort}]";
+  }else{
+    $r_origin->{origin}=$r_origin->{user};
   }
+  my ($user,$origin,$level)=@{$r_origin}{qw'user origin accessLevel'};
   
   my $r_jsonReq;
   eval {
@@ -3167,9 +3165,9 @@ sub processJsonRpcRequest {
   
   my $cmd=$r_jsonReq->{method};
   
-  return encodeJsonRpcError('METHOD_NOT_FOUND',$requestId) unless(exists $ctcHandlers{$cmd});
+  return encodeJsonRpcError('METHOD_NOT_FOUND',$requestId) unless(exists $apiHandlers{$cmd});
   
-  my $requiredLevel=$ctcCmdRights{$cmd};
+  my $requiredLevel=$apiCmdRights{$cmd}//$cmd;
   if(defined $requiredLevel && $requiredLevel !~ /^\d+$/) {
     my $lcEquivCmd=lc($requiredLevel);
     if(exists $spads->{commands}{$lcEquivCmd}) {
@@ -3194,7 +3192,8 @@ sub processJsonRpcRequest {
 
   return encodeJsonRpcError('INSUFFICIENT_PRIVILEGES',$requestId) if(! defined $requiredLevel || ($requiredLevel > 0 && $level < $requiredLevel));
   
-  my ($r_result,$r_error)=&{$ctcHandlers{$cmd}}($source,$source eq 'rctc' ? $origin : $r_origin,$r_jsonReq->{params});
+  $r_origin->{protocol}='jsonrpc';
+  my ($r_result,$r_error)=&{$apiHandlers{$cmd}}($r_origin,$r_jsonReq->{params});
   if(defined $r_error) {
     my $r_jsonRpcError = ref $r_error ? createJsonRpcError(@{$r_error}{qw'code message data'}) : createJsonRpcError($r_error);
     return encodeJsonRpcResponse('error',$r_jsonRpcError,$requestId);
@@ -3248,6 +3247,14 @@ sub encodeJsonRpcResult {
 sub encodeJsonRpcResponse {
   my ($type,$response,$id)=@_;
   return encode_json({jsonrpc => '2.0', $type => $response, id => $id});
+}
+
+sub encodeJsonRpcRequest {
+  my ($method,$r_params,$id)=@_;
+  my %jsonReq=(jsonrpc => '2.0', method => $method);
+  $jsonReq{params}=$r_params if(defined $r_params);
+  $jsonReq{id}=$id if(defined $id);
+  return encode_json(\%jsonReq);
 }
 
 sub invalidSyntax {
@@ -3612,8 +3619,8 @@ sub checkAntiFloodDataPurge {
     foreach my $u (keys %ignoredUsers) {
       delete $ignoredUsers{$u} if(time > $ignoredUsers{$u});
     }
-    foreach my $u (keys %ignoredRctcUsers) {
-      delete $ignoredRctcUsers{$u} if(time > $ignoredRctcUsers{$u});
+    foreach my $u (keys %ignoredRelayedApiUsers) {
+      delete $ignoredRelayedApiUsers{$u} if(time > $ignoredRelayedApiUsers{$u});
     }
   }
 }
@@ -5709,21 +5716,21 @@ sub checkCmdFlood {
   return 0;
 }
 
-sub checkRctcCmdFlood {
+sub checkRelayedApiFlood {
   my $user=shift;
 
   return 0 if(getUserAccessLevel($user) >= $conf{floodImmuneLevel});
 
   my $currentTs=time;
-  if(exists $lastRctcCmds{$user}{$currentTs}) {
-    $lastRctcCmds{$user}{$currentTs}++;
+  if(exists $nbRelayedApiCalls{$user}{$currentTs}) {
+    $nbRelayedApiCalls{$user}{$currentTs}++;
   }else{
-    $lastRctcCmds{$user}{$currentTs}=1;
+    $nbRelayedApiCalls{$user}{$currentTs}=1;
   }
   
-  if(exists $ignoredRctcUsers{$user}) {
-    if(time > $ignoredRctcUsers{$user}) {
-      delete $ignoredRctcUsers{$user};
+  if(exists $ignoredRelayedApiUsers{$user}) {
+    if(time > $ignoredRelayedApiUsers{$user}) {
+      delete $ignoredRelayedApiUsers{$user};
     }else{
       return 2;
     }
@@ -5733,16 +5740,16 @@ sub checkRctcCmdFlood {
   return unless($autoIgnoreData[0]);
 
   my $received=0;
-  foreach my $ts (keys %{$lastRctcCmds{$user}}) {
+  foreach my $ts (keys %{$nbRelayedApiCalls{$user}}) {
     if($currentTs - $ts > $autoIgnoreData[1]) {
-      delete $lastRctcCmds{$user}{$ts};
+      delete $nbRelayedApiCalls{$user}{$ts};
     }else{
-      $received+=$lastRctcCmds{$user}{$ts};
+      $received+=$nbRelayedApiCalls{$user}{$ts};
     }
   }
 
   if($received >= $autoIgnoreData[0]) {
-    $ignoredRctcUsers{$user}=time+($autoIgnoreData[2] * 60);
+    $ignoredRelayedApiUsers{$user}=time+($autoIgnoreData[2] * 60);
     return 1;
   }
   
@@ -12730,8 +12737,8 @@ sub hSkill {
 
 # SPADS JSONRPC commands handlers #############################################
 
-sub hCtcGetSettings {
-  my ($source,$origin,$r_params)=@_;
+sub hApiGetSettings {
+  my ($r_origin,$r_params)=@_;
   
   return (undef,'INVALID_PARAMS') unless(ref $r_params eq 'ARRAY' && @{$r_params} && (all {defined $_ && ref $_ eq ''} @{$r_params}));
   
@@ -12759,20 +12766,17 @@ sub hCtcGetSettings {
   return (\%result,undef);
 }
 
-sub hCtcStatus {
-  my ($source,$origin,$r_params)=@_;
+sub hApiStatus {
+  my ($r_origin,$r_params)=@_;
   
-  return (undef,'INVALID_PARAMS') unless(ref $r_params eq 'ARRAY' && @{$r_params} == 1);
+  return (undef,'INVALID_PARAMS') unless(ref $r_params eq 'ARRAY' && @{$r_params} && @{$r_params} < 3 && (all {defined $_ && ref $_ eq ''} @{$r_params}));
+  return (undef,'INVALID_PARAMS') if(any {$_ ne 'battle' && $_ ne 'game'} @{$r_params});
+  return (undef,'INVALID_PARAMS') if(@{$r_params} == 2 && $r_params->[0] eq $r_params->[1]);
   
-  my $mode=$r_params->[0];
-  return (undef,'INVALID_PARAMS') unless(defined $mode && ref $mode eq '');
-
-  my $battleLobbyStatusRequested = (any {$mode eq $_} (qw'battle full')) ? 1 : 0;
-  my $gameStatusRequested = (any {$mode eq $_} (qw'game full')) ? 1 : 0;
+  my $battleLobbyStatusRequested = any {$_ eq 'battle'} @{$r_params};
+  my $gameStatusRequested = any {$_ eq 'game'} @{$r_params};
   
-  return (undef,'INVALID_PARAMS') unless($battleLobbyStatusRequested || $gameStatusRequested);
-
-  my $r_user={accessLevel => $source eq 'rctc' ? getUserAccessLevel($origin) : 0};
+  my $r_user={accessLevel => $r_origin->{accessLevel} // getUserAccessLevel($r_origin->{user})};
   
   my %result;
   if($battleLobbyStatusRequested) {
@@ -12951,7 +12955,7 @@ sub cbLobbyDisconnect {
     }
   }
   %currentVote=();
-  %pendingRctcJsonRpcChunks=();
+  %pendingRelayedJsonRpcChunks=();
   foreach my $joinedChan (keys %{$lobby->{channels}}) {
     logMsg("channel_$joinedChan","=== $conf{lobbyLogin} left ===") if($conf{logChanJoinLeave});
   }
@@ -13616,7 +13620,7 @@ sub cbRemoveUser {
   my (undef,$user)=@_;
   delete $alertedUsers{$user};
   delete $authenticatedUsers{$user};
-  delete $pendingRctcJsonRpcChunks{$user};
+  delete $pendingRelayedJsonRpcChunks{$user};
   if($user eq $sldbLobbyBot) {
     slog("TrueSkill service unavailable!",2);
   }
@@ -13658,7 +13662,7 @@ sub cbSaidPrivate {
   if($msg =~ /^!([\#\w].*)$/) {
     my $cmdMsg=$1;
     if($cmdMsg =~ /^#JSONRPC((?:\(\d{1,3}\/\d{1,3}\))?) (.+)$/) {
-      handleRctcJsonRpcChunks($user,$1,$2);
+      handleRelayedJsonRpcChunk($user,$1,$2);
     }else{
       handleRequest("pv",$user,$cmdMsg);
     }

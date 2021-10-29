@@ -912,10 +912,11 @@ spads.pl:
 0.12.43: added experimental support of configurable supermajority (aka qualified majority) in vote system
 0.12.44: added experimental "awayVoteDelay" setting (configure the delay for automatic votes when players are in away mode, or disable the functionality)
 0.12.45: the loaded plugins list is now accessible from plugins
-0.12.46: add experimental support for RCTC (Relayed Client-To-Client) JSON-RPC protocol ("!#JSONRPC" commands sent in private messages)
-         new CTC (Client-To-Client) commands: "getSettings" and "status"
+0.12.46: implement new experimental SPADS client API using relayed JSON-RPC protocol ("!#JSONRPC" commands sent in private messages by other lobby clients)
+         new SPADS client API functions: "getSettings" and "status"
 0.12.47: replace the basic list functions any/all/none/notall with those provided by the List::Util Perl module (requires Perl >= 5.19.5)
-         fix parameter checks for CTC command "getSettings"
+         fix parameter checks for SPADS client API function "getSettings"
+0.12.48: minor internal rework regarding SPADS client API
 
 SpadsConf.pm:
 ============
