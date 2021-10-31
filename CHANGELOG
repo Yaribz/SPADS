@@ -917,6 +917,7 @@ spads.pl:
 0.12.47: replace the basic list functions any/all/none/notall with those provided by the List::Util Perl module (requires Perl >= 5.19.5)
          fix parameter checks for SPADS client API function "getSettings"
 0.12.48: minor internal rework regarding SPADS client API
+0.12.49: refactor SPADS client API response management to allow asynchronous processing
 
 SpadsConf.pm:
 ============

@@ -50,7 +50,7 @@ use SpringLobbyInterface;
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.48';
+our $spadsVer='0.12.49';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -3106,32 +3106,16 @@ sub handleRelayedJsonRpcChunk {
   }
   delete $pendingRelayedJsonRpcChunks{$user};
 
-  handleRelayedJsonRpcRequest($user,$jsonString);
-}
-
-sub handleRelayedJsonRpcRequest {
-  my ($user,$jsonString)=@_;
-  
   my $floodCheckStatus=checkRelayedApiFlood($user);
   return if($floodCheckStatus > 1);
 
-  my $jsonResponseString=processJsonRpcRequest({source => 'pv',user => $user},$jsonString,$floodCheckStatus);
-  return unless(defined $jsonResponseString);
-
-  my $r_jsonResponseStrings=splitMsg($jsonResponseString,$conf{maxChatMessageLength}-length($user)-31);
-  my $nbChunks=@{$r_jsonResponseStrings};
-  if($nbChunks==1) {
-    sayPrivate($user,'!#JSONRPC '.$r_jsonResponseStrings->[0]);
-  }else{
-    for my $chunkNb (1..$nbChunks) {
-      sayPrivate($user,"!#JSONRPC($chunkNb/$nbChunks) ".$r_jsonResponseStrings->[$chunkNb-1]);
-    }
-  }
+  processJsonRpcRequest({source => 'pv',user => $user},$jsonString,$floodCheckStatus);
 }
 
 sub processJsonRpcRequest {
   my ($r_origin,$jsonString,$floodCheckStatus)=@_;
 
+  $r_origin->{protocol}='jsonrpc';
   $r_origin->{user}//='UNAUTHENTICATED USER';
   if($r_origin->{source} eq 'tcp') {
     $r_origin->{accessLevel}//=0;
@@ -3146,7 +3130,7 @@ sub processJsonRpcRequest {
     $r_jsonReq=decode_json($jsonString);
   };
 
-  my ($errorCode,$errorData,$requestId);
+  my ($errorCode,$errorData);
   if(hasEvalError()) {
     $errorData=$@;
     $errorData=$1 if($errorData =~ /^(.+) at [^\s]+ line \d+\.$/);
@@ -3155,17 +3139,17 @@ sub processJsonRpcRequest {
   }elsif($errorData=checkJsonRpcRequest($r_jsonReq)) {
     slog("Received an invalid JSONRPC request from $origin ($errorData)",5);
     $errorCode='INVALID_REQUEST';
-    $requestId=$r_jsonReq->{id} if(ref $r_jsonReq eq 'HASH' && exists $r_jsonReq->{id} && ref $r_jsonReq->{id} eq '');
+    $r_origin->{jsonrpcReqId}=$r_jsonReq->{id} if(ref $r_jsonReq eq 'HASH' && exists $r_jsonReq->{id} && ref $r_jsonReq->{id} eq '');
   }else{
-    $requestId=$r_jsonReq->{id} if(exists $r_jsonReq->{id});
+    $r_origin->{jsonrpcReqId}=$r_jsonReq->{id} if(exists $r_jsonReq->{id});
   }
 
-  return encodeJsonRpcError('RATE_LIMIT_EXCEEDED',$requestId) if($floodCheckStatus);
-  return encodeJsonRpcError($errorCode,$requestId,$errorData) if(defined $errorCode);
+  return sendApiResponse($r_origin,undef,'RATE_LIMIT_EXCEEDED') if($floodCheckStatus);
+  return sendApiResponse($r_origin,undef,{code => $errorCode, data => $errorData}) if(defined $errorCode);
   
   my $cmd=$r_jsonReq->{method};
   
-  return encodeJsonRpcError('METHOD_NOT_FOUND',$requestId) unless(exists $apiHandlers{$cmd});
+  return sendApiResponse($r_origin,undef,'METHOD_NOT_FOUND') unless(exists $apiHandlers{$cmd});
   
   my $requiredLevel=$apiCmdRights{$cmd}//$cmd;
   if(defined $requiredLevel && $requiredLevel !~ /^\d+$/) {
@@ -3190,17 +3174,10 @@ sub processJsonRpcRequest {
     }
   }
 
-  return encodeJsonRpcError('INSUFFICIENT_PRIVILEGES',$requestId) if(! defined $requiredLevel || ($requiredLevel > 0 && $level < $requiredLevel));
+  return sendApiResponse($r_origin,undef,'INSUFFICIENT_PRIVILEGES') if(! defined $requiredLevel || ($requiredLevel > 0 && $level < $requiredLevel));
   
-  $r_origin->{protocol}='jsonrpc';
   my ($r_result,$r_error)=&{$apiHandlers{$cmd}}($r_origin,$r_jsonReq->{params});
-  if(defined $r_error) {
-    my $r_jsonRpcError = ref $r_error ? createJsonRpcError(@{$r_error}{qw'code message data'}) : createJsonRpcError($r_error);
-    return encodeJsonRpcResponse('error',$r_jsonRpcError,$requestId);
-  }elsif(defined $r_result) {
-    return encodeJsonRpcResult($r_result,$requestId);
-  }
-  return undef;
+  sendApiResponse($r_origin,$r_result,$r_error) if(defined $r_result || defined $r_error);
 }
 
 sub checkJsonRpcRequest {
@@ -3212,6 +3189,40 @@ sub checkJsonRpcRequest {
   return 'Invalid type for "id" member' unless(! exists $r_jsonReq->{id} || ref $r_jsonReq->{id} eq '');
   return 'Invalid members in request' unless(all {my $k=$_; any {$k eq $_} (qw'jsonrpc method params id')} (keys %{$r_jsonReq}));
   return undef;
+}
+
+sub sendApiResponse {
+  my ($r_origin,$r_result,$r_error)=@_;
+  if($r_origin->{protocol} eq 'jsonrpc') {
+    my $jsonResponseString;
+    if(defined $r_error) {
+      my $r_jsonRpcError = ref $r_error ? createJsonRpcError(@{$r_error}{qw'code message data'}) : createJsonRpcError($r_error);
+      $jsonResponseString=encodeJsonRpcResponse('error',$r_jsonRpcError,$r_origin->{jsonrpcReqId});
+    }elsif(defined $r_result) {
+      $jsonResponseString=encodeJsonRpcResponse('result',$r_result,$r_origin->{jsonrpcReqId});
+    }else{
+      slog('sendApiResponse() called with no result/error',1);
+      return;
+    }
+    if($r_origin->{source} eq 'pv') {
+      return unless($lobbyState > 3 && exists $lobby->{users}{$r_origin->{user}});
+      my $r_jsonResponseStrings=splitMsg($jsonResponseString,$conf{maxChatMessageLength}-length($r_origin->{user})-31);
+      my $nbChunks=@{$r_jsonResponseStrings};
+      if($nbChunks==1) {
+        sayPrivate($r_origin->{user},'!#JSONRPC '.$r_jsonResponseStrings->[0]);
+      }else{
+        for my $chunkNb (1..$nbChunks) {
+          sayPrivate($r_origin->{user},"!#JSONRPC($chunkNb/$nbChunks) ".$r_jsonResponseStrings->[$chunkNb-1]);
+        }
+      }
+    }else{
+      slog("sendApiResponse() called with unsupported source for JSON-RPC protocol: \"$r_origin->{source}\"",1);
+      return;
+    }
+  }else{
+    slog("sendApiResponse() called with unsupported protocol \"$r_origin->{protocol}\"",1);
+    return;
+  }
 }
 
 sub createJsonRpcError {
@@ -3232,16 +3243,6 @@ sub createJsonRpcError {
   $jsonError{message}=$message//$JSONRPC_ERRORMSGS{$jsonError{code}}//'Unknown error';
   $jsonError{data}=$data if(defined $data);
   return \%jsonError;
-}
-
-sub encodeJsonRpcError {
-  my ($code,$id,$data,$message)=@_;
-  return encodeJsonRpcResponse('error',createJsonRpcError($code,$message,$data),$id);
-}
-
-sub encodeJsonRpcResult {
-  my ($result,$id)=@_;
-  return encodeJsonRpcResponse('result',$result,$id);
 }
 
 sub encodeJsonRpcResponse {
