@@ -50,7 +50,7 @@ use SpringLobbyInterface;
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.49';
+our $spadsVer='0.12.50';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -3380,7 +3380,8 @@ sub handleVote {
         $currentVote{expireTime}=time;
       }elsif(time >= $currentVote{expireTime}) {
         my @awayVoters;
-        if($r_cmdVoteSettings->{awayVoteDelay} ne '') {
+        my $awayVoteDelay=$r_cmdVoteSettings->{awayVoteDelay}//$confMacros{awayVoteDelay}//20;
+        if($awayVoteDelay ne '') {
           foreach my $remainingVoter (@remainingVoters) {
             my $autoSetVoteMode=getUserPref($remainingVoter,"autoSetVoteMode");
             if($autoSetVoteMode) {
