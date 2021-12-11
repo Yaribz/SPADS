@@ -50,7 +50,7 @@ use SpringLobbyInterface;
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.50';
+our $spadsVer='0.12.51';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -2603,8 +2603,13 @@ sub sayGame {
 sub getCommandLevels {
   my ($source,$user,$cmd)=@_;
 
-  my $gameState="stopped";
-  $gameState="running" if($autohost->getState());
+  my $gameState='stopped';
+  if($autohost->getState()) {
+    $gameState='running';
+  }elsif(%currentVote && defined $currentVote{command}) {
+    my $lcVotedCmd=lc($currentVote{command}[0]);
+    $gameState='voting' if(any {$lcVotedCmd eq $_} (qw'start forcestart'));
+  }
 
   my $status="outside";
   if($gameState eq "running" && exists $p_runningBattle->{users}->{$user} && %{$autohost->getPlayer($user)}) {

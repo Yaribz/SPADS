@@ -919,6 +919,7 @@ spads.pl:
 0.12.48: minor internal rework regarding SPADS client API
 0.12.49: refactor SPADS client API response management to allow asynchronous processing
 0.12.50: fix Perl warnings "Use of uninitialized value" occuring when votes timeout (introduced by version 0.12.44)
+0.12.51: commands rights granularity improved (new game state : "voting", when the game is not running but a vote is in progress to start it)
 
 SpadsConf.pm:
 ============
@@ -1012,7 +1013,7 @@ SpadsConf.pm:
         new preset settings ("speedControl:0|1", "skillMode:rank")
         new preference: "skillMode"
         SPADS configuration system can now be used by plugins too, including command rights management
-        new filter "playing" can now be used in commnands rights configuration (only matches players actually playing in the current game)
+        new filter "playing" can now be used in commands rights configuration (only matches players actually playing in the current game)
         commands prefixed with '#' are considered as bot commands and don't require help
 0.11.1: "rank" has been renamed to "skill" in balanceMode setting values ("skill","clan;skill")
         the "pluginsDir" directory is no longer added to Perl include directories if empty
@@ -1093,6 +1094,7 @@ SpadsConf.pm:
 0.12.19: added experimental "awayVoteDelay" setting (configure the delay for automatic votes when players are in away mode, or disable the functionality)
 0.12.20: added map list inheritance functionality (map list declaration syntax extension)
 0.12.21: replace the basic list functions any/all/none/notall with those provided by the List::Util Perl module (requires Perl >= 5.19.5)
+0.12.22: new value "voting" can now be used for filter "gameState" in commands rights configuration (only matches if the game is not running and a vote is in progress to start it)
 
 spadsInstaller.pl:
 =================

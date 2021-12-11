@@ -38,7 +38,7 @@ use SimpleLog;
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.12.21';
+my $moduleVersion='0.12.22';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -719,6 +719,9 @@ sub findMatchingData {
           $matchedField=1;
           last;
         }elsif($field eq 'status' && $fieldData eq 'playing' && $filterFieldValue eq 'player') {
+          $matchedField=1;
+          last;
+        }elsif($field eq 'gameState' && $fieldData eq 'voting' && $filterFieldValue eq 'stopped') {
           $matchedField=1;
           last;
         }
