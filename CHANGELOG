@@ -920,6 +920,8 @@ spads.pl:
 0.12.49: refactor SPADS client API response management to allow asynchronous processing
 0.12.50: fix Perl warnings "Use of uninitialized value" occuring when votes timeout (introduced by version 0.12.44)
 0.12.51: commands rights granularity improved (new game state : "voting", when the game is not running but a vote is in progress to start it)
+0.12.52: valid lobby server TLS certificates (i.e. matching lobby server hostname and signed by a trusted CA) no longer require to be additionally trusted by hash
+         minor fix for redirection
 
 SpadsConf.pm:
 ============

@@ -50,7 +50,7 @@ use SpringLobbyInterface;
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.51';
+our $spadsVer='0.12.52';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -12856,6 +12856,8 @@ sub cbOk {
         slog("Adding following certificate to the trusted certificates list:\n".($lobby->{lobbySock}->dump_peer_certificate())."SHA-256: $lobby->{tlsCertifHash}",2);
         $spads->addTrustedCertificateHash({lobbyHost => $conf{lobbyHost}, certHash => $lobby->{tlsCertifHash}});
         initLobbyConnection();
+      }elsif($lobby->{tlsServerIsAuthenticated}) {
+        initLobbyConnection();
       }else{
         slog("Untrusted lobby certificate, lobby server authenticity cannot be verified:\n".($lobby->{lobbySock}->dump_peer_certificate())."SHA-256: $lobby->{tlsCertifHash}",2);
         slog("Restart SPADS with following parameter if you decide to trust this certificate: --tls-cert-trust=$conf{lobbyHost}:$lobby->{tlsCertifHash}",2);
@@ -15157,7 +15159,8 @@ sub checkLobbyConnection {
     $lobby = SpringLobbyInterface->new(serverHost => $conf{lobbyHost},
                                        serverPort => $conf{lobbyPort},
                                        simpleLog => $lobbySimpleLog,
-                                       warnForUnhandledMessages => 0);
+                                       warnForUnhandledMessages => 0,
+                                       inconsistencyHandler => sub { $lobbyBrokenConnection=1; } );
     $timestamps{connectAttempt}=0;
   }
 }
