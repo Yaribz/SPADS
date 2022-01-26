@@ -50,7 +50,7 @@ use SpringLobbyInterface;
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.52';
+our $spadsVer='0.12.53';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -326,6 +326,22 @@ our $spads=SpadsConf->new($confFile,$sLog,\%confMacros);
 sub slog {
   $sLog->log(@_);
 }
+
+$SIG{__DIE__} = sub {
+  return unless(defined $^S && ! $^S);
+  my $msg=shift;
+  chomp($msg);
+  slog("Fatal error: $msg",0);
+  my $nestLevel=1;
+  while(my @callerData=caller($nestLevel++)) {
+    if($nestLevel>9) {
+      slog("Fatal error:         ...",0);
+      last;
+    }else{
+      slog("Fatal error:         $callerData[3] called at $callerData[1] line $callerData[2]",0);
+    }
+  }
+};
 
 $SIG{__WARN__} = sub {
   my $msg=shift;
