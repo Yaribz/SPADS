@@ -915,7 +915,7 @@ sub compareVersions {
 
 sub generatePassword {
   my $length=shift;
-  my @passwdChars=split("","abcdefghijklmnopqrstuvwxyz1234567890");
+  my @passwdChars=split("","abcdefghjkmnpqrstuvwxyz123456789");
   my $passwd="";
   for my $i (0..($length-1)) {
     $passwd.=$passwdChars[int(rand($#passwdChars+1))];
