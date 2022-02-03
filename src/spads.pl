@@ -2,7 +2,7 @@
 #
 # SPADS: Spring Perl Autohost for Dedicated Server
 #
-# Copyright (C) 2008-2021  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2022  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -50,7 +50,7 @@ use SpringLobbyInterface;
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.53';
+our $spadsVer='0.12.54';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -914,11 +914,14 @@ sub compareVersions {
 }
 
 sub generatePassword {
-  my $length=shift;
-  my @passwdChars=split("","abcdefghijklmnopqrstuvwxyz1234567890");
-  my $passwd="";
-  for my $i (0..($length-1)) {
-    $passwd.=$passwdChars[int(rand($#passwdChars+1))];
+  my ($length,$r_passwdChars)=@_;
+  if(! ref $r_passwdChars) {
+    my $passwdChars = defined $r_passwdChars ? $r_passwdChars : 'abcdefghijklmnopqrstuvwxyz1234567890';
+    $r_passwdChars=[split('',$passwdChars)];
+  }
+  my $passwd='';
+  for my $i (1..$length) {
+    $passwd.=$r_passwdChars->[int(rand(@{$r_passwdChars}))];
   }
   return $passwd;
 }

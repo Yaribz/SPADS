@@ -923,6 +923,7 @@ spads.pl:
 0.12.52: valid lobby server TLS certificates (i.e. matching lobby server hostname and signed by a trusted CA) no longer require to be additionally trusted by hash
          minor fix for redirection
 0.12.53: try to print fatal errors in log files before exiting
+0.12.54: refactor the "generatePassword" function to allow custom allowed characters
 
 SpadsConf.pm:
 ============
