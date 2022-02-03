@@ -11,7 +11,7 @@ use Text::ParseWords 'shellwords';
 
 use SpadsPluginApi;
 
-my $pluginVersion='0.3';
+my $pluginVersion='0.4';
 my $requiredSpadsVersion='0.12.27';
 
 my %globalPluginParams = ( commandsFile => ['notNull'],
@@ -628,9 +628,9 @@ sub c_startNewInstancesIfNeeded {
       $self->{clustPresets}{$r_instData->{clustPreset}}{$r_instData->{clustInstNb}}=$r_instData->{instNb};
       $self->{instStates}{launched}{$r_instData->{instNb}}=time;
       $self->{instLobbyStates}{offline}{$r_instData->{instNb}}=time;
-      slog("Started a new public instance (\#$r_instData->{instNb} - $r_instData->{instName}) in clusert \"$clustPreset\"",4);
+      slog("Started a new public instance (\#$r_instData->{instNb} - $r_instData->{instName}) in cluster \"$clustPreset\"",4);
     }else{
-      slog("Failed to start a new public instance in cluser $clustPreset",1);
+      slog("Failed to start a new public instance in cluster $clustPreset",1);
       last;
     }
   }
@@ -1146,7 +1146,7 @@ sub c_startInstance {
   $instanceMacros{'set:logDir'}='log';
   $instanceMacros{sharedData}=$r_pluginConf->{sharedData} if($r_pluginConf->{sharedData} ne '');
   if($owner) {
-    my $passwd=::generatePassword(4);
+    my $passwd=::generatePassword(4,'abcdefghjkmnpqrstuvwxyz123456789');
     $instanceMacros{'hSet:password'}=$passwd;
     $instanceData{password}=$passwd;
   }
@@ -1269,11 +1269,11 @@ sub hPrivateHost {
     $self->{instLobbyStates}{offline}{$instNb}=time;
     $self->{instOwners}{$user}=$instNb;
     sayPrivate($user,"Starting a new private instance in $clustPreset cluster (name=$r_instData->{instName}, password=$r_instData->{password})");
-    slog("Started a new private instance (\#$instNb - $r_instData->{instName}) in cluser \"$clustPreset\" (owner \"$user\", password=$r_instData->{password})",4);
+    slog("Started a new private instance (\#$instNb - $r_instData->{instName}) in cluster \"$clustPreset\" (owner \"$user\", password=$r_instData->{password})",4);
     return 1;
   }else{
-    answer("Failed to start a new private instance in cluser $clustPreset (internal error)");
-    slog("Failed to start a new private instance in cluser $clustPreset (user \"$user\")",1);
+    answer("Failed to start a new private instance in cluster $clustPreset (internal error)");
+    slog("Failed to start a new private instance in cluster $clustPreset (user \"$user\")",1);
     return 0;
   }
 }
@@ -1491,7 +1491,7 @@ sub hListInstances {
     return 1 if($checkOnly);
     @fields=map {"$C{5}$_$C{1}"} (qw'clustInstNb instName instNb owner hostState instState PID');
     $title="Instances list for cluster: $clustPreset";
-    foreach my $clustInstNb (sort keys %{$self->{clustPresets}{$clustPreset}}) {
+    foreach my $clustInstNb (sort {$a <=> $b} keys %{$self->{clustPresets}{$clustPreset}}) {
       my $instNb=$self->{clustPresets}{$clustPreset}{$clustInstNb};
       my $r_instData=$self->{instData}{$instNb};
       my %instanceData=(clustInstNb => $clustInstNb,
@@ -1519,7 +1519,7 @@ sub hListInstances {
     return 1 if($checkOnly);
     @fields=map {"$C{5}$_$C{1}"} (qw'instNb instName cluster clustInstNb owner hostState instState PID');
     $title='Global cluster instances list';
-    foreach my $instNb (sort keys %{$self->{instData}}) {
+    foreach my $instNb (sort {$a <=> $b} keys %{$self->{instData}}) {
       my $r_instData=$self->{instData}{$instNb};
       my %instanceData=(instNb => $instNb,
                         instName => $r_instData->{instName},
