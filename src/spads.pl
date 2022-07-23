@@ -50,7 +50,7 @@ use SpringLobbyInterface;
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.54';
+our $spadsVer='0.12.55';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -505,6 +505,7 @@ my %prefCacheTs;
 my %nbRelayedApiCalls;
 my %ignoredRelayedApiUsers;
 my %pendingRelayedJsonRpcChunks;
+my %sentPlayersScriptTags;
 
 my $lobbySimpleLog=SimpleLog->new(logFiles => [$conf{logDir}."/spads.log",''],
                                   logLevels => [$conf{lobbyInterfaceLogLevel},3],
@@ -2159,6 +2160,7 @@ sub openBattle {
   %pendingLocalBotManual=();
   %pendingLocalBotAuto=();
   %autoAddedLocalBots=();
+  %sentPlayersScriptTags=();
 }
 
 sub closeBattle {
@@ -6039,6 +6041,7 @@ sub updateBattleSkillForNewSkillAndRankModes {
   }else{
     $battleSkills{$user}->{skillOrigin}='rank';
     $battleSkills{$user}->{skill}=$rankSkill{$battleSkills{$user}->{rank}};
+    delete $battleSkills{$user}{sigma};
     pluginsUpdateSkill($battleSkills{$user},$accountId);
     sendPlayerSkill($user);
     checkBattleBansForPlayer($user);
@@ -6047,44 +6050,56 @@ sub updateBattleSkillForNewSkillAndRankModes {
 
 sub sendPlayerSkill {
   return unless($lobbyState > 5 && %{$lobby->{battle}});
+  
   my $player=shift;
   if(! exists $lobby->{battle}->{users}->{$player}) {
     slog("Unable to send skill of player $player to battle lobby, player is not in battle!",2);
     return;
   }
+  
+  my $skillOrigin=$battleSkills{$player}{skillOrigin};
+  
   my $skill;
-  my $skillSigma;
-  if($battleSkills{$player}->{skillOrigin} eq 'rank') {
+  if($skillOrigin eq 'rank') {
     $skill="($battleSkills{$player}->{skill})";
-  }elsif($battleSkills{$player}->{skillOrigin} eq 'TrueSkill') {
+  }elsif($skillOrigin eq 'TrueSkill') {
     if(exists $battleSkills{$player}->{skillPrivacy} && $battleSkills{$player}->{skillPrivacy} == 0) {
       $skill=$battleSkills{$player}->{skill};
     }else{
       $skill=getRoundedSkill($battleSkills{$player}->{skill});
       $skill="~$skill";
     }
-    if(exists $battleSkills{$player}->{sigma}) {
-      if($battleSkills{$player}->{sigma} > 3) {
-        $skillSigma=3;
-      }elsif($battleSkills{$player}->{sigma} > 2) {
-        $skillSigma=2;
-      }elsif($battleSkills{$player}->{sigma} > 1.5) {
-        $skillSigma=1;
-      }else{
-        $skillSigma=0;
-      }
-    }
-  }elsif($battleSkills{$player}->{skillOrigin} eq 'TrueSkillDegraded') {
+  }elsif($skillOrigin eq 'TrueSkillDegraded') {
     $skill="\#$battleSkills{$player}->{skill}\#";
-  }elsif($battleSkills{$player}->{skillOrigin} eq 'Plugin') {
+  }elsif($skillOrigin eq 'Plugin') {
     $skill="\[$battleSkills{$player}->{skill}\]";
-  }elsif($battleSkills{$player}->{skillOrigin} eq 'PluginDegraded') {
+  }elsif($skillOrigin eq 'PluginDegraded') {
     $skill="\[\#$battleSkills{$player}->{skill}\#\]";
   }else{
     $skill="?$battleSkills{$player}->{skill}?";
   }
-  queueLobbyCommand(["SETSCRIPTTAGS",'game/players/'.lc($player)."/skill=$skill"]);
-  queueLobbyCommand(["SETSCRIPTTAGS",'game/players/'.lc($player)."/skilluncertainty=$skillSigma"]) if(defined $skillSigma);
+  my $lcPlayer=lc($player);
+  queueLobbyCommand(["SETSCRIPTTAGS","game/players/$lcPlayer/skill=$skill"]);
+  $sentPlayersScriptTags{$lcPlayer}{skill}=1;
+  
+  if(($skillOrigin eq 'TrueSkill' || $skillOrigin eq 'Plugin')
+     && exists $battleSkills{$player}->{sigma}) {
+    my $skillSigma;
+    if($battleSkills{$player}->{sigma} > 3) {
+      $skillSigma=3;
+    }elsif($battleSkills{$player}->{sigma} > 2) {
+      $skillSigma=2;
+    }elsif($battleSkills{$player}->{sigma} > 1.5) {
+      $skillSigma=1;
+    }else{
+      $skillSigma=0;
+    }
+    queueLobbyCommand(["SETSCRIPTTAGS","game/players/$lcPlayer/skilluncertainty=$skillSigma"]);
+    $sentPlayersScriptTags{$lcPlayer}{skilluncertainty}=1;
+  }elsif(exists $sentPlayersScriptTags{$lcPlayer}{skilluncertainty}) {
+    queueLobbyCommand(["REMOVESCRIPTTAGS","game/players/$lcPlayer/skilluncertainty"]);
+    delete $sentPlayersScriptTags{$lcPlayer}{skilluncertainty};
+  }
 }
 
 sub getBattleSkills {
@@ -11720,9 +11735,21 @@ sub getBattleLobbyStatus {
                 }
                 $rank="$rank$C{12}$diffRank$C{1}";
               }
-              if($battleSkills{$player}->{skillOrigin} eq 'rank') {
+              my $skillOrigin=$battleSkills{$player}{skillOrigin};
+              my $skillSigma='';
+              if(($skillOrigin eq 'TrueSkill' || $skillOrigin eq 'Plugin')
+                 && exists $battleSkills{$player}{sigma}) {
+                if($battleSkills{$player}{sigma} > 3) {
+                  $skillSigma=' ???';
+                }elsif($battleSkills{$player}{sigma} > 2) {
+                  $skillSigma=' ??';
+                }elsif($battleSkills{$player}{sigma} > 1.5) {
+                  $skillSigma=' ?';
+                }
+              }
+              if($skillOrigin eq 'rank') {
                 $skill="($battleSkills{$player}->{skill})";
-              }elsif($battleSkills{$player}->{skillOrigin} eq 'TrueSkill') {
+              }elsif($skillOrigin eq 'TrueSkill') {
                 if(exists $battleSkills{$player}->{skillPrivacy}
                    && ($battleSkills{$player}->{skillPrivacy} == 0
                        || ($battleSkills{$player}->{skillPrivacy} == 1 && $userLevel >= $conf{privacyTrustLevel}))) {
@@ -11731,21 +11758,13 @@ sub getBattleLobbyStatus {
                   $skill=getRoundedSkill($battleSkills{$player}->{skill});
                   $skill="~$skill";
                 }
-                if(exists $battleSkills{$player}->{sigma}) {
-                  if($battleSkills{$player}->{sigma} > 3) {
-                    $skill.=' ???';
-                  }elsif($battleSkills{$player}->{sigma} > 2) {
-                    $skill.=' ??';
-                  }elsif($battleSkills{$player}->{sigma} > 1.5) {
-                    $skill.=' ?';
-                  }
-                }
-                $skill="$C{6}$skill$C{1}";
-              }elsif($battleSkills{$player}->{skillOrigin} eq 'TrueSkillDegraded') {
+                $skill="$C{6}$skill$skillSigma$C{1}";
+              }elsif($skillOrigin eq 'TrueSkillDegraded') {
                 $skill="$C{4}\#$battleSkills{$player}->{skill}\#$C{1}";
-              }elsif($battleSkills{$player}->{skillOrigin} eq 'Plugin') {
-                $skill="$C{10}\[$battleSkills{$player}->{skill}\]$C{1}";
-              }elsif($battleSkills{$player}->{skillOrigin} eq 'PluginDegraded') {
+              }elsif($skillOrigin eq 'Plugin') {
+                $skill=$battleSkills{$player}->{skill};
+                $skill="$C{10}\[$skill$skillSigma\]$C{1}";
+              }elsif($skillOrigin eq 'PluginDegraded') {
                 $skill="$C{4}\[\#$battleSkills{$player}->{skill}\#\]$C{1}";
               }else{
                 $skill="$C{13}?$battleSkills{$player}->{skill}?$C{1}";
@@ -11816,9 +11835,21 @@ sub getBattleLobbyStatus {
           }
           $rank="$rank$C{12}$diffRank$C{1}";
         }
-        if($battleSkills{$spec}->{skillOrigin} eq 'rank') {
+        my $skillOrigin=$battleSkills{$spec}{skillOrigin};
+        my $skillSigma='';
+        if(($skillOrigin eq 'TrueSkill' || $skillOrigin eq 'Plugin')
+           && exists $battleSkills{$spec}{sigma}) {
+          if($battleSkills{$spec}{sigma} > 3) {
+            $skillSigma=' ???';
+          }elsif($battleSkills{$spec}{sigma} > 2) {
+            $skillSigma=' ??';
+          }elsif($battleSkills{$spec}{sigma} > 1.5) {
+            $skillSigma=' ?';
+          }
+        }
+        if($skillOrigin eq 'rank') {
           $skill="($rankSkill{$battleSkills{$spec}->{rank}})";
-        }elsif($battleSkills{$spec}->{skillOrigin} eq 'TrueSkill') {
+        }elsif($skillOrigin eq 'TrueSkill') {
           if(exists $battleSkills{$spec}->{skillPrivacy}
              && ($battleSkills{$spec}->{skillPrivacy} == 0
                  || ($battleSkills{$spec}->{skillPrivacy} == 1 && $userLevel >= $conf{privacyTrustLevel}))) {
@@ -11827,21 +11858,13 @@ sub getBattleLobbyStatus {
             $skill=getRoundedSkill($battleSkills{$spec}->{skill});
             $skill="~$skill";
           }
-          if(exists $battleSkills{$spec}->{sigma}) {
-            if($battleSkills{$spec}->{sigma} > 3) {
-              $skill.=' ???';
-            }elsif($battleSkills{$spec}->{sigma} > 2) {
-              $skill.=' ??';
-            }elsif($battleSkills{$spec}->{sigma} > 1.5) {
-              $skill.=' ?';
-            }
-          }
-          $skill="$C{6}$skill$C{1}";
-        }elsif($battleSkills{$spec}->{skillOrigin} eq 'TrueSkillDegraded') {
+          $skill="$C{6}$skill$skillSigma$C{1}";
+        }elsif($skillOrigin eq 'TrueSkillDegraded') {
           $skill="$C{4}\#$battleSkills{$spec}->{skill}\#$C{1}";
-        }elsif($battleSkills{$spec}->{skillOrigin} eq 'Plugin') {
-          $skill="$C{10}\[$battleSkills{$spec}->{skill}\]$C{1}";
-        }elsif($battleSkills{$spec}->{skillOrigin} eq 'PluginDegraded') {
+        }elsif($skillOrigin eq 'Plugin') {
+          $skill=$battleSkills{$spec}->{skill};
+          $skill="$C{10}\[$skill$skillSigma\]$C{1}";
+        }elsif($skillOrigin eq 'PluginDegraded') {
           $skill="$C{4}\[\#$battleSkills{$spec}->{skill}\#\]$C{1}";
         }else{
           $skill="$C{13}?$battleSkills{$spec}->{skill}?$C{1}";
@@ -13562,7 +13585,13 @@ sub cbLeftBattle {
     }
     updateCurrentGameType();
 
-    queueLobbyCommand(["REMOVESCRIPTTAGS",'game/players/'.lc($user).'/skill','game/players/'.lc($user).'/skilluncertainty']);
+    my $lcUser=lc($user);
+    if(exists $sentPlayersScriptTags{$lcUser}) {
+      my @scriptTagsToRemove=keys %{$sentPlayersScriptTags{$lcUser}};
+      delete $sentPlayersScriptTags{$lcUser};
+      @scriptTagsToRemove=map {"game/players/$lcUser/$_"} @scriptTagsToRemove;
+      queueLobbyCommand(["REMOVESCRIPTTAGS",@scriptTagsToRemove]) if(@scriptTagsToRemove);
+    }
   }
 }
 
@@ -13613,6 +13642,7 @@ sub cbBattleClosed {
     %pendingLocalBotManual=();
     %pendingLocalBotAuto=();
     %autoAddedLocalBots=();
+    %sentPlayersScriptTags=();
     foreach my $pluginName (@pluginsOrder) {
       $plugins{$pluginName}->onBattleClosed() if($plugins{$pluginName}->can('onBattleClosed'));
     }
@@ -14572,9 +14602,10 @@ sub pluginsUpdateSkill {
                                                                 $lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod},
                                                                 $currentGameType);
       if(ref $pluginResult eq 'ARRAY') {
-        my $newPlayerSkill;
-        ($pluginResult,$newPlayerSkill)=@{$pluginResult};
-        $p_userSkill->{skill}=$newPlayerSkill;
+        my ($newPlayerSkill,$newPlayerSigma);
+        ($pluginResult,$newPlayerSkill,$newPlayerSigma)=@{$pluginResult};
+        $p_userSkill->{skill}=$newPlayerSkill if(defined $newPlayerSkill);
+        $p_userSkill->{sigma}=$newPlayerSigma if(defined $newPlayerSigma);
       }
       if($pluginResult) {
         if($pluginResult == 2) {

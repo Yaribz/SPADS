@@ -924,6 +924,8 @@ spads.pl:
          minor fix for redirection
 0.12.53: try to print fatal errors in log files before exiting
 0.12.54: refactor the "generatePassword" function to allow custom allowed characters
+0.12.55: allow plugins to update skill uncertainty value ("updatePlayerSkill" customization callback)
+         fix sending of superfluous REMOVESCRIPTTAGS commands for players skill values
 
 SpadsConf.pm:
 ============
@@ -1244,6 +1246,7 @@ SpadsPluginApi.pm:
 0.30: update documentation for "getCurrentVote()", "getLobbyInterface()" and "getRunningBattle()" accessors
 0.31: new plugin API accessor "getPluginList"
       plugins can now declare lobby command callbacks which will be called before the lobby interface module callbacks (new optional parameter for "addLobbyCommandHandler" and "removeLobbyCommandHandler" plugin API functions)
+0.32: allow plugins to update skill uncertainty value ("updatePlayerSkill" customization callback)
 
 SpadsUpdater.pm:
 ===============

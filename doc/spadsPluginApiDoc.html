@@ -608,7 +608,7 @@
 
 <p>This callback is called by SPADS each time it needs to get or update the skill of a player (on battle join, on game type change...). This allows plugins to replace the built-in skill estimations (rank, TrueSkill...) with custom skill estimations (ELO, Glicko ...).</p>
 
-<p><code>\%playerSkill</code> is a reference to a hash containing the skill data of the player. A Perl plugin can update the <code>skill</code> entry as follows: <code>$playerSkill-&gt;{skill}=&lt;skillValue&gt;</code></p>
+<p><code>\%playerSkill</code> is a reference to a hash containing the skill data of the player. A Perl plugin can update the <code>skill</code> entry as follows: <code>$playerSkill-&gt;{skill}=&lt;skillValue&gt;</code>. The skill uncertainty can also be updated by plugins, by updating the <code>sigma</code> entry as follows: <code>$playerSkill-&gt;{sigma}=&lt;skillUncertaintyValue&gt;</code>.</p>
 
 <p><code>$accountId</code> is the account ID of the player for whom skill value is requested.</p>
 
@@ -618,7 +618,7 @@
 
 <p>The return value is the skill update status: <code>0</code> (skill not updated by the plugin), <code>1</code> (skill updated by the plugin), <code>2</code> (skill updated by the plugin in degraded mode)</p>
 
-<p>Note for Python plugins: As Python plugins cannot modify the data structures passed as parameters to the callbacks, an alternate way to implement this callback is offered. Instead of modifying the <code>playerSkill</code> dictionary directly, the callback can return a list contaning the normal return value as first item (described above), and the new skill value as second item.</p>
+<p>Note for Python plugins: As Python plugins cannot modify the data structures passed as parameters to the callbacks, an alternate way to implement this callback is offered. Instead of modifying the <code>playerSkill</code> dictionary directly, the callback can return a list containing the normal return value as first item (described above), the new skill value as second item, and optionally the new skill uncertainty value as third item.</p>
 
 </dd>
 <dt id="updateGameStatusInfo-self-playerStatus-accessLevel"><code>updateGameStatusInfo($self,\%playerStatus,$accessLevel)</code></dt>

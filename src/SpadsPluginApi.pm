@@ -24,7 +24,7 @@ use List::Util qw'any none';
 use Exporter 'import';
 @EXPORT=qw/$spadsVersion $spadsDir loadPythonPlugin get_flag fix_string getLobbyState getSpringPid getSpringServerType getTimestamps getRunningBattle getConfMacros getCurrentVote getPlugin getPluginList addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess forkCall removeProcessCallback createDetachedProcess addTimer removeTimer addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog updateSetting secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives/;
 
-my $apiVersion='0.31';
+my $apiVersion='0.32';
 
 our $spadsVersion=$::spadsVer;
 our $spadsDir=$::cwd;
@@ -1243,7 +1243,9 @@ estimations (ELO, Glicko ...).
 
 C<\%playerSkill> is a reference to a hash containing the skill data of the
 player. A Perl plugin can update the C<skill> entry as follows:
-C<< $playerSkill->{skill}=<skillValue> >>
+C<< $playerSkill->{skill}=<skillValue> >>. The skill uncertainty can also be
+updated by plugins, by updating the C<sigma> entry as follows:
+C<< $playerSkill->{sigma}=<skillUncertaintyValue> >>.
 
 C<$accountId> is the account ID of the player for whom skill value is requested.
 
@@ -1260,8 +1262,9 @@ in degraded mode)
 Note for Python plugins: As Python plugins cannot modify the data structures
 passed as parameters to the callbacks, an alternate way to implement this
 callback is offered. Instead of modifying the C<playerSkill> dictionary
-directly, the callback can return a list contaning the normal return value as
-first item (described above), and the new skill value as second item.
+directly, the callback can return a list containing the normal return value as
+first item (described above), the new skill value as second item, and optionally
+the new skill uncertainty value as third item.
 
 =item C<updateGameStatusInfo($self,\%playerStatus,$accessLevel)>
 
