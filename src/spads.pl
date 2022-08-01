@@ -50,7 +50,7 @@ use SpringLobbyInterface;
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.55';
+our $spadsVer='0.12.56';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -2823,7 +2823,7 @@ sub processAliases {
   }
 
   if($conf{allowSettingsShortcut} && ! exists $spads->{commands}->{$lcCmd} && none {$lcCmd eq $_} @readOnlySettings) {
-    if(any {$lcCmd eq $_} qw'users presets hpresets bpresets settings bsettings hsettings aliases bans maps pref rotationmaps plugins psettings') {
+    if(any {$lcCmd eq $_} qw'users presets hpresets bpresets settings bsettings hsettings vsettings aliases bans maps pref rotationmaps plugins psettings') {
       unshift(@cmd,"list");
       return (\@cmd,0);
     }else{
@@ -3338,35 +3338,43 @@ sub checkSpringCrash {
 }
 
 sub handleVote {
-  if(%currentVote) {
-    if(time >= $currentVote{expireTime} + $conf{reCallVoteDelay}) {
-      %currentVote=();
-    }elsif(exists $currentVote{command}) {
-      my $mustPrintVoteState=0;
-      if($currentVote{awayVoteTime} && time >= $currentVote{awayVoteTime}) {
-        $currentVote{awayVoteTime}=0;
-        my @awayVoters;
-        foreach my $remainingVoter (keys %{$currentVote{remainingVoters}}) {
-          my $voteMode=getUserPref($remainingVoter,"voteMode");
-          if($voteMode eq "away") {
-            $currentVote{blankCount}++;
-            $currentVote{awayVoters}->{$remainingVoter}=1;
-            delete $currentVote{remainingVoters}->{$remainingVoter};
-            push(@awayVoters,$remainingVoter);
-          }
-        }
-        if(@awayVoters) {
-          my $awayVotersString=join(",",@awayVoters);
-          $awayVotersString=($#awayVoters+1)." users" if(length($awayVotersString) > 50);
-          sayBattleAndGame("Away vote mode for $awayVotersString");
-          $mustPrintVoteState=1;
+  return unless(%currentVote);
+  if(time >= $currentVote{expireTime} + $conf{reCallVoteDelay}) {
+    %currentVote=();
+  }elsif(exists $currentVote{command}) {
+    my $mustPrintVoteState=0;
+    if($currentVote{awayVoteTime} && time >= $currentVote{awayVoteTime}) {
+      $currentVote{awayVoteTime}=0;
+      my @awayVoters;
+      foreach my $remainingVoter (keys %{$currentVote{remainingVoters}}) {
+        my $voteMode=getUserPref($remainingVoter,"voteMode");
+        if($voteMode eq "away") {
+          $currentVote{blankCount}++;
+          $currentVote{awayVoters}->{$remainingVoter}=1;
+          delete $currentVote{remainingVoters}->{$remainingVoter};
+          push(@awayVoters,$remainingVoter);
         }
       }
-      my @remainingVoters=keys %{$currentVote{remainingVoters}};
-      my $nbRemainingVotes=$#remainingVoters+1;
-      my $nbAwayVoters=keys %{$currentVote{awayVoters}};
-      my $totalNbVotes=$nbRemainingVotes+$currentVote{yesCount}+$currentVote{noCount};
-      my $nbVotesForVotePart;
+      if(@awayVoters) {
+        my $awayVotersString=join(",",@awayVoters);
+        $awayVotersString=($#awayVoters+1)." users" if(length($awayVotersString) > 50);
+        sayBattleAndGame("Away vote mode for $awayVotersString");
+        $mustPrintVoteState=1;
+      }
+    }
+    my @remainingVoters=keys %{$currentVote{remainingVoters}};
+    my $nbRemainingVotes=$#remainingVoters+1;
+    my $nbAwayVoters=keys %{$currentVote{awayVoters}};
+    my $totalNbVotes=$nbRemainingVotes+$currentVote{yesCount}+$currentVote{noCount};
+    my $r_cmdVoteSettings=getCmdVoteSettings(lc($currentVote{command}[0]));
+    my $majorityVoteMargin=$r_cmdVoteSettings->{majorityVoteMargin}//$confMacros{majorityVoteMargin}//0;
+    $majorityVoteMargin=0 unless($majorityVoteMargin =~ /^\d+$/ && $majorityVoteMargin > 0 && $majorityVoteMargin < 51);
+    my $nbVotesForVotePart;
+    if($majorityVoteMargin) {
+      my $nbVotesForVotePartYes=int($currentVote{yesCount}*(100/(50+$majorityVoteMargin)));
+      my $nbVotesForVotePartNo = $majorityVoteMargin < 50 ? ceil($currentVote{noCount}*(100/(50-$majorityVoteMargin))-1) : $currentVote{noCount}*1000;
+      $nbVotesForVotePart=$nbVotesForVotePartYes>$nbVotesForVotePartNo?$nbVotesForVotePartYes:$nbVotesForVotePartNo;
+    }else{
       if($currentVote{yesCount}>$currentVote{noCount}) {
         $nbVotesForVotePart=2*$currentVote{yesCount}-1;
       }elsif($currentVote{yesCount}<$currentVote{noCount}) {
@@ -3374,92 +3382,97 @@ sub handleVote {
       }else{
         $nbVotesForVotePart=$currentVote{yesCount}+$currentVote{noCount};
       }
-      my $votePart=($nbVotesForVotePart+$currentVote{blankCount}-$nbAwayVoters)/($totalNbVotes+$currentVote{blankCount});
-      my $r_cmdVoteSettings=getCmdVoteSettings(lc($currentVote{command}[0]));
-      my $minVotePart=$r_cmdVoteSettings->{minVoteParticipation};
-      if($minVotePart =~ /^(\d+);(\d+)$/) {
-        my ($minVotePartNoGame,$minVotePartRunningGame)=($1,$2);
-        if($autohost->getState()) {
-          $minVotePart=$minVotePartRunningGame;
-        }else{
-          $minVotePart=$minVotePartNoGame;
+    }
+    $nbVotesForVotePart+=$currentVote{blankCount}-$nbAwayVoters;
+    my $minVotePart=$r_cmdVoteSettings->{minVoteParticipation};
+    if($minVotePart =~ /^(\d+);(\d+)$/) {
+      my ($minVotePartNoGame,$minVotePartRunningGame)=($1,$2);
+      if($autohost->getState()) {
+        $minVotePart=$minVotePartRunningGame;
+      }else{
+        $minVotePart=$minVotePartNoGame;
+      }
+    }
+    $minVotePart/=100;
+    my $votePart=$nbVotesForVotePart/($totalNbVotes+$currentVote{blankCount});
+    my $nbRequiredYesVotes = $majorityVoteMargin ? ceil($totalNbVotes*(50+$majorityVoteMargin)/100) : int($totalNbVotes/2)+1;
+    my $nbRequiredNoVotes = $totalNbVotes - $nbRequiredYesVotes + 1;
+    if($votePart >= $minVotePart && $currentVote{yesCount} >= $nbRequiredYesVotes) {
+      sayBattleAndGame("Vote for command \"".join(" ",@{$currentVote{command}})."\" passed.");
+      my ($voteSource,$voteUser,$voteCommand)=($currentVote{source},$currentVote{user},$currentVote{command});
+      foreach my $pluginName (@pluginsOrder) {
+        $plugins{$pluginName}->onVoteStop(1) if($plugins{$pluginName}->can('onVoteStop'));
+      }
+      %currentVote=();
+      executeCommand($voteSource,$voteUser,$voteCommand);
+    }elsif($votePart >= $minVotePart && ($currentVote{noCount} >= $nbRequiredNoVotes || ! $nbRemainingVotes)) {
+      sayBattleAndGame("Vote for command \"".join(" ",@{$currentVote{command}})."\" failed.");
+      foreach my $pluginName (@pluginsOrder) {
+        $plugins{$pluginName}->onVoteStop(-1) if($plugins{$pluginName}->can('onVoteStop'));
+      }
+      delete @currentVote{(qw'awayVoteTime source command remainingVoters yesCount noCount blankCount awayVoters manualVoters')};
+      $currentVote{expireTime}=time;
+    }elsif(time >= $currentVote{expireTime}) {
+      my @awayVoters;
+      my $awayVoteDelay=$r_cmdVoteSettings->{awayVoteDelay}//$confMacros{awayVoteDelay}//20;
+      if($awayVoteDelay ne '') {
+        foreach my $remainingVoter (@remainingVoters) {
+          my $autoSetVoteMode=getUserPref($remainingVoter,"autoSetVoteMode");
+          if($autoSetVoteMode) {
+            setUserPref($remainingVoter,"voteMode","away");
+            push(@awayVoters,$remainingVoter);
+          }
         }
       }
-      $minVotePart/=100;
-      my $majorityVoteMargin=$r_cmdVoteSettings->{majorityVoteMargin}//$confMacros{majorityVoteMargin}//0;
-      my $nbRequiredYesVotes = ($majorityVoteMargin =~ /^\d+$/ && $majorityVoteMargin > 0 && $majorityVoteMargin < 51) ? ceil($totalNbVotes*(50+$majorityVoteMargin)/100) : int($totalNbVotes/2)+1;
-      my $nbRequiredNoVotes = $totalNbVotes - $nbRequiredYesVotes + 1;
-      if($votePart >= $minVotePart && $currentVote{yesCount} >= $nbRequiredYesVotes) {
-        sayBattleAndGame("Vote for command \"".join(" ",@{$currentVote{command}})."\" passed.");
+      my $awayVotersString="";
+      if(@awayVoters) {
+        $awayVotersString=join(",",@awayVoters);
+        if(length($awayVotersString) > 50) {
+          $awayVotersString=", away vote mode activated for ".($#awayVoters+1)." users";
+        }else{
+          $awayVotersString=", away vote mode activated for $awayVotersString";
+        }
+      }
+      my $yesHasMajority;
+      if($majorityVoteMargin) {
+        $yesHasMajority = $currentVote{noCount} <= $currentVote{yesCount} * (100/(50+$majorityVoteMargin)-1);
+      }else{
+        $yesHasMajority = $currentVote{noCount} < $currentVote{yesCount};
+      }
+      if($yesHasMajority && $currentVote{yesCount} > 1 && $votePart >= $minVotePart) {
+        sayBattleAndGame("Vote for command \"".join(" ",@{$currentVote{command}})."\" passed (delay expired$awayVotersString).");
         my ($voteSource,$voteUser,$voteCommand)=($currentVote{source},$currentVote{user},$currentVote{command});
         foreach my $pluginName (@pluginsOrder) {
           $plugins{$pluginName}->onVoteStop(1) if($plugins{$pluginName}->can('onVoteStop'));
         }
         %currentVote=();
         executeCommand($voteSource,$voteUser,$voteCommand);
-      }elsif($votePart >= $minVotePart && ($currentVote{noCount} >= $nbRequiredNoVotes || ! $nbRemainingVotes)) {
-        sayBattleAndGame("Vote for command \"".join(" ",@{$currentVote{command}})."\" failed.");
+      }else{
+        sayBattleAndGame("Vote for command \"".join(" ",@{$currentVote{command}})."\" failed (delay expired$awayVotersString).");
         foreach my $pluginName (@pluginsOrder) {
           $plugins{$pluginName}->onVoteStop(-1) if($plugins{$pluginName}->can('onVoteStop'));
         }
         delete @currentVote{(qw'awayVoteTime source command remainingVoters yesCount noCount blankCount awayVoters manualVoters')};
-        $currentVote{expireTime}=time;
-      }elsif(time >= $currentVote{expireTime}) {
-        my @awayVoters;
-        my $awayVoteDelay=$r_cmdVoteSettings->{awayVoteDelay}//$confMacros{awayVoteDelay}//20;
-        if($awayVoteDelay ne '') {
-          foreach my $remainingVoter (@remainingVoters) {
-            my $autoSetVoteMode=getUserPref($remainingVoter,"autoSetVoteMode");
-            if($autoSetVoteMode) {
-              setUserPref($remainingVoter,"voteMode","away");
-              push(@awayVoters,$remainingVoter);
-            }
-          }
-        }
-        my $awayVotersString="";
-        if(@awayVoters) {
-          $awayVotersString=join(",",@awayVoters);
-          if(length($awayVotersString) > 50) {
-            $awayVotersString=", away vote mode activated for ".($#awayVoters+1)." users";
-          }else{
-            $awayVotersString=", away vote mode activated for $awayVotersString";
-          }
-        }
-        if($currentVote{yesCount} > $currentVote{noCount} && $currentVote{yesCount} > 1 && $votePart >= $minVotePart) {
-          sayBattleAndGame("Vote for command \"".join(" ",@{$currentVote{command}})."\" passed (delay expired$awayVotersString).");
-          my ($voteSource,$voteUser,$voteCommand)=($currentVote{source},$currentVote{user},$currentVote{command});
-          foreach my $pluginName (@pluginsOrder) {
-            $plugins{$pluginName}->onVoteStop(1) if($plugins{$pluginName}->can('onVoteStop'));
-          }
-          %currentVote=();
-          executeCommand($voteSource,$voteUser,$voteCommand);
-        }else{
-          sayBattleAndGame("Vote for command \"".join(" ",@{$currentVote{command}})."\" failed (delay expired$awayVotersString).");
-          foreach my $pluginName (@pluginsOrder) {
-            $plugins{$pluginName}->onVoteStop(-1) if($plugins{$pluginName}->can('onVoteStop'));
-          }
-          delete @currentVote{(qw'awayVoteTime source command remainingVoters yesCount noCount blankCount awayVoters manualVoters')};
-        }
-      }else{
-        foreach my $remainingVoter (keys %{$currentVote{remainingVoters}}) {
-          if($currentVote{remainingVoters}->{$remainingVoter}->{ringTime} && time >= $currentVote{remainingVoters}->{$remainingVoter}->{ringTime}) {
-            $currentVote{remainingVoters}->{$remainingVoter}->{ringTime}=0;
-            if(! exists $lastRungUsers{$remainingVoter} || time - $lastRungUsers{$remainingVoter} > getUserPref($remainingVoter,"minRingDelay")) {
-              $lastRungUsers{$remainingVoter}=time;
-              queueLobbyCommand(["RING",$remainingVoter]);
-            }
-          }
-          if($currentVote{remainingVoters}->{$remainingVoter}->{notifyTime} && time >= $currentVote{remainingVoters}->{$remainingVoter}->{notifyTime}) {
-            $currentVote{remainingVoters}->{$remainingVoter}->{notifyTime}=0;
-            if(exists $lobby->{users}->{$remainingVoter} && (! $lobby->{users}->{$remainingVoter}->{status}->{inGame})) {
-              my ($p_C,$B)=initUserIrcColors($remainingVoter);
-              my %C=%{$p_C};
-              sayPrivate($remainingVoter,"Your vote is awaited for following poll: \"$C{12}".join(" ",@{$currentVote{command}})."$C{1}\" [$C{3}!vote y$C{1}, $C{4}!vote n$C{1}, $C{14}!vote b$C{1}]");
-            }
-          }
-        }
-        printVoteState() if($mustPrintVoteState);
       }
+    }else{
+      foreach my $remainingVoter (keys %{$currentVote{remainingVoters}}) {
+        if($currentVote{remainingVoters}->{$remainingVoter}->{ringTime} && time >= $currentVote{remainingVoters}->{$remainingVoter}->{ringTime}) {
+          $currentVote{remainingVoters}->{$remainingVoter}->{ringTime}=0;
+          if(! exists $lastRungUsers{$remainingVoter} || time - $lastRungUsers{$remainingVoter} > getUserPref($remainingVoter,"minRingDelay")) {
+            $lastRungUsers{$remainingVoter}=time;
+            queueLobbyCommand(["RING",$remainingVoter]);
+          }
+        }
+        if($currentVote{remainingVoters}->{$remainingVoter}->{notifyTime} && time >= $currentVote{remainingVoters}->{$remainingVoter}->{notifyTime}) {
+          $currentVote{remainingVoters}->{$remainingVoter}->{notifyTime}=0;
+          if(exists $lobby->{users}->{$remainingVoter} && (! $lobby->{users}->{$remainingVoter}->{status}->{inGame})) {
+            my ($p_C,$B)=initUserIrcColors($remainingVoter);
+            my %C=%{$p_C};
+            sayPrivate($remainingVoter,"Your vote is awaited for following poll: \"$C{12}".join(" ",@{$currentVote{command}})."$C{1}\" [$C{3}!vote y$C{1}, $C{4}!vote n$C{1}, $C{14}!vote b$C{1}]");
+          }
+        }
+      }
+      printVoteState() if($mustPrintVoteState);
     }
   }
 }
@@ -3718,30 +3731,28 @@ sub autoRestartForUpdateIfNeeded {
 
 sub getVoteStateMsg {
   return (undef,undef,undef) unless(%currentVote && exists $currentVote{command});
-  my ($lobbyMsg,$gameMsg,$additionalMsg);
   my @remainingVoters=keys %{$currentVote{remainingVoters}};
-  my @awayVoters=keys %{$currentVote{awayVoters}};
   my $nbRemainingVotes=$#remainingVoters+1;
-  my $nbAwayVoters=$#awayVoters+1;
+  my $nbAwayVoters=keys %{$currentVote{awayVoters}};
   my $totalNbVotes=$nbRemainingVotes+$currentVote{yesCount}+$currentVote{noCount};
   my $r_cmdVoteSettings=getCmdVoteSettings(lc($currentVote{command}[0]));
   my $majorityVoteMargin=$r_cmdVoteSettings->{majorityVoteMargin}//$confMacros{majorityVoteMargin}//0;
-  my $reqYesVotes = ($majorityVoteMargin =~ /^\d+$/ && $majorityVoteMargin > 0 && $majorityVoteMargin < 51) ? ceil($totalNbVotes*(50+$majorityVoteMargin)/100) : int($totalNbVotes/2)+1;
-  my $reqNoVotes=$totalNbVotes-$reqYesVotes+1;
-  my $maxReqYesVotes=int(($totalNbVotes+$nbAwayVoters)/2)+1;
-  my $maxReqNoVotes=$totalNbVotes+$nbAwayVoters-$maxReqYesVotes+1;
-  my ($maxYesVotesString,$maxNoVotesString)=('','');
-  $maxYesVotesString="($maxReqYesVotes)" if($reqYesVotes != $maxReqYesVotes);
-  $maxNoVotesString="($maxReqNoVotes)" if($reqNoVotes != $maxReqNoVotes);
-  my $remainingTime=$currentVote{expireTime} - time;
+  $majorityVoteMargin=0 unless($majorityVoteMargin =~ /^\d+$/ && $majorityVoteMargin > 0 && $majorityVoteMargin < 51);
   my $nbVotesForVotePart;
-  if($currentVote{yesCount}>$currentVote{noCount}) {
-    $nbVotesForVotePart=2*$currentVote{yesCount}-1;
-  }elsif($currentVote{yesCount}<$currentVote{noCount}) {
-    $nbVotesForVotePart=2*$currentVote{noCount}-1;
+  if($majorityVoteMargin) {
+    my $nbVotesForVotePartYes=int($currentVote{yesCount}*(100/(50+$majorityVoteMargin)));
+    my $nbVotesForVotePartNo = $majorityVoteMargin < 50 ? ceil($currentVote{noCount}*(100/(50-$majorityVoteMargin))-1) : $currentVote{noCount}*1000;
+    $nbVotesForVotePart=$nbVotesForVotePartYes>$nbVotesForVotePartNo?$nbVotesForVotePartYes:$nbVotesForVotePartNo;
   }else{
-    $nbVotesForVotePart=$currentVote{yesCount}+$currentVote{noCount};
+    if($currentVote{yesCount}>$currentVote{noCount}) {
+      $nbVotesForVotePart=2*$currentVote{yesCount}-1;
+    }elsif($currentVote{yesCount}<$currentVote{noCount}) {
+      $nbVotesForVotePart=2*$currentVote{noCount}-1;
+    }else{
+      $nbVotesForVotePart=$currentVote{yesCount}+$currentVote{noCount};
+    }
   }
+  $nbVotesForVotePart+=$currentVote{blankCount}-$nbAwayVoters;
   my $minVotePart=$r_cmdVoteSettings->{minVoteParticipation};
   if($minVotePart =~ /^(\d+);(\d+)$/) {
     my ($minVotePartNoGame,$minVotePartRunningGame)=($1,$2);
@@ -3752,11 +3763,24 @@ sub getVoteStateMsg {
     }
   }
   my $nbRequiredManualVotes=ceil($minVotePart * ($totalNbVotes+$currentVote{blankCount}) / 100);
+  my $nbRequiredYesNoVotes=$nbRequiredManualVotes-($currentVote{blankCount}-$nbAwayVoters);
+  my ($reqYesVotes,$maxReqYesVotes,$minReqYesVotes);
+  if($majorityVoteMargin) {
+    ($reqYesVotes,$maxReqYesVotes,$minReqYesVotes) = map {ceil($_*(50+$majorityVoteMargin)/100)} ($totalNbVotes,$totalNbVotes+$nbAwayVoters,$nbRequiredYesNoVotes);
+  }else{
+    ($reqYesVotes,$maxReqYesVotes,$minReqYesVotes) = map {int($_/2)+1} ($totalNbVotes,$totalNbVotes+$nbAwayVoters,$nbRequiredYesNoVotes);
+  }
+  my $reqNoVotes=$totalNbVotes-$reqYesVotes+1;
+  my $maxReqNoVotes=$totalNbVotes+$nbAwayVoters-$maxReqYesVotes+1;
+  my $minReqNoVotes=$nbRequiredYesNoVotes-$minReqYesVotes+1;
+  $reqYesVotes=$minReqYesVotes if($reqYesVotes < $minReqYesVotes);
+  $reqNoVotes=$minReqNoVotes if($reqNoVotes < $minReqNoVotes);
+  my ($lobbyMsg,$gameMsg,$additionalMsg);
   if($nbVotesForVotePart < $nbRequiredManualVotes || (@remainingVoters && $currentVote{yesCount} < $reqYesVotes && $currentVote{noCount} < $reqNoVotes)) {
-    my $nbManualVotes=$currentVote{yesCount}+$currentVote{noCount}+$currentVote{blankCount}-$nbAwayVoters;
-    my $requiredVotesString='';
-    $requiredVotesString=", votes:$nbManualVotes/$nbRequiredManualVotes" if($nbVotesForVotePart < $nbRequiredManualVotes && $nbRequiredManualVotes-$nbManualVotes > $reqYesVotes-$currentVote{yesCount});
-    $lobbyMsg="Vote in progress: \"".join(" ",@{$currentVote{command}})."\" [y:$currentVote{yesCount}/$reqYesVotes$maxYesVotesString, n:$currentVote{noCount}/$reqNoVotes$maxNoVotesString$requiredVotesString] (${remainingTime}s remaining)";
+    my $maxYesVotesString = $reqYesVotes < $maxReqYesVotes ? "($maxReqYesVotes)" : '';
+    my $maxNoVotesString = $reqNoVotes < $maxReqNoVotes ? "($maxReqNoVotes)" : '';
+    my $remainingTime=$currentVote{expireTime} - time;
+    $lobbyMsg="Vote in progress: \"".join(" ",@{$currentVote{command}})."\" [y:$currentVote{yesCount}/$reqYesVotes$maxYesVotesString, n:$currentVote{noCount}/$reqNoVotes$maxNoVotesString] (${remainingTime}s remaining)";
     my ($pluginLobbyMsg,$pluginGameMsg);
     foreach my $pluginName (@pluginsOrder) {
       ($pluginLobbyMsg,$pluginGameMsg)=$plugins{$pluginName}->setVoteMsg($reqYesVotes,$maxReqYesVotes,$reqNoVotes,$maxReqNoVotes,$nbRequiredManualVotes) if($plugins{$pluginName}->can('setVoteMsg'));
@@ -9568,6 +9592,45 @@ sub hList {
         sayPrivate($user,"  --> Use \"$C{3}!list hSettings all$C{1}\" to list all hosting settings.");
       }else{
         sayPrivate($user,"No hosting setting found.");
+      }
+    }
+  }elsif($lcData eq 'vsettings') {
+    if(@filters) {
+      invalidSyntax($user,'list');
+      return 0;
+    }
+    return 1 if($checkOnly);
+    my %defaultVSettings=(majorityVoteMargin => 0, awayVoteDelay => 20);
+    map {$defaultVSettings{$_}=$confMacros{$_} if(defined $confMacros{$_})} (keys %defaultVSettings);
+    my @settingsData;
+    foreach my $vSetting (qw'autoSetVoteMode awayVoteDelay majorityVoteMargin minVoteParticipation reCallVoteDelay voteTime') {
+      push(@settingsData,{"$C{5}Setting$C{1}" => $vSetting, "$C{5}Value$C{1}" => $conf{$vSetting}//$defaultVSettings{$vSetting}});
+    }
+    sayPrivate($user,'.');
+    my $p_resultLines=formatArray(["$C{5}Setting$C{1}","$C{5}Value$C{1}"],\@settingsData,"$C{2}Global vote settings$C{1}");
+    foreach my $resultLine (@{$p_resultLines}) {
+      sayPrivate($user,$resultLine);
+    }
+    my %cmdVSettings;
+    foreach my $spadsCmd (keys %{$spads->{commandsAttributes}}) {
+      map {$cmdVSettings{$spadsCmd}{$_}=$spads->{commandsAttributes}{$spadsCmd}{$_} if(exists $spads->{commandsAttributes}{$spadsCmd}{$_})} (qw'awayVoteDelay majorityVoteMargin minVoteParticipation voteTime');
+    }
+    foreach my $pluginName (keys %{$spads->{pluginsConf}}) {
+      my $r_pluginCmdAttribs=$spads->{pluginsConf}{$pluginName}{commandsAttributes};
+      foreach my $pluginCmd (keys %{$r_pluginCmdAttribs}) {
+        next if(exists $cmdVSettings{$pluginCmd});
+        map {$cmdVSettings{$pluginCmd}{$_}=$r_pluginCmdAttribs->{$pluginCmd}{$_} if(exists $r_pluginCmdAttribs->{$pluginCmd}{$_})} (qw'awayVoteDelay majorityVoteMargin minVoteParticipation voteTime');
+      }
+    }
+    if(%cmdVSettings) {
+      @settingsData=();
+      foreach my $cmd (sort keys %cmdVSettings) {
+        map {push(@settingsData,{"$C{5}Command$C{1}" => $cmd, "$C{5}Setting$C{1}" => $_, "$C{5}Value$C{1}" => $cmdVSettings{$cmd}{$_}})} (sort keys %{$cmdVSettings{$cmd}});
+      }
+      sayPrivate($user,'.');
+      $p_resultLines=formatArray(["$C{5}Command$C{1}","$C{5}Setting$C{1}","$C{5}Value$C{1}"],\@settingsData,"$C{2}Specific vote settings$C{1}");
+      foreach my $resultLine (@{$p_resultLines}) {
+        sayPrivate($user,$resultLine);
       }
     }
   }elsif($lcData eq 'aliases') {

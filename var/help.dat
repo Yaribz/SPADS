@@ -182,7 +182,7 @@
 "!learnMaps . spads" learns all the maps hosted currently by players containing "spads" in their name
 
 [list]
-!list users|presets|bPresets|hPresets|settings|bSettings|hSettings|aliases|bans|maps|rotationMaps|pref|plugins|pSettings [all|map|mod|engine|<filters>] - lists various settings
+!list users|presets|bPresets|hPresets|settings|bSettings|hSettings|vSettings|aliases|bans|maps|rotationMaps|pref|plugins|pSettings [all|map|mod|engine|<filters>] - lists various settings
 "!list users" lists AutoHost users and rights
 "!list presets" lists all global SPADS presets
 "!list bPresets" lists allowed battle presets for current global SPADS preset
@@ -197,6 +197,7 @@
 "!list pref" lists your AutoHost preferences
 "!list plugins" lists currently loaded plugins
 "!list pSettings" lists plugins settings
+"!list vSettings" lists vote settings
 
 [loadBoxes]
 !loadBoxes [<mapName> [<nbTeams> [<nbExtraBox>]]] - loads start boxes for given map, number of teams and number of extra boxes (use current values if not provided)

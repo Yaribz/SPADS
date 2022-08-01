@@ -80,6 +80,7 @@ help.dat:
 0.13.1: added fast mode for !reload command (detects archives addition/removal, but not archives modifications)
 0.13.2: removed "cpu" filter parameter from !ban and !unban commands
         removed "all" parameter from !smurfs command
+0.13.3: extend !list command usage to show current vote settings: "!list vSettings"
 
 helpSettings.dat:
 ================
@@ -926,6 +927,11 @@ spads.pl:
 0.12.54: refactor the "generatePassword" function to allow custom allowed characters
 0.12.55: allow plugins to update skill uncertainty value ("updatePlayerSkill" customization callback)
          fix sending of superfluous REMOVESCRIPTTAGS commands for players skill values
+0.12.56: extend !list command usage to show current vote settings: "!list vSettings"
+         improve vote status message: remove total votes counter, take minVoteParticipation into account directly in yes/no counters
+         fix vote participation calculation when majorityVoteMargin is used
+         fix handling of majorityVoteMargin when vote delay has expired
+         fix vote messages showing inconsistent values for maximum number of required yes/no votes when majorityVoteMargin is used
 
 SpadsConf.pm:
 ============
