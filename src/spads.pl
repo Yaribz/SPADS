@@ -50,7 +50,7 @@ use SpringLobbyInterface;
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.56';
+our $spadsVer='0.12.57';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -7814,8 +7814,9 @@ sub hBSet {
     $allowExternalValues=$conf{allowMapOptionsValues};
   }
   my @allowedValues=getBSettingAllowedValues($bSetting,$p_options,$allowExternalValues);
+  my $optionType = $optionScope eq 'engine' ? 'unknown' : $p_options->{$bSetting}{type};
   if(! @allowedValues && $allowExternalValues) {
-    answer("\"$bSetting\" is a $optionScope option of type \"$p_options->{$bSetting}->{type}\", it must be defined in current battle preset to be modifiable");
+    answer("\"$bSetting\" is a $optionScope option of type \"$optionType\", it must be defined in current battle preset to be modifiable");
     return 0;
   }
 
@@ -7823,6 +7824,13 @@ sub hBSet {
   foreach my $allowedValue (@allowedValues) {
     if(isRange($allowedValue)) {
       $allowed=1 if(matchRange($allowedValue,$val));
+    }elsif($optionType eq 'string' && substr($allowedValue,0,1) eq '~') {
+      my $regexp=substr($allowedValue,1);
+      if(eval { qr/^$regexp$/ } && ! $@) {
+        $allowed=1 if($val =~ /^$regexp$/);
+      }else{
+        slog("Ignoring invalid regular expression \"$regexp\" when checking $bSetting battle setting allowed values (string $optionScope option)",2);
+      }
     }elsif($val eq $allowedValue) {
       $allowed=1;
     }

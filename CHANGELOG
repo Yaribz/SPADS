@@ -932,6 +932,7 @@ spads.pl:
          fix vote participation calculation when majorityVoteMargin is used
          fix handling of majorityVoteMargin when vote delay has expired
          fix vote messages showing inconsistent values for maximum number of required yes/no votes when majorityVoteMargin is used
+0.12.57: allow using regular expression syntax when declaring allowed mod/map option values in battlePresets.conf (for string type options only)
 
 SpadsConf.pm:
 ============
