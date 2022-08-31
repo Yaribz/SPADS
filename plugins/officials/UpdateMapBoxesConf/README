@@ -1,0 +1,4 @@
+This plugin automatically updates (if needed) the local mapBoxes.conf file from
+an URL, at regular intervals. The "mapBoxesConfUrl" parameter of the plugin
+configuration file must be updated with the URL containing the desired
+mapBoxes.conf file content.
