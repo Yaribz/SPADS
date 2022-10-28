@@ -1108,6 +1108,7 @@ SpadsConf.pm:
 0.12.20: added map list inheritance functionality (map list declaration syntax extension)
 0.12.21: replace the basic list functions any/all/none/notall with those provided by the List::Util Perl module (requires Perl >= 5.19.5)
 0.12.22: new value "voting" can now be used for filter "gameState" in commands rights configuration (only matches if the game is not running and a vote is in progress to start it)
+0.12.23: detect invalid integer setting declarations which use integer range notation as default value (first value)
 
 spadsInstaller.pl:
 =================

@@ -1,6 +1,6 @@
 # Object-oriented Perl module handling SPADS configuration files
 #
-# Copyright (C) 2008-2021  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2022  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -38,7 +38,7 @@ use SimpleLog;
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.12.22';
+my $moduleVersion='0.12.23';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -629,9 +629,10 @@ sub aindex (\@$;$) {
 }
 
 sub checkValue {
-  my ($value,$p_types)=@_;
+  my ($value,$p_types,$isFirstVal)=@_;
   return 1 unless(@{$p_types});
   foreach my $type (@{$p_types}) {
+    next if($isFirstVal && (any {$type eq $_} (qw'integerRange nonNullIntegerRange')));
     my $checkFunction=$paramTypes{$type};
     if(ref($checkFunction)) {
       return 1 if(&{$checkFunction}($value));
@@ -820,11 +821,13 @@ sub loadSettingsFile {
         my @values=split(/\|/,$value);
         $values[0]//='';
         if(exists $p_sectionParams->{$param}) {
+          my $isFirstVal=1;
           foreach my $v (@values) {
-            if(! checkValue($v,$p_sectionParams->{$param})) {
+            if(! checkValue($v,$p_sectionParams->{$param},$isFirstVal)) {
               push(@invalidSectionParams,$param);
               last;
             }
+            $isFirstVal=0;
           }
         }
         if(exists $newConf{$currentSection}{$param}) {
