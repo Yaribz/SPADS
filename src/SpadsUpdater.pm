@@ -601,14 +601,14 @@ sub uncompress7zipFile {
   my $sl=$self->{sLog};
   my $sevenZipBin=catfile($self->{localDir},$win?'7za.exe':'7za');
   $sl->log("Extracting sevenzip file \"$archiveFile\" into \"$destDir\"...",5);
-  my $previousEnvLangValue=$ENV{LANG};
-  $ENV{LANG}='C' unless($win);
+  my $previousEnvLangValue=$ENV{LC_ALL};
+  $ENV{LC_ALL}='C' unless($win);
   my ($exitCode,$errorMsg)=_systemNoOutput($sevenZipBin,'x','-y',"-o$destDir",$archiveFile,@filesToExtract);
   if(! $win) {
     if(defined $previousEnvLangValue) {
-      $ENV{LANG}=$previousEnvLangValue;
+      $ENV{LC_ALL}=$previousEnvLangValue;
     }else{
-      delete $ENV{LANG};
+      delete $ENV{LC_ALL};
     }
   }
   my $failReason;
