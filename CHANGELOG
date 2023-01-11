@@ -1302,6 +1302,7 @@ SpadsUpdater.pm:
 0.17: support automatic Spring installation for specific versions of the maintenance branch too
 0.18: automatic Spring installation now also supports 64-bit builds on Windows (requires 64-bit Perl)
 0.19: replace the basic list functions any/all/none/notall with those provided by the List::Util Perl module (requires Perl >= 5.19.5)
+0.20: override LC_ALL instead of LANG when calling 7za on Linux (workaround for 7za bug) [thanks CommanderSpice]
 
 springLobbyCertificates.dat:
 ===========================

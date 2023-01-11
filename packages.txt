@@ -55,7 +55,7 @@ spads.pl:spads_0.12.57.pl
 SpadsConf.pm:SpadsConf_0.12.23.pm
 spadsInstaller.pl:spadsInstaller_0.27.pl
 SpadsPluginApi.pm:SpadsPluginApi_0.32.pm
-SpadsUpdater.pm:SpadsUpdater_0.19.pm
+SpadsUpdater.pm:SpadsUpdater_0.20.pm
 SpringAutoHostInterface.pm:SpringAutoHostInterface_0.13.pm
 SpringLobbyInterface.pm:SpringLobbyInterface_0.39.pm
 springLobbyCertificates.dat:springLobbyCertificates_0.1.dat
@@ -76,7 +76,7 @@ spads.pl:spads_0.12.57.pl
 SpadsConf.pm:SpadsConf_0.12.23.pm
 spadsInstaller.pl:spadsInstaller_0.27.pl
 SpadsPluginApi.pm:SpadsPluginApi_0.32.pm
-SpadsUpdater.pm:SpadsUpdater_0.19.pm
+SpadsUpdater.pm:SpadsUpdater_0.20.pm
 SpringAutoHostInterface.pm:SpringAutoHostInterface_0.13.pm
 SpringLobbyInterface.pm:SpringLobbyInterface_0.39.pm
 springLobbyCertificates.dat:springLobbyCertificates_0.1.dat

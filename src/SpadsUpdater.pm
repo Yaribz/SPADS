@@ -1,6 +1,6 @@
 # Perl module used for Spads auto-updating functionnality
 #
-# Copyright (C) 2008-2021  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2023  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -34,7 +34,7 @@ use Time::HiRes;
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $archName=($win?'win':'linux').($Config{ptrsize} > 4 ? 64 : 32);
 
-my $moduleVersion='0.19';
+my $moduleVersion='0.20';
 
 my @constructorParams = qw'sLog repository release packages';
 my @optionalConstructorParams = qw'localDir springDir';
