@@ -933,6 +933,7 @@ spads.pl:
          fix handling of majorityVoteMargin when vote delay has expired
          fix vote messages showing inconsistent values for maximum number of required yes/no votes when majorityVoteMargin is used
 0.12.57: allow using regular expression syntax when declaring allowed mod/map option values in battlePresets.conf (for string type options only)
+0.12.58: avoid calling unitsync functions deprecated in Spring 106 [thanks CommanderSpice]
 
 SpadsConf.pm:
 ============

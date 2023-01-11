@@ -2,7 +2,7 @@
 #
 # SPADS: Spring Perl Autohost for Dedicated Server
 #
-# Copyright (C) 2008-2022  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2023  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -50,7 +50,7 @@ use SpringLobbyInterface;
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.57';
+our $spadsVer='0.12.58';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -15118,8 +15118,7 @@ if(! $abortSpadsStartForAutoUpdate) {
   fatalError("Unable to load PerlUnitSync module ($@)") if (hasEvalError());
   $syncedSpringVersion=PerlUnitSync::GetSpringVersion();
   $fullSpringVersion=$syncedSpringVersion;
-  my ($majorSpringVersion)=$fullSpringVersion =~ /^(\d+)/;
-  if(int($majorSpringVersion) <= 105) {
+  if(! ($fullSpringVersion =~ /^(\d+)/ && $1 > 105)) {
     my $buggedUnitsync=0;
     if(! $win) {
       my $fileBin;
