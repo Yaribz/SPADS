@@ -54,9 +54,9 @@ close(DATA);
 
 1;
 
-######################################################################################
-# https://raw.githubusercontent.com/spring/spring/91.0/tools/unitsync/unitsync_api.h #
-######################################################################################
+#######################################################################################
+# https://raw.githubusercontent.com/spring/spring/106.0/tools/unitsync/unitsync_api.h #
+#######################################################################################
 __DATA__
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
@@ -70,9 +70,8 @@ __DATA__
 	#warning PLAIN_API_STRUCTURE is defined -> functions will NOT be properly exported!
 #else
 	#include "unitsync.h"
-	#include "System/exportdefines.h"
+	#include "System/ExportDefines.h"
 #endif
-
 
 // from unitsync.cpp:
 
@@ -107,19 +106,6 @@ EXPORT(const char* ) GetNextError();
  * Returns a string specifying the synced part of the version of Spring used to
  * build this library with.
  *
- * Before release 83:
- *   Release:
- *     The version will be of the format "Major.Minor".
- *     With Major=0.82 and Minor=6, the returned version would be "0.82.6".
- *   Development:
- *     They use the same format, but major ends with a +, for example "0.82+.5".
- *   Examples:
- *   - 0.78.0: 1st release of 0.78
- *   - 0.82.6: 7th release of 0.82
- *   - 0.82+.5: some test-version from after the 6th release of 0.82
- *   - 0.82+.0: some dev-version from after the 1st release of 0.82
- *     (on the main dev branch)
- *
  * After release 83:
  *   You may check for sync compatibility by using a string equality test with
  *   the return of this function.
@@ -135,33 +121,18 @@ EXPORT(const char* ) GetNextError();
  *     this may only be on the the master or hotfix branch
  *   - 83.0.1-13-g1234567 develop: some dev-version after the 1st release of 83
  *     on the develop branch
+ * After release 106.0:
+ *    The full version, for example "104.0.1-2155-gddd1321651 develop" or "105.0"
  */
 EXPORT(const char* ) GetSpringVersion();
 
 /**
- * @brief Returns the unsynced/patch-set part of the version of Spring
- *   this unitsync was compiled with.
- *
- * Before release 83:
- *   You may want to use this together with GetSpringVersion() to form the whole
- *   version like this:
- *   GetSpringVersion() + "." + GetSpringVersionPatchset()
- *   This will provide you with a version of the format "Major.Minor.Patchset".
- *   Examples:
- *   - 0.82.6.0                in this case, the 0 is usually omitted -> 0.82.6
- *   - 0.82.6.1                release
- *   - 0.82+.6.1               dev build
- *
- * After release 83:
- *   You should only possibly append this to the main version returned by
- *   GetSpringVersion(), if it is a release, as otherwise GetSpringVersion()
- *   already contains the patch-set.
+ * @deprecated
  */
 EXPORT(const char* ) GetSpringVersionPatchset();
 
 /**
- * @brief Returns true if the version of Spring this unitsync was compiled
- *   with is a release version, false if it is a development version.
+ * @deprecated
  */
 EXPORT(bool        ) IsSpringReleaseVersion();
 
@@ -215,19 +186,14 @@ EXPORT(int         ) GetDataDirectoryCount();
 EXPORT(const char* ) GetDataDirectory(int index);
 
 /**
- * @brief Process another unit and return how many are left to process
+ * @brief Process units
  *
- * Call this function repeatedly until it returns 0 before calling any other
- * function related to units.
+ * Must be called before GetUnitCount(), GetUnitName(), ...
  *
- * Before any units are available, you will first need to map a mod's archives
+ * Before caling this function, you will first need to load a game's archives
  * into the VFS using AddArchive() or AddAllArchives().
  *
- * @return negative integer (< 0) on error;
- *   the number of units left to process (>= 0) on success.
- *   Because of risk for infinite loops, this function does not yet return
- *   any error code.
- *   It is advised to poll GetNextError() after calling this function.
+ * @return always 0!
  * @see ProcessUnitsNoChecksum
  */
 EXPORT(int         ) ProcessUnits();
@@ -327,6 +293,18 @@ EXPORT(const char* ) GetArchivePath(const char* archiveName);
  *		@endcode
  */
 EXPORT(int         ) GetMapCount();
+
+/**
+ * @brief Retrieves the number of info items available for a given Map
+ * @param index Map index/id
+ * @return negative integer (< 0) on error;
+ *   the number of info items available (>= 0) on success
+ * @see GetMapCount
+ * @see GetInfoKey
+ *
+ * Be sure to call GetMapCount() prior to using this function.
+ */
+EXPORT(int         ) GetMapInfoCount(int index);
 /**
  * @brief Get the name of a map
  * @return NULL on error; the name of the map (e.g. "SmallDivide") on success
@@ -338,94 +316,6 @@ EXPORT(const char* ) GetMapName(int index);
  *   on success
  */
 EXPORT(const char* ) GetMapFileName(int index);
-/**
- * @brief Get the description of a map
- * @return NULL on error; the description of the map
- *         (e.g. "Lot of metal in middle") on success
- */
-EXPORT(const char* ) GetMapDescription(int index);
-/**
- * @brief Get the name of the author of a map
- * @return NULL on error; the name of the author of a map on success
- */
-EXPORT(const char* ) GetMapAuthor(int index);
-/**
- * @brief Get the width of a map
- * @return negative integer (< 0) on error;
- *   the width of a map (>= 0) on success
- */
-EXPORT(int         ) GetMapWidth(int index);
-/**
- * @brief Get the height of a map
- * @return negative integer (< 0) on error;
- *   the height of a map (>= 0) on success
- */
-EXPORT(int         ) GetMapHeight(int index);
-/**
- * @brief Get the tidal speed of a map
- * @return negative integer (< 0) on error;
- *   the tidal speed of the map (>= 0) on success
- */
-EXPORT(int         ) GetMapTidalStrength(int index);
-/**
- * @brief Get the minimum wind speed on a map
- * @return negative integer (< 0) on error;
- *   the minimum wind speed on the map (>= 0) on success
- */
-EXPORT(int         ) GetMapWindMin(int index);
-/**
- * @brief Get the maximum wind strenght on a map
- * @return negative integer (< 0) on error;
- *   the maximum wind strenght on the map (>= 0) on success
- */
-EXPORT(int         ) GetMapWindMax(int index);
-/**
- * @brief Get the gravity of a map
- * @return negative integer (< 0) on error;
- *   the gravity of the map (>= 0) on success
- */
-EXPORT(int         ) GetMapGravity(int index);
-/**
- * @brief Get the number of supported resources
- * @return negative integer (< 0) on error;
- *   the number of supported resources (>= 0) on success
- */
-EXPORT(int         ) GetMapResourceCount(int index);
-/**
- * @brief Get the name of a map resource
- * @return NULL on error; the name of a map resource (e.g. "Metal") on success
- */
-EXPORT(const char* ) GetMapResourceName(int index, int resourceIndex);
-/**
- * @brief Get the scale factor of a resource map
- * @return 0.0f on error; the scale factor of a resource map on success
- */
-EXPORT(float       ) GetMapResourceMax(int index, int resourceIndex);
-/**
- * @brief Get the extractor radius for a map resource
- * @return negative integer (< 0) on error;
- *   the extractor radius for a map resource (>= 0) on success
- */
-EXPORT(int         ) GetMapResourceExtractorRadius(int index, int resourceIndex);
-
-/**
- * @brief Get the number of defined start positions for a map
- * @return negative integer (< 0) on error;
- *   the number of defined start positions for a map (>= 0) on success
- */
-EXPORT(int         ) GetMapPosCount(int index);
-/**
- * @brief Get the position on the x-axis for a start position on a map
- * @return -1.0f on error; the position on the x-axis for a start position
- *         on a map on success
- */
-EXPORT(float       ) GetMapPosX(int index, int posIndex);
-/**
- * @brief Get the position on the z-axis for a start position on a map
- * @return -1.0f on error; the position on the z-axis for a start position
- *         on a map on success
- */
-EXPORT(float       ) GetMapPosZ(int index, int posIndex);
 
 /**
  * @brief return the map's minimum height
@@ -828,20 +718,6 @@ EXPORT(const char* ) GetOptionName(int optIndex);
  */
 EXPORT(const char* ) GetOptionSection(int optIndex);
 /**
- * @brief Retrieve an option's style
- * @param optIndex option index/id
- * @return NULL on error; the option's style on success
- *
- * XXX The format of an option style string is currently undecided.
- *
- * Do not use this before having called Get*OptionCount().
- * @see GetMapOptionCount
- * @see GetModOptionCount
- * @see GetSkirmishAIOptionCount
- * @see GetCustomOptionCount
- */
-EXPORT(const char* ) GetOptionStyle(int optIndex);
-/**
  * @brief Retrieve an option's description
  * @param optIndex option index/id
  * @return NULL on error; the option's description on success
@@ -1237,6 +1113,15 @@ EXPORT(void        ) SetSpringConfigInt(const char* name, const int value);
  * @param value float value to set
  */
 EXPORT(void        ) SetSpringConfigFloat(const char* name, const float value);
+/**
+ * @brief deletes configkey in Spring configuration
+ * @param name name of key to set
+ */
+EXPORT(void        ) DeleteSpringConfigKey(const char* name);
+
+
+EXPORT(const char* ) GetSysInfoHash();
+EXPORT(const char* ) GetMacAddrHash();
 
 
 // from LuaParserAPI.cpp:
@@ -1287,57 +1172,9 @@ EXPORT(const char*) lpGetIntKeyStrVal(int key, const char* defValue);
 EXPORT(const char*) lpGetStrKeyStrVal(const char* key, const char* defValue);
 
 /* deprecated functions */
-/**
- * @deprecated in June 2011, use ProcessUnits() instead
- */
-EXPORT(int         ) ProcessUnitsNoChecksum();
-#if       !defined(PLAIN_API_STRUCTURE)
-/**
- * @deprecated use GetMapCount instead
- */
-EXPORT(int         ) GetMapInfoEx(const char* mapName, MapInfo* outInfo, int version);
-/**
- * @deprecated use GetMapCount instead
- */
-EXPORT(int         ) GetMapInfo(const char* mapName, MapInfo* outInfo);
-#endif // !defined(PLAIN_API_STRUCTURE)
-/**
- * @deprecated use GetInfoValue* instead
- */
-EXPORT(const char* ) GetInfoValue(int index);
-/**
- * @deprecated use the mod info item with key "name" instead, see GetPrimaryModInfoCount / GetInfoKey
- */
-EXPORT(const char* ) GetPrimaryModName(int index);
-/**
- * @deprecated use the mod info item with key "shortName" instead, see GetPrimaryModInfoCount / GetInfoKey
- */
-EXPORT(const char* ) GetPrimaryModShortName(int index);
-/**
- * @deprecated use the mod info item with key "version" instead, see GetPrimaryModInfoCount / GetInfoKey
- */
-EXPORT(const char* ) GetPrimaryModVersion(int index);
-/**
- * @deprecated use the mod info item with key "mutator" instead, see GetPrimaryModInfoCount / GetInfoKey
- */
-EXPORT(const char* ) GetPrimaryModMutator(int index);
-/**
- * @deprecated use the mod info item with key "game" instead, see GetPrimaryModInfoCount / GetInfoKey
- */
-EXPORT(const char* ) GetPrimaryModGame(int index);
-/**
- * @deprecated use the mod info item with key "shortGame" instead, see GetPrimaryModInfoCount / GetInfoKey
- */
-EXPORT(const char* ) GetPrimaryModShortGame(int index);
-/**
- * @deprecated use the mod info item with key "description" instead, see GetPrimaryModInfoCount / GetInfoKey
- */
-EXPORT(const char* ) GetPrimaryModDescription(int index);
-/**
- * @deprecated use OpenArchive instead
- */
-EXPORT(int         ) OpenArchiveType(const char* name, const char* type);
 
+#ifdef ENABLE_DEPRECATED_FUNCTIONS
+#endif // ENABLE_DEPRECATED_FUNCTIONS
 /** @} */
 
 #endif // _UNITSYNC_API_H
