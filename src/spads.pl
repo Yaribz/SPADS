@@ -15118,29 +15118,32 @@ if(! $abortSpadsStartForAutoUpdate) {
   fatalError("Unable to load PerlUnitSync module ($@)") if (hasEvalError());
   $syncedSpringVersion=PerlUnitSync::GetSpringVersion();
   $fullSpringVersion=$syncedSpringVersion;
-  my $buggedUnitsync=0;
-  if(! $win) {
-    my $fileBin;
-    if(-x '/usr/bin/file') {
-      $fileBin='/usr/bin/file';
-    }elsif(-x '/bin/file') {
-      $fileBin='/bin/file';
+  my ($majorSpringVersion)=$fullSpringVersion =~ /^(\d+)/;
+  if(int($majorSpringVersion) <= 105) {
+    my $buggedUnitsync=0;
+    if(! $win) {
+      my $fileBin;
+      if(-x '/usr/bin/file') {
+        $fileBin='/usr/bin/file';
+      }elsif(-x '/bin/file') {
+        $fileBin='/bin/file';
+      }
+      $buggedUnitsync=1 if(! defined $fileBin || `$fileBin $spadsDir/PerlUnitSync.so` !~ /64\-bit/);
     }
-    $buggedUnitsync=1 if(! defined $fileBin || `$fileBin $spadsDir/PerlUnitSync.so` !~ /64\-bit/);
-  }
-  my $isSpringReleaseVersion;
-  if($buggedUnitsync) {
-    if($syncedSpringVersion =~ /^\d+$/) {
-      $isSpringReleaseVersion=1;
+    my $isSpringReleaseVersion;
+    if($buggedUnitsync) {
+      if($syncedSpringVersion =~ /^\d+$/) {
+        $isSpringReleaseVersion=1;
+      }else{
+        $isSpringReleaseVersion=0;
+      }
     }else{
-      $isSpringReleaseVersion=0;
+      $isSpringReleaseVersion=PerlUnitSync::IsSpringReleaseVersion();
     }
-  }else{
-    $isSpringReleaseVersion=PerlUnitSync::IsSpringReleaseVersion();
-  }
-  if($isSpringReleaseVersion) {
-    my $springVersionPatchset=PerlUnitSync::GetSpringVersionPatchset();
-    $fullSpringVersion.='.'.$springVersionPatchset;
+    if($isSpringReleaseVersion) {
+      my $springVersionPatchset=PerlUnitSync::GetSpringVersionPatchset();
+      $fullSpringVersion.='.'.$springVersionPatchset;
+    }
   }
   slog("Loading Spring archives using unitsync library version $syncedSpringVersion ...",3);
   fatalError('Unable to load Spring archives at startup') unless(loadArchives());
