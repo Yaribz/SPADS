@@ -13,7 +13,7 @@ Then you can run SPADS as follows:
 To install SPADS on Windows, you have to:
 =========================================
 
-1) Install ActivePerl Windows (available here: http://www.activestate.com/activeperl/downloads) or Strawberry Perl (available here: http://strawberryperl.com)
+1) Install Strawberry Perl (available here: http://strawberryperl.com) or ActivePerl for Windows (available here: http://www.activestate.com/activeperl/downloads)
 2) Ensure your Perl bin directory is in your PATH environement variable
 3) Open a Command shell, go in the directory where you extracted SPADS installation files, and run "perl spadsInstaller.pl" (SPADS will be installed in current directory)
 4) Check your configuration files, in particular "spads.conf", "hostingPresets.conf" and "battlePresets.conf"
@@ -37,5 +37,8 @@ Then you can run SPADS as follows:
 
 
 
-If you have any problem, you can contact me (bibim) directly in Spring lobby or forums
-======================================================================================
+You can find more info and contact me regarding SPADS here:
+===========================================================
+
+- SpringRTS/SPADS subforum: https://springrts.com/phpbb/viewforum.php?f=88
+- Github/SPADS discussions: https://github.com/Yaribz/SPADS/discussions
