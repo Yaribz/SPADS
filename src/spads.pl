@@ -50,7 +50,7 @@ use SpringLobbyInterface;
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.58';
+our $spadsVer='0.12.59';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -1840,10 +1840,8 @@ sub getSysInfo {
     $memAmount=formatMemSize($macOsData{'hw.memsize'});
     $uptime=time()-$1 if(defined $macOsData{'kern.boottime'} && $macOsData{'kern.boottime'} =~ /\bsec\s*=\s*(\d+)/);
   }else{
-    if(-f '/etc/issue.net') {
-      $osVersion=`cat /etc/issue.net`;
-      chomp($osVersion);
-    }
+    my $r_issueNetContent=fileToArray('/etc/issue.net');
+    $osVersion=$r_issueNetContent->[0] if(defined $r_issueNetContent && @{$r_issueNetContent});
     my $kernelVersion="$uname[0] $uname[2]";
     if($kernelVersion ne '') {
       if($osVersion ne '') {
@@ -1852,21 +1850,17 @@ sub getSysInfo {
         $osVersion=$kernelVersion;
       }
     }
-    if(-f '/proc/meminfo') {
-      my @memInfo=`cat /proc/meminfo 2>/dev/null`;
-      foreach my $line (@memInfo) {
+    my $r_memInfoContent=fileToArray('/proc/meminfo');
+    if(defined $r_memInfoContent) {
+      foreach my $line (@{$r_memInfoContent}) {
         if($line =~ /^\s*MemTotal\s*:\s*(\d+\s*\w+)$/) {
           $memAmount=$1;
           last;
         }
       }
     }
-    if(-f '/proc/uptime') {
-      my $uptimeInfo=`cat /proc/uptime 2>/dev/null`;
-      if($uptimeInfo =~ /^\s*(\d+)/) {
-        $uptime=$1;
-      }
-    }
+    my $r_uptimeContent=fileToArray('/proc/uptime');
+    $uptime=$1 if(defined $r_uptimeContent && @{$r_uptimeContent} && $r_uptimeContent->[0] =~ /^\s*(\d+)/);
   }
   my ($procName,$origin);
   if($win) {
@@ -1882,19 +1876,33 @@ sub getSysInfo {
   }elsif($macOs) {
     $origin='using sysctl command';
     $procName=$macOsData{'machdep.cpu.brand_string'} if(exists $macOsData{'machdep.cpu.brand_string'});
-  }elsif(-f '/proc/cpuinfo' && -r '/proc/cpuinfo') {
+  }elsif(-f '/proc/cpuinfo' && -r _) {
     $origin='from /proc/cpuinfo';
-    my @cpuInfo=`cat /proc/cpuinfo 2>/dev/null`;
-    my %cpu;
-    foreach my $line (@cpuInfo) {
-      $cpu{$1}=$2 if($line =~ /^([\w\s]*\w)\s*:\s*(.*)$/);
+    my $r_cpuInfo=fileToArray('/proc/cpuinfo');
+    if(defined $r_cpuInfo) {
+      my %cpu;
+      foreach my $line (@{$r_cpuInfo}) {
+        $cpu{$1}=$2 if($line =~ /^([\w\s]*\w)\s*:\s*(.*)$/);
+      }
+      $procName=$cpu{'model name'} if(exists $cpu{'model name'});
     }
-    $procName=$cpu{'model name'} if(exists $cpu{'model name'});
   }else{
     $origin='(unknown system)';
   }
   slog("Unable to retrieve CPU info $origin",2) unless(defined $procName);
   return ($osVersion,$memAmount,$uptime,$procName);
+}
+
+sub fileToArray {
+  my $filePath=shift;
+  return undef unless(-f $filePath && -r _);
+  if(open(my $fh,'<',$filePath)) {
+    chomp(my @lines=<$fh>);
+    close($fh);
+    return \@lines;
+  }
+  slog("Failed to open file \"$filePath\" for reading: $!",2);
+  return undef;
 }
 
 sub getLocalLanIp {
@@ -8433,7 +8441,7 @@ sub hForce {
       my @bots=keys(%{$lobby->{battle}->{bots}});
       my $p_forcedBots=cleverSearch($player,\@bots);
       if(! @{$p_forcedBots}) {
-        answer("Unable to fing matching player for \"$player\" in battle lobby");
+        answer("Unable to find matching player for \"$player\" in battle lobby");
         return 0;
       }
       if($#{$p_forcedBots} > 0) {
