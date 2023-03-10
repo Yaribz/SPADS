@@ -2,7 +2,7 @@
 #
 # This program installs SPADS in current directory from remote repository.
 #
-# Copyright (C) 2008-2021  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2023  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -18,11 +18,13 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.27 (2021/10/28)
+# Version 0.28 (2023/03/09)
 
 use strict;
 
+use Config;
 use Cwd;
+use Digest::MD5 'md5_base64';
 use File::Basename 'fileparse';
 use File::Copy;
 use File::Path;
@@ -264,13 +266,13 @@ sub promptDir {
 }
 
 sub promptString {
-  my ($prompt,$autoInstallValue)=@_;
+  my ($prompt,$defaultVal,$autoInstallValue,$r_checkFunc)=@_;
   my $choice='';
   my $firstTry=1;
-  while($choice eq '') {
+  while($choice eq '' || (defined $r_checkFunc && ! $r_checkFunc->($choice))) {
     fatalError("Inconsistent data received in non-interactive mode \"$choice\", exiting!") unless($firstTry || $isInteractive);
     $firstTry=0;
-    $choice=promptStdin($prompt,undef,$autoInstallValue);
+    $choice=promptStdin($prompt,$defaultVal,$autoInstallValue);
     $autoInstallValue=undef;
   }
   return $choice;
@@ -615,7 +617,7 @@ sub configureSpringDataDir {
       $currentStep++;
       if($downloadMaps eq 'yes') {
         slog('Downloading maps...',3);
-        slog('Failed to download maps',2) unless(all {downloadFile("http://api.springfiles.com/files/maps/$_",File::Spec->catfile($mapsDir,$_))} @mapFiles);
+        slog('Failed to download maps',2) unless(all {downloadFile("http://planetspads.free.fr/spring/maps/$_",File::Spec->catfile($mapsDir,$_))} @mapFiles);
       }
     }else{
       $nbSteps-=2;
@@ -764,40 +766,91 @@ if(! exists $conf{absoluteLogDir}) {
   createDir(File::Spec->catdir($conf{absoluteLogDir},'chat'));
 }
 
+sub ghAssetTemplateToRegex {
+  my $assetTmpl=shift;
+  return undef if(index($assetTmpl,',') != -1);
+  my $osString = $win ? 'windows' : $macOs ? 'macos' : 'linux';
+  my $bitnessString = $Config{ptrsize} > 4 ? 64 : 32;
+  $assetTmpl=~s/\Q<os>\E/$osString/g;
+  $assetTmpl=~s/\Q<bitness>\E/$bitnessString/g;
+  return $assetTmpl if(eval { qw/^$assetTmpl$/ } && ! $@);
+  return undef;
+}
+
 if(! exists $conf{autoManagedSpringVersion}) {
-  my $springBinariesType;
+
+  my $engineBinariesType;
   if($macOs) {
-    $springBinariesType='custom';
+    $engineBinariesType='custom';
   }else{
-    $springBinariesType=promptChoice("5/$nbSteps - Do you want to use official Spring binary files (auto-managed by SPADS), or a custom Spring installation already existing on the system?",[qw'official custom'],'official',$autoInstallData{springBinariesType});
+    my ($githubDescStr,@engineBinChoices);
+    if($SpadsUpdater::HttpTinyCanSsl) {
+      $githubDescStr=' engine binaries from GitHub (auto-managed by SPADS),';
+      @engineBinChoices=(qw'official github custom');
+    }else{
+      slog("Engine auto-management using GitHub is unavailable because TLS support is missing (IO::Socket::SSL version 1.42 or superior and Net::SSLeay version 1.49 or superior are required)",2);
+      $githubDescStr='';
+      @engineBinChoices=(qw'official custom');
+    }
+    $engineBinariesType=promptChoice("5/$nbSteps - Do you want to use official Spring binary files (auto-managed by SPADS),$githubDescStr or a custom engine installation already existing on the system?",\@engineBinChoices,'official',$autoInstallData{springBinariesType});
   }
 
-  if($springBinariesType eq 'official') {
-    my (%springVersions,%springReleasesVersion,%springVersionsReleases);
-    my @springBranches=(qw'dev release');
-    my %springReleases=(stable => 'recommended release',
+  if($engineBinariesType eq 'official' || $engineBinariesType eq 'github') {
+    
+    my $autoManagedSpringVersionPrefix='';
+    my $engineStr='Spring';
+    my @engineBranches=(qw'develop master');
+    my %engineReleases=(stable => 'recommended release',
                         testing => 'next release candidate',
                         unstable => 'latest develop version');
-
-    slog('Checking available Spring versions...',3);
-    map { my $r_availableSpringVersions=$updater->getAvailableSpringVersions($_);
-          fatalError("Couldn't check available Spring versions") unless(@{$r_availableSpringVersions});
-          $springVersions{$_}=$r_availableSpringVersions; } @springBranches;
-    map { my $releaseVersion=$updater->resolveSpringReleaseNameToVersion($_);
+    
+    my %ghInfo;
+    if($engineBinariesType eq 'github') {
+      $engineStr='engine';
+      shift(@engineBranches);
+      delete $engineReleases{unstable};
+      $ghInfo{owner}=promptString('       Please enter the GitHub repository owner name','beyond-all-reason',$autoInstallData{githubOwner},sub {$_[0]=~/^[\w\-]+$/});
+      $ghInfo{name}=promptString('       Please enter the GitHub repository name','spring',$autoInstallData{githubName},sub {$_[0]=~/^[\w\-\.]+$/});
+      $ghInfo{tag}=promptString('       Please enter the GitHub release tag template','spring_bar_{BAR105}<version>',$autoInstallData{githubTag}, sub {index($_[0],'<version>') != -1 && index($_[0],',') == -1});
+      my $ghAsset=promptString('       Please enter the GitHub asset regular expression','.+_<os>-<bitness>-minimal-portable\.7z',$autoInstallData{githubAsset},\&ghAssetTemplateToRegex);
+      $ghInfo{asset}=ghAssetTemplateToRegex($ghAsset);
+      my $ghRepoHash=substr(md5_base64(join('/',@ghInfo{qw'owner name'})),0,7);
+      $ghRepoHash=~tr/\/\+/ab/;
+      my $ghSubdir=$ghInfo{tag};
+      $ghSubdir =~ s/\Q<version>\E/($ghRepoHash)/g;
+      $ghSubdir =~ tr/\\\/\:\*\?\"\<\>\|/........./;
+      $ghInfo{subdir}=$ghSubdir;
+      $autoManagedSpringVersionPrefix="[GITHUB]{owner=$ghInfo{owner},name=$ghInfo{name},tag=$ghInfo{tag},asset=$ghAsset}";
+    }
+    
+    my (%engineVersions,%engineReleasesVersion,%engineVersionsReleases);
+    slog("Checking available $engineStr versions...",3);
+    if($engineBinariesType eq 'official') {
+      map { my $r_availableSpringVersions=$updater->getAvailableSpringVersions($_);
+            fatalError("Couldn't check available Spring versions") unless(@{$r_availableSpringVersions});
+            $engineVersions{$_}=$r_availableSpringVersions; } @engineBranches;
+    }else{
+      my $r_availableEngineVersions=$updater->getAvailableEngineVersionsFromGithub(\%ghInfo);
+      fatalError("Couldn't check available engine versions") unless(@{$r_availableEngineVersions});
+      $engineVersions{master}=[reverse @{$r_availableEngineVersions}];
+    }
+    
+    map { my $releaseVersion=$updater->resolveEngineReleaseNameToVersion($_,%ghInfo ? \%ghInfo : undef);
           if(defined $releaseVersion) {
-            $springReleasesVersion{$_}=$releaseVersion;
-            $springVersionsReleases{$releaseVersion}{$_}=1;
-          } } (keys %springReleases);
+            $engineReleasesVersion{$_}=$releaseVersion;
+            $engineVersionsReleases{$releaseVersion}{$_}=1;
+          } } (keys %engineReleases);
 
-    my %availableVersions=%springReleasesVersion;
-    print "\nAvailable Spring versions:\n";
-    foreach my $springBranch (@springBranches) {
+    my %availableVersions=%engineReleasesVersion;
+    
+    print "\nAvailable $engineStr versions:\n";
+    foreach my $engineBranch (@engineBranches) {
       my $versionsToAdd=5;
-      while(@{$springVersions{$springBranch}}) {
-        my ($printedVersion,$versionComment)=(pop(@{$springVersions{$springBranch}}),undef);
+      while(@{$engineVersions{$engineBranch}}) {
+        my ($printedVersion,$versionComment)=(pop(@{$engineVersions{$engineBranch}}),undef);
         $availableVersions{$printedVersion}=1;
-        if(exists $springVersionsReleases{$printedVersion}) {
-          $versionComment=join(' + ', map { '['.uc($_)."] ($springReleases{$_})" } (sort keys %{$springVersionsReleases{$printedVersion}}));
+        if(exists $engineVersionsReleases{$printedVersion}) {
+          $versionComment=join(' + ', map { '['.uc($_)."] ($engineReleases{$_})" } (sort keys %{$engineVersionsReleases{$printedVersion}}));
           $versionsToAdd=5;
         }
         if($versionsToAdd >= 0) {
@@ -810,32 +863,33 @@ if(! exists $conf{autoManagedSpringVersion}) {
         }
       }
     }
-    print "\nPlease choose the Spring version which will be used by the autohost.\n";
-    print "If you choose \"stable\", \"testing\" or \"unstable\", SPADS will stay up to date with the corresponding official Spring release by automatically downloading and using new Spring binary files when needed.\n";
-    my @springVersionExamples=($springReleasesVersion{stable});
-    push(@springVersionExamples,$springReleasesVersion{testing}) unless($springReleasesVersion{stable} eq $springReleasesVersion{testing});
-    push(@springVersionExamples,$springReleasesVersion{unstable});
-    print 'If you choose a specific Spring version number ("'.join('", "',@springVersionExamples)."\", ...), SPADS will stick to this version until you manualy change it in the configuration file.\n\n";
-    my $autoManagedSpringVersion='';
-    my $springVersion;
+    print "\nPlease choose the $engineStr version which will be used by the autohost.\n";
+    print 'If you choose "stable"'.(%ghInfo ? ' or "testing"' : ', "testing" or "unstable"').", SPADS will stay up to date with the corresponding $engineStr release by automatically downloading and using new binary files when needed.\n";
+    my @engineVersionExamples=($engineReleasesVersion{stable});
+    push(@engineVersionExamples,$engineReleasesVersion{testing}) unless($engineReleasesVersion{stable} eq $engineReleasesVersion{testing});
+    push(@engineVersionExamples,$engineReleasesVersion{unstable}) if(defined $engineReleasesVersion{unstable});
+    print "If you choose a specific $engineStr version number (\"".join('", "',@engineVersionExamples)."\", ...), SPADS will stick to this version until you manualy change it in the configuration file.\n\n";
+    my $engineVersion;
     my $autoInstallValue=$autoInstallData{autoManagedSpringVersion};
+    my $autoManagedSpringVersion='';
     while(! exists $availableVersions{$autoManagedSpringVersion}) {
-      $autoManagedSpringVersion=promptStdin("6/$nbSteps - Which Spring version do you want to use (".(join(',',@springVersionExamples,(sort keys %springReleases),'...')).')',$springReleasesVersion{stable},$autoInstallValue);
+      $autoManagedSpringVersion=promptStdin("6/$nbSteps - Which $engineStr version do you want to use (".(join(',',@engineVersionExamples,(sort keys %engineReleases),'...')).')',$engineReleasesVersion{stable},$autoInstallValue);
       $autoInstallValue=undef;
       if(exists $availableVersions{$autoManagedSpringVersion}) {
-        $springVersion=$springReleasesVersion{$autoManagedSpringVersion} // $autoManagedSpringVersion;
-        my $springSetupRes=$updater->setupSpring($springVersion);
-        if($springSetupRes < -9) {
-          slog("Installation failed: unable to find, download and extract all required files for Spring $springVersion, please choose a different Spring version",2);
+        $engineVersion=$engineReleasesVersion{$autoManagedSpringVersion} // $autoManagedSpringVersion;
+        my $engineSetupRes=$updater->setupEngine($engineVersion,%ghInfo ? \%ghInfo : undef);
+        if($engineSetupRes < -9) {
+          slog("Installation failed: unable to find, download and extract all required files for $engineStr $engineVersion, please choose a different version",2);
           $autoManagedSpringVersion='';
           next;
         }
-        fatalError("Spring installation failed: internal error (you can use a custom Spring installation as a workaround if you don't know how to fix this issue)") if($springSetupRes < 0);
-        slog("Spring $springVersion is already installed",3) if($springSetupRes == 0);
+        my $ucfEngineStr=ucfirst($engineStr);
+        fatalError("$ucfEngineStr installation failed: internal error (you can use a custom $engineStr installation as a workaround if you don't know how to fix this issue)") if($engineSetupRes < 0);
+        slog("$ucfEngineStr $engineVersion is already installed",3) if($engineSetupRes == 0);
       }
     }
-    $conf{autoManagedSpringVersion}=$autoManagedSpringVersion;
-    $conf{autoInstalledSpringDir}=$updater->getSpringDir($springVersion);
+    $conf{autoManagedSpringVersion}=$autoManagedSpringVersionPrefix.$autoManagedSpringVersion;
+    $conf{autoInstalledSpringDir}=$updater->getEngineDir($engineVersion,%ghInfo ? \%ghInfo : undef);
   }else{
     $conf{autoManagedSpringVersion}='';
   }
@@ -958,11 +1012,11 @@ if(defined $autoInstallData{modName}) {
   }
 }
 
-$conf{lobbyLogin}=promptString("$currentStep/$nbSteps - Please enter the autohost lobby login (the lobby account must already exist)",$autoInstallData{lobbyLogin});
+$conf{lobbyLogin}=promptString("$currentStep/$nbSteps - Please enter the autohost lobby login (the lobby account must already exist)",undef,$autoInstallData{lobbyLogin});
 $currentStep++;
-$conf{lobbyPassword}=promptString("$currentStep/$nbSteps - Please enter the autohost lobby password",$autoInstallData{lobbyPassword});
+$conf{lobbyPassword}=promptString("$currentStep/$nbSteps - Please enter the autohost lobby password",undef,$autoInstallData{lobbyPassword});
 $currentStep++;
-$conf{owner}=promptString("$currentStep/$nbSteps - Please enter the lobby login of the autohost owner",$autoInstallData{owner});
+$conf{owner}=promptString("$currentStep/$nbSteps - Please enter the lobby login of the autohost owner",undef,$autoInstallData{owner});
 $currentStep++;
 
 my @confFiles=qw'banLists.conf battlePresets.conf commands.conf hostingPresets.conf levels.conf mapBoxes.conf mapLists.conf spads.conf users.conf';

@@ -34,20 +34,20 @@ use Time::HiRes;
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $archName=($win?'win':'linux').($Config{ptrsize} > 4 ? 64 : 32);
 
-my $moduleVersion='0.20';
+my $moduleVersion='0.21';
 
 my @constructorParams = qw'sLog repository release packages';
 my @optionalConstructorParams = qw'localDir springDir';
 
 my $springBuildbotUrl='http://springrts.com/dl/buildbot/default';
 my $springVersionUrl='http://planetspads.free.fr/spring/SpringVersion';
-my %springBranches=(release => 'master', dev => 'develop');
+our ($SPRING_MASTER_BRANCH,$SPRING_DEV_BRANCH)=('master','develop');
 
-my $httpTinyCanSsl;
+our $HttpTinyCanSsl;
 if(HTTP::Tiny->can('can_ssl')) {
-  $httpTinyCanSsl=HTTP::Tiny->can_ssl();
+  $HttpTinyCanSsl=HTTP::Tiny->can_ssl();
 }else{
-  $httpTinyCanSsl=eval { require IO::Socket::SSL;
+  $HttpTinyCanSsl=eval { require IO::Socket::SSL;
                          IO::Socket::SSL->VERSION(1.42);
                          require Net::SSLeay;
                          Net::SSLeay->VERSION(1.49);
@@ -58,6 +58,7 @@ sub getVersion {
   return $moduleVersion;
 }
 
+# Called by spadsInstaller.pl, spads.pl
 sub new {
   my ($objectOrClass,%params) = @_;
   if(! exists $params{sLog}) {
@@ -85,63 +86,182 @@ sub new {
 
   $self->{repository}=~s/\/$//;
   $self->{localDir}//=File::Spec->canonpath($FindBin::Bin);
+  $self->{engineReleaseVersionCache}={};
   return $self;
 }
 
-sub resolveSpringReleaseNameToVersion {
-  my ($self,$release)=@_;
+sub _unescapeUrl {
+  my $url=shift;
+  $url =~ s/%([0-9A-Fa-f]{2})/chr(hex($1))/eg;
+  return $url;
+}
+
+sub _buildTagRegexp { return join('(\d+(?:\.\d+){1,3}(?:-\d+-g[0-9a-f]+)?)',map {quotemeta($_)} split(/\Q<version>\E/,$_[0],-1)) }
+
+sub _getEngineReleaseVersionCacheFile {
+  my ($self,$release,$r_githubInfo)=@_;
+  my @releaseVersionFilePath=$self->{springDir};
+  push(@releaseVersionFilePath,$r_githubInfo->{subdir}) if(defined $r_githubInfo);
+  my $file=catfile(@releaseVersionFilePath,$release.'Version.dat');
+  return wantarray() ? (catdir(@releaseVersionFilePath),$file) : $file;
+}
+
+# Called by spads.pl
+sub resolveEngineReleaseNameToVersionWithFallback {
+  my ($self,$release,$r_githubInfo)=@_;
   my $sl=$self->{sLog};
-  my $httpTiny=HTTP::Tiny->new(timeout => 10);
+  my $engineVersion=$self->resolveEngineReleaseNameToVersion($release,$r_githubInfo);
+  return $engineVersion if(defined $engineVersion);
+  my $releaseVersionFile=$self->_getEngineReleaseVersionCacheFile($release,$r_githubInfo);
+  return undef unless(-f $releaseVersionFile);
+  my $releaseVersionLockFile=$releaseVersionFile.'.lock';
+  if(open(my $releaseVersionLockFh,'>',$releaseVersionLockFile)) {
+    if(_autoRetry(sub {flock($releaseVersionLockFh, LOCK_EX|LOCK_NB)})) {
+      if(open(my $releaseVersionFh,'<',$releaseVersionFile)) {
+        $engineVersion=<$releaseVersionFh>;
+        close($releaseVersionFh);
+        if(defined $engineVersion) {
+          chomp($engineVersion);
+          $engineVersion=undef if($engineVersion eq '');
+        }
+        if(defined $engineVersion) {
+          $sl->log("Using cached $release release version \"$engineVersion\" as fallback solution",2);
+        }else{
+          $sl->log("Failed to read cached release version from file \"$releaseVersionFile\" as fallback solution",2);
+        }
+      }else{
+        $sl->log("Failed to open release version cache file \"$releaseVersionFile\" for fallback solution",2);
+      }
+    }else{
+      $sl->log("Failed to acquire lock on release version cache file \"$releaseVersionFile\" for fallback solution",2);
+    }
+    close($releaseVersionLockFh);
+  }else{
+    $sl->log("Failed to open release version cache lock file \"$releaseVersionLockFile\" for fallback solution",2);
+  }
+  return $engineVersion;
+}
+
+# Called by spads.pl, spadsInstaller.pl
+sub resolveEngineReleaseNameToVersion {
+  my ($self,$release,$r_githubInfo)=@_;
+  my $sl=$self->{sLog};
+  my $engineVersion=$self->_resolveEngineReleaseNameToVersion($release,$r_githubInfo);
+  if(defined $engineVersion) {
+    my ($releaseVersionPath,$releaseVersionFile)=$self->_getEngineReleaseVersionCacheFile($release,$r_githubInfo);
+    if(! defined $self->{engineReleaseVersionCache}{$releaseVersionFile} || $self->{engineReleaseVersionCache}{$releaseVersionFile} ne $engineVersion) {
+      $self->{engineReleaseVersionCache}{$releaseVersionFile}=$engineVersion;
+      if(! -e $releaseVersionPath) {
+        eval { mkpath($releaseVersionPath) };
+        if($@) {
+          $sl->log("Unable to create directory \"$releaseVersionPath\" for engine release version cache ($@)",1);
+        }else{
+          $sl->log("Created new directory \"$releaseVersionPath\" for engine release version cache",4);
+        }
+      }
+      if(-d $releaseVersionPath) {      
+        my $releaseVersionLockFile=$releaseVersionFile.'.lock';
+        if(open(my $releaseVersionLockFh,'>',$releaseVersionLockFile)) {
+          if(_autoRetry(sub {flock($releaseVersionLockFh, LOCK_EX|LOCK_NB)})) {
+            if(open(my $releaseVersionFh,'>',$releaseVersionFile)) {
+              print $releaseVersionFh $engineVersion;
+              close($releaseVersionFh);
+            }else{
+              $sl->log("Unable to write release version cache file \"$releaseVersionFile\" ($!)",2);
+            }
+          }else{
+            $sl->log("Failed to acquire lock to write release version cache file \"$releaseVersionFile\"",2);
+          }
+          close($releaseVersionLockFh);
+        }else{
+          $sl->log("Failed to open lock file \"$releaseVersionLockFile\" to write release version cache file",2);
+        }
+      }
+    }
+  }
+  return $engineVersion;
+}
+
+sub _resolveEngineReleaseNameToVersion {
+  my ($self,$release,$r_githubInfo)=@_;
+  my $sl=$self->{sLog};
+  if(defined $r_githubInfo) {
+    if($release eq 'stable') {
+      my $ghRepo=$r_githubInfo->{owner}.'/'.$r_githubInfo->{name};
+      my $ghRepoUrl='https://github.com/'.$ghRepo.'/';
+      my $httpRes=HTTP::Tiny->new(timeout => 10)->request('GET',$ghRepoUrl.'releases/latest');
+      if($httpRes->{success} && ref $httpRes->{redirects} eq 'ARRAY' && @{$httpRes->{redirects}} && defined $httpRes->{url}) {
+        my $redirectedUrl=_unescapeUrl($httpRes->{url});
+        my $tagBaseUrl=$ghRepoUrl.'releases/tag/';
+        my $tagBaseUrlLength=length($tagBaseUrl);
+        my $tagRegexp=_buildTagRegexp($r_githubInfo->{tag});
+        return $1
+            if(length($redirectedUrl) > $tagBaseUrlLength && substr($redirectedUrl,0,$tagBaseUrlLength) eq $tagBaseUrl && substr($redirectedUrl,$tagBaseUrlLength) =~ /^$tagRegexp$/);
+        $sl->log("Unable to retrieve engine version number for $release release (URL for latest release \"$redirectedUrl\" doesn't match tag template \"$r_githubInfo->{tag}\")",2);
+        return undef;
+      }
+      $sl->log("Unable to retrieve engine version number for $release release from GitHub repository \"$ghRepo\"",2);
+      return undef;
+    }else{
+      my $r_matchingVersions=$self->getAvailableEngineVersionsFromGithub($r_githubInfo);
+      return $r_matchingVersions->[0];
+    }
+  }
   if($release eq 'stable') {
-    my $httpRes=$httpTiny->request('GET',"$springVersionUrl.Stable");
+    my $httpRes=HTTP::Tiny->new(timeout => 10)->request('GET',"$springVersionUrl.Stable");
     if($httpRes->{success} && $httpRes->{content} =~ /id="mw-content-text".*>([^<>]+)\n/) {
       return $1;
     }else{
-      $sl->log("Unable to retrieve Spring version number for $release release!",2);
+      $sl->log("Unable to retrieve Spring version number for $release release",2);
       return undef;
     }
   }elsif($release eq 'testing') {
-    my ($testingRelease,$latestRelease);
-    my $httpRes=$httpTiny->request('GET',"$springVersionUrl.Testing");
+    my $testingRelease;
+    my $httpRes=HTTP::Tiny->new(timeout => 10)->request('GET',"$springVersionUrl.Testing");
     if($httpRes->{success} && $httpRes->{content} =~ /id="mw-content-text".*>([^<>]+)\n/) {
       $testingRelease=$1;
     }else{
-      $sl->log("Unable to retrieve Spring version number for $release release!",2);
-      return undef;
+      $sl->log("Unable to retrieve Spring version number for $release release",2);
     }
-    $httpRes=$httpTiny->request('GET',"$springBuildbotUrl/$springBranches{release}/LATEST_$archName");
-    if($httpRes->{success} && defined $httpRes->{content}) {
-      $latestRelease=$httpRes->{content};
-      chomp($latestRelease);
-    }else{
-      $sl->log("Unable to retrieve latest Spring version number on $springBranches{release} branch!",2);
-      return undef;
+    my $latestMasterVersion=$self->_getSpringBranchLatestVersion($SPRING_MASTER_BRANCH);
+    if(defined $testingRelease) {
+      if(defined $latestMasterVersion) {
+        return $testingRelease gt $latestMasterVersion ? $testingRelease : $latestMasterVersion;
+      }else{
+        return $testingRelease;
+      }
+    }elsif(defined $latestMasterVersion) {
+      return $latestMasterVersion;
     }
-    return $testingRelease gt $latestRelease ? $testingRelease : $latestRelease;
+    return undef;
   }elsif($release eq 'unstable') {
-    my $httpRes=$httpTiny->request('GET',"$springBuildbotUrl/$springBranches{dev}/LATEST_$archName");
-    if($httpRes->{success} && $httpRes->{content} =~ /^{$springBranches{dev}}(.+)$/) {
-      return $1;
-    }else{
-      $sl->log("Unable to retrieve latest Spring version number on $springBranches{dev} branch!",2);
-      return undef;
-    }
+    return $self->_getSpringBranchLatestVersion($SPRING_DEV_BRANCH);
   }else{
-    my $httpRes=$httpTiny->request('GET',"$springBuildbotUrl/$release/LATEST_$archName");
-    my $quotedRelease=quotemeta($release);
-    if($httpRes->{success} && $httpRes->{content} =~ /^{$quotedRelease}(.+)$/) {
-      return $1;
-    }else{
-      $sl->log("Unable to retrieve latest Spring version number on $release branch!",2);
-      return undef;
-    }
+    return $self->_getSpringBranchLatestVersion($release);
   }
 }
 
-sub getAvailableSpringVersions {
-  my ($self,$typeOrBranch)=@_;
+sub _getSpringBranchLatestVersion {
+  my ($self,$springBranch)=@_;
   my $sl=$self->{sLog};
-  my $branch = $springBranches{$typeOrBranch} // $typeOrBranch;
+  my $httpRes=HTTP::Tiny->new(timeout => 10)->request('GET',"$springBuildbotUrl/$springBranch/LATEST_$archName");
+  if($httpRes->{success} && defined $httpRes->{content}) {
+    if($springBranch eq $SPRING_MASTER_BRANCH) {
+      my $latestVersion=$httpRes->{content};
+      chomp($latestVersion);
+      return $latestVersion;
+    }
+    my $quotedBranch=quotemeta($springBranch);
+    return $1 if($httpRes->{content} =~ /^{$quotedBranch}(.+)$/);
+  }
+  $sl->log("Unable to retrieve latest Spring version number for $springBranch branch!",2);
+  return undef;
+}
+
+# Called by spadsInstaller.pl
+sub getAvailableSpringVersions {
+  my ($self,$branch)=@_;
+  my $sl=$self->{sLog};
   my $httpRes=HTTP::Tiny->new(timeout => 10)->request('GET',"$springBuildbotUrl/$branch/");
   my @versions;
   @versions=$httpRes->{content} =~ /href="([^"]+)\/">\1\//g if($httpRes->{success});
@@ -149,13 +269,38 @@ sub getAvailableSpringVersions {
   return \@versions;
 }
 
-sub getSpringDir {
-  my ($self,$springVersion)=@_;
+# Called by spadsInstaller.pl
+sub getAvailableEngineVersionsFromGithub {
+  my ($self,$r_githubInfo)=@_;
+  my $sl=$self->{sLog};
+  my $ghRepo=$r_githubInfo->{owner}.'/'.$r_githubInfo->{name};
+  my $httpRes=HTTP::Tiny->new(timeout => 10)->request('GET','https://github.com/'.$ghRepo.'/releases');
+  if($httpRes->{success}) {
+    my @versions = $httpRes->{content} =~ /\Q<a href="\/$ghRepo\/releases\/tag\/\E([^\"]+)\"/g;
+    if(@versions) {
+      my $tagRegexp=_buildTagRegexp($r_githubInfo->{tag});
+      my @matchingVersions;
+      map {push(@matchingVersions,$1) if(_unescapeUrl($_) =~ /^$tagRegexp$/)} @versions;
+      return \@matchingVersions if(@matchingVersions);
+    }
+    $sl->log("Unable to find available engine releases matching tag template \"$r_githubInfo->{tag}\" from GitHub repository \"$ghRepo\"",2);
+  }else{
+    $sl->log("Unable to get available engine releases from GitHub repository \"$ghRepo\"",2);
+  }
+  return [];
+}
+
+# Called by spadsInstaller.pl, spads.pl
+sub getEngineDir {
+  my ($self,$engineVersion,$r_githubInfo)=@_;
   if(! exists $self->{springDir}) {
-    $self->{sLog}->log("Unable to get Spring directory for version $springVersion, no base Spring directory specified!",1);
+    my $engineStr = defined $r_githubInfo ? 'engine' : 'Spring';
+    $self->{sLog}->log("Unable to get $engineStr directory for version $engineVersion, no base $engineStr directory specified!",1);
     return undef;
   }
-  return catdir($self->{springDir},"$springVersion-$archName");
+  my @springDirPath=$self->{springDir};
+  push(@springDirPath,$r_githubInfo->{subdir}) if(defined $r_githubInfo);
+  return catdir(@springDirPath,"$engineVersion-$archName");
 }
 
 sub _compareSpringVersions ($$) {
@@ -206,17 +351,16 @@ sub _getSpringRequiredFiles {
   return \@requiredFiles;
 }
 
-sub checkSpringDir {
-  my ($self,$springVersion)=@_;
-  my $springDir=$self->getSpringDir($springVersion);
-  return wantarray ? (undef,[]) : undef unless(defined $springDir);
-  return wantarray ? (undef,['base']) : undef unless(-d "$springDir/base");
-  my $p_requiredFiles=_getSpringRequiredFiles($springVersion);
-  my @missingFiles=grep {! -f "$springDir/$_" && $_ ne 'libcurl.dll'} @{$p_requiredFiles};
+sub _checkEngineDir {
+  my ($engineDir,$engineVersion)=@_;
+  return wantarray ? (undef,['base']) : undef unless(-d "$engineDir/base");
+  my $p_requiredFiles=_getSpringRequiredFiles($engineVersion);
+  my @missingFiles=grep {! -f "$engineDir/$_" && $_ ne 'libcurl.dll'} @{$p_requiredFiles};
   return wantarray ? (undef,[@missingFiles]) : undef if(@missingFiles);
-  return wantarray ? ($springDir,[]) : $springDir;
+  return wantarray ? ($engineDir,[]) : $engineDir;
 }
 
+# Called by spads.pl
 sub isUpdateInProgress {
   my $self=shift;
   my $lockFile=catfile($self->{localDir},'SpadsUpdater.lock');
@@ -234,11 +378,13 @@ sub isUpdateInProgress {
   return $res;
 }
 
-sub isSpringSetupInProgress {
-  my ($self,$version)=@_;
-  my $springDir=$self->getSpringDir($version);
-  return 0 unless(defined $springDir && -e $springDir);
-  my $lockFile=catfile($springDir,'SpringSetup.lock');
+# Called by spads.pl
+sub isEngineSetupInProgress {
+  my ($self,$version,$r_githubInfo)=@_;
+  my $engineDir=$self->getEngineDir($version,$r_githubInfo);
+  return 0 unless(defined $engineDir && -e $engineDir);
+  my $engineSetupLockFileBasename = (defined $r_githubInfo ? 'Engine' : 'Spring').'Setup';
+  my $lockFile=catfile($engineDir,$engineSetupLockFileBasename.'.lock');
   my $res=0;
   if(open(my $lockFh,'>',$lockFile)) {
     if(flock($lockFh, LOCK_EX|LOCK_NB)) {
@@ -248,7 +394,7 @@ sub isSpringSetupInProgress {
     }
     close($lockFh);
   }else{
-    $self->{sLog}->log("Unable to write SpringSetup lock file \"$lockFile\" ($!)",1);
+    $self->{sLog}->log("Unable to write $engineSetupLockFileBasename lock file \"$lockFile\" ($!)",1);
   }
   return $res;
 }
@@ -267,6 +413,7 @@ sub _autoRetry {
   return $res;
 }
 
+# Called by spadsInstaller.pl, spads.pl, updater.pl
 sub update {
   my ($self,undef,$force)=@_;
   my $sl=$self->{sLog};
@@ -281,7 +428,7 @@ sub update {
     close($lockFh);
     return -1;
   }
-  my $res=$self->updateUnlocked($force);
+  my $res=$self->_updateLockProtected($force);
   flock($lockFh, LOCK_UN);
   close($lockFh);
   return $res;
@@ -292,7 +439,7 @@ sub downloadFile {
   my $sl=$self->{sLog};
   if($url !~ /^http:\/\//i) {
     if($url =~ /^https:\/\//i) {
-      if(! $httpTinyCanSsl) {
+      if(! $HttpTinyCanSsl) {
         $sl->log("Unable to to download file to \"$file\", IO::Socket::SSL version 1.42 or superior and Net::SSLeay version 1.49 or superior are required for SSL support",1);
         return 0;
       }
@@ -335,7 +482,7 @@ sub _renameToBeDeleted {
   return move($fileName,"$fileName.$i.toBeDeleted");
 }
 
-sub updateUnlocked {
+sub _updateLockProtected {
   my ($self,$force)=@_;
   $force//=0;
   my $sl=$self->{sLog};
@@ -477,13 +624,23 @@ sub updateUnlocked {
   return $nbUpdatedPackage;
 }
 
-sub _getSpringVersionType {
-  return shift =~ /^\d+\.\d+$/ ? 'release' : 'dev';
+sub _getSpringVersionBranch {
+  return shift =~ /^\d+\.\d+$/ ? $SPRING_MASTER_BRANCH : $SPRING_DEV_BRANCH;
 }
 
-sub _getSpringVersionDownloadInfo {
-  my ($version,$branch)=@_;
-  my $versionInArchives = $branch eq 'master' ? $version : "{$branch}$version";
+sub _getEngineVersionDownloadInfo {
+  my ($version,$r_githubInfoOrSpringBranch)=@_;
+  if(ref $r_githubInfoOrSpringBranch) {
+    my ($assetUrl,$errorMsg)=_getEngineGithubDownloadUrl($version,$r_githubInfoOrSpringBranch);
+    return ($errorMsg) if(defined $errorMsg);
+    if($assetUrl =~ /^(.+\/)([^\/]+)$/) {
+      return (undef,$1,undef,$2);
+    }else{
+      return ("unknown format for GitHub release asset URL \"$assetUrl\"");
+    }
+  }
+  my $branch=$r_githubInfoOrSpringBranch//_getSpringVersionBranch($version);
+  my $versionInArchives = $branch eq $SPRING_MASTER_BRANCH ? $version : "{$branch}$version";
   my ($requiredArchive,@optionalArchives);
   if($win) {
     $requiredArchive="spring_${versionInArchives}_".(_compareSpringVersions($version,102)<0?'':"$archName-").'minimal-portable.7z';
@@ -494,71 +651,105 @@ sub _getSpringVersionDownloadInfo {
   }
   my $baseUrlRequired="$springBuildbotUrl/$branch/$version/".(_compareSpringVersions($version,91)<0?'':"$archName/");
   my $baseUrlOptional="$springBuildbotUrl/$branch/$version/".(_compareSpringVersions($version,92)<0?'':"$archName/");
-  return ($baseUrlRequired,$baseUrlOptional,$requiredArchive,@optionalArchives);
+  return (undef,$baseUrlRequired,$baseUrlOptional,$requiredArchive,@optionalArchives);
 }
 
-sub checkSpringVersionAvailability {
-  my ($self,$version,$branch)=@_;
-  $branch//=$springBranches{_getSpringVersionType($version)};
-  my $p_availableVersions = $self->getAvailableSpringVersions($branch);
-  return (0,'version unavailable for download') unless(any {$version eq $_} @{$p_availableVersions});
-  my ($baseUrlRequired,undef,$requiredArchive)=_getSpringVersionDownloadInfo($version,$branch);
+sub _checkSpringVersionAvailability {
+  my ($self,$version,$springBranch)=@_;
+  $springBranch//=_getSpringVersionBranch($version);
+  my $p_availableVersions = $self->getAvailableSpringVersions($springBranch);
+  return 'version unavailable for download' unless(any {$version eq $_} @{$p_availableVersions});
+  my (undef,$baseUrlRequired,undef,$requiredArchive)=_getEngineVersionDownloadInfo($version,$springBranch);
   my $httpRes=HTTP::Tiny->new(timeout => 10)->request('GET',$baseUrlRequired);
   if($httpRes->{success}) {
-    return (1) if(index($httpRes->{content},">$requiredArchive<") != -1);
-    return (-2,'archive not found');
+    return undef if(index($httpRes->{content},">$requiredArchive<") != -1);
+    return 'archive not found';
   }elsif($httpRes->{status} == 404) {
-    return (-1,'version unavailable for this architecture');
+    return 'version unavailable for this architecture';
   }else{
-    return (-3,"unable to check version availability, HTTP status:$httpRes->{status}");
+    return "unable to check version availability, HTTP status:$httpRes->{status}";
   }
 }
 
-sub setupSpring {
-  my ($self,$version,$branch)=@_;
-  $branch//=$springBranches{_getSpringVersionType($version)};
-  my $sl=$self->{sLog};
+sub _getEngineGithubDownloadUrl {
+  my ($version,$r_githubInfo)=@_;
+  my $ghTag=$r_githubInfo->{tag};
+  $ghTag =~ s/\Q<version>\E/$version/g;
+  my $ghRepo=$r_githubInfo->{owner}.'/'.$r_githubInfo->{name};
+  my $httpRes=HTTP::Tiny->new(timeout => 10)->request('GET','https://github.com/'.$ghRepo.'/releases/expanded_assets/'.$ghTag);
+  if($httpRes->{success}) {
+    if($httpRes->{content} =~ /href="([^"]+\/$r_githubInfo->{asset})"/) {
+      my $assetUrl=$1;
+      $assetUrl='https://github.com'.$assetUrl if(substr($assetUrl,0,1) eq '/');
+      return ($assetUrl);
+    }else{
+      return (undef,"no asset matching regular expression \"$r_githubInfo->{asset}\" found in release \"$ghTag\" of GitHub repository \"$ghRepo\"");
+    }
+  }elsif($httpRes->{status} == 404) {
+    return (undef,"release not found on GitHub: invalid tag \"$ghTag\" or invalid repository \"$ghRepo\"");
+  }else{
+    return (undef,"unable to check version availability, HTTP status:$httpRes->{status}");
+  }
+}
 
+sub _checkEngineVersionAvailabilityFromGithub {
+  my ($version,$r_githubInfo)=@_;
+  my (undef,$reason)=_getEngineGithubDownloadUrl($version,$r_githubInfo);
+  return $reason;
+}
+  
+# Called by spadsInstaller.pl, spads.pl
+sub setupEngine {
+  my ($self,$version,$r_githubInfoOrSpringBranch)=@_;
+  my $isFromGithub = ref $r_githubInfoOrSpringBranch eq 'HASH';
+  my $engineStr = $isFromGithub ? 'engine' : 'Spring';
+  
+  my $sl=$self->{sLog};
   if($version !~ /^\d/) {
-    $sl->log("Invalid Spring version \"$version\"",1);
+    $sl->log("Invalid $engineStr version \"$version\"",1);
     return -1;
   }
 
-  my $springDir=$self->getSpringDir($version);
-  return -1 unless(defined $springDir);
-  return 0 if($self->checkSpringDir($version));
+  my $engineDir=$self->getEngineDir($version,$isFromGithub ? $r_githubInfoOrSpringBranch : undef);
+  return -1 unless(defined $engineDir);
+  return 0 if(_checkEngineDir($engineDir,$version));
 
-  my (undef,$unavailabilityMsg)=$self->checkSpringVersionAvailability($version,$branch);
-  if(defined $unavailabilityMsg && $branch eq 'develop') {
-    $branch='maintenance';
-    my (undef,$unavailabilityMsg2)=$self->checkSpringVersionAvailability($version,$branch);
-    $unavailabilityMsg=undef if(! defined $unavailabilityMsg2);
-  }
-  if(defined $unavailabilityMsg) {
-    $sl->log("Spring $version installation cancelled ($unavailabilityMsg)",1);
-    return -10;
+  if($isFromGithub) {
+    my $unavailabilityMsg=_checkEngineVersionAvailabilityFromGithub($version,$r_githubInfoOrSpringBranch);
+    if(defined $unavailabilityMsg) {
+      $sl->log("Installation aborted for engine version \"$version\" ($unavailabilityMsg)",1);
+      return -10;
+    }
+  }else{
+    my $unavailabilityMsg=$self->_checkSpringVersionAvailability($version,$r_githubInfoOrSpringBranch);
+    if(defined $unavailabilityMsg) {
+      $sl->log("Installation aborted for Spring version \"$version\" ($unavailabilityMsg)",1);
+      return -10;
+    }
   }
 
-  if(! -e $springDir) {
-    eval { mkpath($springDir) };
+  if(! -e $engineDir) {
+    eval { mkpath($engineDir) };
     if($@) {
-      $sl->log("Unable to create directory \"$springDir\" ($@)",1);
+      $sl->log("Unable to create directory \"$engineDir\" ($@)",1);
       return -2;
     }
-    $sl->log("Created new directory \"$springDir\" for Spring installation",4);
+    $sl->log("Created new directory \"$engineDir\" for automatic $engineStr installation",4);
   }
-  my $lockFile=catfile($springDir,'SpringSetup.lock');
+  
+  my $engineSetupLockFileBasename=ucfirst($engineStr).'Setup';
+  my $lockFile=catfile($engineDir,$engineSetupLockFileBasename.'.lock');
   my $lockFh;
   if(! open($lockFh,'>',$lockFile)) {
-    $sl->log("Unable to write SpringSetup lock file \"$lockFile\" ($!)",1);
+    $sl->log("Unable to write $engineSetupLockFileBasename lock file \"$lockFile\" ($!)",1);
     return -2;
   }
   if(! _autoRetry(sub {flock($lockFh, LOCK_EX|LOCK_NB)})) {
-    $sl->log('Another instance of SpadsUpdater is already performing a Spring installation in same directory',2);
+    $sl->log('Another instance of SpadsUpdater is already performing '.($isFromGithub ? 'an engine' : 'a Spring').' installation in same directory',2);
     close($lockFh);
     return -3;
   }
-  my $res=$self->setupSpringUnlocked($version,$branch);
+  my $res=$self->_setupEngineLockProtected($version,$r_githubInfoOrSpringBranch,$engineDir);
   flock($lockFh, LOCK_UN);
   close($lockFh);
   return $res;
@@ -625,58 +816,62 @@ sub uncompress7zipFile {
   return 1;
 }
 
-sub setupSpringUnlocked {
-  my ($self,$version,$branch)=@_;
-  $branch//=$springBranches{_getSpringVersionType($version)};
-  return 0 if($self->checkSpringDir($version));
+sub _setupEngineLockProtected {
+  my ($self,$version,$r_githubInfoOrSpringBranch,$engineDir)=@_;
+  return 0 if(_checkEngineDir($engineDir,$version));
+  
+  my $isFromGithub = ref $r_githubInfoOrSpringBranch eq 'HASH';
+  my $engineStr = $isFromGithub ? 'engine' : 'Spring';
 
   my $sl=$self->{sLog};
+  $sl->log("Installing $engineStr $version into \"$engineDir\"...",3);
 
-  my $springDir=$self->getSpringDir($version);
-  $sl->log("Installing Spring $version into \"$springDir\"...",3);
-
-  my ($baseUrlRequired,$baseUrlOptional,$requiredArchive,@optionalArchives)=_getSpringVersionDownloadInfo($version,$branch);
-
-  my $tmpArchive=catfile($springDir,$requiredArchive);
+  my ($errorMsg,$baseUrlRequired,$baseUrlOptional,$requiredArchive,@optionalArchives)=_getEngineVersionDownloadInfo($version,$r_githubInfoOrSpringBranch);
+  if(defined $errorMsg) {
+    $sl->log("Engine $version installation cancelled ($errorMsg)",1);
+    return -10;
+  }
+  
+  my $tmpArchive=catfile($engineDir,$requiredArchive);
   if(! $self->downloadFile($baseUrlRequired.$requiredArchive,$tmpArchive,my $httpStatus)) {
-    if($httpStatus == 404) {
+    if($httpStatus == 404 && ! $isFromGithub) {
       $sl->log("No Spring $version package available for architecture $archName",2);
       return -11;
     }else{
-      $sl->log("Unable to downloadable Spring archive file \"$requiredArchive\" from \"$baseUrlRequired\" to \"$springDir\" (HTTP status: $httpStatus)",1);
-      return -12;
+      $sl->log("Unable to download $engineStr archive file from \"$baseUrlRequired$requiredArchive\" to \"$engineDir\" (HTTP status: $httpStatus)",1);
+      return $httpStatus == 503 ? -9 : -12; # return codes < -9 are for permanent errors
     }
   }
 
   my $p_requiredFiles=_getSpringRequiredFiles($version);
-  if(! $self->uncompress7zipFile($tmpArchive,$springDir,'base',@{$p_requiredFiles})) {
+  if(! $self->uncompress7zipFile($tmpArchive,$engineDir,'base',@{$p_requiredFiles})) {
     unlink($tmpArchive);
-    $sl->log("Unable to extract Spring archive \"$tmpArchive\"",1);
+    $sl->log("Unable to extract $engineStr archive \"$tmpArchive\"",1);
     return -13;
   }
   unlink($tmpArchive);
 
   foreach my $optionalArchive (@optionalArchives) {
-    $tmpArchive=catfile($springDir,$optionalArchive);
+    $tmpArchive=catfile($engineDir,$optionalArchive);
     if(! $self->downloadFile($baseUrlOptional.$optionalArchive,$tmpArchive,my $httpStatus)) {
-      $sl->log("Unable to downloadable Spring archive file \"$optionalArchive\" from \"$baseUrlOptional\" to \"$springDir\" (HTTP status: $httpStatus)",1) if($httpStatus != 404);
+      $sl->log("Unable to download $engineStr archive file \"$optionalArchive\" from \"$baseUrlOptional\" to \"$engineDir\" (HTTP status: $httpStatus)",1) if($httpStatus != 404);
     }else{
-      if(! $self->uncompress7zipFile($tmpArchive,$springDir,@{$p_requiredFiles})) {
+      if(! $self->uncompress7zipFile($tmpArchive,$engineDir,@{$p_requiredFiles})) {
         unlink($tmpArchive);
-        $sl->log("Unable to extract Spring archive \"$tmpArchive\"",1);
+        $sl->log("Unable to extract $engineStr archive \"$tmpArchive\"",1);
         return -13;
       }
       unlink($tmpArchive);
     }
   }
 
-  my ($installResult,$r_missingFiles)=$self->checkSpringDir($version);
+  my ($installResult,$r_missingFiles)=_checkEngineDir($engineDir,$version);
   if($installResult) {
-    $sl->log("Spring $version installation complete.",3);
+    $sl->log(ucfirst($engineStr)." $version installation complete.",3);
     return 1;
   }
 
-  $sl->log("Unable to install Spring version $version (incomplete archives, missing files: ".join(',',@{$r_missingFiles}).')',1);
+  $sl->log("Unable to install $engineStr version $version (incomplete archive, missing files: ".join(',',@{$r_missingFiles}).')',1);
   return -14;
 }
 

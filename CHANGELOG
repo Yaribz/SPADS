@@ -179,6 +179,8 @@ helpSettings.dat:
 0.6.4: support new placeholders in "welcomeMsg" and "welcomeMsgInGame" preset settings: "%p" for current global preset, "%P" for description of current global preset
 0.6.5: update documentation for "idShareMode" (it is no longer required to set "idShareMode" to "off" to enable workarounds for lobby protocol limitations regarding maximum team and ID numbers)
 0.6.6: the "colorSensitivity" global setting now also accepts value "-1" to use a new color assignment algorithm taking game mode and battle structure into account
+0.6.7: fix "lobbyHost" global setting allowed and default values
+       update description of "autoManagedSpringVersion" global setting (add engine auto-management using GitHub releases + remove obsolete "maintenance" branch support)
 
 PerlUnitSync.pm:
 ===============
@@ -936,6 +938,8 @@ spads.pl:
 0.12.58: avoid calling unitsync functions deprecated in Spring 106 [thanks CommanderSpice]
 0.12.59: read files directly instead of calling "cat" through shell when retrieving system info
          fix typo in !force output when player is not found
+0.12.60: add support for auto-management of engine releases from GitHub         
+         fix duplicate log messages when exiting/restarting in some circunstances
 
 SpadsConf.pm:
 ============
@@ -1112,6 +1116,7 @@ SpadsConf.pm:
 0.12.21: replace the basic list functions any/all/none/notall with those provided by the List::Util Perl module (requires Perl >= 5.19.5)
 0.12.22: new value "voting" can now be used for filter "gameState" in commands rights configuration (only matches if the game is not running and a vote is in progress to start it)
 0.12.23: detect invalid integer setting declarations which use integer range notation as default value (first value)
+0.12.24: update "autoManagedSpringVersion" format check function for GitHub mode
 
 spadsInstaller.pl:
 =================
@@ -1188,6 +1193,8 @@ spadsInstaller.pl:
 0.25: improve resilience to broken official Spring repository (makes it possible to continue using automatic Spring version management even though the maintenance branch repository is broken)
 0.26: fix error when trying to use automatic Spring version management (remove support for obsolete "maintenance" branch)
 0.27: replace the basic list functions any/all/none/notall with those provided by the List::Util Perl module (requires Perl >= 5.19.5)
+0.28: add support for installation of engines directly from GitHub releases
+      fix download link for minimal set of maps
 
 SpadsPluginApi.pm:
 =================
@@ -1306,6 +1313,8 @@ SpadsUpdater.pm:
 0.18: automatic Spring installation now also supports 64-bit builds on Windows (requires 64-bit Perl)
 0.19: replace the basic list functions any/all/none/notall with those provided by the List::Util Perl module (requires Perl >= 5.19.5)
 0.20: override LC_ALL instead of LANG when calling 7za on Linux (workaround for 7za bug) [thanks CommanderSpice]
+0.21: add support for engine releases from GitHub
+      add engine release/version mapping cache system to secure engine auto-management
 
 springLobbyCertificates.dat:
 ===========================

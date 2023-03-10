@@ -1,6 +1,6 @@
 # Object-oriented Perl module handling SPADS configuration files
 #
-# Copyright (C) 2008-2022  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2023  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -20,6 +20,7 @@ package SpadsConf;
 
 use strict;
 
+use Config;
 use Digest::MD5 'md5_base64';
 use FileHandle;
 use Fcntl qw':DEFAULT :flock';
@@ -38,7 +39,7 @@ use SimpleLog;
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.12.23';
+my $moduleVersion='0.12.24';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -232,7 +233,7 @@ my %paramTypes = (login => '[\w\[\]]{2,20}',
                   absoluteExecutableFile => sub { return (-f $_[0] && -x $_[0] && isAbsolutePath($_[0])) },
                   unitsyncDirType => sub { return (-f "$_[0]/$unitsyncLibName" && -r "$_[0]/$unitsyncLibName") },
                   autoUpdateType => '(stable|testing|unstable|contrib)',
-                  autoManagedSpringVersionType => sub { return $_[0] =~ /^(stable|testing|unstable|maintenance)(?:;\d*(?:;(on|off|whenEmpty|whenOnlySpec))?)?$/ || $_[0] =~ /^\d+(?:\.\d+){1,3}(?:-\d+-g[0-9a-f]+)?$/},
+                  autoManagedSpringVersionType => \&parseAutoManagedSpringVersion,
                   autoRestartType => '(on|off|whenEmpty|whenOnlySpec)',
                   absoluteReadableDirs => sub { return $_[0] ne '' && (all {-d $_ && -x $_ && -r $_ && isAbsolutePath($_)} split($win?';':':',$_[0])) },
                   integerCouple => '\d+;\d+',
@@ -289,6 +290,59 @@ my %paramTypes = (login => '[\w\[\]]{2,20}',
                                              return $_[0] ne '';
                                            }
                                          } );
+
+sub parseAutoManagedSpringVersion {
+  my %autoManagedInfo;
+  if($_[0] =~ /^\[GITHUB\]\{(.+)\}([^\}]+)$/) {
+    my ($githubInfoString,$autoManagedString,%ghInfo)=($1,$2);
+    foreach my $ghInfoString (split(/,/,$githubInfoString)) {
+      return undef unless($ghInfoString =~ /^([^\=]+)=(.+)$/);
+      return undef unless(any {$1 eq $_} (qw'owner name tag asset'));
+      return undef if(exists $ghInfo{$1});
+      $ghInfo{$1}=$2;
+    }
+    return undef unless(all {exists $ghInfo{$_}} (qw'owner name tag asset'));
+    return undef if(index($ghInfo{tag},'<version>') == -1);
+    my $osString = $win ? 'windows' : $macOs ? 'macos' : 'linux';
+    my $bitnessString = $Config{ptrsize} > 4 ? 64 : 32;
+    $ghInfo{asset}=~s/\Q<os>\E/$osString/g;
+    $ghInfo{asset}=~s/\Q<bitness>\E/$bitnessString/g;
+    return undef if(! eval { qw/^$ghInfo{asset}$/ } || $@);
+    my $ghRepoHash=substr(md5_base64(join('/',@ghInfo{qw'owner name'})),0,7);
+    $ghRepoHash=~tr/\/\+/ab/;
+    my $ghSubdir=$ghInfo{tag};
+    $ghSubdir =~ s/\Q<version>\E/($ghRepoHash)/g;
+    $ghSubdir =~ tr/\\\/\:\*\?\"\<\>\|/........./;
+    $ghInfo{subdir}=$ghSubdir;
+    $autoManagedInfo{github}=\%ghInfo;
+    if($autoManagedString =~ /^(stable|testing)(?:;(\d*)(?:;(on|off|whenEmpty|whenOnlySpec))?)?$/) {
+      $autoManagedInfo{mode}='release';
+      $autoManagedInfo{release}=$1;
+      $autoManagedInfo{delay}=$2//{stable => 60, testing => 30}->{$1};
+      $autoManagedInfo{restart}=$3//'whenEmpty';
+      return \%autoManagedInfo;
+    }
+    if($autoManagedString =~ /^\d+(?:\.\d+){1,3}(?:-\d+-g[0-9a-f]+)?$/) {
+      $autoManagedInfo{mode}='version';
+      $autoManagedInfo{version}=$autoManagedString;
+      return \%autoManagedInfo;
+    }
+    return undef;
+  }
+  if($_[0] =~ /^(stable|testing|unstable)(?:;(\d*)(?:;(on|off|whenEmpty|whenOnlySpec))?)?$/) {
+    $autoManagedInfo{mode}='release';
+    $autoManagedInfo{release}=$1;
+    $autoManagedInfo{delay}=$2//{stable => 60, testing => 30, unstable => 15}->{$1};
+    $autoManagedInfo{restart}=$3//'whenEmpty';
+    return \%autoManagedInfo;
+  }
+  if($_[0] =~ /^\d+(?:\.\d+){1,3}(?:-\d+-g[0-9a-f]+)?$/) {
+    $autoManagedInfo{mode}='version';
+    $autoManagedInfo{version}=$_[0];
+    return \%autoManagedInfo;
+  }
+  return undef;
+}
 
 my @banListsFields=(['accountId','name','country','cpu','lobbyClient','rank','access','bot','level','ip','skill','skillUncert'],['banType','startDate','endDate','remainingGames','reason']);
 my @preferencesListsFields=(['accountId'],['autoSetVoteMode','voteMode','votePvMsgDelay','voteRingDelay','minRingDelay','handleSuggestions','password','rankMode','skillMode','shareId','spoofProtection','ircColors','clan']);

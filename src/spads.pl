@@ -33,7 +33,7 @@ use JSON::PP;
 use List::Util qw'first any all none notall shuffle reduce';
 use MIME::Base64;
 use POSIX qw'ceil uname';
-use Storable qw'nfreeze dclone';
+use Storable qw'nfreeze dclone nstore retrieve';
 use Symbol qw'delete_package';
 use Text::ParseWords;
 use Time::HiRes;
@@ -50,7 +50,7 @@ use SpringLobbyInterface;
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.59';
+our $spadsVer='0.12.60';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -498,14 +498,15 @@ my %pendingGetSkills;
 my $currentGameType='Duel';
 our $springServerType=$conf{springServerType};
 my $springServerBin=$conf{springServer};
-my %autoManagedSpringData=(mode => 'off');
-my $failedSpringInstallVersion;
+my %autoManagedEngineData=(mode => 'off');
+my $failedEngineInstallVersion;
 my %prefCache;
 my %prefCacheTs;
 my %nbRelayedApiCalls;
 my %ignoredRelayedApiUsers;
 my %pendingRelayedJsonRpcChunks;
 my %sentPlayersScriptTags;
+my $simpleEventLoopStopping;
 
 my $lobbySimpleLog=SimpleLog->new(logFiles => [$conf{logDir}."/spads.log",''],
                                   logLevels => [$conf{lobbyInterfaceLogLevel},3],
@@ -3552,43 +3553,39 @@ sub checkAutoUpdate {
   }
 }
 
-sub springVersionAutoManagement {
-  my $autoManagedSpringVersion=$updater->resolveSpringReleaseNameToVersion($autoManagedSpringData{release});
-  if(! defined $autoManagedSpringVersion) {
-    slog("Unable to identify current Spring version of auto-managed Spring $autoManagedSpringData{release} release, skipping Spring version auto-management",2);
+sub engineVersionAutoManagement {
+  my $autoManagedEngineVersion=$updater->resolveEngineReleaseNameToVersion($autoManagedEngineData{release},$autoManagedEngineData{github});
+  my $engineStr = defined $autoManagedEngineData{github} ? 'engine' : 'Spring';
+  if(! defined $autoManagedEngineVersion) {
+    slog("Unable to identify current version of auto-managed $autoManagedEngineData{release} $engineStr release, skipping $engineStr version auto-management",2);
     return;
   }
-  return if($autoManagedSpringVersion eq $autoManagedSpringData{version});
-  if(defined $failedSpringInstallVersion && $failedSpringInstallVersion eq $autoManagedSpringVersion) {
-    slog("Installation failed previously for Spring version $failedSpringInstallVersion, skipping Spring version auto-management",5);
+  return if($autoManagedEngineVersion eq $autoManagedEngineData{version});
+  if(defined $failedEngineInstallVersion && $failedEngineInstallVersion eq $autoManagedEngineVersion) {
+    slog("Installation failed previously for $engineStr version $failedEngineInstallVersion, skipping $engineStr version auto-management",5);
     return;
   }
-  slog("New version detected for Spring $autoManagedSpringData{release} release: $autoManagedSpringVersion",3);
-  if($updater->isSpringSetupInProgress($autoManagedSpringVersion)) {
-    slog("Skipping installation of Spring $autoManagedSpringVersion, another process is already installing this version",2);
+  slog("New version detected for $autoManagedEngineData{release} $engineStr release: $autoManagedEngineVersion",3);
+  if($updater->isEngineSetupInProgress($autoManagedEngineVersion,$autoManagedEngineData{github})) {
+    slog("Skipping installation of $engineStr $autoManagedEngineVersion, another process is already installing this version",2);
     return;
   }
-  my $autoManagedSpringBranch=(any {$autoManagedSpringData{release} eq $_} (qw'stable testing unstable')) ? undef : $autoManagedSpringData{release};
-  my $setupResult=$updater->setupSpring($autoManagedSpringVersion,$autoManagedSpringBranch);
+  my $setupResult=$updater->setupEngine($autoManagedEngineVersion,$autoManagedEngineData{github});
   if($setupResult < 0) {
-    my $setupFailedMsg="Unable to install Spring $autoManagedSpringVersion for Spring version auto-management";
+    my $setupFailedMsg="Unable to install $engineStr $autoManagedEngineVersion for version auto-management";
     if($setupResult < -9) {
-      $failedSpringInstallVersion=$autoManagedSpringVersion;
-      $setupFailedMsg.=", keeping current version ($autoManagedSpringData{version})";
+      $failedEngineInstallVersion=$autoManagedEngineVersion;
+      $setupFailedMsg.=", keeping current version ($autoManagedEngineData{version})";
     }
     slog($setupFailedMsg,2);
     return;
   }
-  broadcastMsg("Installed new version for Spring $autoManagedSpringData{release} release: $autoManagedSpringVersion") if($setupResult > 0);
-  $autoManagedSpringData{version}=$autoManagedSpringVersion;
-  my $autoManagedSpringFile="$conf{instanceDir}/autoManagedSpringVersion.dat";
-  if(open(my $springVersionFh,'>',$autoManagedSpringFile)) {
-    print $springVersionFh $autoManagedSpringVersion;
-    close($springVersionFh);
-  }else{
-    slog("Unable to write auto-managed Spring version file \"$autoManagedSpringFile\" ($!)",2);
-  }
-  applyQuitAction(1,{on => 0, whenOnlySpec => 1, whenEmpty => 2}->{$autoManagedSpringData{restart}},'Spring version auto-management') unless($autoManagedSpringData{restart} eq 'off');
+  broadcastMsg("Installed new version for $autoManagedEngineData{release} $engineStr release: $autoManagedEngineVersion") if($setupResult > 0);
+  $autoManagedEngineData{version}=$autoManagedEngineVersion;
+  my $autoManagedEngineFile="$conf{instanceDir}/autoManagedEngineVersion.dat";
+  nstore(\%autoManagedEngineData,$autoManagedEngineFile)
+      or slog("Unable to write auto-managed $engineStr version file \"$autoManagedEngineFile\"",2);
+  applyQuitAction(1,{on => 0, whenOnlySpec => 1, whenEmpty => 2}->{$autoManagedEngineData{restart}},$engineStr.' version auto-management') unless($autoManagedEngineData{restart} eq 'off');
 }
 
 sub checkAutoForceStart {
@@ -12483,10 +12480,13 @@ sub hVersion {
   my %C=%{$p_C};
   
   my $springVersion=$syncedSpringVersion.$C{1};
-  if($autoManagedSpringData{mode} eq 'version') {
-    $springVersion.=' (auto-downloaded)';
-  }elsif($autoManagedSpringData{mode} eq 'release') {
-    $springVersion.=" (auto-download: $autoManagedSpringData{release})";
+  my $autoDlExtraInfo = defined $autoManagedEngineData{github} ? " from GitHub:$autoManagedEngineData{github}{owner}/$autoManagedEngineData{github}{name}" : '';
+  if($autoManagedEngineData{mode} eq 'version') {
+    my $autoDlInfo='auto-downloaded'.$autoDlExtraInfo;
+    $springVersion.=" ($autoDlInfo)";
+  }elsif($autoManagedEngineData{mode} eq 'release') {
+    my $autoDlInfo="\"$autoManagedEngineData{release}\"".$autoDlExtraInfo;
+    $springVersion.=" (auto-download $autoDlInfo)";
   }
   sayPrivate($user,"$C{12}$conf{lobbyLogin}$C{1} is running ${B}$C{5}SPADS $C{10}v$spadsVer$B$C{1} with following components:");
   my %versionedComponents=(Perl => $^V."$C{1} ($Config{archname})",
@@ -14992,24 +14992,17 @@ sub encodeHtmlHelp {
   return $line;
 }
 
-sub useFallbackSpringVersion {
+sub useFallbackEngineVersion {
   my $reason=shift;
-  my $autoManagedSpringFile="$conf{instanceDir}/autoManagedSpringVersion.dat";
-  fatalError("$reason, and couldn't find the previous auto-installed version as fallback solution") unless(-f $autoManagedSpringFile);
-  if(open(my $springVersionFh,'<',$autoManagedSpringFile)) {
-    my $autoManagedSpringVersion=<$springVersionFh>;
-    close($springVersionFh);
-    fatalError("$reason, and couldn't read the previous auto-installed version file \"$autoManagedSpringFile\" as fallback solution") unless(defined $autoManagedSpringVersion);
-    chomp($autoManagedSpringVersion);
-    fatalError("$reason, and couldn't use the previous auto-installed version ($autoManagedSpringVersion) as fallback solution") if($updater->setupSpring($autoManagedSpringVersion) < 0);
-    $autoManagedSpringData{version}=$autoManagedSpringVersion;
-    my $springDir=$updater->getSpringDir($autoManagedSpringVersion);
-    setSpringEnv($springDir,$conf{instanceDir},$springDir,splitPaths($conf{springDataDir}));
-    setSpringServerBin($springDir);
-    slog("$reason, using previous auto-installed version ($autoManagedSpringVersion) as fallback solution",2);
-  }else{
-    fatalError("$reason, and couldn't read the previous auto-installed version file \"$autoManagedSpringFile\" as fallback solution ($!)");
-  }  
+  my $autoManagedEngineFile="$conf{instanceDir}/autoManagedEngineVersion.dat";
+  fatalError("$reason, and couldn't find the previous auto-installed version as fallback solution") unless(-f $autoManagedEngineFile);
+  my $r_fallbackAutoManagedEngineData=retrieve($autoManagedEngineFile)
+      or fatalError("$reason, and couldn't read the previous auto-installed version file \"$autoManagedEngineFile\" as fallback solution");
+  $autoManagedEngineData{version}=$r_fallbackAutoManagedEngineData->{version};
+  my $engineDir=$updater->getEngineDir($r_fallbackAutoManagedEngineData->{version},$r_fallbackAutoManagedEngineData->{github});
+  setSpringEnv($engineDir,$conf{instanceDir},$engineDir,splitPaths($conf{springDataDir}));
+  setSpringServerBin($engineDir);
+  slog("$reason, using previous auto-installed version ($r_fallbackAutoManagedEngineData->{version}".(defined $r_fallbackAutoManagedEngineData->{github} ? ' from GitHub' : '').') as fallback solution',2);
 }
 
 # Auto-update ##########################
@@ -15082,35 +15075,34 @@ if(! $abortSpadsStartForAutoUpdate) {
 # Environment setup ####################
 
   if($conf{autoManagedSpringVersion} ne '') {
-    if($conf{autoManagedSpringVersion} =~ /^\d+(?:\.\d+){1,3}(?:-\d+-g[0-9a-f]+)?$/) {
-      %autoManagedSpringData=(mode => 'version', version => $conf{autoManagedSpringVersion});
-      fatalError("Unable to auto-install Spring version \"$autoManagedSpringData{version}\"") if($updater->setupSpring($autoManagedSpringData{version}) < 0);
-      my $springDir=$updater->getSpringDir($autoManagedSpringData{version});
-      setSpringEnv($springDir,$conf{instanceDir},$springDir,splitPaths($conf{springDataDir}));
-      setSpringServerBin($springDir);
-    }elsif($conf{autoManagedSpringVersion} =~ /^(stable|testing|unstable|maintenance)(?:;(\d*)(?:;(on|off|whenEmpty|whenOnlySpec))?)?$/) {
-      %autoManagedSpringData=(mode => 'release', release => $1, delay => $2//{stable => 60, testing => 30, unstable => 15}->{$1}//30, restart => $3//'whenEmpty');
-      my $autoManagedSpringVersion=$updater->resolveSpringReleaseNameToVersion($autoManagedSpringData{release});
-      if(! defined $autoManagedSpringVersion) {
-        useFallbackSpringVersion('Unable to identify the auto-managed Spring release');
+    %autoManagedEngineData=%{SpadsConf::parseAutoManagedSpringVersion($conf{autoManagedSpringVersion})};
+    fatalError("The \"autoManagedSpringVersion\" setting is configured to enable auto-download of engine using GitHub, but TLS support is missing (IO::Socket::SSL version 1.42 or superior and Net::SSLeay version 1.49 or superior are required)")
+        if(defined $autoManagedEngineData{github} && ! $SpadsUpdater::HttpTinyCanSsl);
+    my $engineStr = defined $autoManagedEngineData{github} ? 'engine' : 'Spring';
+    if($autoManagedEngineData{mode} eq 'version') {
+      fatalError("Unable to auto-install $engineStr version \"$autoManagedEngineData{version}\"")
+          if($updater->setupEngine($autoManagedEngineData{version},$autoManagedEngineData{github}) < 0);
+      my $engineDir=$updater->getEngineDir($autoManagedEngineData{version},$autoManagedEngineData{github});
+      setSpringEnv($engineDir,$conf{instanceDir},$engineDir,splitPaths($conf{springDataDir}));
+      setSpringServerBin($engineDir);
+    }elsif($autoManagedEngineData{mode} eq 'release') {
+      my $autoManagedEngineVersion=$updater->resolveEngineReleaseNameToVersionWithFallback($autoManagedEngineData{release},$autoManagedEngineData{github});
+      if(! defined $autoManagedEngineVersion) {
+        useFallbackEngineVersion("Unable to identify the auto-managed $engineStr release");
       }else{
-        my $autoManagedSpringBranch=(any {$autoManagedSpringData{release} eq $_} (qw'stable testing unstable')) ? undef : $autoManagedSpringData{release};
-        my $setupResult=$updater->setupSpring($autoManagedSpringVersion,$autoManagedSpringBranch);
+        my $setupResult=$updater->setupEngine($autoManagedEngineVersion,$autoManagedEngineData{github});
         if($setupResult < 0) {
-          $failedSpringInstallVersion=$autoManagedSpringVersion if($setupResult < -9);
-          useFallbackSpringVersion("Unable to auto-install Spring $autoManagedSpringData{release} release (version $autoManagedSpringVersion)");
+          $failedEngineInstallVersion=$autoManagedEngineVersion if($setupResult < -9);
+          useFallbackEngineVersion("Unable to auto-install $autoManagedEngineData{release} $engineStr release (version $autoManagedEngineVersion)");
         }else{
-          $autoManagedSpringData{version}=$autoManagedSpringVersion;
-          my $springDir=$updater->getSpringDir($autoManagedSpringVersion);
-          setSpringEnv($springDir,$conf{instanceDir},$springDir,splitPaths($conf{springDataDir}));
-          setSpringServerBin($springDir);
-          my $autoManagedSpringFile="$conf{instanceDir}/autoManagedSpringVersion.dat";
-          if(open(my $springVersionFh,'>',$autoManagedSpringFile)) {
-            print $springVersionFh $autoManagedSpringVersion;
-            close($springVersionFh);
-          }else{
-            slog("Unable to write auto-managed Spring version file \"$autoManagedSpringFile\" ($!)",2);
-          }
+          $autoManagedEngineData{version}=$autoManagedEngineVersion;
+          my $engineDir=$updater->getEngineDir($autoManagedEngineVersion,$autoManagedEngineData{github});
+          setSpringEnv($engineDir,$conf{instanceDir},$engineDir,splitPaths($conf{springDataDir}));
+          setSpringServerBin($engineDir);
+          my $autoManagedEngineFile="$conf{instanceDir}/autoManagedEngineVersion.dat";
+          unlink("$conf{instanceDir}/autoManagedSpringVersion.dat"); #TODO: remove this line when this code has been in stable SPADS long enough
+          nstore(\%autoManagedEngineData,$autoManagedEngineFile)
+              or slog("Unable to write auto-managed $engineStr version file \"$autoManagedEngineFile\"",2);
         }
       }
     }else{
@@ -15211,7 +15203,7 @@ if(! $abortSpadsStartForAutoUpdate) {
   }
 
   SimpleEvent::addTimer('SpadsMainLoop',0,0.5,\&mainLoop);
-  SimpleEvent::addTimer('SpringVersionAutoManagement',$autoManagedSpringData{delay}*60,$autoManagedSpringData{delay}*60,\&springVersionAutoManagement) if($autoManagedSpringData{mode} eq 'release');
+  SimpleEvent::addTimer('EngineVersionAutoManagement',$autoManagedEngineData{delay}*60,$autoManagedEngineData{delay}*60,\&engineVersionAutoManagement) if($autoManagedEngineData{mode} eq 'release');
   SimpleEvent::addTimer('RefreshSharedData',$sharedDataRefreshDelay,$sharedDataRefreshDelay,sub {$spads->refreshSharedDataIfNeeded()}) if($sharedDataRefreshDelay);
   SimpleEvent::startLoop(\&postMainLoop);
 }
@@ -15336,23 +15328,28 @@ sub manageBattle {
 }
 
 sub checkExit {
+  return if($simpleEventLoopStopping);
   if($autohost->getState() == 0 && $springPid == 0 && defined $quitAfterGame{action} && ! $loadArchivesInProgress) {
     if($quitAfterGame{condition} == 0) {
       slog("Game is not running, exiting",3);
+      $simpleEventLoopStopping=1;
       SimpleEvent::stopLoop();
     }elsif($lobbyState > 5) {
       my @players=grep {$_ ne $conf{lobbyLogin} && ! $lobby->{users}{$_}{status}{bot}} (keys %{$lobby->{battle}{users}});
       if(! @players) {
         slog("Game is not running and battle is empty, exiting",3);
+        $simpleEventLoopStopping=1;
         SimpleEvent::stopLoop();
       }elsif($quitAfterGame{condition} == 1) {
         if(none {defined $lobby->{battle}{users}{$_}{battleStatus} && $lobby->{battle}{users}{$_}{battleStatus}{mode}} @players) {
           slog("Game is not running and battle only contains spectators, exiting",3);
+          $simpleEventLoopStopping=1;
           SimpleEvent::stopLoop();
         }
       }
     }else{
       slog("Game is not running and battle is closed, exiting",3);
+      $simpleEventLoopStopping=1;
       SimpleEvent::stopLoop();
     }
   }
@@ -15383,7 +15380,7 @@ sub postMainLoop {
   SimpleEvent::unregisterSocket($autohost->{autoHostSock});
   $autohost->close();
   SimpleEvent::removeTimer('SpadsMainLoop');
-  SimpleEvent::removeTimer('SpringVersionAutoManagement') if($autoManagedSpringData{mode} eq 'release');
+  SimpleEvent::removeTimer('EngineVersionAutoManagement') if($autoManagedEngineData{mode} eq 'release');
   SimpleEvent::removeTimer('RefreshSharedData') if($sharedDataRefreshDelay);
 }
 

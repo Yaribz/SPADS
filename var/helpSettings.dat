@@ -6,9 +6,9 @@ Lobby server hostname
 -
 Hostname or IP address of the Spring lobby server
 -
-Routable hostname or IP address
+Hostname or IP address
 -
-taspringmaster.clan-sy.com
+lobby.springrts.com
 
 [global:lobbyPort]
 Lobby server port
@@ -170,17 +170,24 @@ whenEmpty
 [global:autoManagedSpringVersion]
 Auto-managed Spring version
 -
-If this setting is defined, then Spring version auto-management is enabled: SPADS automatically downloads and uses official Spring binaries matching the version/release specified (Spring binaries downloaded automatically are stored in the directory indicated by [global:autoManagedSpringDir]).
-The Spring version can be specified as a version number directly (for example: "103.0.1-1272-g170516f", "103.0" ...), or as a release name ("stable", "testing", "unstable" or "maintenance"). When a version number is used, SPADS will stick to this version until the setting is changed manually. When a release name is used, SPADS will stay up to date with the corresponding official Spring release by automatically downloading and using new Spring binary files when needed (the "stable" release is the current recommended Spring version, the "testing" release is the next Spring release candidate, and the "unstable" release is the latest develop version). A check delay and an auto-restart mode can optionnaly be provided to alter default behaviour (see below).
+If this setting is defined, then engine version auto-management is enabled: SPADS automatically downloads and uses engine binaries matching the version/release specified (auto-downloaded binaries are stored in the directory specified by [global:autoManagedSpringDir]).
+The desired Spring version can be specified as a version number directly (for example: "103.0.1-1272-g170516f", "103.0" ...), or as a release name ("stable", "testing" or "unstable"). When a version number is used, SPADS will stick to this version until the setting is changed manually. When a release name is used, SPADS will stay up to date with the corresponding official Spring release by automatically downloading and using new Spring binary files when needed (the "stable" release is the current recommended Spring version, the "testing" release is the next Spring release candidate, and the "unstable" release is the latest develop version). A check delay and an auto-restart mode can optionnaly be provided to alter default behaviour (see below).
 When Spring version auto-management is enabled, [global:springServerType] must be defined to specify which type of Spring server must be used (dedicated or headless). The auto-managed Spring version setting and the custom Spring installation settings are mutually exclusive: either Spring version auto-management is enabled and the custom Spring installation settings ([global:unitsyncDir] and [global:springServer]) must not be defined, or Spring version auto-management is disabled and the custom Spring installation settings ([global:unitsyncDir] and [global:springServer]) must be defined.
-Spring version auto-management isn't available on macOS.
+Engine version auto-management can also be enabled for any Spring-based engine whose releases are stored on GitHub. In this case a GitHub-specific prefix must be added to the value described above with following format:
+[GITHUB]{owner=<repositoryOwner>,name=<repositoryName>,tag=<releaseTagTemplate>,asset=<assetRegularExpresion>}
+  <repositoryOwner> is the name of the GitHub user/organization who owns the repository
+  <repositoryName> is the name of the GitHub repository containing the engine releases
+  <releaseTagTemplate> is the template of the tags used for the releases, it must contain the "<version>" placeholder indicating where the engine version is located in the tag name
+  <assetRegularExpression> is the regular expression used to select the release asset to download and install. This regular expression can contain the "<os>" and "<bitness>" placeholders: "<os>" will be automatically replaced by the current operating system ("linux" or "windows"), and "<bitness>" will be replaced by the system bitness ("64" or "32").
+As for official Spring engine, it is possible to select a specific engine version number or an engine release, but only "stable" and "testing" releases are supported: the "stable" release is the latest release in GitHub terminology (i.e. by default the most recent non-prerelease, non-draft release), and the "testing" release is the latest non-draft prerelease.
 -
 <null>: Spring version auto-management is disabled (the custom Spring installation specified by [global:unitsyncDir] and [global:springServer] is used instead)
 <springVersionNumber>: SPADS auto-downloads Spring binaries for this specific version if needed, and sticks to this version
-<springRelease>: SPADS stays up to date with the selected Spring release ("stable", "testing", "unstable" or "maintenance")
+<springRelease>: SPADS stays up to date with the selected Spring release ("stable", "testing", "unstable")
 <springRelease>;<checkDelay>;<autoRestartMode>: same, with customization of check delay and auto-restart mode
     <checkDelay> is the delay in minutes between Spring version checks for selected release (integer). Default is "60" for "stable" Spring release, "30" for "testing" and "15" for "unstable"
     <autoRestartMode> specifies if and when SPADS must auto-restart after Spring release updates, allowed values: "off", "whenEmpty", "whenOnlySpec", "on". Default is "whenEmpty"
+[GITHUB]{owner=<repositoryOwner>,name=<repositoryName>,tag=<releaseTagTemplate>,asset=<assetRegularExpresion>}<engineVersionNumberOrRelease>
 -
 %autoManagedSpringVersion% (set during installation)
 
@@ -1222,7 +1229,7 @@ Non-null integer
 Minimum team size
 -
 When auto-balancing, normaly [set:nbTeams] has higher priority than [set:teamSize], which means that if there aren't enough players to reach target battle structure, SPADS will try to put at least one player in each team before adding players to existing teams.
-[set:minTeamSize] makes it possible to alter this behaviour: it specifies the minimum team size before starting to fill another team when auto-balancing. This is only useful for Team FFA, when there aren't enough players to fulfill target battle structure: it makes SPADS decrease the number of teams so that there are at least this number of people in each team.
+[set:minTeamSize] makes it possible to alter this behaviour: it specifies the minimum team size before starting to fill another team when auto-balancing. This is only useful for TeamFFA, when there aren't enough players to fulfill target battle structure: it makes SPADS decrease the number of teams so that there are at least this number of people in each team.
 If minTeamSize is set to 0, it simply makes [set:teamSize] have higher priority than [set:nbTeams] (it acts as if [set:minTeamSize] had same value as [set:teamSize]).
 -
 Integer
@@ -1407,7 +1414,7 @@ Auto-add bot number
 This number is used by SPADS to determine the number of local bots to add/remove automatically, according to following rules:
 - If "humans vs bots" mode is selected (i.e., [set:nbTeams] is set to 1), then "autoAddBotNb" is the total number of bots which must be in the bot team.
 - Else if FFA mode is selected (i.e., [set:teamSize] is set to 1), then "autoAddBotNb" is the minimum number of players or bots to maintain in the battle room
-- Else if Team FFA mode is selected (i.e., [set:minTeamSize] is different than 1), then "autoAddBotNb" is the minimum number of teams to fill with [set:minTeamSize] (or [set:teamSize] if [set:minTeamSize] is 0) players and bots
+- Else if TeamFFA mode is selected (i.e., [set:minTeamSize] is different than 1), then "autoAddBotNb" is the minimum number of teams to fill with [set:minTeamSize] (or [set:teamSize] if [set:minTeamSize] is 0) players and bots
 - Else, "autoAddBotNb" is the minimum number of players or bots to maintain in each team
 Auto added bots are taken from [set:localBots] and always obey the [set:maxLocalBots] and [set:maxBots] limits.
 (local bots require Spring headless, see [global:springServerType])
