@@ -50,7 +50,7 @@ use SpringLobbyInterface;
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.60';
+our $spadsVer='0.12.61';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -1831,9 +1831,9 @@ sub getSysInfo {
     $osVersion.=$macOsData{ProductVersion}.' ' if(defined $macOsData{ProductVersion});
     $osVersion.="- Build $macOsData{BuildVersion}" if(defined $macOsData{BuildVersion});
     my $kernelVersion="$uname[0] $uname[2]";
-    if($kernelVersion ne '') {
+    if($kernelVersion ne ' ') {
       if($osVersion ne '') {
-        $osVersion.=" ($kernelVersion)";
+        $osVersion.=" [$kernelVersion]";
       }else{
         $osVersion=$kernelVersion;
       }
@@ -1841,12 +1841,30 @@ sub getSysInfo {
     $memAmount=formatMemSize($macOsData{'hw.memsize'});
     $uptime=time()-$1 if(defined $macOsData{'kern.boottime'} && $macOsData{'kern.boottime'} =~ /\bsec\s*=\s*(\d+)/);
   }else{
-    my $r_issueNetContent=fileToArray('/etc/issue.net');
-    $osVersion=$r_issueNetContent->[0] if(defined $r_issueNetContent && @{$r_issueNetContent});
+    my $r_osReleaseContent=fileToArray('/etc/os-release');
+    if(defined $r_osReleaseContent && @{$r_osReleaseContent}) {
+      my %osReleaseContent;
+      foreach my $osReleaseLine (@{$r_osReleaseContent}) {
+        if($osReleaseLine =~ /^\s*([^\s]+)\s*=\s*(.*[^\s])\s*$/) {
+          my ($infoKey,$infoVal)=($1,$2);
+          $infoVal=$2 if($infoVal =~ /^([\"\'])(.+)\1$/);
+          $osReleaseContent{$infoKey}=$infoVal;
+        }
+      }
+      if(defined $osReleaseContent{PRETTY_NAME}) {
+        $osVersion=$osReleaseContent{PRETTY_NAME};
+      }elsif(defined $osReleaseContent{NAME}) {
+        $osVersion=$osReleaseContent{NAME};
+        $osVersion.=" $osReleaseContent{VERSION}" if(defined $osReleaseContent{VERSION});
+      }elsif(defined $osReleaseContent{ID}) {
+        $osVersion=$osReleaseContent{ID};
+        $osVersion.=" $osReleaseContent{VERSION_ID}" if(defined $osReleaseContent{VERSION_ID});
+      }
+    }
     my $kernelVersion="$uname[0] $uname[2]";
-    if($kernelVersion ne '') {
+    if($kernelVersion ne ' ') {
       if($osVersion ne '') {
-        $osVersion.=" ($kernelVersion)";
+        $osVersion.=" [$kernelVersion]";
       }else{
         $osVersion=$kernelVersion;
       }

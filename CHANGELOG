@@ -940,6 +940,7 @@ spads.pl:
          fix typo in !force output when player is not found
 0.12.60: add support for auto-management of engine releases from GitHub         
          fix duplicate log messages when exiting/restarting in some circunstances
+0.12.61: improve non-Windows operating systems detection
 
 SpadsConf.pm:
 ============
