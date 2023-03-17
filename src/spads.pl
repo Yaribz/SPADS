@@ -50,7 +50,7 @@ use SpringLobbyInterface;
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.61';
+our $spadsVer='0.12.62';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -13654,8 +13654,13 @@ sub cbLeftBattle {
     $timestamps{rotationEmpty}=time;
     updateBattleInfoIfNeeded();
     updateBattleStates();
-    if(exists $currentVote{command} && exists $currentVote{remainingVoters}->{$user}) {
-      delete $currentVote{remainingVoters}->{$user};
+    if(exists $currentVote{command} && exists $currentVote{remainingVoters}{$user}) {
+      my $userIsStillInGame;
+      if($autohost->getState()) {
+        my $p_ahUser=$autohost->getPlayer($user);
+        $userIsStillInGame=1 if(%{$p_ahUser} && $p_ahUser->{disconnectCause} == -1);
+      }
+      delete $currentVote{remainingVoters}{$user} unless($userIsStillInGame);
     }
     $timestamps{autoRestore}=time if(! $lobby->{users}{$user}{status}{bot} && $timestamps{autoRestore});
     delete $currentPlayers{$user};
@@ -14015,6 +14020,9 @@ sub cbAhPlayerLeft {
   if(exists $autohost->{players}->{$playerNb}) {
     my $name=$autohost->{players}->{$playerNb}->{name};
     logMsg("game","=== $name left ===") if($conf{logGameJoinLeave});
+    if(exists $currentVote{command} && exists $currentVote{remainingVoters}{$name}) {
+      delete $currentVote{remainingVoters}{$name} unless($lobbyState > 5 && %{$lobby->{battle}} && exists $lobby->{battle}{users}{$name});
+    }
   }else{
     logMsg("game","=== \#$playerNb (unknown) left ===")  if($conf{logGameJoinLeave});
   }

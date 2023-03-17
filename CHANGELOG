@@ -941,6 +941,7 @@ spads.pl:
 0.12.60: add support for auto-management of engine releases from GitHub         
          fix duplicate log messages when exiting/restarting in some circunstances
 0.12.61: improve non-Windows operating systems detection
+0.12.62: minor fixes regarding management of players who leave without voting while a poll in progress
 
 SpadsConf.pm:
 ============
