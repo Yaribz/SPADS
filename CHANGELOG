@@ -1317,6 +1317,7 @@ SpadsUpdater.pm:
 0.20: override LC_ALL instead of LANG when calling 7za on Linux (workaround for 7za bug) [thanks CommanderSpice]
 0.21: add support for engine releases from GitHub
       add engine release/version mapping cache system to secure engine auto-management
+0.22: use formatted UPDATE.md file from GitHub for major update documentation
 
 springLobbyCertificates.dat:
 ===========================
