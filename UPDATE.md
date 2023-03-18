@@ -15,7 +15,7 @@ Then, when all the required manual actions have been performed, you must force a
 Finally, you can take a look at what changed in this update by checking the changelog available here:
   http://planetspads.free.fr/spads/repository/CHANGELOG
 
-## Update instructions for updating SPADS from version 0.12.* to 0.13.*
+## Instructions for SPADS upgrade from version 0.12 to version 0.13
 
 /!\ _Steps 1 to 3 must be skipped on Windows systems_ /!\
 
