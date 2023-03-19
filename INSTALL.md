@@ -1,21 +1,21 @@
 Prerequisites
 =============
 
-Linux
------
+For Linux systems
+-----------------
 1) Ensure Perl is installed, including all standard Perl core modules (on some systems such as RedHat/Fedora/CentOS, this requires installing a metapackage usually named "perl-core")
 2) For SPADS 0.12 only (current "stable" and "testing" SPADS releases): ensure swig and g++ are installed and available in your PATH
 3) For SPADS 0.13 only (current "unstable" SPADS release): install the "FFI::Platypus" Perl module. Usually this module can be installed using the standard system package manager of your Linux distribution. For example, on Debian-based distributions, you can use the following command to install the "FFI::Platypus" Perl module: `apt-get install libffi-platypus-perl`. On RedHat-based distributions, you can use `dnf install perl-FFI-Platypus`. If your distribution doesn't provide a package for the "FFI::Platypus" Perl module, you can install the module using the "CPAN" tool included with Perl instead, with following command: `cpan FFI::Platypus`
 4) If you plan to run multiple instances of SPADS in parallel from same installation directory (multi-instance mode), it is recommended to install the "DBD::SQLite" Perl module. Usually this module can be installed using the standard system package manager of your Linux distribution. For example, on Debian-based distributions, you can use the following command to install the "DBD::SQLite" Perl module: `apt-get install libdbd-sqlite3-perl`. On RedHat-based distributions, you can use `dnf install perl-DBD-SQLite`. If your distribution doesn't provide a package for the "DBD::SQLite" Perl module, you can install the module using the "CPAN" tool included with Perl instead, with following command: `cpan DBD::SQLite`
 
-Windows
--------
+For Windows systems
+-------------------
 1) Install Strawberry Perl (available here: http://strawberryperl.com)
 2) Ensure your Perl bin directory is in your PATH environement variable
 
 
-macOS
------
+For macOS systems
+-----------------
 1) Ensure Perl is installed
 2) For SPADS 0.12 only (current "stable" and "testing" SPADS releases): ensure swig and g++ are installed and available in your PATH
 3) For SPADS 0.13 only (current "unstable" SPADS release): install the "FFI::Platypus" Perl module.
