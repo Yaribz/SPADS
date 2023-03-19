@@ -46,7 +46,9 @@ If your distribution doesn't provide a package for the `DBD::SQLite` Perl module
 ### 4. Removal of the obsolete `cpu` field from the users configuration file (`users.conf`)
 
 The `cpu` field has been removed from SpringRTS lobby protocol so the corresponding field must be removed from the `users.conf` configuration file (usually located in the `etc` subdirectory of main SPADS installation directory). To do so, following actions must be performed in this file:
-* the template declaration line (usually the first line of the file) must be replaced from `#?accountId:name:country:cpu:rank:access:bot:auth|level` to `#?accountId:name:country:rank:access:bot:auth|level`
+* the template declaration line (usually the first line of the file) must be replaced:  
+Old line: `#?accountId:name:country:cpu:rank:access:bot:auth|level`  
+New line: `#?accountId:name:country:rank:access:bot:auth|level` (the `cpu` field has been removed)
 * the data lines (i.e. all the lines that contain values and which don't start with `#`) must be modified to remove the 4th field. For example, a data line like `:::::1::|110` must be replaced by `::::1::|110` (the 3rd `:` character has been removed).
 
 ### 5. Declaration of the new `resign` command in the commands configuration file (`commands.conf` by default)
