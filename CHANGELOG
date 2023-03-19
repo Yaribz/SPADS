@@ -81,6 +81,7 @@ help.dat:
 0.13.2: removed "cpu" filter parameter from !ban and !unban commands
         removed "all" parameter from !smurfs command
 0.13.3: extend !list command usage to show current vote settings: "!list vSettings"
+0.14.0: add !resign command
 
 helpSettings.dat:
 ================
@@ -181,6 +182,10 @@ helpSettings.dat:
 0.6.6: the "colorSensitivity" global setting now also accepts value "-1" to use a new color assignment algorithm taking game mode and battle structure into account
 0.6.7: fix "lobbyHost" global setting allowed and default values
        update description of "autoManagedSpringVersion" global setting (add engine auto-management using GitHub releases + remove obsolete "maintenance" branch support)
+0.7.0: new global settings: lobbyTls, bansData, mapInfoCacheData, savedBoxesData, trustedLobbyCertificatesData, preferencesData, sharedDataRefreshDelay, sequentialUnitsync, majorityVoteMargin, awayVoteDelay
+       add documentation regarding the fact that vote settings can be overridden in the commands configuration file (commands.conf)
+       change default value of "springieEmulation" global setting from "warn" to "off"
+       change the "colorSensitivity" setting type from global setting to preset setting
 
 PerlUnitSync.pm:
 ===============
@@ -188,6 +193,9 @@ PerlUnitSync.pm:
 91.0b: remove functions obsolete in Spring 104+
 91.0c: localize variable $_ (improve AnyEvent stability)
 91.0d: improve handling of Windows error messages (support more error codes)
+106.0a: restore compatibility with all unitsync versions
+        import requested unitsync functions only, on the fly
+        use FFI::Platypus instead of SWIG pre-compiled wrappers (Linux)
 
 spads.pl:
 ========
@@ -942,6 +950,17 @@ spads.pl:
          fix duplicate log messages when exiting/restarting in some circunstances
 0.12.61: improve non-Windows operating systems detection
 0.12.62: minor fixes regarding management of players who leave without voting while a poll in progress
+0.13.0: new command: !resign (was previously provided by the "Resign" plugin)
+        new global settings: lobbyTls, sharedDataRefreshDelay, sequentialUnitsync, majorityVoteMargin, awayVoteDelay (they replace the corresponding configuration macros, which are now obsolete)
+        new global settings: bansData, mapInfoCacheData, savedBoxesData, trustedLobbyCertificatesData, preferencesData (they replace the "sharedData" configuration macro, which is now obsolete)
+        vote settings can now be overridden in the commands configuration file ("commands.conf" by default)
+        make "colorSensitivity" setting dynamic (changed type from global setting to preset setting)
+        improve setting change detection code
+        use new unitsync library wrapper mechanism on non-Windows systems (no pre-compilation required anymore)
+        detect available unitsync functions automatically
+        map information (width, height and start positions) are now cached again (this functionality was disabled since SPADS 0.11.48 due to unitsync backward compatibility breakage in Spring 104)
+        check number of start positions available in map before launching a game in fixed or random start position type
+        refactor dependency checking code
 
 SpadsConf.pm:
 ============
@@ -1119,6 +1138,10 @@ SpadsConf.pm:
 0.12.22: new value "voting" can now be used for filter "gameState" in commands rights configuration (only matches if the game is not running and a vote is in progress to start it)
 0.12.23: detect invalid integer setting declarations which use integer range notation as default value (first value)
 0.12.24: update "autoManagedSpringVersion" format check function for GitHub mode
+0.13.0: new global settings: lobbyTls, sharedDataRefreshDelay, sequentialUnitsync, majorityVoteMargin, awayVoteDelay (they replace the corresponding configuration macros, which are now obsolete)
+        new global settings: bansData, mapInfoCacheData, savedBoxesData, trustedLobbyCertificatesData, preferencesData (they replace the "sharedData" configuration macro, which is now obsolete)
+        the "colorSensitivity" global setting is now a preset setting
+        automatically add new preferences fields in the SQLite database
 
 spadsInstaller.pl:
 =================
@@ -1197,6 +1220,9 @@ spadsInstaller.pl:
 0.27: replace the basic list functions any/all/none/notall with those provided by the List::Util Perl module (requires Perl >= 5.19.5)
 0.28: add support for installation of engines directly from GitHub releases
       fix download link for minimal set of maps
+0.29: use new unitsync library wrapper mechanism on non-Windows systems (no pre-compilation required anymore)
+      refactor dependency checking code
+      check SQLite availability to warn if not available and autoconfigure the new "preferencesData" setting
 
 SpadsPluginApi.pm:
 =================
