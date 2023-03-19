@@ -1,84 +1,97 @@
-                  Help file for SPADS manual updates
-==============================================================================
-Some SPADS updates require manual modifications in configuration files. When
-this happens, SPADS does NOT auto-update because it wouldn't be able to
-restart without these modifications. Instead, it logs an alert and continues
-running normally.
+SPADS major update documentation
+================================
 
-This file explains for each SPADS manual update how to add the required new
-settings with their default values. You just have to follow the section
-concerning your update. If you need additional information about these new
-settings, you can check the SPADS settings documentation here:
-  http://planetspads.free.fr/spads/doc/spadsDoc.html
+Description
+-----------
 
-You can also check that your modifications are correct by taking a look at the
-up-to-date configuration templates available here (replace <release> by your
-actual SPADS release: "stable", "testing" or "unstable"):
-  http://planetspads.free.fr/spads/conf/templates/<release>/
+Some SPADS updates, called "major updates", require some modifications to be performed manually on the system (usually in SPADS configuration files). When this happens, SPADS does NOT auto-update because it wouldn't be able to restart without these modifications. Instead, it logs an alert, points to this document and continues running normally.
 
-Then, when the manual actions have been performed, you can force an update of
-all SPADS packages by entering the following command from SPADS installation
-directory (replace <release> by your actual SPADS release: "stable", "testing"
-or "unstable"):
-  on Linux: ./update.pl <release> -f -a
-  on Windows: perl update.pl <release> -f -a
+This document describes the manual actions which must be performed during the major update. If you need additional information regarding new SPADS settings, you can check the SPADS settings documentation here: http://planetspads.free.fr/spads/doc/spadsDoc.html
 
-Finally you can take a look at what changed during this update by checking the
-changelog available here:
+You can also check that your modifications are correct by comparing them with the up-to-date configuration templates available here (replace `<release>` by your actual SPADS release: "stable", "testing" or "unstable"): `http://planetspads.free.fr/spads/conf/templates/<release>/`
+
+Then, when all the required manual actions have been performed, you must force an update of all SPADS packages by entering the following command from main SPADS installation directory (replace `<release>` by your actual SPADS release: "stable", "testing" or "unstable"):
+
+    perl update.pl <release> -f -a
+
+Finally, you can take a look at what changed in this update by checking the changelog available here:
   http://planetspads.free.fr/spads/repository/CHANGELOG
-==============================================================================
 
-#######################################
-# help.dat: 0.12.* --> 0.13.*         #
-# helpSettings.dat: 0.5.* --> 0.6.*   #
-# spads.pl: 0.11.* --> 0.12.*         #
-# SpadsConf.pm: 0.11.* --> 0.12.*     #
-#######################################
+Instructions for SPADS upgrade from version 0.12 to version 0.13
+----------------------------------------------------------------
 
-  1) Actions in spads.conf
-  ------------------------
-- remove following global setting definitions:
-  binDir, autoUpdateBinaries, onBadSpringVersion
-- remove following preset setting definitions:
-  minRankForPasswd, minLevelForPasswd
-- add following global setting definitions:
-  instanceDir:
-  autoManagedSpringVersion:
-  autoManagedSpringDir:spring
-  unitsyncDir:<absolute_path_of_the_directory_containing_the_unitsync_library>
-  simpleEventLogLevel:4
-  eventModel:auto
-  maxChildProcesses:16
-- rename the "minLevelForIpAddr" global setting to "privacyTrustLevel"
-- check the value of the "springieEmulation" global setting:
-  if it is set to "on" (old default value), change it to "warn"
-- check the value of the "kickBanDuration" global setting:
-  if it is set to "120" (old default value), change it to 300
-- check the value of the "pluginsDir" global setting:
-  if it is empty (old default value), set it to "plugins" and create the subdirectory "plugins" in the directory pointed by the "varDir" global setting
-  if it is not empty, ensure the corresponding directory exists
-- check the allowed values for the "balanceMode" preset setting:
-  if one of the values is "clan" (second value in default configuration), change it to "clan;random"
+/!\ _Steps 1 to 3 must be skipped on Windows systems_ /!\
 
-  2) Other actions
-  ----------------
-- create the subdirectory "spring" in the directory pointed by the "varDir" global setting
-- remove the "!pass" command declaration in commands.conf:
-  remove the line "[pass]" and the non-empty line(s) just after, such as "::|0:"
-- following plugins must be updated to latest version if you plan to use them: FirstWelcomeMsg, InGameMute, ReverseLookup
+### 1. Installation of the `FFI::Platypus` Perl module
+(_this step must be skipped on Windows systems_)
 
-  3) Optional actions
-  -------------------
-- if you are hosting several SPADS instances running from same SPADS installation, then you need to adjust your "varDir" and "instanceDir" global settings in spads.conf:
-  the "varDir" global setting no longer needs to be different for each SPADS instance (and it can be an absolute path or a path relative to SPADS installation directory), so you can set it back to default value: "var"
-  the "instanceDir" global setting is the directory which must be different for each SPADS instance, so you can set it to your old "varDir" value
-- if you want to use the new "Spring version auto-management" functionality of SPADS (recommended), in spads.conf:
-  set the "autoManagedSpringVersion" global setting to the desired Spring version (example: "103.0")
-  set the "springServer" and "unitsyncDir" global settings to empty values
-  set the "springServerType" global setting to "dedicated" (or "headless" if you want to use headless server)
-  remove any Spring data directory containing Spring base files (content specific to a given Spring version) from "springDataDir" global setting value
+On Linux, SPADS 0.13 requires the `FFI::Platypus` Perl module. Usually this module can be installed using the standard system package manager of your Linux distribution. For example, on Debian-based distributions, you can use the following command to install the `FFI::Platypus` Perl module: `apt-get install libffi-platypus-perl`. On RedHat-based distributions, you can use `dnf install perl-FFI-Platypus`.
 
-  4) Post-update action
-  ---------------------
-- finally, after the "./update.pl <release> -f -a" command has been executed, the Perl unitsync library interface module must be re-generated (on Linux system only):
-  "./spadsInstaller.pl -g"
+If your distribution doesn't provide a package for the `FFI::Platypus` Perl module, you can use the `CPAN` tool included with Perl instead to install the module, using following command: `cpan FFI::Platypus`
+
+### 2. Removal of the obsolete Perl Unitsync wrapper files
+(_this step must be skipped on Windows systems_)
+
+On Linux, SPADS versions prior to 0.13 were using a generated wrapper to call the Unitsync library. This method of calling the Unitsync library has been replaced by `FFI::Platypus` in SPADS 0.13. Consequently, following files must be removed from SPADS installation directory to allow `FFI::Platypus` to work properly: `PerlUnitSync.pm` and `PerlUnitSync.so` (a new `PerlUnitSync.pm` file will be automatically downloaded when launching the update at the end of the procedure)
+
+### 3. Installation of the `DBD::SQLite` Perl module
+(_this step must be skipped on Windows systems_)
+
+(_this step is optional on Linux systems, but recommended if SPADS is used in multi-instance mode_)
+
+In order to be able to share user preferences data between several instances, SPADS uses a SQLite database which requires the Perl `DBD::SQLite` module. Usually this module can be installed using the standard system package manager of your Linux distribution. For example, on Debian-based distributions, you can use the following command to install the `DBD::SQLite` Perl module: `apt-get install libdbd-sqlite3-perl`. On RedHat-based distributions, you can use `dnf install perl-DBD-SQLite`.
+
+If your distribution doesn't provide a package for the `DBD::SQLite` Perl module, you can use the `CPAN` tool included with Perl instead to install the module, using following command: `cpan DBD::SQLite`
+
+### 4. Removal of the obsolete `cpu` field from the users configuration file (`users.conf`)
+
+The `cpu` field has been removed from SpringRTS lobby protocol so the corresponding field must be removed from the `users.conf` configuration file (usually located in the `etc` subdirectory of main SPADS installation directory). To do so, following actions must be performed in this file:
+* the template declaration line (usually the first line of the file) must be replaced from `#?accountId:name:country:cpu:rank:access:bot:auth|level` to `#?accountId:name:country:rank:access:bot:auth|level`
+* the data lines (i.e. all the lines that contain values and which don't start with `#`) must be modified to remove the 4th field. For example, a data line like `:::::1::|110` must be replaced by `::::1::|110` (the 3rd `:` character has been removed).
+
+### 5. Declaration of the new `resign` command in the commands configuration file (`commands.conf` by default)
+
+SPADS 0.13 provides a new command called `resign` which was provided by the `Resign` plugin in previous SPADS versions.
+
+a) If the `Resign` plugin is installed and the `resign` command configuration has been customized
+
+The customized content contained in the `ResignCmd.conf` plugin configuration file must be copied directly in main SPADS commands configuration file (`commands.conf` by default)
+
+b) If the `Resign` plugin is NOT installed or the `resign` command configuration has NOT been customized
+
+Following lines must be added in SPADS commands configuration file (`commands.conf` by default):
+```
+[resign]
+:playing:running|100:10
+::running|100:
+```
+
+### 6. Uninstallation of the `Resign` plugin if needed
+
+If the `Resign` plugin is installed, it must be uninstalled as follows:
+* remove the `Resign` plugin from the `autoLoadPlugins` setting if needed in your main SPADS configuration file (`spads.conf` by default)
+* remove the `Resign.pm` and `ResignHelp.dat` files from your SPADS plugin directory
+* remove the `Resign.conf` and `ResignCmd.conf` files from your SPADS configuration directory
+
+### 7. Update of main SPADS configuration file (`spads.conf` by default)
+
+The `colorSensitivity` setting has been changed from a global unmodifiable setting to a global preset setting. This means the setting declaration must be moved from the top part of the configuration file to the preset declarations part, between the `autoBlockColors` and the `balanceMode` settings declarations for example.
+
+The `springieEmulation` setting value _should_ be updated from `warn` to `off`.
+
+Following new global settings must be declared (in the top part of the configuration file, before the preset declarations):
+```
+lobbyTls:auto
+bansData:shared
+mapInfoCacheData:shared
+savedBoxesData:shared
+trustedLobbyCertificatesData:shared
+preferencesData:shared
+sharedDataRefreshDelay:5
+sequentialUnitsync:0
+majorityVoteMargin:0
+awayVoteDelay:20
+```
+Note 1: if you are using Linux and chose to not install the `DBD::SQLite` module in step 3., you must use `private` instead of `shared` for the `preferencesData` value
+
+Note 2: if you were previously using command line arguments to pass values of `lobbyTls`, `sharedDataRefreshDelay`, `sequentialUnitsync`, `majorityVoteMargin`, `awayVoteDelay` and `sharedData`, you must now use the corresponding standard settings listed above instead, as these command line arguments will be ignored by SPADS 0.13.
