@@ -66,13 +66,12 @@ functionalities:
 
 Installation
 ------------
-The installation can be performed by downloading
-[the installation package](http://planetspads.free.fr/spads/installer/spadsInstaller.tar)
-and following the instructions of the [INSTALL](INSTALL) file.
+The installation can be performed by following the instructions of the
+[INSTALL.md](INSTALL.md) file.
 
 The installation package contains following components (other components are
 automatically downloaded):
-* [INSTALL](INSTALL)
+* [INSTALL.md](INSTALL.md)
 * [LICENSE](LICENSE)
 * [SimpleLog.pm](https://github.com/Yaribz/SimpleLog/blob/master/SimpleLog.pm)
 * [spadsInstaller.pl](src/spadsInstaller.pl)
