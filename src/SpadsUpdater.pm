@@ -34,7 +34,7 @@ use Time::HiRes;
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $archName=($win?'win':'linux').($Config{ptrsize} > 4 ? 64 : 32);
 
-my $moduleVersion='0.22';
+my $moduleVersion='0.23';
 
 my @constructorParams = qw'sLog repository release packages';
 my @optionalConstructorParams = qw'localDir springDir';
@@ -548,8 +548,7 @@ sub _updateLockProtected {
             my $availableMajor=$1;
             if($currentMajor ne $availableMajor) {
               $sl->log("Major version number of package $packageName has changed ($currentVersion -> $availableVersion), which means that it requires manual operations before update.",2);
-              $sl->log("Please check the SPADS major update documentation here: https://github.com/Yaribz/SPADS/blob/master/UPDATE.md",2);
-              $sl->log("Then force package update with \"perl update.pl $self->{release} -f $packageName\" (or \"perl update.pl $self->{release} -f -a\" to force update of all SPADS packages).",2);
+              $sl->log("Please follow the SPADS upgrade procedure described here: https://github.com/Yaribz/SPADS/blob/master/UPDATE.md",2);
               return -7;
             }
           }

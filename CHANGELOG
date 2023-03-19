@@ -951,6 +951,7 @@ spads.pl:
 0.12.61: improve non-Windows operating systems detection
 0.12.62: minor fixes regarding management of players who leave without voting while a poll in progress
 0.12.63: workaround for lobby server sending SERVERMSG instead of OPENBATTLEFAILED when the battle opening is denied due to lobby client not using TLS
+0.12.64: put "spads.pl" at start of packages list to make manual upgrade message clearer during major SPADS updates
 0.13.0: new command: !resign (was previously provided by the "Resign" plugin)
         new global settings: lobbyTls, sharedDataRefreshDelay, sequentialUnitsync, majorityVoteMargin, awayVoteDelay (they replace the corresponding configuration macros, which are now obsolete)
         new global settings: bansData, mapInfoCacheData, savedBoxesData, trustedLobbyCertificatesData, preferencesData (they replace the "sharedData" configuration macro, which is now obsolete)
@@ -1345,6 +1346,7 @@ SpadsUpdater.pm:
 0.21: add support for engine releases from GitHub
       add engine release/version mapping cache system to secure engine auto-management
 0.22: use formatted UPDATE.md file from GitHub for major update documentation
+0.23: simplify message for upgrade procedure during major SPADS updates
 
 springLobbyCertificates.dat:
 ===========================

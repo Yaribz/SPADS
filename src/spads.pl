@@ -50,7 +50,7 @@ use SpringLobbyInterface;
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.63';
+our $spadsVer='0.12.64';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -76,7 +76,7 @@ my @ircStyle=(\%ircColors,'');
 my @noIrcStyle=(\%noColor,'');
 my @readOnlySettings=qw'description commandsfile battlepreset hostingpreset welcomemsg welcomemsgingame maplink ghostmaplink preset battlename advertmsg endgamecommand endgamecommandenv endgamecommandmsg';
 
-my @packagesSpads=qw'help.dat helpSettings.dat springLobbyCertificates.dat SpringAutoHostInterface.pm SpringLobbyInterface.pm SimpleEvent.pm SimpleLog.pm spads.pl SpadsConf.pm SpadsUpdater.pm SpadsPluginApi.pm argparse.py replay_upload.py';
+my @packagesSpads=qw'spads.pl help.dat helpSettings.dat springLobbyCertificates.dat SpringAutoHostInterface.pm SpringLobbyInterface.pm SimpleEvent.pm SimpleLog.pm SpadsConf.pm SpadsUpdater.pm SpadsPluginApi.pm argparse.py replay_upload.py';
 if($win) {
   push(@packagesSpads,'7za.exe','PerlUnitSync.pm');
 }elsif(! $macOs) {
