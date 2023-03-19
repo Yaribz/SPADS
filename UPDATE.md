@@ -1,6 +1,8 @@
-# SPADS major update documentation
+SPADS major update documentation
+================================
 
-## Description
+Description
+-----------
 
 Some SPADS updates, called "major updates", require some modifications to be performed manually on the system (usually in SPADS configuration files). When this happens, SPADS does NOT auto-update because it wouldn't be able to restart without these modifications. Instead, it logs an alert, points to this document and continues running normally.
 
@@ -15,7 +17,8 @@ Then, when all the required manual actions have been performed, you must force a
 Finally, you can take a look at what changed in this update by checking the changelog available here:
   http://planetspads.free.fr/spads/repository/CHANGELOG
 
-## Instructions for SPADS upgrade from version 0.12 to version 0.13
+Instructions for SPADS upgrade from version 0.12 to version 0.13
+----------------------------------------------------------------
 
 /!\ _Steps 1 to 3 must be skipped on Windows systems_ /!\
 
