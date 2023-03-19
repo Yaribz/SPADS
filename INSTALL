@@ -1,44 +1,37 @@
-To install SPADS on Linux/UNIX, you have to:
-============================================
+Prerequisites
+=============
 
-1) Ensure Perl, swig and g++ are installed and available in your PATH (all standard Perl core modules must be available, on some systems such as RedHat/Fedora/CentOS this requires installing a metapackage usually named "perl-core")
-2) Run "./spadsInstaller.pl" (SPADS will be installed in current directory)
-3) Check your configuration files, in particular "spads.conf", "hostingPresets.conf" and "battlePresets.conf"
+  For Linux systems
+  -----------------
+  1) Ensure Perl is installed, including all standard Perl core modules (on some systems such as RedHat/Fedora/CentOS, this requires installing a metapackage usually named "perl-core")
+  2) For SPADS 0.12 only (current "stable" and "testing" SPADS releases): ensure swig and g++ are installed and available in your PATH
+  3) For SPADS 0.13 only (current "unstable" SPADS release): install the "FFI::Platypus" Perl module. Usually this module can be installed using the standard system package manager of your Linux distribution. For example, on Debian-based distributions, you can use the following command to install the "FFI::Platypus" Perl module: `apt-get install libffi-platypus-perl`. On RedHat-based distributions, you can use `dnf install perl-FFI-Platypus`. If your distribution doesn't provide a package for the "FFI::Platypus" Perl module, you can install the module using the "CPAN" tool included with Perl instead, with following command: `cpan FFI::Platypus`
+  4) If you plan to run multiple instances of SPADS in parallel from same installation directory (multi-instance mode), it is recommended to install the "DBD::SQLite" Perl module. Usually this module can be installed using the standard system package manager of your Linux distribution. For example, on Debian-based distributions, you can use the following command to install the "DBD::SQLite" Perl module: `apt-get install libdbd-sqlite3-perl`. On RedHat-based distributions, you can use `dnf install perl-DBD-SQLite`. If your distribution doesn't provide a package for the "DBD::SQLite" Perl module, you can install the module using the "CPAN" tool included with Perl instead, with following command: `cpan DBD::SQLite`
 
-Then you can run SPADS as follows:
-"./spads.pl <spadsConfPath>" (for instance: "./spads.pl etc/spads.conf")
+  For Windows systems
+  -------------------
+  1) Install Strawberry Perl (available here: http://strawberryperl.com)
+  2) Ensure your Perl bin directory is in your PATH environement variable
 
+  For macOS systems
+  -----------------
+  1) Ensure Perl is installed
+  2) For SPADS 0.12 only (current "stable" and "testing" SPADS releases): ensure swig and g++ are installed and available in your PATH
+  3) For SPADS 0.13 only (current "unstable" SPADS release): install the "FFI::Platypus" Perl module.
+  4) Install Spring server (check the locations of the unitsyc library, "spring-dedicated" and "Spring data directory", they will be asked during SPADS installation)
+  5) Install at least one mod in Spring data directory
 
+Installation instructions
+=========================
 
-To install SPADS on Windows, you have to:
-=========================================
+  1) Create the directory where SPADS should be installed
+  2) Download SPADS installation archive from http://planetspads.free.fr/spads/installer/spadsInstaller.tar and extract it in SPADS installation directory
+  3) From SPADS installation directory, launch the installer using following command: `perl spadsInstaller.pl`
+  4) After installation, check and customize your configuration files if needed (in particular "spads.conf", "hostingPresets.conf" and "battlePresets.conf")
+  5) Launch SPADS using following command: `perl spads.pl etc/spads.conf`
 
-1) Install Strawberry Perl (available here: http://strawberryperl.com) or ActivePerl for Windows (available here: http://www.activestate.com/activeperl/downloads)
-2) Ensure your Perl bin directory is in your PATH environement variable
-3) Open a Command shell, go in the directory where you extracted SPADS installation files, and run "perl spadsInstaller.pl" (SPADS will be installed in current directory)
-4) Check your configuration files, in particular "spads.conf", "hostingPresets.conf" and "battlePresets.conf"
+Support
+=======
 
-Then you can run SPADS as follows:
-"perl spads.pl <spadsConfPath>" (for instance: "perl spads.pl etc/spads.conf")
-
-
-
-To install SPADS on macOS, you have to:
-=======================================
-
-1) Ensure Perl, swig and g++ are installed and available in your PATH
-2) Install Spring server (check the locations of the unitsyc library, "spring-dedicated" and "Spring data directory", they will be asked during SPADS installation)
-3) Install at least one mod in Spring data directory
-4) Run "./spadsInstaller.pl" (SPADS will be installed in current directory)
-5) Check your configuration files, in particular "spads.conf", "hostingPresets.conf" and "battlePresets.conf"
-
-Then you can run SPADS as follows:
-"./spads.pl <spadsConfPath>" (for instance: "./spads.pl etc/spads.conf")
-
-
-
-You can find more info and contact me regarding SPADS here:
-===========================================================
-
-- SpringRTS/SPADS subforum: https://springrts.com/phpbb/viewforum.php?f=88
-- Github/SPADS discussions: https://github.com/Yaribz/SPADS/discussions
+  * SpringRTS/SPADS subforum: https://springrts.com/phpbb/viewforum.php?f=88
+  * Github/SPADS discussions: https://github.com/Yaribz/SPADS/discussions
