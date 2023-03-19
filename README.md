@@ -43,7 +43,7 @@ Components
   used in the tutorials.
 * [packages.txt](packages.txt): SPADS packages index file for HTTP repository
   (used for automatic updates).
-* [UPDATE](UPDATE): Manual update procedure for major SPADS versions.
+* [UPDATE.md](UPDATE.md): Manual update procedure for major SPADS versions.
 
 SPADS is based on the templates provided by following project:
 * [SpringLobbyBot](https://github.com/Yaribz/SpringLobbyBot)
