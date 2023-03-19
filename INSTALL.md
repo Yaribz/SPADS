@@ -17,7 +17,7 @@ Prerequisites
   For macOS systems
   -----------------
   1) Ensure Perl is installed
-  2) Install the "IO::Socket::SSL" Perl module
+  2) Install the "IO::Socket::SSL" Perl module if you plan to use SPADS on official Spring lobby server which requires TLS connection
   3) For SPADS 0.12 only (current "stable" and "testing" SPADS releases): ensure swig and g++ are installed and available in your PATH
   4) For SPADS 0.13 only (current "unstable" SPADS release): install the "FFI::Platypus" Perl module.
   5) If you plan to run multiple instances of SPADS in parallel from same installation directory (multi-instance mode), it is recommended to install the "DBD::SQLite" Perl module.
