@@ -950,6 +950,7 @@ spads.pl:
          fix duplicate log messages when exiting/restarting in some circunstances
 0.12.61: improve non-Windows operating systems detection
 0.12.62: minor fixes regarding management of players who leave without voting while a poll in progress
+0.12.63: workaround for lobby server sending SERVERMSG instead of OPENBATTLEFAILED when the battle opening is denied due to lobby client not using TLS
 0.13.0: new command: !resign (was previously provided by the "Resign" plugin)
         new global settings: lobbyTls, sharedDataRefreshDelay, sequentialUnitsync, majorityVoteMargin, awayVoteDelay (they replace the corresponding configuration macros, which are now obsolete)
         new global settings: bansData, mapInfoCacheData, savedBoxesData, trustedLobbyCertificatesData, preferencesData (they replace the "sharedData" configuration macro, which is now obsolete)

@@ -50,7 +50,7 @@ use SpringLobbyInterface;
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.62';
+our $spadsVer='0.12.63';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -10096,6 +10096,10 @@ sub hOpenBattle {
     answer("Unable to open battle lobby, it is already opened");
     return 0;
   }
+  if($lobbyState == 5) {
+    answer('Opening of the battle lobby is already in progress');
+    return 0;
+  }
   if($#{$p_params} != -1) {
     invalidSyntax($user,"openbattle");
     return 0;
@@ -13805,6 +13809,8 @@ sub cbServerMsg {
     $accountInGameTime=secToTime($1*60);
   }elsif($msg =~ /^Ingame time: (.+)$/) {
     $accountInGameTime=$1;
+  }elsif($lobbyState == 5 && $msg =~ /^A TLS connection is required to host battles/) {
+    cbOpenBattleFailed(undef,'lobby server requires TLS connection to host battles');
   }
 }
 
