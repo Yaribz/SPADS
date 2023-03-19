@@ -10,11 +10,11 @@ This document describes the manual actions which must be performed during the ma
 
 You can also check that your modifications are correct by comparing them with the up-to-date configuration templates available here (replace `<release>` by your actual SPADS release: "stable", "testing" or "unstable"): `http://planetspads.free.fr/spads/conf/templates/<release>/`
 
-Then, when all the required manual actions have been performed, you must force an update of all SPADS packages by entering the following command from main SPADS installation directory (replace `<release>` by your actual SPADS release: "stable", "testing" or "unstable"):
+When all the required manual actions listed in next section have been performed, you must force an update of all SPADS packages by entering the following command from main SPADS installation directory (replace `<release>` by your actual SPADS release: "stable", "testing" or "unstable"):
 
     perl update.pl <release> -f -a
 
-Finally, you can take a look at what changed in this update by checking the changelog available here:
+Finally, you can take a look at what changed with this update by checking the changelog available here:
   http://planetspads.free.fr/spads/repository/CHANGELOG
 
 Instructions for SPADS upgrade from version 0.12 to version 0.13
