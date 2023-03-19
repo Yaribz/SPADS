@@ -34,5 +34,5 @@ Installation instructions
 Support
 =======
 
-1) SpringRTS/SPADS subforum: https://springrts.com/phpbb/viewforum.php?f=88
-2) Github/SPADS discussions: https://github.com/Yaribz/SPADS/discussions
+* SpringRTS/SPADS subforum: https://springrts.com/phpbb/viewforum.php?f=88
+* Github/SPADS discussions: https://github.com/Yaribz/SPADS/discussions
