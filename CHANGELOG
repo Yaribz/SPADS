@@ -1380,3 +1380,4 @@ update.pl:
       the 7za binary is no longer downloaded on macOS
 0.12: add "springLobbyCertificates.dat" to the list of auto-updated modules
 0.13: replace the basic list functions any/all/none/notall with those provided by the List::Util Perl module (requires Perl >= 5.19.5)
+0.14: package PerlUnitSync.pm is now downloaded for all systems (new unitsync interface using FFI::Platypus)

@@ -2,7 +2,7 @@
 #
 # This program update SPADS components in current directory from remote repository.
 #
-# Copyright (C) 2008-2021  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2023  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.13 (2021/10/28)
+# Version 0.14 (2023/03/20)
 
 use strict;
 
@@ -69,6 +69,7 @@ for my $argNb (1..$#ARGV) {
     %packages=('getDefaultModOptions.pl' => 1,
                'help.dat' => 1,
                'helpSettings.dat' => 1,
+               'PerlUnitSync.pm' => 1,
                'springLobbyCertificates.dat' => 1,
                'SpringAutoHostInterface.pm' => 1,
                'SpringLobbyInterface.pm' => 1,
@@ -83,7 +84,6 @@ for my $argNb (1..$#ARGV) {
                'argparse.py' => 1,
                'replay_upload.py' => 1);
     if($win) {
-      $packages{'PerlUnitSync.pm'}=1;
       $packages{'7za.exe'}=1;
     }elsif(! $macOs) {
       $packages{'7za'}=1;

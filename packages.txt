@@ -59,7 +59,7 @@ SpadsUpdater.pm:SpadsUpdater_0.23.pm
 SpringAutoHostInterface.pm:SpringAutoHostInterface_0.13.pm
 SpringLobbyInterface.pm:SpringLobbyInterface_0.39.pm
 springLobbyCertificates.dat:springLobbyCertificates_0.1.dat
-update.pl:update_0.13.pl
+update.pl:update_0.14.pl
 
 [contrib]
 7za:7za-16.2
@@ -80,4 +80,4 @@ SpadsUpdater.pm:SpadsUpdater_0.23.pm
 SpringAutoHostInterface.pm:SpringAutoHostInterface_0.13.pm
 SpringLobbyInterface.pm:SpringLobbyInterface_0.39.pm
 springLobbyCertificates.dat:springLobbyCertificates_0.1.dat
-update.pl:update_0.13.pl
+update.pl:update_0.14.pl
