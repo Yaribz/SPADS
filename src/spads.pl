@@ -50,10 +50,12 @@ use SpringLobbyInterface;
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.12.64';
+our $spadsVer='0.13.0';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
+
+our $cwd=cwd();
 
 my $ioSocketSslVer=eval { require IO::Socket::SSL; $IO::Socket::SSL::VERSION; };
 
@@ -76,9 +78,9 @@ my @ircStyle=(\%ircColors,'');
 my @noIrcStyle=(\%noColor,'');
 my @readOnlySettings=qw'description commandsfile battlepreset hostingpreset welcomemsg welcomemsgingame maplink ghostmaplink preset battlename advertmsg endgamecommand endgamecommandenv endgamecommandmsg';
 
-my @packagesSpads=qw'spads.pl help.dat helpSettings.dat springLobbyCertificates.dat SpringAutoHostInterface.pm SpringLobbyInterface.pm SimpleEvent.pm SimpleLog.pm SpadsConf.pm SpadsUpdater.pm SpadsPluginApi.pm argparse.py replay_upload.py';
+my @packagesSpads=qw'spads.pl help.dat helpSettings.dat PerlUnitSync.pm springLobbyCertificates.dat SpringAutoHostInterface.pm SpringLobbyInterface.pm SimpleEvent.pm SimpleLog.pm SpadsConf.pm SpadsUpdater.pm SpadsPluginApi.pm argparse.py replay_upload.py';
 if($win) {
-  push(@packagesSpads,'7za.exe','PerlUnitSync.pm');
+  push(@packagesSpads,'7za.exe');
 }elsif(! $macOs) {
   push(@packagesSpads,'7za');
 }
@@ -88,12 +90,18 @@ my ($lockFh,$pidFile,$lockAcquired,$auLockFh,$periodicAutoUpdateLockAcquired);
 eval "use HTML::Entities";
 my $htmlEntitiesUnavailable=$@;
 
-our $cwd=cwd();
 if($win) {
-  eval "use Win32";
-  die "\nSPADS requires Win32::API module version 0.73 or superior.\nPlease update your Perl installation (Perl 5.16.2 or superior is recommended)\n"
-      unless(eval { require Win32::API; Win32::API->VERSION(0.73); 1; });
-  eval "use Win32::TieRegistry ':KEY_'";
+  eval { require Win32; 1; }
+    or die "$@Missing dependency: Win32 Perl module\n";
+  eval { require Win32::API; 1; }
+    or die "$@Missing dependency: Win32::API Perl module\n";
+  eval { Win32::API->VERSION(0.73); 1; }
+    or die "$@SPADS requires Win32::API module version 0.73 or superior.\nPlease update your Perl installation (Perl 5.16.2 or superior is recommended)\n";
+  eval { require Win32::TieRegistry; Win32::TieRegistry->import(':KEY_'); 1; }
+    or die "$@Missing dependency: Win32::TieRegistry Perl module\n";
+}else{
+  eval { require FFI::Platypus; 1; }
+    or die "$@Missing dependency: FFI::Platypus Perl module\n";
 }
 
 my %macOsData;
@@ -187,6 +195,7 @@ our %spadsHandlers = (
   reloadconf => \&hReloadConf,
   removebot => \&hRemoveBot,
   rehost => \&hRehost,
+  resign => \&hResign,
   restart => \&hRestart,
   ring => \&hRing,
   saveboxes => \&hSaveBoxes,
@@ -507,6 +516,7 @@ my %ignoredRelayedApiUsers;
 my %pendingRelayedJsonRpcChunks;
 my %sentPlayersScriptTags;
 my $simpleEventLoopStopping;
+my %unitsyncOptFuncs;
 
 my $lobbySimpleLog=SimpleLog->new(logFiles => [$conf{logDir}."/spads.log",''],
                                   logLevels => [$conf{lobbyInterfaceLogLevel},3],
@@ -640,23 +650,12 @@ if(defined $tlsAction && ($tlsAction eq 'revoke' || $tlsAction eq 'list' || defi
   exit 0;
 }
 
-# Specific features configurable by configuration macros ######################
-
-my $useTls = defined $ioSocketSslVer ? 1 : 0;
-if(exists $confMacros{lobbyTls}) {
-  if(any {lc($confMacros{lobbyTls}) eq $_} (qw'on yes enabled true 1')) {
-    fatalError('Module IO::Socket::SSL required for TLS support') unless(defined $ioSocketSslVer);
-  }else{
-    $useTls=0;
-  }
-}
-my $sharedDataRefreshDelay=5;
-if(exists $confMacros{sharedDataRefreshDelay}) {
-  if($confMacros{sharedDataRefreshDelay} !~ /^\d+$/) {
-    fatalError("Invalid sharedDataRefreshDelay value (not a number): $confMacros{sharedDataRefreshDelay}");
-  }else{
-    $sharedDataRefreshDelay=$confMacros{sharedDataRefreshDelay};
-  }
+my $useTls;
+if($conf{lobbyTls} eq 'off') {
+  $useTls=0;
+}else{
+  fatalError('Module IO::Socket::SSL required for TLS support') if($conf{lobbyTls} eq 'on' &&  ! defined $ioSocketSslVer);
+  $useTls = defined $ioSocketSslVer ? 1 : 0;
 }
 
 # Console title update (Windows only) #########################################
@@ -1398,7 +1397,7 @@ sub loadArchivesBlocking {
   my $full=shift;
 
   my $usLockFh;
-  if($confMacros{sequentialUnitsync}) {
+  if($conf{sequentialUnitsync}) {
     my $usLockFile="$conf{varDir}/unitsync.lock";
     open($usLockFh,'>',$usLockFile)
         or fatalError("Unable to write Unitsync library lock file \"$usLockFile\" ($!)");
@@ -1465,19 +1464,46 @@ sub loadArchivesBlocking {
       }
       my $mapName=$p_uncachedMapsNames->[$uncachedMapNb];
       my $mapNb=$availableMapsByNames{$mapName};
-      $newCachedMaps{$mapName}={};
-
-# This functionality is disabled since SPADS 0.11.48 because of unitsync backward compatibility breakage in Spring 104...
-#      $newCachedMaps{$mapName}->{width}=PerlUnitSync::GetMapWidth($mapNb);
-#      $newCachedMaps{$mapName}->{height}=PerlUnitSync::GetMapHeight($mapNb);
-#      my $nbStartPos=PerlUnitSync::GetMapPosCount($mapNb);
-#      $newCachedMaps{$mapName}->{nbStartPos}=$nbStartPos;
-#      $newCachedMaps{$mapName}->{startPos}=[];
-#      for my $startPosNb (0..($nbStartPos-1)) {
-#        push(@{$newCachedMaps{$mapName}->{startPos}},[PerlUnitSync::GetMapPosX($mapNb,$startPosNb),PerlUnitSync::GetMapPosZ($mapNb,$startPosNb)]);
-#      }
-
-      $newCachedMaps{$mapName}->{options}={};
+      $newCachedMaps{$mapName}={startPos => [],
+                                options => {}};
+      if($unitsyncOptFuncs{GetMapInfoCount}) {
+        my $nbMapInfo=PerlUnitSync::GetMapInfoCount($mapNb);
+        if($nbMapInfo < 0) {
+          while(my $unitSyncErr=PerlUnitSync::GetNextError()) {
+            chomp($unitSyncErr);
+            slog("UnitSync error: $unitSyncErr",1);
+          }
+          slog("Unable to get map info count for map $mapName",1);
+          PerlUnitSync::UnInit();
+          return ([],[],{});
+        }
+        for my $infoNb (0..($nbMapInfo-1)) {
+          my $mapInfoKey=PerlUnitSync::GetInfoKey($infoNb);
+          if($mapInfoKey eq 'width') {
+            $newCachedMaps{$mapName}{width}=PerlUnitSync::GetInfoValueInteger($infoNb);
+          }elsif($mapInfoKey eq 'height') {
+            $newCachedMaps{$mapName}{height}=PerlUnitSync::GetInfoValueInteger($infoNb);
+          }elsif($mapInfoKey eq 'xPos') {
+            push(@{$newCachedMaps{$mapName}{startPos}},[PerlUnitSync::GetInfoValueFloat($infoNb)]);
+          }elsif($mapInfoKey eq 'zPos') {
+            if(! @{$newCachedMaps{$mapName}{startPos}}
+               || $#{$newCachedMaps{$mapName}{startPos}[-1]} != 0) {
+              slog("Inconsistentcy in start position data for map $mapName",1);
+              PerlUnitSync::UnInit();
+              return ([],[],{});
+            }
+            push(@{$newCachedMaps{$mapName}{startPos}[-1]},PerlUnitSync::GetInfoValueFloat($infoNb));
+          }
+        }
+      }else{
+        $newCachedMaps{$mapName}{width}=PerlUnitSync::GetMapWidth($mapNb);
+        $newCachedMaps{$mapName}{height}=PerlUnitSync::GetMapHeight($mapNb);
+        my $nbStartPos=PerlUnitSync::GetMapPosCount($mapNb);
+        for my $startPosNb (0..($nbStartPos-1)) {
+          push(@{$newCachedMaps{$mapName}{startPos}},[PerlUnitSync::GetMapPosX($mapNb,$startPosNb),PerlUnitSync::GetMapPosZ($mapNb,$startPosNb)]);
+        }
+      }
+      $newCachedMaps{$mapName}{nbStartPos}=$#{$newCachedMaps{$mapName}{startPos}}+1;
       PerlUnitSync::AddAllArchives($newAvailableMaps[$mapNb]->{archive});
       my $nbMapOptions = PerlUnitSync::GetMapOptionCount($mapName);
       for my $optionIdx (0..($nbMapOptions-1)) {
@@ -3394,8 +3420,7 @@ sub handleVote {
     my $nbAwayVoters=keys %{$currentVote{awayVoters}};
     my $totalNbVotes=$nbRemainingVotes+$currentVote{yesCount}+$currentVote{noCount};
     my $r_cmdVoteSettings=getCmdVoteSettings(lc($currentVote{command}[0]));
-    my $majorityVoteMargin=$r_cmdVoteSettings->{majorityVoteMargin}//$confMacros{majorityVoteMargin}//0;
-    $majorityVoteMargin=0 unless($majorityVoteMargin =~ /^\d+$/ && $majorityVoteMargin > 0 && $majorityVoteMargin < 51);
+    my $majorityVoteMargin=$r_cmdVoteSettings->{majorityVoteMargin};
     my $nbVotesForVotePart;
     if($majorityVoteMargin) {
       my $nbVotesForVotePartYes=int($currentVote{yesCount}*(100/(50+$majorityVoteMargin)));
@@ -3441,7 +3466,7 @@ sub handleVote {
       $currentVote{expireTime}=time;
     }elsif(time >= $currentVote{expireTime}) {
       my @awayVoters;
-      my $awayVoteDelay=$r_cmdVoteSettings->{awayVoteDelay}//$confMacros{awayVoteDelay}//20;
+      my $awayVoteDelay=$r_cmdVoteSettings->{awayVoteDelay};
       if($awayVoteDelay ne '') {
         foreach my $remainingVoter (@remainingVoters) {
           my $autoSetVoteMode=getUserPref($remainingVoter,"autoSetVoteMode");
@@ -3759,8 +3784,7 @@ sub getVoteStateMsg {
   my $nbAwayVoters=keys %{$currentVote{awayVoters}};
   my $totalNbVotes=$nbRemainingVotes+$currentVote{yesCount}+$currentVote{noCount};
   my $r_cmdVoteSettings=getCmdVoteSettings(lc($currentVote{command}[0]));
-  my $majorityVoteMargin=$r_cmdVoteSettings->{majorityVoteMargin}//$confMacros{majorityVoteMargin}//0;
-  $majorityVoteMargin=0 unless($majorityVoteMargin =~ /^\d+$/ && $majorityVoteMargin > 0 && $majorityVoteMargin < 51);
+  my $majorityVoteMargin=$r_cmdVoteSettings->{majorityVoteMargin};
   my $nbVotesForVotePart;
   if($majorityVoteMargin) {
     my $nbVotesForVotePartYes=int($currentVote{yesCount}*(100/(50+$majorityVoteMargin)));
@@ -5412,9 +5436,8 @@ sub launchGame {
       return 0;
     }
 
-# NbStartPos is no longer extracted since Spring 104 because of unitsync backward compatibility breakage...
     my $r_mapInfo=$spads->getCachedMapInfo($currentMap);
-    if(exists $r_mapInfo->{nbStartPos} && $p_battleState->{nbIds} > $r_mapInfo->{nbStartPos}) {
+    if($p_battleState->{nbIds} > $r_mapInfo->{nbStartPos}) {
       my $currentStartPosType=$spads->{bSettings}->{startpostype} ? 'random' : 'fixed';
       answer("Unable to start game, not enough start positions on map for $currentStartPosType start position type") unless($automatic);
       return 0;
@@ -6210,7 +6233,7 @@ sub getBattleSkill {
 
 sub applySettingChange {
   my $settingRegExp=shift;
-  if("maplist" =~ /^$settingRegExp$/) {
+  if('maplist' =~ /^$settingRegExp$/) {
     $timestamps{mapLearned}=0;
     $spads->applyMapList(\@availableMaps,$syncedSpringVersion);
   }
@@ -6218,20 +6241,18 @@ sub applySettingChange {
   updateBattleInfoIfNeeded();
   updateBattleStates();
   sendBattleMapOptions() if('map' =~ /^$settingRegExp$/);
-  applyMapBoxes() if("map" =~ /^$settingRegExp$/ || "nbteams" =~ /^$settingRegExp$/ || "extrabox" =~ /^$settingRegExp$/);
-  if("nbplayerbyid" =~ /^$settingRegExp$/ || "teamsize" =~ /^$settingRegExp$/ || "minteamsize" =~ /^$settingRegExp$/ || "nbteams" =~ /^$settingRegExp$/
-     || "balancemode" =~ /^$settingRegExp$/ || "autobalance" =~ /^$settingRegExp$/ || "idsharemode" =~ /^$settingRegExp$/
-     || 'clanmode' =~ /^$settingRegExp$/) {
+  applyMapBoxes() if(any {$_ =~ /^$settingRegExp$/} (qw'map nbteams extrabox'));
+  if(any {$_ =~ /^$settingRegExp$/} (qw'nbplayerbyid teamsize minteamsize nbteams balancemode autobalance idsharemode clanmode')) {
     $balanceState=0;
     %balanceTarget=();
   }
-  if("autofixcolors" =~ /^$settingRegExp$/) {
+  if(any {$_ =~ /^$settingRegExp$/} (qw'autofixcolors colorsensitivity')) {
     $colorsState=0;
     %colorsTarget=();
   }
-  enforceMaxBots() if('maxbots' =~ /^$settingRegExp$/ || 'maxlocalbots' =~ /^$settingRegExp$/ || 'maxremotebots' =~ /^$settingRegExp$/);
+  enforceMaxBots() if(any {$_ =~ /^$settingRegExp$/} (qw'maxbots maxlocalbots maxremotebots'));
   enforceMaxSpecs() if('maxspecs' =~ /^$settingRegExp$/);
-  specExtraPlayers() if($conf{autoSpecExtraPlayers} && ("nbteams" =~ /^$settingRegExp$/ || "nbplayerbyid" =~ /^$settingRegExp$/));
+  specExtraPlayers() if($conf{autoSpecExtraPlayers} && (any {$_ =~ /^$settingRegExp$/} (qw'nbteams nbplayerbyid')));
   if($autohost->getState()) {
     if('nospecdraw' =~ /^$settingRegExp$/) {
       my $noSpecDraw=$conf{noSpecDraw};
@@ -6245,14 +6266,13 @@ sub applySettingChange {
       $autohost->sendChatMessage("/speedcontrol $speedControl");
     }
   }
-  updateCurrentGameType() if('nbteams' =~ /^$settingRegExp$/ || 'teamsize' =~ /^$settingRegExp$/ || 'nbplayerbyid' =~ /^$settingRegExp$/
-                             || 'idsharemode' =~ /^$settingRegExp$/ || 'minteamSize' =~ /^$settingRegExp$/);
-  if('rankmode' =~ /^$settingRegExp$/ || 'skillmode' =~ /^$settingRegExp$/) {
+  updateCurrentGameType() if(any {$_ =~ /^$settingRegExp$/} (qw'nbteams teamsize nbplayerbyid idsharemode minteamSize'));
+  if(any {$_ =~ /^$settingRegExp$/} (qw'rankmode skillmode')) {
     updateBattleSkillsForNewSkillAndRankModes();
     $balanceState=0;
     %balanceTarget=();
   }
-  applyBattleBans() if('banlist' =~ /^$settingRegExp$/ || 'nbteams' =~ /^$settingRegExp$/ || 'teamsize' =~ /^$settingRegExp$/);
+  applyBattleBans() if(any {$_ =~ /^$settingRegExp$/} (qw'banlist nbteams teamsize'));
 }
 
 sub applyBattleBans {
@@ -7943,6 +7963,19 @@ sub hCheat {
   
 }
 
+sub isNotAllowedToVoteForResign {
+  my ($user,$resignedPlayer)=@_;
+  return 1 unless($autohost->getState() == 2);
+  return 2 unless(exists $p_runningBattle->{users}{$user}
+                  && defined $p_runningBattle->{users}{$user}{battleStatus}
+                  && $p_runningBattle->{users}{$user}{battleStatus}{mode});
+  return 3 unless($p_runningBattle->{users}{$user}{battleStatus}{team} == $p_runningBattle->{users}{$resignedPlayer}{battleStatus}{team});
+  my $p_ahPlayer=$autohost->getPlayer($user);
+  return 4 unless(%{$p_ahPlayer} && $p_ahPlayer->{disconnectCause} == -1);
+  return 5 if($p_ahPlayer->{lost});
+  return 0;
+}
+
 sub hCallVote {
   my ($source,$user,$p_params,$checkOnly)=@_;
 
@@ -8041,6 +8074,9 @@ sub hCallVote {
         $remainingVoters{$gUser}->{notifyTime} = time+$votePvMsgDelay if($votePvMsgDelay);
       }
     }
+    if(lc($p_params->[0]) eq 'resign') {
+      map {delete $remainingVoters{$_} if(isNotAllowedToVoteForResign($_,$p_params->[1]))} (keys %remainingVoters);
+    }
   }
 
   if(%remainingVoters) {
@@ -8056,7 +8092,7 @@ sub hCallVote {
       return;
     }
     my $r_cmdVoteSettings=getCmdVoteSettings(lc($p_params->[0]));
-    my $awayVoteDelay=$r_cmdVoteSettings->{awayVoteDelay}//$confMacros{awayVoteDelay}//20;
+    my $awayVoteDelay=$r_cmdVoteSettings->{awayVoteDelay};
     my $awayVoteTime=0;
     if($awayVoteDelay ne '') {
       $awayVoteDelay=ceil($r_cmdVoteSettings->{voteTime}*$1/100) if($awayVoteDelay =~ /^(\d+)\%$/);
@@ -9631,11 +9667,9 @@ sub hList {
       return 0;
     }
     return 1 if($checkOnly);
-    my %defaultVSettings=(majorityVoteMargin => 0, awayVoteDelay => 20);
-    map {$defaultVSettings{$_}=$confMacros{$_} if(defined $confMacros{$_})} (keys %defaultVSettings);
     my @settingsData;
     foreach my $vSetting (qw'autoSetVoteMode awayVoteDelay majorityVoteMargin minVoteParticipation reCallVoteDelay voteTime') {
-      push(@settingsData,{"$C{5}Setting$C{1}" => $vSetting, "$C{5}Value$C{1}" => $conf{$vSetting}//$defaultVSettings{$vSetting}});
+      push(@settingsData,{"$C{5}Setting$C{1}" => $vSetting, "$C{5}Value$C{1}" => $conf{$vSetting}});
     }
     sayPrivate($user,'.');
     my $p_resultLines=formatArray(["$C{5}Setting$C{1}","$C{5}Value$C{1}"],\@settingsData,"$C{2}Global vote settings$C{1}");
@@ -10677,6 +10711,113 @@ sub hRehost {
                       battle => "battle lobby" );
 
   rehostAfterGame("requested by $user in $sourceNames{$source}");
+}
+
+sub hResign {
+  my ($source,$user,$p_params,$checkOnly)=@_;
+
+  my $ahState=$autohost->getState();
+  if($ahState != 2) {
+    my $reason='game is not running';
+    if($ahState == 1) {
+      $reason='game has not started yet';
+    }elsif($ahState == 3) {
+      $reason='game is already over';
+    }
+    answer("Unable to resign, $reason!");
+    return 0;
+  }
+
+  my ($resignedPlayer,$isTeamResign);
+  if($#{$p_params} == -1) {
+    ($resignedPlayer,$isTeamResign)=($user,1);
+  }elsif($#{$p_params} == 0) {
+    ($resignedPlayer,$isTeamResign)=($p_params->[0],0);
+  }elsif($#{$p_params} == 1) {
+    if(lc($p_params->[1]) ne 'team') {
+      invalidSyntax($user,'resign');
+      return 0;
+    }
+    ($resignedPlayer,$isTeamResign)=($p_params->[0],1);
+  }else{
+    invalidSyntax($user,'resign');
+    return 0;
+  }
+
+  my @bPlayers=grep {defined $p_runningBattle->{users}{$_}{battleStatus} && $p_runningBattle->{users}{$_}{battleStatus}{mode}} (keys %{$p_runningBattle->{users}});
+
+  if($#{$p_params} == -1) {
+    if(! grep {$resignedPlayer eq $_} @bPlayers) {
+      answer('Only players are allowed to resign!');
+      return 0;
+    }
+  }else{
+    my $p_playerFound=::cleverSearch($resignedPlayer,\@bPlayers);
+    if(! @{$p_playerFound}) {
+      answer("Unable to resign \"$resignedPlayer\", player not found!");
+      return 0;
+    }elsif($#{$p_playerFound} > 0) {
+      answer("Unable to resign \"$resignedPlayer\", ambiguous command! (multiple matches)");
+      return 0;
+    }
+    $resignedPlayer=$p_playerFound->[0];
+  }
+
+  if($checkOnly) {
+    my $notAllowed=isNotAllowedToVoteForResign($user,$resignedPlayer);
+    if($notAllowed) {
+      if($notAllowed == 2) {
+        answer('Only players are allowed to call vote for resign!');
+      }elsif($notAllowed == 3) {
+        answer('Only players from same team are allowed to call vote for resign!');
+      }elsif($notAllowed == 4) {
+        answer('Only connected players are allowed to call vote for resign!');
+      }elsif($notAllowed == 5) {
+        answer("Only the players who haven't lost yet are allowed to call vote for resign!");
+      }
+      return 0;
+    }
+  }
+
+  my @playersToResign;
+  if($isTeamResign) {
+    my @resignablePlayers;
+    foreach my $bPlayer (@bPlayers) {
+      my $p_ahPlayer=$autohost->getPlayer($bPlayer);
+      push(@resignablePlayers,$bPlayer) if(%{$p_ahPlayer} && $p_ahPlayer->{disconnectCause} == -1 && $p_ahPlayer->{lost} == 0);
+    }
+    @playersToResign=grep {$p_runningBattle->{users}{$_}{battleStatus}{team} == $p_runningBattle->{users}{$resignedPlayer}{battleStatus}{team}} @resignablePlayers;
+    if(! @playersToResign) {
+      answer("Unable to resign ally team of $resignedPlayer, no resignable player found!");
+      return 0;
+    }
+  }else{
+    my $p_ahPlayer=$autohost->getPlayer($resignedPlayer);
+    if(! %{$p_ahPlayer} || $p_ahPlayer->{disconnectCause} != -1) {
+      answer("Unable to resign $resignedPlayer, player is not connected!");
+      return 0;
+    }
+    if($p_ahPlayer->{lost}) {
+      answer("Unable to resign $resignedPlayer, player has already lost!");
+      return 0;
+    }
+    @playersToResign=($resignedPlayer);
+  }
+
+  if($p_runningBattle->{engineVersion} =~ /^(\d+)/ && $1 < 92) {
+    answer('The resign command requires Spring engine version 92 or later!');
+    return 0;
+  }
+
+  return "resign $resignedPlayer".($isTeamResign?' TEAM':'') if($checkOnly);
+
+  map {$autohost->sendChatMessage('/specbynum '.$autohost->getPlayer($_)->{playerNb})} @playersToResign;
+
+  if($#playersToResign > 0) {
+    sayBattleAndGame('Resigned '.($#playersToResign+1)." players (by $user)");
+  }else{
+    sayBattleAndGame("Resigned player $playersToResign[0] (by $user)");
+  }
 }
 
 sub hRemoveBot {
@@ -15148,6 +15289,7 @@ if(! $abortSpadsStartForAutoUpdate) {
 
   eval "use PerlUnitSync";
   fatalError("Unable to load PerlUnitSync module ($@)") if (hasEvalError());
+  map {$unitsyncOptFuncs{$_}=1 if(PerlUnitSync::hasFunc($_))} (qw'GetMapInfoCount');
   $syncedSpringVersion=PerlUnitSync::GetSpringVersion();
   $fullSpringVersion=$syncedSpringVersion;
   if(! ($fullSpringVersion =~ /^(\d+)/ && $1 > 105)) {
@@ -15236,7 +15378,7 @@ if(! $abortSpadsStartForAutoUpdate) {
 
   SimpleEvent::addTimer('SpadsMainLoop',0,0.5,\&mainLoop);
   SimpleEvent::addTimer('EngineVersionAutoManagement',$autoManagedEngineData{delay}*60,$autoManagedEngineData{delay}*60,\&engineVersionAutoManagement) if($autoManagedEngineData{mode} eq 'release');
-  SimpleEvent::addTimer('RefreshSharedData',$sharedDataRefreshDelay,$sharedDataRefreshDelay,sub {$spads->refreshSharedDataIfNeeded()}) if($sharedDataRefreshDelay);
+  SimpleEvent::addTimer('RefreshSharedData',$conf{sharedDataRefreshDelay},$conf{sharedDataRefreshDelay},sub {$spads->refreshSharedDataIfNeeded()}) if($conf{sharedDataRefreshDelay});
   SimpleEvent::startLoop(\&postMainLoop);
 }
 
@@ -15413,7 +15555,7 @@ sub postMainLoop {
   $autohost->close();
   SimpleEvent::removeTimer('SpadsMainLoop');
   SimpleEvent::removeTimer('EngineVersionAutoManagement') if($autoManagedEngineData{mode} eq 'release');
-  SimpleEvent::removeTimer('RefreshSharedData') if($sharedDataRefreshDelay);
+  SimpleEvent::removeTimer('RefreshSharedData') if($conf{sharedDataRefreshDelay});
 }
 
 $spads->dumpDynamicData();

@@ -39,7 +39,7 @@ use SimpleLog;
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.12.24';
+my $moduleVersion='0.13.0';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -56,6 +56,7 @@ my %globalParameters = (lobbyLogin => ['login'],
                         lobbyPassword => ['password'],
                         lobbyHost => ['hostname'],
                         lobbyPort => ['port'],
+                        lobbyTls => ['onOffAutoType'],
                         lobbyReconnectDelay => ['integer'],
                         localLanIp => ['ipAddr','star','null'],
                         lobbyFollowRedirect => ['bool'],
@@ -77,6 +78,7 @@ my %globalParameters = (lobbyLogin => ['login'],
                         unitsyncDir => ['unitsyncDirType','null'],
                         springDataDir => ['absoluteReadableDirs'],
                         autoReloadArchivesMinDelay => ['integer'],
+                        sequentialUnitsync => ['bool'],
                         sendRecordPeriod => ['integer'],
                         maxBytesSent => ['integer'],
                         maxLowPrioBytesSent => ['integer'],
@@ -96,6 +98,8 @@ my %globalParameters = (lobbyLogin => ['login'],
                         opOnMasterChannel => ['bool'],
                         voteTime => ['integer'],
                         minVoteParticipation => ['integer','integerCouple'],
+                        majorityVoteMargin => ['integerMax50'],
+                        awayVoteDelay => ['integer','percent','null'],
                         reCallVoteDelay => ['integer'],
                         promoteDelay => ['integer'],
                         botsRank => ['integer'],
@@ -120,7 +124,12 @@ my %globalParameters = (lobbyLogin => ['login'],
                         promoteMsg => [],
                         promoteChannels => ['channelList','null'],
                         springieEmulation => ['onOffWarnType'],
-                        colorSensitivity => ['integer','minus1'],
+                        bansData => ['shareableDataType'],
+                        mapInfoCacheData => ['shareableDataType'],
+                        savedBoxesData => ['shareableDataType'],
+                        trustedLobbyCertificatesData => ['shareableDataType'],
+                        preferencesData => ['shareableDataType'],
+                        sharedDataRefreshDelay => ['integer'],
                         dataDumpDelay => ['integer'],
                         allowSettingsShortcut => ['bool'],
                         kickBanDuration => ['kickBanDurationType'],
@@ -195,6 +204,7 @@ my %spadsSectionParameters = (description => ['notNull'],
                               autoStart => ['autoParamType'],
                               autoStop => ['autoStopType'],
                               autoLockRunningBattle => ['bool'],
+                              colorSensitivity => ['integer','minus1'],
                               forwardLobbyToGame => ['bool'],
                               noSpecChat => ['bool'],
                               noSpecDraw => ['bool'],
@@ -261,6 +271,7 @@ my %paramTypes = (login => '[\w\[\]]{2,20}',
                   deathMode => '(killall|com|comcontrol)',
                   autoParamType => '(on|off|advanced)',
                   autoStopType => '(gameOver(\(\d+\))?|noOpponent(\(\d+\))?|onlySpec(\(\d+\))?|off)',
+                  onOffAutoType => '(on|off|auto)',
                   onOffWarnType => '(on|off|warn)',
                   voteMode => '(normal|away)',
                   rankMode => '(account|ip|[0-7])',
@@ -289,7 +300,9 @@ my %paramTypes = (login => '[\w\[\]]{2,20}',
                                            }else{
                                              return $_[0] ne '';
                                            }
-                                         } );
+                                         },
+                  shareableDataType => '(private|shared(\(.+\))?)',
+    );
 
 sub parseAutoManagedSpringVersion {
   my %autoManagedInfo;
@@ -372,7 +385,8 @@ sub new {
   my $class = ref($objectOrClass) || $objectOrClass;
 
   my $p_conf = loadSettingsFile($sLog,$confFile,\%globalParameters,\%spadsSectionParameters,$p_macros,undef,'set');
-  if(! checkSpadsConfig($sLog,$p_conf)) {
+  my (%sharedDataTs,%sharedDataFiles);
+  if(! checkSpadsConfig($sLog,$p_conf,\%sharedDataTs,\%sharedDataFiles)) {
     $sLog->log('Unable to load main configuration parameters',1);
     return 0;
   }
@@ -410,33 +424,9 @@ sub new {
   my $p_help=loadSimpleTableFile($sLog,"$spadsDir/help.dat",$p_macros,1);
   my $p_helpSettings=loadHelpSettingsFile($sLog,"$spadsDir/helpSettings.dat",$p_macros,1);
 
-  my $sqliteChecked=0;
-  my %sharedDataTs=map {$_ => 0} (keys %shareableData);
-  if(exists $p_macros->{sharedData}) {
-    foreach my $sharedData (split(',',$p_macros->{sharedData})) {
-      if(exists $sharedDataTs{$sharedData}) {
-        if($shareableData{$sharedData}{type} eq 'sqlite' && ! $sqliteChecked) {
-          eval 'use DBI';
-          if(hasEvalError()) {
-            $sLog->log("Unable to share $sharedData data (failed to load Perl DBI module: $@)",1);
-            return 0;
-          }
-          if(none {$_ eq 'SQLite'} DBI->available_drivers()) {
-            $sLog->log("Unable to share $sharedData data (Perl DBD::SQLite module not found)",1);
-            return 0;
-          }
-          $sqliteChecked=1;
-        }
-        $sharedDataTs{$sharedData}=-1;
-      }else{
-        $sLog->log("Ignoring request to share invalid data \"$sharedData\"",2);
-      }
-    }
-  }
-
   my $p_bans;
   if($sharedDataTs{bans}) {
-    $p_bans=initSharedData($sLog,$p_conf,\%sharedDataTs,'bans');
+    $p_bans=initSharedData($sLog,$p_conf,\%sharedDataTs,'bans',$sharedDataFiles{bans});
   }else{
     my $bansFile=$p_conf->{''}{instanceDir}.'/bans.dat';
     touch($bansFile) unless(-f $bansFile);
@@ -454,12 +444,25 @@ sub new {
 
   my $p_preferences;
   if($sharedDataTs{preferences}) {
-    $p_preferences=initSqliteDb($sLog,$p_conf,'preferences');
+    $p_preferences=initSqliteDb($sLog,$p_conf,'preferences',$sharedDataFiles{preferences});
     if(! $p_preferences) {
       $sLog->log('Unable to load shared preferences',1);
       return 0;
     }
     $p_preferences->sqlite_busy_timeout(5000);
+    my $r_existingPreferences=getSqliteTableColumns($sLog,$p_preferences,'preferences');
+    return 0 unless(defined $r_existingPreferences);
+    my @missingPrefs=grep {! exists $r_existingPreferences->{$_}} @{$preferencesListsFields[1]};
+    foreach my $missingPref (@missingPrefs) {
+      $sLog->log("Adding column $missingPref to SQLite database for preferences shared data",5);
+      $p_preferences->do("ALTER TABLE preferences ADD COLUMN $missingPref BLOB");
+    }
+    $r_existingPreferences=getSqliteTableColumns($sLog,$p_preferences,'preferences');
+    return 0 unless(defined $r_existingPreferences);
+    if(any {! exists $r_existingPreferences->{$_}} @{$preferencesListsFields[1]}) {
+      $sLog->log('Failed to extend SQLite database for preferences shared data',1);
+      return 0;
+    }
   }else{
     my $preferencesFile=$p_conf->{''}{instanceDir}.'/preferences.dat';
     touch($preferencesFile) unless(-f $preferencesFile);
@@ -480,7 +483,7 @@ sub new {
 
   my $p_savedBoxes;
   if($sharedDataTs{savedBoxes}) {
-    $p_savedBoxes=initSharedData($sLog,$p_conf,\%sharedDataTs,'savedBoxes');
+    $p_savedBoxes=initSharedData($sLog,$p_conf,\%sharedDataTs,'savedBoxes',$sharedDataFiles{'savedBoxes'});
   }else{
     my $savedBoxesFile=$p_conf->{''}{instanceDir}.'/savedBoxes.dat';
     touch($savedBoxesFile) unless(-f $savedBoxesFile);
@@ -527,7 +530,7 @@ sub new {
 
   my $p_mapInfoCache={};
   if($sharedDataTs{mapInfoCache}) {
-    $p_mapInfoCache=initSharedData($sLog,$p_conf,\%sharedDataTs,'mapInfoCache');
+    $p_mapInfoCache=initSharedData($sLog,$p_conf,\%sharedDataTs,'mapInfoCache',$sharedDataFiles{mapInfoCache});
   }else{
     my $mapInfoCacheFile=$p_conf->{''}{instanceDir}.'/mapInfoCache.dat';
     if(-f $mapInfoCacheFile) {
@@ -541,7 +544,7 @@ sub new {
 
   my $p_trustedLobbyCertificates={};
   if($sharedDataTs{trustedLobbyCertificates}) {
-    $p_trustedLobbyCertificates=initSharedData($sLog,$p_conf,\%sharedDataTs,'trustedLobbyCertificates');
+    $p_trustedLobbyCertificates=initSharedData($sLog,$p_conf,\%sharedDataTs,'trustedLobbyCertificates',$sharedDataFiles{trustedLobbyCertificates});
   }else{
     my $trustedLobbyCertificatesFile=$p_conf->{''}{instanceDir}.'/trustedLobbyCertificates.dat';
     if(-f $trustedLobbyCertificatesFile) {
@@ -589,7 +592,8 @@ sub new {
     pluginsConf => {},
     springLobbyCertificates => $p_springLobbyCertificates->{''},
     trustedLobbyCertificates => $p_trustedLobbyCertificates,
-    sharedDataTs => \%sharedDataTs
+    sharedDataTs => \%sharedDataTs,
+    sharedDataFiles => \%sharedDataFiles,
   };
 
   bless ($self, $class);
@@ -632,6 +636,21 @@ sub getVersion {
 }
 
 # Internal functions ##########################################################
+
+sub getSqliteTableColumns {
+  my ($sLog,$dbh,$tableName)=@_;
+  my $sth=$dbh->column_info(undef,'main',$tableName,undef);
+  if(! defined $sth || $dbh->err()) {
+    $sLog->log("Unable to get existing column info for $tableName SQLite table: $DBI::errstr",1);
+    return undef;
+  }
+  my $r_columns=$sth->fetchall_hashref('COLUMN_NAME');
+  if(! defined $r_columns || $sth->err()) {
+    $sLog->log("Unable to get existing column names for $tableName SQLite table: $DBI::errstr",1);
+    return undef;
+  }
+  return $r_columns;
+}
 
 sub hasEvalError {
   if($@) {
@@ -1458,7 +1477,7 @@ sub checkPluginConfig {
 }
 
 sub checkSpadsConfig {
-  my ($sLog,$p_conf)=@_;
+  my ($sLog,$p_conf,$r_sharedDataTs,$r_sharedDataFiles)=@_;
 
   return 0 unless(%{$p_conf});
 
@@ -1526,6 +1545,57 @@ sub checkSpadsConfig {
     $p_conf->{''}{$paramName}=$fixedValue;
   }
 
+  my $sqliteChecked=0;
+  foreach my $shareableDataName (keys %shareableData) {
+    my $shareableDataParam=$shareableDataName.'Data';
+    if($p_conf->{''}{$shareableDataParam} eq 'private') {
+      $r_sharedDataTs->{$shareableDataName}=0;
+      next;
+    }
+    my $defaultDataFileExtension='.dat';
+    if($shareableData{$shareableDataName}{type} eq 'sqlite') {
+      $defaultDataFileExtension='.sqlite';
+      if(! $sqliteChecked) {
+        eval 'use DBI';
+        if(hasEvalError()) {
+          $sLog->log("Unable to share $shareableDataName data (failed to load Perl DBI module: $@)",1);
+          return 0;
+        }
+        if(none {$_ eq 'SQLite'} DBI->available_drivers()) {
+          $sLog->log("Unable to share $shareableDataName data (Perl DBD::SQLite module not found)",1);
+          return 0;
+        }
+        $sqliteChecked=1;
+      }
+    }
+    my $dataFile;
+    if($p_conf->{''}{$shareableDataParam} =~ /^shared\((.+)\)$/) {
+      $dataFile=$1;
+    }else{
+      $dataFile=$shareableDataName.$defaultDataFileExtension;
+    }
+    if(! isAbsolutePath($dataFile)) {
+      $dataFile = File::Spec->catfile($p_conf->{''}{varDir},$dataFile);
+    }
+    my $dataFileDir=dirname($dataFile);
+    my $errorMsg;
+    if(! -d $dataFileDir) {
+      $errorMsg='directory';
+    }elsif(! -x $dataFileDir) {
+      $errorMsg='traversable directory';
+    }elsif(! -r $dataFileDir) {
+      $errorMsg='readable directory';
+    }elsif(! -w $dataFileDir) {
+      $errorMsg='writable directory';
+    }
+    if($errorMsg) {
+      $sLog->log("Invalid value \"$p_conf->{''}{$shareableDataParam}\" for $shareableDataParam global setting: \"$dataFileDir\" isn't a $errorMsg",1);
+      return 0;
+    }
+    $r_sharedDataTs->{$shareableDataName}=-1;
+    $r_sharedDataFiles->{$shareableDataName}=$dataFile;
+  }
+  
   { # special checks for autoManagedSpringVersion setting
     my $springIsAutomanaged=$p_conf->{''}{autoManagedSpringVersion} ne '';
     if($springIsAutomanaged && $macOs) {
@@ -1665,25 +1735,13 @@ sub processCmdAttribs {
           $sLog->log("Duplicate command attribute definition (attribute \"$attr\" for command \"$cmd\")",1);
           return 0;
         }
-        if($attr eq 'majorityVoteMargin') {
-          if(! checkValue($val,['integerMax50'])) {
-            $sLog->log("Invalid value \"$val\" for attribute \"$attr\" declared for command \"$cmd\"",1);
-            return 0;
-          }
-        }elsif($attr eq 'awayVoteDelay') {
-          if(! checkValue($val,['integer','percent','null'])) {
-            $sLog->log("Invalid value \"$val\" for attribute \"$attr\" declared for command \"$cmd\"",1);
-            return 0;
-          }
-        }else{
-          if(none {$attr eq $_} (qw'voteTime minVoteParticipation')) {
-            $sLog->log("Invalid command attribute \"$attr\" declared for command \"$cmd\"",1);
-            return 0;
-          }
-          if(! checkValue($val,$globalParameters{$attr})) {
-            $sLog->log("Invalid value \"$val\" for attribute \"$attr\" declared for command \"$cmd\"",1);
-            return 0;
-          }
+        if(none {$attr eq $_} (qw'voteTime minVoteParticipation majorityVoteMargin awayVoteDelay')) {
+          $sLog->log("Invalid command attribute \"$attr\" declared for command \"$cmd\"",1);
+          return 0;
+        }
+        if(! checkValue($val,$globalParameters{$attr})) {
+          $sLog->log("Invalid value \"$val\" for attribute \"$attr\" declared for command \"$cmd\"",1);
+          return 0;
         }
         $attrs{$attr}=$val;
       }else{
@@ -1757,8 +1815,7 @@ sub printFastTable {
 }
 
 sub initSqliteDb {
-  my ($sLog,$p_conf,$sharedData)=@_;
-  my $dbFile=$p_conf->{''}{varDir}."/$sharedData.sqlite";
+  my ($sLog,$p_conf,$sharedData,$dbFile)=@_;
   if(-f $dbFile) {
     my $dbh=DBI->connect("dbi:SQLite:dbname=$dbFile",'','');
     $sLog->log("Failed to connect to SQLite database for shared $sharedData data ($DBI::errstr)",1) unless($dbh);
@@ -1845,12 +1902,12 @@ sub initSqliteDb {
 }
 
 sub initSharedData {
-  my ($sLog,$p_conf,$r_sharedDataTs,$sharedData)=@_;
+  my ($sLog,$p_conf,$r_sharedDataTs,$sharedData,$sharedFile)=@_;
   my $dataStorageType=$shareableData{$sharedData}{type};
   my $isCustomStorageType = $dataStorageType ne 'binary';
   my $r_data;
   $r_data={} if($isCustomStorageType);
-  my ($privateFile,$sharedFile)=map {$p_conf->{''}{$_}."/$sharedData.dat"} (qw'instanceDir varDir');
+  my $privateFile=$p_conf->{''}{instanceDir}."/$sharedData.dat";
   if(-f $sharedFile) {
     $sLog->log("Loading shared $sharedData data from shared file",5);
     if(my $lock=_acquireLock($sharedFile,LOCK_SH)) {
@@ -1932,7 +1989,7 @@ sub loadShareableData {
 
 sub refreshAndLockSharedDataForUpdate {
   my ($self,$sharedData)=@_;
-  my $sharedFile="$self->{conf}{varDir}/$sharedData.dat";
+  my $sharedFile=$self->{sharedDataFiles}{$sharedData};
   if(my $resLock = _acquireLock($sharedFile,LOCK_RE)) {
     if(-f $sharedFile && (Time::HiRes::stat($sharedFile))[9] > $self->{sharedDataTs}{$sharedData}) {
       $self->{log}->log("Shared file \"$sharedData.dat\" has been modified, refreshing data before update",5);
@@ -1961,7 +2018,7 @@ sub refreshAndLockSharedDataForUpdate {
 sub updateAndUnlockSharedData {
   my ($self,$sharedData,$resLock)=@_;
   $self->{log}->log("updateAndUnlockSharedData() called without reserved lock for $sharedData data",0) unless($resLock);
-  my $sharedFile="$self->{conf}{varDir}/$sharedData.dat";
+  my $sharedFile=$self->{sharedDataFiles}{$sharedData};
   my $res=0;
   if(my $exLock = _acquireLock($sharedFile,LOCK_EX)) {
     if($shareableData{$sharedData}{type} eq 'fastTable') {
@@ -2644,7 +2701,7 @@ sub refreshSharedDataIfNeeded {
       next;
     }
     next if($shareableData{$sharedData}{type} eq 'sqlite');
-    my $sharedFile="$self->{conf}{varDir}/$sharedData.dat";
+    my $sharedFile=$self->{sharedDataFiles}{$sharedData};
     next unless($self->{sharedDataTs}{$sharedData} && -f $sharedFile && (Time::HiRes::stat($sharedFile))[9] > $self->{sharedDataTs}{$sharedData});
     $self->{log}->log("Shared file \"$sharedData.dat\" has been modified, refreshing data",5);
     if(my $lock = _acquireLock($sharedFile,LOCK_SH)) {
@@ -2687,7 +2744,7 @@ sub getUncachedMaps {
       $lock=$self->refreshAndLockSharedDataForUpdate('mapInfoCache');
     }
   }
-  my @uncachedMaps=grep {! exists $self->{mapInfoCache}{$_}} @{$p_maps};
+  my @uncachedMaps=grep {! roExists($self->{mapInfoCache},[$_,'nbStartPos'])} @{$p_maps};
   if($lock) {
     if(@uncachedMaps) {
       $self->{mapInfoCacheResLock}=$lock;

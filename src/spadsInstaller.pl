@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.28 (2023/03/09)
+# Version 0.29 (2023/03/19)
 
 use strict;
 
@@ -43,11 +43,9 @@ my $macOs=$^O eq 'darwin';
 
 my $dynLibSuffix=$win?'dll':($macOs?'dylib':'so');
 my $unitsyncLibName=($win?'':'lib')."unitsync.$dynLibSuffix";
-my $perlUnitsyncLibName="PerlUnitSync.$dynLibSuffix";
 
 my $spadsUrl='http://planetspads.free.fr/spads';
-my @packages=(qw'getDefaultModOptions.pl help.dat helpSettings.dat springLobbyCertificates.dat SpringAutoHostInterface.pm SpringLobbyInterface.pm SimpleEvent.pm SimpleLog.pm spads.pl SpadsConf.pm spadsInstaller.pl SpadsUpdater.pm SpadsPluginApi.pm update.pl argparse.py replay_upload.py',$win?'7za.exe':'7za');
-my $perlUnitsyncModule='PerlUnitSync.pm';
+my @packages=(qw'getDefaultModOptions.pl help.dat helpSettings.dat PerlUnitSync.pm springLobbyCertificates.dat SpringAutoHostInterface.pm SpringLobbyInterface.pm SimpleEvent.pm SimpleLog.pm spads.pl SpadsConf.pm spadsInstaller.pl SpadsUpdater.pm SpadsPluginApi.pm update.pl argparse.py replay_upload.py',$win?'7za.exe':'7za');
 
 my $nbSteps=$macOs?14:15;
 my $isInteractive=-t STDIN;
@@ -56,10 +54,28 @@ my @pathes=splitPaths($ENV{PATH});
 my %conf=(installDir => File::Spec->canonpath($FindBin::Bin));
 
 if($win) {
-  eval 'use Win32';
-  die "\nSPADS requires Win32::API module version 0.73 or superior.\nPlease update your Perl installation (Perl 5.16.2 or superior is recommended)\n"
-      unless(eval { require Win32::API; Win32::API->VERSION(0.73); 1; });
-  push(@packages,$perlUnitsyncModule);
+  eval { require Win32; 1; }
+    or die "$@Missing dependency: Win32 Perl module\n";
+  eval { require Win32::API; 1; }
+    or die "$@Missing dependency: Win32::API Perl module\n";
+  eval { Win32::API->VERSION(0.73); 1; }
+    or die "$@SPADS requires Win32::API module version 0.73 or superior.\nPlease update your Perl installation (Perl 5.16.2 or superior is recommended)\n";
+  eval { require Win32::TieRegistry; Win32::TieRegistry->import(':KEY_'); 1; }
+    or die "$@Missing dependency: Win32::TieRegistry Perl module\n";
+}else{
+  eval { require FFI::Platypus; 1; }
+    or die "$@Missing dependency: FFI::Platypus Perl module\n";
+}
+
+my $sslAvailable = eval { require IO::Socket::SSL; 1; };
+
+my $sqliteUnavailableReason;
+if(eval { require DBI; 1; }) {
+  $sqliteUnavailableReason='Perl module not found: DBD::SQLite'
+      if(none {$_ eq 'SQLite'} DBI->available_drivers());
+}else{
+  chomp($@);
+  $sqliteUnavailableReason="failed to load Perl DBI module: $@";
 }
 
 my $sLog=SimpleLog->new(logFiles => [''],
@@ -93,44 +109,18 @@ if(-f $autoInstallFile) {
   slog("Using auto-install data from file \"$autoInstallFile\"...",3);
 }
 
-my $genUnitsync=0;
 foreach my $installArg (@ARGV) {
   if($installArg =~ /^([^=]+)=(.*)$/) {
     $conf{$1}=$2;
-  }elsif($installArg eq '-g') {
-    $genUnitsync=1;
   }elsif(any {$installArg eq $_} qw'stable testing unstable contrib') {
     $conf{release}=$installArg;
   }else{
     slog('Invalid usage',1);
     print "Usage:\n";
     print "  perl $0 [release]\n";
-    print "  perl $0 -g\n";
     print "      release: \"stable\", \"testing\", \"unstable\" or \"contrib\"\n";
-    print "      -g: (re)generate unitsync wrapper only\n";
     exit 1;
   }
-}
-
-my %prereqFound=(swig => 0, 'g++' => 0, otool => 0, install_name_tool => 0);
-foreach my $prereq (keys %prereqFound) {
-  $prereqFound{$prereq}=1 if(any {-f "$_/$prereq".($win?'.exe':'')} @pathes);
-}
-if($genUnitsync || (! $win && (! -f $perlUnitsyncModule || -f $perlUnitsyncLibName))) {
-  fatalError("Couldn't find Swig, please install Swig for Perl Unitsync interface module generation") unless($prereqFound{swig});
-  fatalError("Couldn't find g++, please install g++ for Perl Unitsync interface module generation") unless($prereqFound{'g++'});
-  if($win) {
-    fatalError('The PERL5_INCLUDE environment variable must be set to your Perl CORE include directory (for instance: "C:\\Perl\\lib\\CORE")')
-        unless(exists $ENV{PERL5_INCLUDE} && -d $ENV{PERL5_INCLUDE});
-    fatalError('The PERL5_LIB environment variable must be set to your Perl CORE library absolute path (for instance: "C:\\Perl\\lib\\CORE\\libperl520.a")')
-        unless(exists $ENV{PERL5_LIB} && isAbsolutePath($ENV{PERL5_LIB}) && -f $ENV{PERL5_LIB});
-    fatalError('The MINGDIR environment variable must be set to your MinGW install directory (for instance: "C:\\mingw")')
-        unless(exists $ENV{MINGDIR} && -d "$ENV{MINGDIR}/include");
-  }
-}
-if($macOs) {
-  fatalError("Couldn't find otool, please install otool to generate Perl Unitsync interface module on macOS") unless($prereqFound{otool});
-  fatalError("Couldn't find install_name_tool, please install install_name_tool to generate Perl Unitsync interface module on macOS") unless($prereqFound{install_name_tool});
 }
 
 sub fatalError { slog(shift,0); exit 1; }
@@ -344,129 +334,6 @@ sub configureUnitsyncDir {
     setEnvVarFirstPaths('PATH',$unitsyncDir);
   }elsif(! $macOs) {
     portableExec($^X,$0,@ARGV,map {"$_=$conf{$_}"} (keys %conf)) if(setEnvVarFirstPaths('LD_LIBRARY_PATH',$unitsyncDir));
-  }
-}
-
-sub unlinkUnitsyncTmpFiles {
-  map {unlink($_)} (qw'unitsync.h unitsync.cpp exportdefines.h maindefines.h PerlUnitSync.i PerlUnitSync_wrap.c PerlUnitSync_wrap.o');
-}
-
-sub unlinkUnitsyncModuleFiles {
-  map {unlink($_)} ($perlUnitsyncModule,$perlUnitsyncLibName);
-}
-
-sub generatePerlUnitSync {
-  slog('Generating Perl Unitsync interface module...',3);
-  if(notall {downloadFile("$spadsUrl/unitsync/src/$_",$_)} (qw'unitsync.h unitsync.cpp exportdefines.h maindefines.h')) {
-    unlinkUnitsyncTmpFiles();
-    exit 1;
-  }
-
-  my @skippedFunctions=qw'ProcessUnitsNoChecksum GetMapInfoEx GetMapInfo GetMapDescription GetMapAuthor GetMapWidth GetMapHeight GetMapTidalStrength GetMapWindMin GetMapWindMax GetMapGravity GetMapResourceCount GetMapResourceName GetMapResourceMax GetMapResourceExtractorRadius GetMapPosCount GetMapPosX GetMapPosZ GetInfoValue GetPrimaryModName GetPrimaryModShortName GetPrimaryModVersion GetPrimaryModMutator GetPrimaryModGame GetPrimaryModShortGame GetPrimaryModDescription OpenArchiveType GetOptionStyle';
-  my $exportedFunctions='';
-  my $exportedFunctionsFixed='';
-  my $usSrc='unitsync.cpp';
-  if(-f $usSrc) {
-    if(open(US_CPP,"<$usSrc")) {
-      while(<US_CPP>) {
-        if(/^\s*DLL_EXPORT/ || /^\s*EXPORT\(/) {
-          my $functionIsSkipped=0;
-          foreach my $skippedFunction (@skippedFunctions) {
-            if(/[ \)]$skippedFunction[ \(]/) {
-              $functionIsSkipped=1;
-              last;
-            }
-          }
-          next if($functionIsSkipped);
-          if(! /;$/) {
-            chomp();
-            $_.=";\n";
-          }
-          s/[\{\}]//g;
-          $exportedFunctions.=$_;
-          s/^\s*EXPORT\(([^\)]*)\)/$1/;
-          s/^\s*DLL_EXPORT\s*//g;
-          s/\s*__stdcall//g;
-          $exportedFunctionsFixed.=$_;
-        }
-      }
-      close(US_CPP);
-    }else{
-      unlinkUnitsyncTmpFiles();
-      fatalError("Unable to open unitsync source file ($usSrc)");
-    }
-  }else{
-    unlinkUnitsyncTmpFiles();
-    fatalError("Unable to find unitsync source file ($usSrc)");
-  }
-
-  if(open(PUS_INT,'>PerlUnitSync.i')) {
-    print PUS_INT "\%module PerlUnitSync\n";
-    print PUS_INT "\%{\n";
-    print PUS_INT "#include \"exportdefines.h\"\n";
-    print PUS_INT "#include \"maindefines.h\"\n";
-    print PUS_INT "#include \"unitsync.h\"\n\n";
-    print PUS_INT $exportedFunctions;
-    print PUS_INT "\%}\n\n";
-    print PUS_INT $exportedFunctionsFixed;
-    close(PUS_INT);
-  }else{
-    unlinkUnitsyncTmpFiles();
-    fatalError('Unable to write Perl Unitsync interface file (PerlUnitSync.i)');
-  }
-
-  system('swig -perl5 PerlUnitSync.i');
-  if($?) {
-    unlinkUnitsyncTmpFiles();
-    unlinkUnitsyncModuleFiles();
-    fatalError('Error during Unitsync wrapper source generation');
-  }
-
-  my $coreIncsString;
-  if($win) {
-    $coreIncsString="\"-I$ENV{MINGDIR}\\include\" \"-I$ENV{PERL5_INCLUDE}\" -m32";
-  }else{
-    my @coreIncs;
-    foreach my $inc (@INC) {
-      push(@coreIncs,"\"-I$inc/CORE\"") if(-d "$inc/CORE");
-    }
-    $coreIncsString=join(' ','-fpic',@coreIncs);
-  }
-  system("g++ -c PerlUnitSync_wrap.c $coreIncsString");
-  if($?) {
-    unlinkUnitsyncTmpFiles();
-    unlinkUnitsyncModuleFiles();
-    fatalError('Error during Unitsync wrapper compilation');
-  }
-
-  my $linkParam=$win?"\"$ENV{PERL5_LIB}\" -static-libgcc -static-libstdc++ -m32":'';
-  my $dynLibFlag=$macOs?'-dynamiclib -flat_namespace -undefined suppress':'-shared';
-  my $unitsyncLib=File::Spec->catfile($unitsyncDir,$unitsyncLibName);
-  system("g++ $dynLibFlag PerlUnitSync_wrap.o \"$unitsyncLib\" $linkParam -o $perlUnitsyncLibName");
-  unlinkUnitsyncTmpFiles();
-  if($?) {
-    unlinkUnitsyncModuleFiles();
-    fatalError('Error during Perl Unitsync interface library compilation');
-  }
-
-  if($macOs) {
-    my @unitsyncIdNameRes=`otool -D $unitsyncLib`;
-    if($?) {
-      unlinkUnitsyncModuleFiles();
-      fatalError('Unable to retrieve Unitsync shared library ID name using "otool -D" command'.($!?" ($!)":''));
-    }
-    if($#unitsyncIdNameRes != 1) {
-      unlinkUnitsyncModuleFiles();
-      fatalError('Unexpected result when retrieving Unitsync shared library ID name');
-    }
-    my $unitsyncIdName=$unitsyncIdNameRes[1];
-    chomp($unitsyncIdName);
-
-    system("install_name_tool -change $unitsyncIdName $unitsyncLib $perlUnitsyncLibName");
-    if($?) {
-      unlinkUnitsyncModuleFiles();
-      fatalError('Unable to configure Unitsync library path in Perl Unitsync interface library using "install_name_tool -change" command'.($!?" ($!)":''));
-    }
   }
 }
 
@@ -690,29 +557,6 @@ sub checkUnitsync {
   return \@availableMods;
 }
 
-if($genUnitsync) {
-  $nbSteps=3;
-  if(! exists $conf{unitsyncDir}) {
-      print "\nExecuting SPADS installer in Perl Unitsync interface generation mode.\n";
-      print "The installer will ask you $nbSteps questions to (re)generate the Perl Unitsync interface module.\n";
-      print "You can stop this process at any time by hitting Ctrl-c.\n\n";
-  }
-
-  $currentStep=1;
-  configureUnitsyncDir();
-
-  generatePerlUnitSync();
-
-  configureSpringDataDir();
-
-  my $r_availableMods=checkUnitsync();
-  $sLog->log('No game found',2) unless(@{$r_availableMods});
-
-  print "\nPerl Unitsync interface module (re)generated.\n";
-  print "\n" unless($win);
-  exit 0;
-}
-
 if(! exists $conf{release}) {
   print "\nThis program will install SPADS in the current working directory, overwriting files if needed.\n";
   print "The installer will ask you $nbSteps questions maximum to customize your installation and pre-configure SPADS.\n";
@@ -747,6 +591,18 @@ if($updaterRc > 0) {
   fatalError('Unable to restart installer');
 }
 slog('SPADS components are up to date, proceeding with installation...',3);
+
+if(! $sslAvailable) {
+  slog('Perl module not found: IO::Socket::SSL',2);
+  slog('--> this module is needed by SPADS for TLS encryption, which is required to host games on official Spring lobby server',2);
+  slog('--> if you plan to use SPADS on official Spring lobby server, it is recommended to hit Ctrl-C now to abort SPADS installation and install the "IO::Socket::SSL" Perl module',2);
+}
+
+if($sqliteUnavailableReason) {
+  slog('Cannot use SQLite, '.$sqliteUnavailableReason,2);
+  slog('--> SQLite is an OPTIONAL dependency: SPADS can run without SQLite but in this case players preferences data cannot be shared between multiple SPADS instances',2);
+  slog('--> if you plan to run multiple SPADS instances and want to share players preferences data between instances, you can hit Ctrl-C now to abort SPADS installation and fix the problem',2);
+}
 
 if(! exists $conf{absoluteEtcDir}) {
   $conf{absoluteEtcDir}=promptDir("2/$nbSteps - Please choose the directory where SPADS configuration files will be stored",'etcDir','etc');
@@ -903,14 +759,6 @@ if($macOs) {
 
 configureUnitsyncDir();
 
-if(! $win) {
-  if(-f $perlUnitsyncModule && -f $perlUnitsyncLibName) {
-    slog('Perl Unitsync interface module already exists, skipping generation (use "-g" flag to force generation)',3);
-  }else {
-    generatePerlUnitSync();
-  }
-}
-
 configureSpringDataDir();
 
 my $r_availableMods=checkUnitsync();
@@ -1018,6 +866,8 @@ $conf{lobbyPassword}=promptString("$currentStep/$nbSteps - Please enter the auto
 $currentStep++;
 $conf{owner}=promptString("$currentStep/$nbSteps - Please enter the lobby login of the autohost owner",undef,$autoInstallData{owner});
 $currentStep++;
+
+$conf{preferencesData}=$sqliteUnavailableReason?'private':'shared';
 
 my @confFiles=qw'banLists.conf battlePresets.conf commands.conf hostingPresets.conf levels.conf mapBoxes.conf mapLists.conf spads.conf users.conf';
 slog('Downloading SPADS configuration templates',3);

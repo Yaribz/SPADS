@@ -19,6 +19,17 @@ Any valid port number
 -
 8200
 
+[global:lobbyTls]
+Lobby TLS mode
+-
+Specifies if TLS encryption must be used for the connection to the lobby server.
+-
+on: TLS is enabled (SPADS will exit if it can't establish a TLS encrypted connection to the lobby server)
+off: TLS is disabled (SPADS will use a plaintext connection to the lobby server)
+auto: TLS is enabled only if the required libraries are available
+-
+auto
+
 [global:lobbyReconnectDelay]
 Delay before reconnecting to lobby server
 -
@@ -130,6 +141,86 @@ Location of SPADS log files. This directory path can be an absolute path or a pa
 Any writable directory
 -
 %logDir% (set during installation, examples: "log", "/var/home/spring/spads/var/log", "C:\Program files\Spads\var\log")
+
+[global:bansData]
+Bans data mode
+-
+Data storage and sharing mode for players bans.
+When set to "private", the data file is stored in the [global:instanceDir] directory and is private to each SPADS instance.
+When set to "shared", the data file is stored in the [global:varDir] directory by default and is shared between all SPADS instances that use the same configuration.
+The default file name for the data file is "bans.dat". When using shared mode, an alternate file name/location can be provided in parentheses after the "shared" keyword to use a specific non-default name/location for the data file.
+-
+private: bans are private to each SPADS instance and stored in the "bans.dat" file located in the [global:instanceDir] directory
+shared: bans are shared between all SPADS instances that use the same configuration and stored in the "bans.dat" file located in the [global:varDir] directory
+shared(<fileLocation>): bans are shared between all SPADS instances that use the same configuration and stored in the <fileLocation> file (if <fileLocation> is a relative path, it is relative to the [global:varDir] directory)
+-
+shared
+
+[global:mapInfoCacheData]
+Map information cache data mode
+-
+Data storage and sharing mode for the map information cache. This cache contains map specific data such as map options, size and start positions.
+When set to "private", the data file is stored in the [global:instanceDir] directory and is private to each SPADS instance.
+When set to "shared", the data file is stored in the [global:varDir] directory by default and is shared between all SPADS instances that use the same configuration.
+The default file name for the data file is "mapInfoCache.dat". When using shared mode, an alternate file name/location can be provided in parentheses after the "shared" keyword to use a specific non-default name/location for the data file.
+-
+private: the map information cache is private to each SPADS instance and stored in the "mapInfoCache.dat" file located in the [global:instanceDir] directory
+shared: the map information cache is shared between all SPADS instances that use the same configuration and stored in the "mapInfoCache.dat" file located in the [global:varDir] directory
+shared(<fileLocation>): the map information cache is shared between all SPADS instances that use the same configuration and stored in the <fileLocation> file (if <fileLocation> is a relative path, it is relative to the [global:varDir] directory)
+-
+shared
+
+[global:savedBoxesData]
+Saved map start boxes data mode
+-
+Data storage and sharing mode for saved map start boxes.
+When set to "private", the data file is stored in the [global:instanceDir] directory and is private to each SPADS instance.
+When set to "shared", the data file is stored in the [global:varDir] directory by default and is shared between all SPADS instances that use the same configuration.
+The default file name for the data file is "savedBoxes.dat". When using shared mode, an alternate file name/location can be provided in parentheses after the "shared" keyword to use a specific non-default name/location for the data file.
+-
+private: saved start boxes are private to each SPADS instance and stored in the "savedBoxes.dat" file located in the [global:instanceDir] directory
+shared: saved start boxes are shared between all SPADS instances that use the same configuration and stored in the "savedBoxes.dat" file located in the [global:varDir] directory
+shared(<fileLocation>): saved start boxes are shared between all SPADS instances that use the same configuration and stored in the <fileLocation> file (if <fileLocation> is a relative path, it is relative to the [global:varDir] directory)
+-
+shared
+
+[global:trustedLobbyCertificatesData]
+Trusted lobby certificates data mode
+-
+Data storage and sharing mode for trusted lobby certificates.
+When set to "private", the data file is stored in the [global:instanceDir] directory and is private to each SPADS instance.
+When set to "shared", the data file is stored in the [global:varDir] directory by default and is shared between all SPADS instances that use the same configuration.
+The default file name for the data file is "trustedLobbyCertificates.dat". When using shared mode, an alternate file name/location can be provided in parentheses "shared" keyword to use a specific non-default name/location for the data file.
+-
+private: trusted lobby certificates are private to each SPADS instance and stored in the "trustedLobbyCertificates.dat" file located in the [global:instanceDir] directory
+shared: trusted lobby certificates are shared between all SPADS instances that use the same configuration and stored in the "trustedLobbyCertificates.dat" file located in the [global:varDir] directory
+shared(<fileLocation>): trusted lobby certificates are shared between all SPADS instances that use the same configuration and stored in the <fileLocation> file (if <fileLocation> is a relative path, it is relative to the [global:varDir] directory)
+-
+shared
+
+[global:preferencesData]
+Players preferences data mode
+-
+Data storage and sharing mode for players preferences.
+When set to "private", the data file is named "preferences.dat". It is stored in the [global:instanceDir] directory and is private to each SPADS instance.
+When set to "shared", the data file is named "preferences.sqlite" by default. It is stored in the [global:varDir] directory by default and is shared between all SPADS instances that use the same configuration (this mode requires the DBD::SQLite Perl module).
+When using shared mode, an alternate file name/location can be provided in parentheses after the "shared" keyword to use a specific non-default name/location for the data file.
+-
+private: players preferences are private to each SPADS instance and stored in the "preferences.dat" file located in the [global:instanceDir] directory
+shared: players preferences are shared between all SPADS instances that use the same configuration and stored in the "preferences.sqlite" file located in the [global:varDir] directory
+shared(<fileLocation>): players preferences are shared between all SPADS instances that use the same configuration and stored in the <fileLocation> file (if <fileLocation> is a relative path, it is relative to the [global:varDir] directory)
+-
+%preferencesData% (set during installation: "shared" if SQLite availability is detected, "private" else)
+
+[global:sharedDataRefreshDelay]
+Shared data refresh delay
+-
+Delay in seconds between checks for updates in shared data files. This is the maximum delay before an update performed in shared data by one SPADS instance is applied to the other instances.
+A value of 0 disables periodic checks for updates in shared data files (in this case shared data are only refreshed when the instance needs to update it, to avoid overwriting changes made by other instances).
+-
+Integer
+-
+5
 
 [global:autoUpdateRelease]
 Auto-update release
@@ -264,6 +355,16 @@ When this feature is enabled, the autoReloadArchivesMinDelay contains the minimu
 Integer
 -
 30
+
+[global:sequentialUnitsync]
+Sequential unitsync mode
+-
+Specifies if SPADS must use the unitsync library in sequential mode instead of parallel mode. When using sequential mode, all the SPADS instances with same [global:varDir] will synchronize themselves so that only one instance is calling the unitsync library at a time.
+-
+0: disabled
+1: enabled
+-
+0
 
 [global:autoLearnMaps]
 Automatic map learning
@@ -699,6 +800,7 @@ This setting defines the rank attibuted to AI bots when auto-balancing the battl
 Vote time
 -
 When a vote is called, this is the delay in seconds during which clients are allowed to vote.
+This global setting can also be overridden individually for each command in the commands rights configuration file (see [set:commandsFile]). The command-specific setting value must be declared at the end of the corresponding command declaration line, in parentheses. If multiple settings are overridden this way for a command, they must be separated by a comma. For example, to use specific values of "voteTime" and "minVoteParticipation" for the "stop" command, the command declaration line could be: "[stop](voteTime:60,minVoteParticipation:75)".
 -
 Integer
 -
@@ -709,11 +811,36 @@ Minimum vote participation
 -
 This is the minimum percent of voters that must have voted manually for a poll to be taken into account by SPADS.
 If two values are provided (separated by ";" character), then the first one is used when there is no game in progress and the second one is used when a game is in progress.
+This global setting can also be overridden individually for each command in the commands rights configuration file (see [set:commandsFile]). The command-specific setting value must be declared at the end of the corresponding command declaration line, in parentheses. If multiple settings are overridden this way for a command, they must be separated by a comma. For example, to use specific values of "voteTime" and "minVoteParticipation" for the "stop" command, the command declaration line could be: "[stop](voteTime:60,minVoteParticipation:75)".
 -
 <percent>: Integer between 0 and 100 included (a single value is used, no distinction is made whether a game is running or not)
 <percent1>;<percent2>: Integers between 0 and 100 included (<percent1> is used when no game is running, <percent2> is used when a game is running)
 -
 50
+
+[global:majorityVoteMargin]
+Majority vote margin
+-
+Specifies the percentage of the casted votes required for the vote to pass, in addition to the 50% already required by default.
+If set to zero, SPADS will use the standard majority vote system: the vote will pass if more than 50% of the casted votes are "yes".
+If not set to zero, SPADS will require supermajority (aka "qualified majority"): the required percentage of the casted votes for the vote to pass will be 50% + the configured value. If set to 50 (maximum value), unanimity will be required for the vote to pass.
+This global setting can also be overridden individually for each command in the commands rights configuration file (see [set:commandsFile]). The command-specific setting value must be declared at the end of the corresponding command declaration line, in parentheses. If multiple settings are overridden this way for a command, they must be separated by a comma. For example, to use specific values of "voteTime" and "majorityVoteMargin" for the "stop" command, the command declaration line could be: "[stop](voteTime:60,majorityVoteMargin:25)".
+-
+Integer between 0 and 50 included
+-
+0
+
+[global:awayVoteDelay]
+Away vote delay
+-
+Configures the delay to wait before triggering automatic blank votes for players who are in away vote mode (see [pSet:voteMode]). The delay can be expressed as a number of seconds or a percentage of the vote time (see [global:voteTime]).
+This global setting can also be overridden individually for each command in the commands rights configuration file (see [set:commandsFile]). The command-specific setting value must be declared at the end of the corresponding command declaration line, in parentheses. If multiple settings are overridden this way for a command, they must be separated by a comma. For example, to use specific values of "voteTime" and "awayVoteDelay" for the "stop" command, the command declaration line could be: "[stop](voteTime:60,awayVoteDelay:50%)".
+-
+<null>: the away vote mode is disabled
+Integer: number of seconds to wait before triggering automatic blank votes
+<percent>%: percentage of total vote time to wait before triggering automatic blank votes
+-
+20
 
 [global:pluginsDir]
 SPADS plugins directory
@@ -743,7 +870,7 @@ on: Springie commands are emulated
 off: Springie commands are not emulated
 warn: Springie commands are emulated, but a warning message is sent in private to the player when a deprecated command is used
 -
-warn
+off
 
 [global:dataDumpDelay]
 Data dump delay
@@ -767,22 +894,6 @@ Instead of "!help set <settingName>", it is possible to type directly "!help <se
 1: enabled
 -
 1
-
-[global:colorSensitivity]
-Color sensitivity
--
-When auto-fixing players colors, SPADS uses a formula to evaluate how much different 2 colors are.
-If the computed color difference is below the value of this setting, SPADS tries to change the offending colors.
-Using a very low value for this setting would allow players to use very similar colors.
-Using a very high value for this setting would change players colors almost every time, even if they seem really different.
-If set to 0, players colors are always forced using hard-coded colors (players can't choose their colors)
-If set to -1, players colors are always forced using an advanced color assignment algorithm, taking game mode and battle structure into account (players can't choose their colors)
--
-Positive integer: players colors are automatically changed if too similar
-0: players colors are always forced using hard-coded values
--1: players colors are always forced using an advanced color assignment algorithm
--
-55 (some colors may seem similar in battle lobby, but usually they are different enough in game)
 
 [global:kickBanDuration]
 Ban duration for kickBan command
@@ -1151,6 +1262,22 @@ gameOver(<delay>): game is auto-stopped when game is over only (delay: <delay> s
 off: game is not auto-stopped by AutoHost
 -
 gameOver
+
+[set:colorSensitivity]
+Color sensitivity
+-
+When auto-fixing players colors, SPADS uses a formula to evaluate how much different 2 colors are.
+If the computed color difference is below the value of this setting, SPADS tries to change the offending colors.
+Using a very low value for this setting would allow players to use very similar colors.
+Using a very high value for this setting would change players colors almost every time, even if they seem really different.
+If set to 0, players colors are always forced using hard-coded colors (players can't choose their colors)
+If set to -1, players colors are always forced using an advanced color assignment algorithm, taking game mode and battle structure into account (players can't choose their colors)
+-
+Positive integer: players colors are automatically changed if too similar
+0: players colors are always forced using hard-coded values
+-1: players colors are always forced using an advanced color assignment algorithm
+-
+55 (some colors may seem similar in battle lobby, but usually they are different enough in game)
 
 [set:balanceMode]
 Balance mode
@@ -1944,7 +2071,7 @@ If you vote while your "voteMode" preference is set to "away", then your "voteMo
 [pSet:voteMode]
 Vote mode
 -
-When a vote is called and your vote mode is set to "away", SPADS will only wait for your vote for 20 seconds. When this delay has expired, SPADS will automatically vote blank for you. But you can still cancel this blank vote by voting before the called vote expires (refer to [global:voteTime]).
+When a vote is called and your vote mode is set to "away", SPADS will only wait for your vote for the time configured by [global:awayVoteDelay]. When this delay has expired, SPADS will automatically vote blank for you. But you can still cancel this blank vote by voting before the called vote expires (refer to [global:voteTime]).
 When your vote mode is set to "normal", SPADS will wait for your vote until the called vote passes, fails, or expires.
 -
 normal: normal vote mode

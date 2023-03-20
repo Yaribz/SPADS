@@ -1,6 +1,6 @@
 # Perl UnitSync interface module for Win32 system
 #
-# Copyright (C) 2008-2020  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2023  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -16,18 +16,40 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 91.0d (2021/01/02)
+# Version 106.0a (2023/03/12)
 
 package PerlUnitSync;
 
 use strict;
 use warnings;
 
-use Win32;
-use Win32::API;
+use constant { PACKAGE_PREFIX_LENGTH => length(__PACKAGE__)+2 };
 
-my $dllName='unitsync.dll';
-my @skippedFunctions=qw'ProcessUnitsNoChecksum GetMapInfoEx GetMapInfo GetMapDescription GetMapAuthor GetMapWidth GetMapHeight GetMapTidalStrength GetMapWindMin GetMapWindMax GetMapGravity GetMapResourceCount GetMapResourceName GetMapResourceMax GetMapResourceExtractorRadius GetMapPosCount GetMapPosX GetMapPosZ GetInfoValue GetPrimaryModName GetPrimaryModShortName GetPrimaryModVersion GetPrimaryModMutator GetPrimaryModGame GetPrimaryModShortGame GetPrimaryModDescription OpenArchiveType GetOptionStyle';
+my $win=$^O eq 'MSWin32';
+my $macOs=$^O eq 'darwin';
+
+my $dynLibSuffix=$win?'dll':($macOs?'dylib':'so');
+my $unitsyncLibName=($win?'':'lib')."unitsync.$dynLibSuffix";
+
+my $ffi;
+if($win) {
+  eval "use Win32;
+        use Win32::API;
+        1;"
+      or die $@;
+}else{
+  eval "use FFI::Platypus;
+        1;"
+      or die $@;
+  $ffi=FFI::Platypus->new(lib => $unitsyncLibName);
+  my $unitsyncDlHdl=FFI::Platypus::DL::dlopen($unitsyncLibName, FFI::Platypus::DL::RTLD_PLATYPUS_DEFAULT());
+  if(defined $unitsyncDlHdl) {
+    FFI::Platypus::DL::dlclose($unitsyncDlHdl);
+  }else{
+    die 'Failed to load unitsync library: '.FFI::Platypus::DL::dlerror();
+  }
+}
+
 
 sub _fixTypesForWin32Api {
   $_[0]=~s/\bconst\s*//gi;
@@ -42,22 +64,78 @@ sub _getLastWin32Error {
   return $errorMsg;
 }
 
+sub win32ImportFunc {
+  my ($returnType,$funcName,$signature)=@_;
+  map {_fixTypesForWin32Api($_)} ($returnType,$signature);
+  Win32::API->Import($unitsyncLibName,"$returnType $funcName($signature)")
+      or return _getLastWin32Error() || 'unknown error';
+  return undef;
+}
+
+sub _fixTypesForFfi {
+  my ($returnType,$signature)=@_;
+  $returnType=~s/\bconst\s*//i;
+  $returnType=~s/\bchar\*/string/i;
+  my @paramTypes=split(',',$signature);
+  foreach my $paramType (@paramTypes) {
+    if($paramType =~ /^\s*([^\s](?:.*[^\s])?)\s+[^\s]+\s*$/) {
+      $paramType=$1;
+      $paramType=~s/\bconst\s*//i;
+      $paramType=~s/\bchar\*/string/i unless($paramType =~ /unsigned/i);
+    }else{
+      die "Invalid type found in unitsync API source code: $paramType";
+    }
+  }
+  return ($returnType,\@paramTypes);
+}
+
+sub ffiImportFunc {
+  my ($returnType,$funcName,$signature)=@_;
+  my $r_paramTypes;
+  ($returnType,$r_paramTypes)=_fixTypesForFfi($returnType,$signature);
+  eval {
+    $ffi->attach($funcName,$r_paramTypes,$returnType);
+    1;
+  } or return $@ || 'unknown error';
+  return undef;
+}
+
+sub win32HasSymbol { return Win32::API::More->new($unitsyncLibName,shift,'V','V') }
+sub ffiHasSymbol { return $ffi->find_symbol(shift) }
+
+*PerlUnitSync::importFunc = $win ? \&win32ImportFunc : \&ffiImportFunc;
+*PerlUnitSync::hasFunc = $win ? \&win32HasSymbol : \&ffiHasSymbol;
+
+my %unitsyncFunctions;
 while(local $_ = <DATA>) {
   next unless(/^\s*EXPORT\(\s*([^\)]*[^\s\)])\s*\)\s*([^\(\s]+)\s*\(\s*((?:.*[^\s])?)\s*\)\s*;/);
   my ($returnType,$funcName,$signature)=($1,$2,$3);
-  next if(grep {$funcName eq $_} @skippedFunctions);
-  map {_fixTypesForWin32Api($_)} ($returnType,$signature);
-  die "Unable to import $funcName from $dllName ("._getLastWin32Error().')' unless(Win32::API->Import($dllName,"$returnType $funcName($signature)"));
+  die "Duplicate function declaration \"$funcName\" in unitsync API source code" if(exists $unitsyncFunctions{$funcName});
+  $unitsyncFunctions{$funcName}={returnType => $returnType, signature => $signature};
 }
-
 close(DATA);
+
+our $AUTOLOAD;
+sub AUTOLOAD {
+  my $funcName=substr($AUTOLOAD,PACKAGE_PREFIX_LENGTH);
+  die "Unable to import unitsync function \"$funcName\" (function not found in API source code)\n"
+      unless(exists $unitsyncFunctions{$funcName});
+  my $importError=importFunc($unitsyncFunctions{$funcName}{returnType},$funcName,$unitsyncFunctions{$funcName}{signature});
+  die "Unable to import unitsync function \"$funcName\" from $unitsyncLibName ($importError)\n"
+      if($importError);
+  {
+    no strict 'refs';
+    &{$funcName}(@_);
+  }
+}
 
 1;
 
-######################################################################################
-# https://raw.githubusercontent.com/spring/spring/91.0/tools/unitsync/unitsync_api.h #
-######################################################################################
+#############################################################################
+# https://github.com/spring/spring/raw/fca8e6/tools/unitsync/unitsync_api.h #
+#############################################################################
 __DATA__
+
 /* This file is part of the Spring engine (GPL v2 or later), see LICENSE.html */
 
 #ifndef _UNITSYNC_API_H
@@ -70,9 +148,8 @@ __DATA__
 	#warning PLAIN_API_STRUCTURE is defined -> functions will NOT be properly exported!
 #else
 	#include "unitsync.h"
-	#include "System/exportdefines.h"
+	#include "System/ExportDefines.h"
 #endif
-
 
 // from unitsync.cpp:
 
@@ -135,35 +212,12 @@ EXPORT(const char* ) GetNextError();
  *     this may only be on the the master or hotfix branch
  *   - 83.0.1-13-g1234567 develop: some dev-version after the 1st release of 83
  *     on the develop branch
+ *
+ * After release 106.0:
+ *    The full version, for example "104.0.1-2155-gddd1321651 develop" or "105.0"
  */
 EXPORT(const char* ) GetSpringVersion();
 
-/**
- * @brief Returns the unsynced/patch-set part of the version of Spring
- *   this unitsync was compiled with.
- *
- * Before release 83:
- *   You may want to use this together with GetSpringVersion() to form the whole
- *   version like this:
- *   GetSpringVersion() + "." + GetSpringVersionPatchset()
- *   This will provide you with a version of the format "Major.Minor.Patchset".
- *   Examples:
- *   - 0.82.6.0                in this case, the 0 is usually omitted -> 0.82.6
- *   - 0.82.6.1                release
- *   - 0.82+.6.1               dev build
- *
- * After release 83:
- *   You should only possibly append this to the main version returned by
- *   GetSpringVersion(), if it is a release, as otherwise GetSpringVersion()
- *   already contains the patch-set.
- */
-EXPORT(const char* ) GetSpringVersionPatchset();
-
-/**
- * @brief Returns true if the version of Spring this unitsync was compiled
- *   with is a release version, false if it is a development version.
- */
-EXPORT(bool        ) IsSpringReleaseVersion();
 
 /**
  * @brief Initialize the unitsync library
@@ -215,19 +269,14 @@ EXPORT(int         ) GetDataDirectoryCount();
 EXPORT(const char* ) GetDataDirectory(int index);
 
 /**
- * @brief Process another unit and return how many are left to process
+ * @brief Process units
  *
- * Call this function repeatedly until it returns 0 before calling any other
- * function related to units.
+ * Must be called before GetUnitCount(), GetUnitName(), ...
  *
- * Before any units are available, you will first need to map a mod's archives
+ * Before caling this function, you will first need to load a game's archives
  * into the VFS using AddArchive() or AddAllArchives().
  *
- * @return negative integer (< 0) on error;
- *   the number of units left to process (>= 0) on success.
- *   Because of risk for infinite loops, this function does not yet return
- *   any error code.
- *   It is advised to poll GetNextError() after calling this function.
+ * @return always 0!
  * @see ProcessUnitsNoChecksum
  */
 EXPORT(int         ) ProcessUnits();
@@ -327,6 +376,18 @@ EXPORT(const char* ) GetArchivePath(const char* archiveName);
  *		@endcode
  */
 EXPORT(int         ) GetMapCount();
+
+/**
+ * @brief Retrieves the number of info items available for a given Map
+ * @param index Map index/id
+ * @return negative integer (< 0) on error;
+ *   the number of info items available (>= 0) on success
+ * @see GetMapCount
+ * @see GetInfoKey
+ *
+ * Be sure to call GetMapCount() prior to using this function.
+ */
+EXPORT(int         ) GetMapInfoCount(int index);
 /**
  * @brief Get the name of a map
  * @return NULL on error; the name of the map (e.g. "SmallDivide") on success
@@ -338,94 +399,6 @@ EXPORT(const char* ) GetMapName(int index);
  *   on success
  */
 EXPORT(const char* ) GetMapFileName(int index);
-/**
- * @brief Get the description of a map
- * @return NULL on error; the description of the map
- *         (e.g. "Lot of metal in middle") on success
- */
-EXPORT(const char* ) GetMapDescription(int index);
-/**
- * @brief Get the name of the author of a map
- * @return NULL on error; the name of the author of a map on success
- */
-EXPORT(const char* ) GetMapAuthor(int index);
-/**
- * @brief Get the width of a map
- * @return negative integer (< 0) on error;
- *   the width of a map (>= 0) on success
- */
-EXPORT(int         ) GetMapWidth(int index);
-/**
- * @brief Get the height of a map
- * @return negative integer (< 0) on error;
- *   the height of a map (>= 0) on success
- */
-EXPORT(int         ) GetMapHeight(int index);
-/**
- * @brief Get the tidal speed of a map
- * @return negative integer (< 0) on error;
- *   the tidal speed of the map (>= 0) on success
- */
-EXPORT(int         ) GetMapTidalStrength(int index);
-/**
- * @brief Get the minimum wind speed on a map
- * @return negative integer (< 0) on error;
- *   the minimum wind speed on the map (>= 0) on success
- */
-EXPORT(int         ) GetMapWindMin(int index);
-/**
- * @brief Get the maximum wind strenght on a map
- * @return negative integer (< 0) on error;
- *   the maximum wind strenght on the map (>= 0) on success
- */
-EXPORT(int         ) GetMapWindMax(int index);
-/**
- * @brief Get the gravity of a map
- * @return negative integer (< 0) on error;
- *   the gravity of the map (>= 0) on success
- */
-EXPORT(int         ) GetMapGravity(int index);
-/**
- * @brief Get the number of supported resources
- * @return negative integer (< 0) on error;
- *   the number of supported resources (>= 0) on success
- */
-EXPORT(int         ) GetMapResourceCount(int index);
-/**
- * @brief Get the name of a map resource
- * @return NULL on error; the name of a map resource (e.g. "Metal") on success
- */
-EXPORT(const char* ) GetMapResourceName(int index, int resourceIndex);
-/**
- * @brief Get the scale factor of a resource map
- * @return 0.0f on error; the scale factor of a resource map on success
- */
-EXPORT(float       ) GetMapResourceMax(int index, int resourceIndex);
-/**
- * @brief Get the extractor radius for a map resource
- * @return negative integer (< 0) on error;
- *   the extractor radius for a map resource (>= 0) on success
- */
-EXPORT(int         ) GetMapResourceExtractorRadius(int index, int resourceIndex);
-
-/**
- * @brief Get the number of defined start positions for a map
- * @return negative integer (< 0) on error;
- *   the number of defined start positions for a map (>= 0) on success
- */
-EXPORT(int         ) GetMapPosCount(int index);
-/**
- * @brief Get the position on the x-axis for a start position on a map
- * @return -1.0f on error; the position on the x-axis for a start position
- *         on a map on success
- */
-EXPORT(float       ) GetMapPosX(int index, int posIndex);
-/**
- * @brief Get the position on the z-axis for a start position on a map
- * @return -1.0f on error; the position on the z-axis for a start position
- *         on a map on success
- */
-EXPORT(float       ) GetMapPosZ(int index, int posIndex);
 
 /**
  * @brief return the map's minimum height
@@ -828,20 +801,6 @@ EXPORT(const char* ) GetOptionName(int optIndex);
  */
 EXPORT(const char* ) GetOptionSection(int optIndex);
 /**
- * @brief Retrieve an option's style
- * @param optIndex option index/id
- * @return NULL on error; the option's style on success
- *
- * XXX The format of an option style string is currently undecided.
- *
- * Do not use this before having called Get*OptionCount().
- * @see GetMapOptionCount
- * @see GetModOptionCount
- * @see GetSkirmishAIOptionCount
- * @see GetCustomOptionCount
- */
-EXPORT(const char* ) GetOptionStyle(int optIndex);
-/**
  * @brief Retrieve an option's description
  * @param optIndex option index/id
  * @return NULL on error; the option's description on success
@@ -1237,6 +1196,15 @@ EXPORT(void        ) SetSpringConfigInt(const char* name, const int value);
  * @param value float value to set
  */
 EXPORT(void        ) SetSpringConfigFloat(const char* name, const float value);
+/**
+ * @brief deletes configkey in Spring configuration
+ * @param name name of key to set
+ */
+EXPORT(void        ) DeleteSpringConfigKey(const char* name);
+
+
+EXPORT(const char* ) GetSysInfoHash();
+EXPORT(const char* ) GetMacAddrHash();
 
 
 // from LuaParserAPI.cpp:
@@ -1286,7 +1254,144 @@ EXPORT(float      ) lpGetStrKeyFloatVal(const char* key, float defValue);
 EXPORT(const char*) lpGetIntKeyStrVal(int key, const char* defValue);
 EXPORT(const char*) lpGetStrKeyStrVal(const char* key, const char* defValue);
 
-/* deprecated functions */
+/** @} */
+
+#endif // _UNITSYNC_API_H
+
+######################################################################################
+# https://raw.githubusercontent.com/spring/spring/91.0/tools/unitsync/unitsync_api.h #
+######################################################################################
+
+/**
+ * @brief Returns the unsynced/patch-set part of the version of Spring
+ *   this unitsync was compiled with.
+ *
+ * Before release 83:
+ *   You may want to use this together with GetSpringVersion() to form the whole
+ *   version like this:
+ *   GetSpringVersion() + "." + GetSpringVersionPatchset()
+ *   This will provide you with a version of the format "Major.Minor.Patchset".
+ *   Examples:
+ *   - 0.82.6.0                in this case, the 0 is usually omitted -> 0.82.6
+ *   - 0.82.6.1                release
+ *   - 0.82+.6.1               dev build
+ *
+ * After release 83:
+ *   You should only possibly append this to the main version returned by
+ *   GetSpringVersion(), if it is a release, as otherwise GetSpringVersion()
+ *   already contains the patch-set.
+ */
+EXPORT(const char* ) GetSpringVersionPatchset();
+/**
+ * @brief Returns true if the version of Spring this unitsync was compiled
+ *   with is a release version, false if it is a development version.
+ */
+EXPORT(bool        ) IsSpringReleaseVersion();
+/**
+ * @brief Get the description of a map
+ * @return NULL on error; the description of the map
+ *         (e.g. "Lot of metal in middle") on success
+ */
+
+EXPORT(const char* ) GetMapDescription(int index);
+/**
+ * @brief Get the name of the author of a map
+ * @return NULL on error; the name of the author of a map on success
+ */
+EXPORT(const char* ) GetMapAuthor(int index);
+/**
+ * @brief Get the width of a map
+ * @return negative integer (< 0) on error;
+ *   the width of a map (>= 0) on success
+ */
+EXPORT(int         ) GetMapWidth(int index);
+/**
+ * @brief Get the height of a map
+ * @return negative integer (< 0) on error;
+ *   the height of a map (>= 0) on success
+ */
+EXPORT(int         ) GetMapHeight(int index);
+/**
+ * @brief Get the tidal speed of a map
+ * @return negative integer (< 0) on error;
+ *   the tidal speed of the map (>= 0) on success
+ */
+EXPORT(int         ) GetMapTidalStrength(int index);
+/**
+ * @brief Get the minimum wind speed on a map
+ * @return negative integer (< 0) on error;
+ *   the minimum wind speed on the map (>= 0) on success
+ */
+EXPORT(int         ) GetMapWindMin(int index);
+/**
+ * @brief Get the maximum wind strenght on a map
+ * @return negative integer (< 0) on error;
+ *   the maximum wind strenght on the map (>= 0) on success
+ */
+EXPORT(int         ) GetMapWindMax(int index);
+/**
+ * @brief Get the gravity of a map
+ * @return negative integer (< 0) on error;
+ *   the gravity of the map (>= 0) on success
+ */
+EXPORT(int         ) GetMapGravity(int index);
+/**
+ * @brief Get the number of supported resources
+ * @return negative integer (< 0) on error;
+ *   the number of supported resources (>= 0) on success
+ */
+EXPORT(int         ) GetMapResourceCount(int index);
+/**
+ * @brief Get the name of a map resource
+ * @return NULL on error; the name of a map resource (e.g. "Metal") on success
+ */
+EXPORT(const char* ) GetMapResourceName(int index, int resourceIndex);
+/**
+ * @brief Get the scale factor of a resource map
+ * @return 0.0f on error; the scale factor of a resource map on success
+ */
+EXPORT(float       ) GetMapResourceMax(int index, int resourceIndex);
+/**
+ * @brief Get the extractor radius for a map resource
+ * @return negative integer (< 0) on error;
+ *   the extractor radius for a map resource (>= 0) on success
+ */
+EXPORT(int         ) GetMapResourceExtractorRadius(int index, int resourceIndex);
+
+/**
+ * @brief Get the number of defined start positions for a map
+ * @return negative integer (< 0) on error;
+ *   the number of defined start positions for a map (>= 0) on success
+ */
+EXPORT(int         ) GetMapPosCount(int index);
+/**
+ * @brief Get the position on the x-axis for a start position on a map
+ * @return -1.0f on error; the position on the x-axis for a start position
+ *         on a map on success
+ */
+EXPORT(float       ) GetMapPosX(int index, int posIndex);
+/**
+ * @brief Get the position on the z-axis for a start position on a map
+ * @return -1.0f on error; the position on the z-axis for a start position
+ *         on a map on success
+ */
+EXPORT(float       ) GetMapPosZ(int index, int posIndex);
+
+/**
+ * @brief Retrieve an option's style
+ * @param optIndex option index/id
+ * @return NULL on error; the option's style on success
+ *
+ * XXX The format of an option style string is currently undecided.
+ *
+ * Do not use this before having called Get*OptionCount().
+ * @see GetMapOptionCount
+ * @see GetModOptionCount
+ * @see GetSkirmishAIOptionCount
+ * @see GetCustomOptionCount
+ */
+EXPORT(const char* ) GetOptionStyle(int optIndex);
+
 /**
  * @deprecated in June 2011, use ProcessUnits() instead
  */
@@ -1337,7 +1442,3 @@ EXPORT(const char* ) GetPrimaryModDescription(int index);
  * @deprecated use OpenArchive instead
  */
 EXPORT(int         ) OpenArchiveType(const char* name, const char* type);
-
-/** @} */
-
-#endif // _UNITSYNC_API_H

@@ -273,6 +273,12 @@
 !removeBot <botName> - removes a local AI bot
 "!removeBot joe" removes the local AI bot named "joe"
 
+[resign]
+!resign [<playerName> [TEAM]] - resigns a player or his entire ally team if "TEAM" parameter is provided
+"!resign joe" resigns the player named joe
+"!resign joe TEAM" resigns joe's ally team
+"!resign" resigns your entire ally team (same as "!resign <yourName> TEAM")
+
 [restart]
 !restart [empty|spec] [<macro>=<value> [..]] - restarts SPADS (wait game end, and empty battle lobby if "empty" is specified)
 "!restart" restarts SPADS now if no game is running, or else wait the end of the game
