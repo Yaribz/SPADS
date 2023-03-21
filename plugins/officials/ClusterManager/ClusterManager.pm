@@ -11,8 +11,8 @@ use Text::ParseWords 'shellwords';
 
 use SpadsPluginApi;
 
-my $pluginVersion='0.4';
-my $requiredSpadsVersion='0.12.27';
+my $pluginVersion='0.6';
+my $requiredSpadsVersion='0.13.0';
 
 my %globalPluginParams = ( commandsFile => ['notNull'],
                            helpFile => ['notNull'],
@@ -28,8 +28,8 @@ my %globalPluginParams = ( commandsFile => ['notNull'],
                            baseAutoHostPort => ['port'],
                            clusters => [],
                            createNewConsoles => ['bool'],
-                           sharedData => [],
-                           autoRegister => ['bool2'] );
+                           autoRegister => ['bool2'],
+                           shareArchiveCache => ['bool'] );
 my %presetPluginParams = ( maxInstancesInCluster => ['integer'],
                            maxInstancesInClusterPublic => ['integer'],
                            maxInstancesInClusterPrivate => ['integer'],
@@ -260,19 +260,6 @@ sub onReloadConf {
     return 0;
   }
 
-  my @sharedData=split(',',$r_pluginConf->{sharedData});
-  if(any {$_ eq 'preferences'} @sharedData) {
-    eval 'use DBI';
-    if($@) {
-      slog('Unable to share preferences data (Perl DBI module not found)',1);
-      return 0;
-    }
-    if(none {$_ eq 'SQLite'} DBI->available_drivers()) {
-      slog('Unable to share preferences data (Perl DBD::SQLite module not found)',1);
-      return 0;
-    }
-  }
-
   foreach my $pluginPreset (keys %{$spads->{pluginsConf}{ClusterManager}{presets}}) {
     next if($pluginPreset eq '');
     my $r_pluginPresetConf=$spads->{pluginsConf}{ClusterManager}{presets}{$pluginPreset};
@@ -286,6 +273,10 @@ sub onReloadConf {
     }
   }
 
+  if($r_pluginConf->{shareArchiveCache} && ! $r_conf->{sequentialUnitsync}) {
+    slog('Archive cache data are shared but unitsync sequential mode is disabled, this can lead to race conditions and cache data corruption',2);
+  }
+  
   c_provisionClustersIfNeeded($self) if(exists $self->{instData});
 
   return 1;
@@ -1073,13 +1064,19 @@ sub c_startInstance {
   }
 
   my ($sourceCacheDir,$instanceCacheDir)=(catdir($r_conf->{instanceDir},'cache'),catdir($fpInstanceDir,'cache'));
-  if(-d $sourceCacheDir && ! -d $instanceCacheDir && ! _copyDir($sourceCacheDir,$instanceCacheDir)) {
-    slog("Failed to copy cache data from \"$sourceCacheDir\" to \"$instanceCacheDir\" to initialize instance unitsync cache",2);
+  if(-d $sourceCacheDir && ! -d $instanceCacheDir) {
+    if($r_pluginConf->{shareArchiveCache}) {
+      if(my $symLinkCreateError=symLinkDir($sourceCacheDir,$instanceCacheDir)) {
+        slog("Failed to create symbolic link \"$instanceCacheDir\" to directory \"$sourceCacheDir\" to initialize instance Spring archive cache ($symLinkCreateError)",2);
+      }
+    }else{
+      slog("Failed to copy cache data from \"$sourceCacheDir\" to \"$instanceCacheDir\" to initialize instance Spring archive cache",2)
+          unless(_copyDir($sourceCacheDir,$instanceCacheDir));
+    }
   }
   
   my @instanceDatFiles=qw'mapHashes.dat userData.dat';
-  my @sharedData=split(',',$r_pluginConf->{sharedData});
-  map {my $data=$_; push(@instanceDatFiles,"$data.dat") unless(any {$data eq $_} @sharedData)} (qw'bans preferences savedBoxes trustedLobbyCertificates mapInfoCache');
+  map {push(@instanceDatFiles,"$_.dat") if($r_conf->{$_.'Data'} eq 'private')} (qw'bans preferences savedBoxes trustedLobbyCertificates mapInfoCache');
   my @datFiles = grep {-f "$r_conf->{instanceDir}/$_" && ! -f "$fpInstanceDir/$_"} @instanceDatFiles;
   foreach my $datFile (@datFiles) {
     if(! copy("$r_conf->{instanceDir}/$datFile",$fpInstanceDir)) {
@@ -1144,7 +1141,6 @@ sub c_startInstance {
   $instanceMacros{'set:autoHostPort'}=$r_pluginConf->{baseAutoHostPort}+$instNb;
   $instanceMacros{'set:instanceDir'}=catdir('ClusterManager',$instName);
   $instanceMacros{'set:logDir'}='log';
-  $instanceMacros{sharedData}=$r_pluginConf->{sharedData} if($r_pluginConf->{sharedData} ne '');
   if($owner) {
     my $passwd=::generatePassword(4,'abcdefghjkmnpqrstuvwxyz123456789');
     $instanceMacros{'hSet:password'}=$passwd;
@@ -1164,6 +1160,34 @@ sub c_startInstance {
     return undef;
   }
   return \%instanceData;
+}
+
+sub symLinkDir {
+  my ($targetDir,$link)=@_;
+  if($^O eq 'MSWin32') {
+    return 'invalid file name'
+        if(any {/[\Q*?"<>|\E]/} ($targetDir,$link));
+    map {$_='"'.$_.'"' if(/[ \t]/)} ($targetDir,$link);
+    system {'cmd.exe'} ('cmd.exe','/c','mklink','/j',$link,$targetDir,'>NUL','2>&1');
+    if($? == -1) {
+      return 'failed to execute cmd.exe: '.$!;
+    }elsif($? & 127) {
+      return 'cmd.exe interrupted by signal '.($? & 127);
+    }else{
+      my $exitCode=$? >> 8;
+      return 'mklink returned with exit code '.$exitCode if($exitCode);
+      return undef;
+    }
+  }else{
+    my $rc;
+    if(eval { $rc=symlink($targetDir,$link); 1 }) {
+      return $! unless($rc);
+      return undef;
+    }else{
+      chomp($@);
+      return $@;
+    }
+  }
 }
 
 sub _copyDir {
@@ -1335,7 +1359,7 @@ sub hClusterConfig {
   return 1 if($checkOnly);
   
   my $r_pluginConf=getPluginConf();
-  my @clusterManagerPublicSettings=(qw'maxInstances maxInstancesPublic maxInstancesPrivate removeSpareInstanceDelay removePrivateInstanceDelay startingInstanceTimeout offlineInstanceTimeout orphanInstanceTimeout baseGamePort baseAutoHostPort clusters sharedData autoRegister');
+  my @clusterManagerPublicSettings=(qw'maxInstances maxInstancesPublic maxInstancesPrivate removeSpareInstanceDelay removePrivateInstanceDelay startingInstanceTimeout offlineInstanceTimeout orphanInstanceTimeout baseGamePort baseAutoHostPort clusters autoRegister shareArchiveCache');
   my @configData;
   foreach my $pluginSetting (sort @clusterManagerPublicSettings) {
     push(@configData,{"$C{5}Setting$C{1}" => $pluginSetting,
