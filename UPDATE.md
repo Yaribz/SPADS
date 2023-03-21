@@ -14,7 +14,7 @@ When all the required manual actions listed in next section have been performed,
 
     perl update.pl <release> -f -a
 
-You need to run the command twice because the script might need to update itself first.
+You need to run the command twice because the script might update itself on first execution.
 
 Finally, you can take a look at what changed with this update by checking the changelog available here:
   http://planetspads.free.fr/spads/repository/CHANGELOG
