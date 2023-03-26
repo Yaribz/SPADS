@@ -186,6 +186,7 @@ helpSettings.dat:
        add documentation regarding the fact that vote settings can be overridden in the commands configuration file (commands.conf)
        change default value of "springieEmulation" global setting from "warn" to "off"
        change the "colorSensitivity" setting type from global setting to preset setting
+0.7.1: the "lobbyReconnectDelay" global setting now accepts a range for delay randomization
 
 PerlUnitSync.pm:
 ===============
@@ -963,6 +964,7 @@ spads.pl:
         map information (width, height and start positions) are now cached again (this functionality was disabled since SPADS 0.11.48 due to unitsync backward compatibility breakage in Spring 104)
         check number of start positions available in map before launching a game in fixed or random start position type
         refactor dependency checking code
+0.13.1: the "lobbyReconnectDelay" global setting now accepts a range for delay randomization
 
 SpadsConf.pm:
 ============
@@ -1144,6 +1146,7 @@ SpadsConf.pm:
         new global settings: bansData, mapInfoCacheData, savedBoxesData, trustedLobbyCertificatesData, preferencesData (they replace the "sharedData" configuration macro, which is now obsolete)
         the "colorSensitivity" global setting is now a preset setting
         automatically add new preferences fields in the SQLite database
+0.13.1: the "lobbyReconnectDelay" global setting now accepts a range for delay randomization
 
 spadsInstaller.pl:
 =================

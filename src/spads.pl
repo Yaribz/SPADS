@@ -50,7 +50,7 @@ use SpringLobbyInterface;
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.13.0';
+our $spadsVer='0.13.1';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -517,6 +517,7 @@ my %pendingRelayedJsonRpcChunks;
 my %sentPlayersScriptTags;
 my $simpleEventLoopStopping;
 my %unitsyncOptFuncs;
+my $lobbyReconnectDelay;
 
 my $lobbySimpleLog=SimpleLog->new(logFiles => [$conf{logDir}."/spads.log",''],
                                   logLevels => [$conf{lobbyInterfaceLogLevel},3],
@@ -15394,20 +15395,32 @@ sub mainLoop {
 
 sub checkLobbyConnection {
   if(! $lobbyState && ! defined $quitAfterGame{action}) {
-    if($timestamps{connectAttempt} != 0 && $conf{lobbyReconnectDelay} == 0) {
+    if($timestamps{connectAttempt} != 0 && index($conf{lobbyReconnectDelay},'-') == -1 && $conf{lobbyReconnectDelay} == 0) {
       quitAfterGame('disconnected from lobby server, no reconnection delay configured');
-    }elsif(time-$timestamps{connectAttempt} > $conf{lobbyReconnectDelay}) {
-      $timestamps{connectAttempt}=time;
-      $lobbyState=1;
-      $lobby->addCallbacks({REDIRECT => \&cbRedirect});
-      if($lobby->connect(\&cbLobbyDisconnect,{TASSERVER => \&cbLobbyConnect},\&cbConnectTimeout)) {
-        if(! SimpleEvent::registerSocket($lobby->{lobbySock},sub { $lobby->receiveCommand(); checkQueuedLobbyCommands(); })) {
-          quitAfterGame('unable to register Spring lobby interface socket');
+    }else{
+      if(! defined $lobbyReconnectDelay) {
+        if(index($conf{lobbyReconnectDelay},'-') == -1) {
+          $lobbyReconnectDelay=$conf{lobbyReconnectDelay};
+        }else{
+          $conf{lobbyReconnectDelay}=~/^(\d+)-(\d+)$/;
+          my ($delayMin,$delayMax) = $1 > $2 ? ($2,$1) : ($1,$2);
+          $lobbyReconnectDelay=$delayMin+int(rand($delayMax+1-$delayMin));
         }
-      }else{
-        $lobby->removeCallbacks(['REDIRECT']);
-        $lobbyState=0;
-        slog("Connection to lobby server failed",1);
+      }
+      if(time-$timestamps{connectAttempt} > $lobbyReconnectDelay) {
+        $lobbyReconnectDelay=undef unless(index($conf{lobbyReconnectDelay},'-') == -1);
+        $timestamps{connectAttempt}=time;
+        $lobbyState=1;
+        $lobby->addCallbacks({REDIRECT => \&cbRedirect});
+        if($lobby->connect(\&cbLobbyDisconnect,{TASSERVER => \&cbLobbyConnect},\&cbConnectTimeout)) {
+          if(! SimpleEvent::registerSocket($lobby->{lobbySock},sub { $lobby->receiveCommand(); checkQueuedLobbyCommands(); })) {
+            quitAfterGame('unable to register Spring lobby interface socket');
+          }
+        }else{
+          $lobby->removeCallbacks(['REDIRECT']);
+          $lobbyState=0;
+          slog("Connection to lobby server failed",1);
+        }
       }
     }
   }

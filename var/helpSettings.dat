@@ -33,9 +33,10 @@ auto
 [global:lobbyReconnectDelay]
 Delay before reconnecting to lobby server
 -
-When SPADS is disconnected from lobby server, it tries to reconnect immediately.
-But when it fails to connect due to network problems, it waits this amount of seconds before trying to reconnect.
+When SPADS is disconnected from the lobby server, it tries to reconnect immediately.
+But when it fails to reconnect due to network problems, it waits this amount of seconds before trying to reconnect another time.
 A value of 0 disables reconnection.
+It is possible to specify a range, in this case the reconnect delay value is chosen randomly inside the range.
 -
 Integer
 -

@@ -39,7 +39,7 @@ use SimpleLog;
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.13.0';
+my $moduleVersion='0.13.1';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -57,7 +57,7 @@ my %globalParameters = (lobbyLogin => ['login'],
                         lobbyHost => ['hostname'],
                         lobbyPort => ['port'],
                         lobbyTls => ['onOffAutoType'],
-                        lobbyReconnectDelay => ['integer'],
+                        lobbyReconnectDelay => ['integer','integerRange'],
                         localLanIp => ['ipAddr','star','null'],
                         lobbyFollowRedirect => ['bool'],
                         autoHostPort => ['port'],
