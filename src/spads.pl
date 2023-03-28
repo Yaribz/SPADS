@@ -50,7 +50,7 @@ use SpringLobbyInterface;
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.13.1';
+our $spadsVer='0.13.2';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -516,6 +516,7 @@ my %ignoredRelayedApiUsers;
 my %pendingRelayedJsonRpcChunks;
 my %sentPlayersScriptTags;
 my $simpleEventLoopStopping;
+our $unitsync;
 my %unitsyncOptFuncs;
 my $lobbyReconnectDelay;
 
@@ -831,39 +832,22 @@ sub exportWin32EnvVar {
 }
 
 sub setSpringEnv {
-  my ($unitSyncPath,@dataDirs)=@_;
-
+  my @dataDirs=@_;
+  
   setEnvVarFirstPaths('SPRING_DATADIR',@dataDirs);
   exportWin32EnvVar('SPRING_DATADIR') if($win);
-
+  
   $ENV{SPRING_WRITEDIR}=$dataDirs[0] unless(areSamePaths($dataDirs[0],$ENV{SPRING_WRITEDIR}//''));
   exportWin32EnvVar('SPRING_WRITEDIR') if($win);
+  
+  eval {require PerlUnitSync};
+  fatalError("Unable to load PerlUnitSync module ($@)") if (hasEvalError());
 
-  if($win) {
-    setEnvVarFirstPaths('PATH',$unitSyncPath);
-  }elsif($macOs) {
-    my $wrapperLibName='PerlUnitSync.dylib';
-    my $unitsyncLibName='libunitsync.dylib';
-    my @libPathes=`otool -L "$spadsDir/$wrapperLibName"`;
-    fatalError("Unable to retrieve current Unitsync shared library path in $wrapperLibName using \"otool -L\" command".($!?" ($!)":'')) if($?);
-    my $currentUnitsyncPathInWrapper;
-    foreach my $libPath (@libPathes) {
-      if($libPath =~ /^\s*((?:.*\/)?$unitsyncLibName)\s/) {
-        $currentUnitsyncPathInWrapper=$1;
-        last;
-      }
-    }
-    fatalError("Unexpected result when retrieving current Unitsync shared library path in $wrapperLibName using \"otool -L\" command") unless(defined $currentUnitsyncPathInWrapper);
-    my $newUnitsyncPathInWrapper=catfile($unitSyncPath,$unitsyncLibName);
-    if(-f $newUnitsyncPathInWrapper && ! areSamePaths($currentUnitsyncPathInWrapper,$newUnitsyncPathInWrapper)) {
-      system('install_name_tool','-change',$currentUnitsyncPathInWrapper,$newUnitsyncPathInWrapper,"$spadsDir/$wrapperLibName");
-      fatalError("Unable to configure Unitsync shared library path in $wrapperLibName using \"install_name_tool -change\" command".($!?" ($!)":'')) if($?);
-    }
-  }elsif(setEnvVarFirstPaths('LD_LIBRARY_PATH',$unitSyncPath)) {
-    SimpleEvent::closeAllUserFds();
-    portableExec($^X,$0,@ARGV,'restartedForSpringEnv=1')
-        or die "Unable to restart SPADS to setup Spring environment ($!)";
-  }
+  $unitsync = eval {PerlUnitSync->new($conf{unitsyncDir} eq '' ? $dataDirs[1] : $conf{unitsyncDir})};
+  fatalError($@) if (hasEvalError());
+  fatalError("Failed to load unitsync library from \"$conf{unitsyncDir}\" - unknown error") unless(defined $unitsync);
+  map {$unitsyncOptFuncs{$_}=1 if($unitsync->hasFunc($_))} (qw'GetMapInfoCount');
+  
 }
 
 sub setSpringServerBin {
@@ -1394,6 +1378,16 @@ sub pingIfNeeded {
   }
 }
 
+sub fetchAndLogUnitsyncErrors {
+  my $nbError=0;
+  while(my $unitSyncErr=$unitsync->GetNextError()) {
+    $nbError++;
+    chomp($unitSyncErr);
+    slog("unitsync error: $unitSyncErr",2);
+  }
+  return $nbError;
+}
+
 sub loadArchivesBlocking {
   my $full=shift;
 
@@ -1412,152 +1406,174 @@ sub loadArchivesBlocking {
     }
   }
 
-  if(! PerlUnitSync::Init(0,0)) {
-    while(my $unitSyncErr=PerlUnitSync::GetNextError()) {
-      chomp($unitSyncErr);
-      slog("UnitSync error: $unitSyncErr",1);
-    }
+  if(! $unitsync->Init(0,0)) {
+    fetchAndLogUnitsyncErrors();
     slog("Unable to initialize UnitSync library",1);
     close($usLockFh) if($usLockFh);
     return ([],[],{});
   }
-  my $nbMaps = PerlUnitSync::GetMapCount();
+  my $nbMaps = $unitsync->GetMapCount();
   slog("No Spring map found",2) unless($nbMaps);
-  my $nbMods = PerlUnitSync::GetPrimaryModCount();
+  my $nbMods = $unitsync->GetPrimaryModCount();
   if(! $nbMods) {
     slog("No Spring mod found",1);
-    PerlUnitSync::UnInit();
+    $unitsync->UnInit();
     close($usLockFh) if($usLockFh);
     return ([],[],{});
   }
-  my @newAvailableMaps=();
-  my %availableMapsByNames=();
+  my @newAvailableMaps;
+  my %availableMapsByNames;
+  my $nextProgressReportTs=time()+5;
+  my $printProgressReport;
   for my $mapNb (0..($nbMaps-1)) {
-    my $mapName = PerlUnitSync::GetMapName($mapNb);
+    my $currentTime=time();
+    if($currentTime >= $nextProgressReportTs) {
+      $nextProgressReportTs=$currentTime+60;
+      $printProgressReport=1;
+      slog("Caching Spring map checksums... $mapNb/$nbMaps (".int(100*$mapNb/$nbMaps).'%)',3);
+    }
+    my $mapName = $unitsync->GetMapName($mapNb);
     if(! $full && exists $availableMapsNameToNb{$mapName}) {
       $newAvailableMaps[$mapNb]=$availableMaps[$availableMapsNameToNb{$mapName}];
       $availableMapsByNames{$mapName}=$mapNb unless(exists $availableMapsByNames{$mapName});
       next;
     }
-    my $mapChecksum = int32(PerlUnitSync::GetMapChecksum($mapNb));
-    PerlUnitSync::GetMapArchiveCount($mapName);
-    my $mapArchive = PerlUnitSync::GetMapArchiveName(0);
+    my $mapChecksum = int32($unitsync->GetMapChecksum($mapNb));
+    $unitsync->GetMapArchiveCount($mapName);
+    my $mapArchive = $unitsync->GetMapArchiveName(0);
     $mapArchive=$1 if($mapArchive =~ /([^\\\/]+)$/);
-    $newAvailableMaps[$mapNb]={name=>$mapName,hash=>$mapChecksum,archive=>$mapArchive,options=>{}};
+    $newAvailableMaps[$mapNb]={name=>$mapName,hash=>$mapChecksum,archive=>$mapArchive};
     if(exists $availableMapsByNames{$mapName}) {
       slog("Duplicate archives found for map \"$mapName\" ($mapArchive)",2);
     }else{
       $availableMapsByNames{$mapName}=$mapNb;
     }
   }
-  PerlUnitSync::RemoveAllArchives();
+  slog("Caching Spring map checksums... $nbMaps/$nbMaps (100%)",3) if($printProgressReport);
+  $unitsync->RemoveAllArchives();
 
+  my @invalidMapNbs;
   my @availableMapsNames=sort keys %availableMapsByNames;
   my $p_uncachedMapsNames = $spads->getUncachedMaps(\@availableMapsNames);
   my %newCachedMaps;
   if(@{$p_uncachedMapsNames}) {
     my $nbUncachedMaps=$#{$p_uncachedMapsNames}+1;
-    my $latestProgressReportTs=0;
+    $nextProgressReportTs=time()+5;
+    $printProgressReport=0;
     for my $uncachedMapNb (0..($#{$p_uncachedMapsNames})) {
-      if(time - $latestProgressReportTs > 60 && $nbUncachedMaps > 4) {
-        $latestProgressReportTs=time;
-        slog("Caching Spring map info... $uncachedMapNb/$nbUncachedMaps (".(int(100*$uncachedMapNb/$nbUncachedMaps)).'%)',3);
+      my $currentTime=time();
+      if($currentTime >= $nextProgressReportTs) {
+        $nextProgressReportTs=$currentTime+60;
+        $printProgressReport=1;
+        slog("Caching Spring map info... $uncachedMapNb/$nbUncachedMaps (".int(100*$uncachedMapNb/$nbUncachedMaps).'%)',3);
       }
       my $mapName=$p_uncachedMapsNames->[$uncachedMapNb];
       my $mapNb=$availableMapsByNames{$mapName};
       $newCachedMaps{$mapName}={startPos => [],
                                 options => {}};
       if($unitsyncOptFuncs{GetMapInfoCount}) {
-        my $nbMapInfo=PerlUnitSync::GetMapInfoCount($mapNb);
+        my $nbMapInfo=$unitsync->GetMapInfoCount($mapNb);
         if($nbMapInfo < 0) {
-          while(my $unitSyncErr=PerlUnitSync::GetNextError()) {
-            chomp($unitSyncErr);
-            slog("UnitSync error: $unitSyncErr",1);
-          }
-          slog("Unable to get map info count for map $mapName",1);
-          PerlUnitSync::UnInit();
-          return ([],[],{});
+          fetchAndLogUnitsyncErrors();
+          slog("Unable to get map info for \"$mapName\", ignoring map.",2);
+          push(@invalidMapNbs,$mapNb);
+          delete $newCachedMaps{$mapName};
+          $unitsync->RemoveAllArchives();
+          next;
         }
         for my $infoNb (0..($nbMapInfo-1)) {
-          my $mapInfoKey=PerlUnitSync::GetInfoKey($infoNb);
+          my $mapInfoKey=$unitsync->GetInfoKey($infoNb);
           if($mapInfoKey eq 'width') {
-            $newCachedMaps{$mapName}{width}=PerlUnitSync::GetInfoValueInteger($infoNb);
+            $newCachedMaps{$mapName}{width}=$unitsync->GetInfoValueInteger($infoNb);
           }elsif($mapInfoKey eq 'height') {
-            $newCachedMaps{$mapName}{height}=PerlUnitSync::GetInfoValueInteger($infoNb);
+            $newCachedMaps{$mapName}{height}=$unitsync->GetInfoValueInteger($infoNb);
           }elsif($mapInfoKey eq 'xPos') {
-            push(@{$newCachedMaps{$mapName}{startPos}},[PerlUnitSync::GetInfoValueFloat($infoNb)]);
+            push(@{$newCachedMaps{$mapName}{startPos}},[$unitsync->GetInfoValueFloat($infoNb)]);
           }elsif($mapInfoKey eq 'zPos') {
             if(! @{$newCachedMaps{$mapName}{startPos}}
                || $#{$newCachedMaps{$mapName}{startPos}[-1]} != 0) {
               slog("Inconsistentcy in start position data for map $mapName",1);
-              PerlUnitSync::UnInit();
+              $unitsync->UnInit();
+              $spads->cacheMapsInfo({}) if($spads->{sharedDataTs}{mapInfoCache}); # release lock
               return ([],[],{});
             }
-            push(@{$newCachedMaps{$mapName}{startPos}[-1]},PerlUnitSync::GetInfoValueFloat($infoNb));
+            push(@{$newCachedMaps{$mapName}{startPos}[-1]},$unitsync->GetInfoValueFloat($infoNb));
           }
         }
       }else{
-        $newCachedMaps{$mapName}{width}=PerlUnitSync::GetMapWidth($mapNb);
-        $newCachedMaps{$mapName}{height}=PerlUnitSync::GetMapHeight($mapNb);
-        my $nbStartPos=PerlUnitSync::GetMapPosCount($mapNb);
+        $newCachedMaps{$mapName}{width}=$unitsync->GetMapWidth($mapNb);
+        if($newCachedMaps{$mapName}{width} < 0) {
+          fetchAndLogUnitsyncErrors();
+          slog("Unable to get map info for \"$mapName\", ignoring map.",2);
+          push(@invalidMapNbs,$mapNb);
+          delete $newCachedMaps{$mapName};
+          $unitsync->RemoveAllArchives();
+          next;
+        }
+        $newCachedMaps{$mapName}{height}=$unitsync->GetMapHeight($mapNb);
+        my $nbStartPos=$unitsync->GetMapPosCount($mapNb);
         for my $startPosNb (0..($nbStartPos-1)) {
-          push(@{$newCachedMaps{$mapName}{startPos}},[PerlUnitSync::GetMapPosX($mapNb,$startPosNb),PerlUnitSync::GetMapPosZ($mapNb,$startPosNb)]);
+          push(@{$newCachedMaps{$mapName}{startPos}},[$unitsync->GetMapPosX($mapNb,$startPosNb),$unitsync->GetMapPosZ($mapNb,$startPosNb)]);
         }
       }
       $newCachedMaps{$mapName}{nbStartPos}=$#{$newCachedMaps{$mapName}{startPos}}+1;
-      PerlUnitSync::AddAllArchives($newAvailableMaps[$mapNb]->{archive});
-      my $nbMapOptions = PerlUnitSync::GetMapOptionCount($mapName);
+      $unitsync->AddAllArchives($newAvailableMaps[$mapNb]->{archive});
+      my $nbMapOptions = $unitsync->GetMapOptionCount($mapName);
       for my $optionIdx (0..($nbMapOptions-1)) {
-        my %option=(name => PerlUnitSync::GetOptionName($optionIdx),
-                    key => PerlUnitSync::GetOptionKey($optionIdx),
-                    description => PerlUnitSync::GetOptionDesc($optionIdx),
-                    type => $optionTypes{PerlUnitSync::GetOptionType($optionIdx)},
-                    section => PerlUnitSync::GetOptionSection($optionIdx),
+        my %option=(name => $unitsync->GetOptionName($optionIdx),
+                    key => $unitsync->GetOptionKey($optionIdx),
+                    description => $unitsync->GetOptionDesc($optionIdx),
+                    type => $optionTypes{$unitsync->GetOptionType($optionIdx)},
+                    section => $unitsync->GetOptionSection($optionIdx),
                     default => "");
         next if($option{type} eq "error" || $option{type} eq "section");
         $option{description}=~s/\n/ /g;
         if($option{type} eq "bool") {
-          $option{default}=PerlUnitSync::GetOptionBoolDef($optionIdx);
+          $option{default}=$unitsync->GetOptionBoolDef($optionIdx);
         }elsif($option{type} eq "number") {
-          $option{default}=formatNumber(PerlUnitSync::GetOptionNumberDef($optionIdx));
-          $option{numberMin}=formatNumber(PerlUnitSync::GetOptionNumberMin($optionIdx));
-          $option{numberMax}=formatNumber(PerlUnitSync::GetOptionNumberMax($optionIdx));
-          $option{numberStep}=formatNumber(PerlUnitSync::GetOptionNumberStep($optionIdx));
+          $option{default}=formatNumber($unitsync->GetOptionNumberDef($optionIdx));
+          $option{numberMin}=formatNumber($unitsync->GetOptionNumberMin($optionIdx));
+          $option{numberMax}=formatNumber($unitsync->GetOptionNumberMax($optionIdx));
+          $option{numberStep}=formatNumber($unitsync->GetOptionNumberStep($optionIdx));
           if($option{numberStep} < 0) {
             slog("Invalid step value \"$option{numberStep}\" for number range (map option: \"$option{key}\")",2);
             $option{numberStep}=0;
           }
         }elsif($option{type} eq "string") {
-          $option{default}=PerlUnitSync::GetOptionStringDef($optionIdx);
-          $option{stringMaxLen}=PerlUnitSync::GetOptionStringMaxLen($optionIdx);
+          $option{default}=$unitsync->GetOptionStringDef($optionIdx);
+          $option{stringMaxLen}=$unitsync->GetOptionStringMaxLen($optionIdx);
         }elsif($option{type} eq "list") {
-          $option{default}=PerlUnitSync::GetOptionListDef($optionIdx);
-          $option{listCount}=PerlUnitSync::GetOptionListCount($optionIdx);
+          $option{default}=$unitsync->GetOptionListDef($optionIdx);
+          $option{listCount}=$unitsync->GetOptionListCount($optionIdx);
           $option{list}={};
           for my $listIdx (0..($option{listCount}-1)) {
-            my %item=(name => PerlUnitSync::GetOptionListItemName($optionIdx,$listIdx),
-                      description => PerlUnitSync::GetOptionListItemDesc($optionIdx,$listIdx),
-                      key => PerlUnitSync::GetOptionListItemKey($optionIdx,$listIdx));
+            my %item=(name => $unitsync->GetOptionListItemName($optionIdx,$listIdx),
+                      description => $unitsync->GetOptionListItemDesc($optionIdx,$listIdx),
+                      key => $unitsync->GetOptionListItemKey($optionIdx,$listIdx));
             $item{description}=~s/\n/ /g;
             $option{list}->{$item{key}}=\%item;
           }
         }
         $newCachedMaps{$mapName}->{options}->{$option{key}}=\%option;
       }
-      PerlUnitSync::RemoveAllArchives();
+      $unitsync->RemoveAllArchives();
     }
-    slog("Caching Spring map info... $nbUncachedMaps/$nbUncachedMaps (100%)",3) if($nbUncachedMaps > 4);
+    slog("Caching Spring map info... $nbUncachedMaps/$nbUncachedMaps (100%)",3) if($printProgressReport);
     $spads->cacheMapsInfo(\%newCachedMaps) if($spads->{sharedDataTs}{mapInfoCache});
   }
+  {
+    my $offset=0;
+    map {splice(@newAvailableMaps,$_-$offset++,1)} @invalidMapNbs;
+  }
 
-  my @newAvailableMods=();
-  my %availableModsByNames=();
+  my @newAvailableMods;
+  my %availableModsByNames;
   for my $modNb (0..($nbMods-1)) {
-    my $nbInfo = PerlUnitSync::GetPrimaryModInfoCount($modNb);
+    my $nbInfo = $unitsync->GetPrimaryModInfoCount($modNb);
     my $modName='';
     for my $infoNb (0..($nbInfo-1)) {
-      next if(PerlUnitSync::GetInfoKey($infoNb) ne 'name');
-      $modName=PerlUnitSync::GetInfoValueString($infoNb);
+      next if($unitsync->GetInfoKey($infoNb) ne 'name');
+      $modName=$unitsync->GetInfoValueString($infoNb);
       last;
     }
     my $cachedMod=getMod($modName);
@@ -1572,68 +1588,69 @@ sub loadArchivesBlocking {
       $availableModsByNames{$modName}=$modNb;
     }
   }
-  PerlUnitSync::RemoveAllArchives();
+  $unitsync->RemoveAllArchives();
   
   my @availableModsNames=keys %availableModsByNames;
   my ($newTargetMod)=getTargetModFromList(\@availableModsNames);
   if(defined $newTargetMod) {
     my $modNb=$availableModsByNames{$newTargetMod};
-    my $modChecksum = int32(PerlUnitSync::GetPrimaryModChecksum($modNb));
+    my $modChecksum = int32($unitsync->GetPrimaryModChecksum($modNb));
     if(defined $newAvailableMods[$modNb]{hash} && $modChecksum && $modChecksum == $newAvailableMods[$modNb]{hash}) {
-      PerlUnitSync::UnInit();
+      $unitsync->UnInit();
       close($usLockFh) if($usLockFh);
       return (\@newAvailableMaps,\@newAvailableMods,\%newCachedMaps);
     }
     $newAvailableMods[$modNb]{hash}=$modChecksum;
-    $newAvailableMods[$modNb]{archive}=PerlUnitSync::GetPrimaryModArchive($modNb);
-    PerlUnitSync::AddAllArchives($newAvailableMods[$modNb]->{archive});
-    my $nbModOptions = PerlUnitSync::GetModOptionCount();
+    $newAvailableMods[$modNb]{archive}=$unitsync->GetPrimaryModArchive($modNb);
+    $unitsync->AddAllArchives($newAvailableMods[$modNb]->{archive});
+    my $nbModOptions = $unitsync->GetModOptionCount();
+    fetchAndLogUnitsyncErrors() if($nbModOptions < 0);
     for my $optionIdx (0..($nbModOptions-1)) {
-      my %option=(name => PerlUnitSync::GetOptionName($optionIdx),
-                  key => PerlUnitSync::GetOptionKey($optionIdx),
-                  description => PerlUnitSync::GetOptionDesc($optionIdx),
-                  type => $optionTypes{PerlUnitSync::GetOptionType($optionIdx)},
-                  section => PerlUnitSync::GetOptionSection($optionIdx),
+      my %option=(name => $unitsync->GetOptionName($optionIdx),
+                  key => $unitsync->GetOptionKey($optionIdx),
+                  description => $unitsync->GetOptionDesc($optionIdx),
+                  type => $optionTypes{$unitsync->GetOptionType($optionIdx)},
+                  section => $unitsync->GetOptionSection($optionIdx),
                   default => "");
       next if($option{type} eq "error" || $option{type} eq "section");
       $option{description}=~s/\n/ /g;
       if($option{type} eq "bool") {
-        $option{default}=PerlUnitSync::GetOptionBoolDef($optionIdx);
+        $option{default}=$unitsync->GetOptionBoolDef($optionIdx);
       }elsif($option{type} eq "number") {
-        $option{default}=formatNumber(PerlUnitSync::GetOptionNumberDef($optionIdx));
-        $option{numberMin}=formatNumber(PerlUnitSync::GetOptionNumberMin($optionIdx));
-        $option{numberMax}=formatNumber(PerlUnitSync::GetOptionNumberMax($optionIdx));
-        $option{numberStep}=formatNumber(PerlUnitSync::GetOptionNumberStep($optionIdx));
+        $option{default}=formatNumber($unitsync->GetOptionNumberDef($optionIdx));
+        $option{numberMin}=formatNumber($unitsync->GetOptionNumberMin($optionIdx));
+        $option{numberMax}=formatNumber($unitsync->GetOptionNumberMax($optionIdx));
+        $option{numberStep}=formatNumber($unitsync->GetOptionNumberStep($optionIdx));
         if($option{numberStep} < 0) {
           slog("Invalid step value \"$option{numberStep}\" for number range (mod option: \"$option{key}\")",2);
           $option{numberStep}=0;
         }
       }elsif($option{type} eq "string") {
-        $option{default}=PerlUnitSync::GetOptionStringDef($optionIdx);
-        $option{stringMaxLen}=PerlUnitSync::GetOptionStringMaxLen($optionIdx);
+        $option{default}=$unitsync->GetOptionStringDef($optionIdx);
+        $option{stringMaxLen}=$unitsync->GetOptionStringMaxLen($optionIdx);
       }elsif($option{type} eq "list") {
-        $option{default}=PerlUnitSync::GetOptionListDef($optionIdx);
-        $option{listCount}=PerlUnitSync::GetOptionListCount($optionIdx);
+        $option{default}=$unitsync->GetOptionListDef($optionIdx);
+        $option{listCount}=$unitsync->GetOptionListCount($optionIdx);
         $option{list}={};
         for my $listIdx (0..($option{listCount}-1)) {
-          my %item=(name => PerlUnitSync::GetOptionListItemName($optionIdx,$listIdx),
-                    description => PerlUnitSync::GetOptionListItemDesc($optionIdx,$listIdx),
-                    key => PerlUnitSync::GetOptionListItemKey($optionIdx,$listIdx));
+          my %item=(name => $unitsync->GetOptionListItemName($optionIdx,$listIdx),
+                    description => $unitsync->GetOptionListItemDesc($optionIdx,$listIdx),
+                    key => $unitsync->GetOptionListItemKey($optionIdx,$listIdx));
           $item{description}=~s/\n/ /g;
           $option{list}->{$item{key}}=\%item;
         }
       }
       $newAvailableMods[$modNb]->{options}->{$option{key}}=\%option;
     }
-    my $nbModSides = PerlUnitSync::GetSideCount();
+    my $nbModSides = $unitsync->GetSideCount();
     for my $sideIdx (0..($nbModSides-1)) {
-      my $sideName = PerlUnitSync::GetSideName($sideIdx);
+      my $sideName = $unitsync->GetSideName($sideIdx);
       $newAvailableMods[$modNb]->{sides}->[$sideIdx]=$sideName;
     }
-    PerlUnitSync::RemoveAllArchives();
+    $unitsync->RemoveAllArchives();
   }
 
-  PerlUnitSync::UnInit();
+  $unitsync->UnInit();
   close($usLockFh) if($usLockFh);
   return (\@newAvailableMaps,\@newAvailableMods,\%newCachedMaps);
 }
@@ -15174,7 +15191,7 @@ sub useFallbackEngineVersion {
       or fatalError("$reason, and couldn't read the previous auto-installed version file \"$autoManagedEngineFile\" as fallback solution");
   $autoManagedEngineData{version}=$r_fallbackAutoManagedEngineData->{version};
   my $engineDir=$updater->getEngineDir($r_fallbackAutoManagedEngineData->{version},$r_fallbackAutoManagedEngineData->{github});
-  setSpringEnv($engineDir,$conf{instanceDir},$engineDir,splitPaths($conf{springDataDir}));
+  setSpringEnv($conf{instanceDir},$engineDir,splitPaths($conf{springDataDir}));
   setSpringServerBin($engineDir);
   slog("$reason, using previous auto-installed version ($r_fallbackAutoManagedEngineData->{version}".(defined $r_fallbackAutoManagedEngineData->{github} ? ' from GitHub' : '').') as fallback solution',2);
 }
@@ -15183,34 +15200,29 @@ sub useFallbackEngineVersion {
 
 $timestamps{autoUpdate}=time if($conf{autoUpdateRelease} ne '');
 
-my $restartedForSpringEnv=delete $confMacros{restartedForSpringEnv};
-if(! $restartedForSpringEnv) {
+slog("Initializing SPADS $spadsVer (PID: $$)",3);
+slog('SPADS process is currently running as root!',2) unless($win || $>);
 
-  slog("Initializing SPADS $spadsVer (PID: $$)",3);
-  slog('SPADS process is currently running as root!',2) unless($win || $>);
-
-  if($conf{autoUpdateRelease} ne "") {
-    if($updater->isUpdateInProgress()) {
-      slog('Skipping auto-update at start, another updater instance is already running',2);
-    }else{
-      my $updateRc=$updater->update();
-      if($updateRc < 0) {
-        slog("Unable to check or apply SPADS update",2);
-        if($updateRc > -7 || $updateRc == -12) {
-          addAlert("UPD-001");
-        }elsif($updateRc == -7) {
-          addAlert("UPD-002");
-        }else{
-          addAlert("UPD-003");
-        }
-      }elsif($updateRc > 0) {
-        sleep(2); # Avoid CPU eating loop in case auto-update is broken (fork bomb protection)
-        restartAfterGame("auto-update");
-        $abortSpadsStartForAutoUpdate=1;
+if($conf{autoUpdateRelease} ne "") {
+  if($updater->isUpdateInProgress()) {
+    slog('Skipping auto-update at start, another updater instance is already running',2);
+  }else{
+    my $updateRc=$updater->update();
+    if($updateRc < 0) {
+      slog("Unable to check or apply SPADS update",2);
+      if($updateRc > -7 || $updateRc == -12) {
+        addAlert("UPD-001");
+      }elsif($updateRc == -7) {
+        addAlert("UPD-002");
+      }else{
+        addAlert("UPD-003");
       }
+    }elsif($updateRc > 0) {
+      sleep(1); # Avoid CPU eating loop in case auto-update is broken (fork bomb protection)
+      restartAfterGame("auto-update");
+      $abortSpadsStartForAutoUpdate=1;
     }
   }
-
 }
 
 if(! $abortSpadsStartForAutoUpdate) {
@@ -15246,7 +15258,7 @@ if(! $abortSpadsStartForAutoUpdate) {
     fatalError("Unable to write SPADS lock file \"$lockFile\" ($!)");
   }
 
-# Environment setup ####################
+# Spring environment setup #############
 
   if($conf{autoManagedSpringVersion} ne '') {
     %autoManagedEngineData=%{SpadsConf::parseAutoManagedSpringVersion($conf{autoManagedSpringVersion})};
@@ -15257,7 +15269,7 @@ if(! $abortSpadsStartForAutoUpdate) {
       fatalError("Unable to auto-install $engineStr version \"$autoManagedEngineData{version}\"")
           if($updater->setupEngine($autoManagedEngineData{version},$autoManagedEngineData{github}) < 0);
       my $engineDir=$updater->getEngineDir($autoManagedEngineData{version},$autoManagedEngineData{github});
-      setSpringEnv($engineDir,$conf{instanceDir},$engineDir,splitPaths($conf{springDataDir}));
+      setSpringEnv($conf{instanceDir},$engineDir,splitPaths($conf{springDataDir}));
       setSpringServerBin($engineDir);
     }elsif($autoManagedEngineData{mode} eq 'release') {
       my $autoManagedEngineVersion=$updater->resolveEngineReleaseNameToVersionWithFallback($autoManagedEngineData{release},$autoManagedEngineData{github});
@@ -15271,7 +15283,7 @@ if(! $abortSpadsStartForAutoUpdate) {
         }else{
           $autoManagedEngineData{version}=$autoManagedEngineVersion;
           my $engineDir=$updater->getEngineDir($autoManagedEngineVersion,$autoManagedEngineData{github});
-          setSpringEnv($engineDir,$conf{instanceDir},$engineDir,splitPaths($conf{springDataDir}));
+          setSpringEnv($conf{instanceDir},$engineDir,splitPaths($conf{springDataDir}));
           setSpringServerBin($engineDir);
           my $autoManagedEngineFile="$conf{instanceDir}/autoManagedEngineVersion.dat";
           unlink("$conf{instanceDir}/autoManagedSpringVersion.dat"); #TODO: remove this line when this code has been in stable SPADS long enough
@@ -15283,15 +15295,12 @@ if(! $abortSpadsStartForAutoUpdate) {
       fatalError("Invalid value of \"autoManagedSpringVersion\" setting: $conf{autoManagedSpringVersion}");
     }
   }else{
-    setSpringEnv($conf{unitsyncDir},$conf{instanceDir},splitPaths($conf{springDataDir}));
+    setSpringEnv($conf{instanceDir},splitPaths($conf{springDataDir}));
   }
 
-# Unitsync loading #####################
+# Spring archives loading ##############
 
-  eval "use PerlUnitSync";
-  fatalError("Unable to load PerlUnitSync module ($@)") if (hasEvalError());
-  map {$unitsyncOptFuncs{$_}=1 if(PerlUnitSync::hasFunc($_))} (qw'GetMapInfoCount');
-  $syncedSpringVersion=PerlUnitSync::GetSpringVersion();
+  $syncedSpringVersion=$unitsync->GetSpringVersion();
   $fullSpringVersion=$syncedSpringVersion;
   if(! ($fullSpringVersion =~ /^(\d+)/ && $1 > 105)) {
     my $buggedUnitsync=0;
@@ -15312,10 +15321,10 @@ if(! $abortSpadsStartForAutoUpdate) {
         $isSpringReleaseVersion=0;
       }
     }else{
-      $isSpringReleaseVersion=PerlUnitSync::IsSpringReleaseVersion();
+      $isSpringReleaseVersion=$unitsync->IsSpringReleaseVersion();
     }
     if($isSpringReleaseVersion) {
-      my $springVersionPatchset=PerlUnitSync::GetSpringVersionPatchset();
+      my $springVersionPatchset=$unitsync->GetSpringVersionPatchset();
       $fullSpringVersion.='.'.$springVersionPatchset;
     }
   }

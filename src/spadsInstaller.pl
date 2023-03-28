@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.29 (2023/03/19)
+# Version 0.30 (2023/03/27)
 
 use strict;
 
@@ -306,35 +306,29 @@ sub configureUnitsyncDir {
   if(exists $conf{autoInstalledSpringDir}) {
     $conf{unitsyncDir}='';
     $unitsyncDir=$conf{autoInstalledSpringDir};
-  }else{
-    if(! exists $conf{unitsyncDir}) {
-      my @potentialUnitsyncDirs;
-      if($win) {
-        @potentialUnitsyncDirs=(@pathes,File::Spec->catdir(Win32::GetFolderPath(Win32::CSIDL_PROGRAM_FILES()),'Spring'));
-      }elsif($macOs) {
-        @potentialUnitsyncDirs=sort {-M $a <=> -M $b} (grep {-d $_} </Applications/Spring*.app/Contents/MacOS>);
-      }else{
-        @potentialUnitsyncDirs=(split(/:/,$ENV{LD_LIBRARY_PATH}//''),File::Spec->catdir($ENV{HOME},'spring','lib'),'/usr/local/lib','/usr/lib','/usr/lib/spring');
-      }
-      my $defaultUnitsync;
-      foreach my $libPath (@potentialUnitsyncDirs) {
-        if(-f "$libPath/$unitsyncLibName") {
-          $defaultUnitsync=File::Spec->catfile($libPath,$unitsyncLibName);
-          last;
-        }
-      }
-      my $unitsync=promptExistingFile("$currentStep/$nbSteps - Please enter the absolute path of the unitsync library".($win?', usually located in the Spring installation directory on Windows systems':''),$unitsyncLibName,$defaultUnitsync,$autoInstallData{unitsyncPath});
-      $conf{unitsyncDir}=File::Spec->canonpath((fileparse($unitsync))[1]);
+    return;
+  }
+  if(! exists $conf{unitsyncDir}) {
+    my @potentialUnitsyncDirs;
+    if($win) {
+      @potentialUnitsyncDirs=(@pathes,File::Spec->catdir(Win32::GetFolderPath(Win32::CSIDL_PROGRAM_FILES()),'Spring'));
+    }elsif($macOs) {
+      @potentialUnitsyncDirs=sort {-M $a <=> -M $b} (grep {-d $_} </Applications/Spring*.app/Contents/MacOS>);
+    }else{
+      @potentialUnitsyncDirs=(split(/:/,$ENV{LD_LIBRARY_PATH}//''),File::Spec->catdir($ENV{HOME},'spring','lib'),'/usr/local/lib','/usr/lib','/usr/lib/spring');
     }
-    $currentStep++;
-    $unitsyncDir=$conf{unitsyncDir};
+    my $defaultUnitsync;
+    foreach my $libPath (@potentialUnitsyncDirs) {
+      if(-f "$libPath/$unitsyncLibName") {
+        $defaultUnitsync=File::Spec->catfile($libPath,$unitsyncLibName);
+        last;
+      }
+    }
+    my $unitsync=promptExistingFile("$currentStep/$nbSteps - Please enter the absolute path of the unitsync library".($win?', usually located in the Spring installation directory on Windows systems':''),$unitsyncLibName,$defaultUnitsync,$autoInstallData{unitsyncPath});
+    $conf{unitsyncDir}=File::Spec->canonpath((fileparse($unitsync))[1]);
   }
-
-  if($win) {
-    setEnvVarFirstPaths('PATH',$unitsyncDir);
-  }elsif(! $macOs) {
-    portableExec($^X,$0,@ARGV,map {"$_=$conf{$_}"} (keys %conf)) if(setEnvVarFirstPaths('LD_LIBRARY_PATH',$unitsyncDir));
-  }
+  $currentStep++;
+  $unitsyncDir=$conf{unitsyncDir};
 }
 
 sub exportWin32EnvVar {
@@ -521,28 +515,32 @@ sub checkUnitsync {
 
   slog('Checking Perl Unitsync interface module...',3);
 
-  eval 'use PerlUnitSync';
-  fatalError("Unable to load Perl Unitsync interface module ($@)") if($@);
+  eval {require PerlUnitSync};
+  fatalError("Unable to load Perl UnitSync interface module ($@)") if ($@);
 
-  if(! PerlUnitSync::Init(0,0)) {
-    while(my $unitSyncErr=PerlUnitSync::GetNextError()) {
+  my $unitsync = eval {PerlUnitSync->new($unitsyncDir)};
+  fatalError($@) if ($@);
+  fatalError("Failed to load unitsync library from \"$unitsyncDir\" - unknown error") unless(defined $unitsync);
+  
+  if(! $unitsync->Init(0,0)) {
+    while(my $unitSyncErr=$unitsync->GetNextError()) {
       chomp($unitSyncErr);
       slog("UnitSync error: $unitSyncErr",1);
     }
     fatalError('Unable to initialize UnitSync library');
   }
 
-  my $unitsyncVersion=PerlUnitSync::GetSpringVersion();
+  my $unitsyncVersion=$unitsync->GetSpringVersion();
   slog("Unitsync library version $unitsyncVersion initialized.",3);
 
   my @availableMods;
-  my $nbMods = PerlUnitSync::GetPrimaryModCount();
+  my $nbMods = $unitsync->GetPrimaryModCount();
   for my $modNb (0..($nbMods-1)) {
-    my $nbInfo = PerlUnitSync::GetPrimaryModInfoCount($modNb);
+    my $nbInfo = $unitsync->GetPrimaryModInfoCount($modNb);
     my $modName='';
     for my $infoNb (0..($nbInfo-1)) {
-      next if(PerlUnitSync::GetInfoKey($infoNb) ne 'name');
-      $modName=PerlUnitSync::GetInfoValueString($infoNb);
+      next if($unitsync->GetInfoKey($infoNb) ne 'name');
+      $modName=$unitsync->GetInfoValueString($infoNb);
       last;
     }
     if($modName eq '') {
@@ -552,7 +550,7 @@ sub checkUnitsync {
     push(@availableMods,$modName);
   }
 
-  PerlUnitSync::UnInit();
+  $unitsync->UnInit();
   chdir($cwd);
   return \@availableMods;
 }

@@ -39,7 +39,7 @@ use SimpleLog;
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.13.1';
+my $moduleVersion='0.13.2';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -2757,6 +2757,10 @@ sub getUncachedMaps {
 
 sub cacheMapsInfo {
   my ($self,$p_mapsInfo)=@_;
+  if(! %{$p_mapsInfo}) {
+    close(delete $self->{mapInfoCacheResLock}) if($self->{sharedDataTs}{mapInfoCache});
+    return;
+  }
   foreach my $map (keys %{$p_mapsInfo}) {
     $self->{mapInfoCache}{$map}=$p_mapsInfo->{$map};
   }

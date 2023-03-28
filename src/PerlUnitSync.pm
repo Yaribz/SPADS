@@ -16,44 +16,84 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 106.0a (2023/03/12)
+# Version 106.0b (2023/03/27)
 
 package PerlUnitSync;
 
 use strict;
 use warnings;
 
-use constant { PACKAGE_PREFIX_LENGTH => length(__PACKAGE__)+2 };
+use Carp 'croak';
+use File::Spec::Functions qw'catfile catdir';
 
-my $win=$^O eq 'MSWin32';
-my $macOs=$^O eq 'darwin';
+use constant {
+  DARWIN => $^O eq 'darwin',
+  MSWIN32 => $^O eq 'MSWin32',
+};
 
-my $dynLibSuffix=$win?'dll':($macOs?'dylib':'so');
-my $unitsyncLibName=($win?'':'lib')."unitsync.$dynLibSuffix";
+use constant {
+  PACKAGE_PREFIX_LENGTH => length(__PACKAGE__)+2,
 
-my $ffi;
-if($win) {
-  eval "use Win32;
-        use Win32::API;
-        1;"
-      or die $@;
-}else{
-  eval "use FFI::Platypus;
-        1;"
-      or die $@;
-  $ffi=FFI::Platypus->new(lib => $unitsyncLibName);
-  my $unitsyncDlHdl=FFI::Platypus::DL::dlopen($unitsyncLibName, FFI::Platypus::DL::RTLD_PLATYPUS_DEFAULT());
-  if(defined $unitsyncDlHdl) {
-    FFI::Platypus::DL::dlclose($unitsyncDlHdl);
+  UNITSYNC_LIB_NAME => (MSWIN32 ? '' : 'lib').'unitsync.'.(MSWIN32 ? 'dll' : (DARWIN ? 'dylib' : 'so')),
+};
+
+(MSWIN32 ? eval { require Win32; require Win32::API; 1} : eval { require FFI::Platypus; 1})
+    or die $@;
+
+my %UNITSYNC_FUNCTIONS;
+while(local $_ = <DATA>) {
+  next unless(/^\s*EXPORT\(\s*([^\)]*[^\s\)])\s*\)\s*([^\(\s]+)\s*\(\s*((?:.*[^\s])?)\s*\)\s*;/);
+  my ($returnType,$funcName,$signature)=($1,$2,$3);
+  die "Duplicate function declaration \"$funcName\" in unitsync API source code" if(exists $UNITSYNC_FUNCTIONS{$funcName});
+  $UNITSYNC_FUNCTIONS{$funcName}={returnType => $returnType, signature => $signature};
+}
+close(DATA);
+
+sub new {
+  my ($class,$libPath)=@_;
+  my $libName = defined $libPath ? catfile($libPath,UNITSYNC_LIB_NAME) : UNITSYNC_LIB_NAME;
+  
+  my $self={libName => $libName,
+            api => {}};
+  $self->{ffi}=FFI::Platypus->new(lib => $libName) unless(MSWIN32);
+  bless($self,$class);
+
+  if(MSWIN32) {
+    
+    # The unitsync lib has dependencies on Windows, so lib path must be added to PATH env var (or a chdir to lib path is needed...)
+    if(defined $libPath) {
+      $self->{originalPath}=$ENV{PATH};
+      $ENV{PATH}=$libPath.';'.$ENV{PATH};
+    }
+    
+    if(my $dlHdl=Win32::API::LoadLibrary($libName)) {
+      Win32::API::FreeLibrary($dlHdl);
+      
+      # Loading a symbol makes Win32::API cache the lib handle, so that the PATH env var dance is not needed for future calls
+      my $importError=$self->importFunc($UNITSYNC_FUNCTIONS{GetSpringVersion}{returnType},'GetSpringVersion',$UNITSYNC_FUNCTIONS{GetSpringVersion}{signature});
+
+      $ENV{PATH}=delete $self->{originalPath} if(defined $self->{originalPath});
+      die "Failed to import GetSpringVersion function from unitsync library \"$libName\" - $importError\n"
+          if($importError);
+    }else{
+      die "Failed to load unitsync library \"$libName\" - "._getLastWin32Error()."\n";
+    }
+  }elsif(my $dlHdl=FFI::Platypus::DL::dlopen($libName,FFI::Platypus::DL::RTLD_PLATYPUS_DEFAULT())) {
+    FFI::Platypus::DL::dlclose($dlHdl);
   }else{
-    die 'Failed to load unitsync library: '.FFI::Platypus::DL::dlerror();
+    die "Failed to load unitsync library \"$libName\" - ".FFI::Platypus::DL::dlerror()."\n";
   }
+  
+  return $self;
 }
 
-
-sub _fixTypesForWin32Api {
-  $_[0]=~s/\bconst\s*//gi;
-  $_[0]=~s/\bbool\b/BOOL/g;
+sub preloadLibStdcpp {
+  croak 'preloadLibStdcpp() call invalid on Windows systems !' if(MSWIN32);
+  if(my $dlHdl=FFI::Platypus::DL::dlopen('libstdc++.so.6',FFI::Platypus::DL::RTLD_PLATYPUS_DEFAULT() | FFI::Platypus::DL::RTLD_GLOBAL())) {
+    FFI::Platypus::DL::dlclose($dlHdl);
+    return 1;
+  }
+  return 0;
 }
 
 sub _getLastWin32Error {
@@ -61,14 +101,20 @@ sub _getLastWin32Error {
   return 'unknown error' unless($errorNb);
   my $errorMsg=Win32::FormatMessage($errorNb)//($^E=$errorNb);
   $errorMsg=~s/\cM?\cJ$//;
-  return $errorMsg;
+  return $errorMsg ? $errorMsg : 'unknown error';
+}
+
+sub _fixTypesForWin32Api {
+  $_[0]=~s/\bconst\s*//gi;
+  $_[0]=~s/\bbool\b/BOOL/g;
 }
 
 sub win32ImportFunc {
-  my ($returnType,$funcName,$signature)=@_;
+  my ($self,$returnType,$funcName,$signature)=@_;
   map {_fixTypesForWin32Api($_)} ($returnType,$signature);
-  Win32::API->Import($unitsyncLibName,"$returnType $funcName($signature)")
-      or return _getLastWin32Error() || 'unknown error';
+  my $r_win32ApiFunc=Win32::API->new($self->{libName},"$returnType $funcName($signature)")
+      or return _getLastWin32Error();
+  $self->{api}{$funcName}=sub { $r_win32ApiFunc->Call(@_) };
   return undef;
 }
 
@@ -90,43 +136,39 @@ sub _fixTypesForFfi {
 }
 
 sub ffiImportFunc {
-  my ($returnType,$funcName,$signature)=@_;
+  my ($self,$returnType,$funcName,$signature)=@_;
   my $r_paramTypes;
   ($returnType,$r_paramTypes)=_fixTypesForFfi($returnType,$signature);
-  eval {
-    $ffi->attach($funcName,$r_paramTypes,$returnType);
-    1;
-  } or return $@ || 'unknown error';
+  my $r_ffiFunc;
+  eval { $r_ffiFunc=$self->{ffi}->function($funcName,$r_paramTypes,$returnType) }
+      or return $@ || 'unknown error';
+  $self->{api}{$funcName}=$r_ffiFunc;
   return undef;
 }
 
-sub win32HasSymbol { return Win32::API::More->new($unitsyncLibName,shift,'V','V') }
-sub ffiHasSymbol { return $ffi->find_symbol(shift) }
+sub win32HasSymbol { my ($self,$sym)=@_; return Win32::API::More->new($self->{libName},$sym,'V','V') }
+sub ffiHasSymbol { my ($self,$sym)=@_; return $self->{ffi}->find_symbol($sym) }
 
-*PerlUnitSync::importFunc = $win ? \&win32ImportFunc : \&ffiImportFunc;
-*PerlUnitSync::hasFunc = $win ? \&win32HasSymbol : \&ffiHasSymbol;
+*PerlUnitSync::importFunc = MSWIN32 ? \&win32ImportFunc : \&ffiImportFunc;
+*PerlUnitSync::hasFunc = MSWIN32 ? \&win32HasSymbol : \&ffiHasSymbol;
 
-my %unitsyncFunctions;
-while(local $_ = <DATA>) {
-  next unless(/^\s*EXPORT\(\s*([^\)]*[^\s\)])\s*\)\s*([^\(\s]+)\s*\(\s*((?:.*[^\s])?)\s*\)\s*;/);
-  my ($returnType,$funcName,$signature)=($1,$2,$3);
-  die "Duplicate function declaration \"$funcName\" in unitsync API source code" if(exists $unitsyncFunctions{$funcName});
-  $unitsyncFunctions{$funcName}={returnType => $returnType, signature => $signature};
-}
-close(DATA);
+sub DESTROY { $ENV{PATH}=delete $_[0]->{originalPath} if(defined $_[0]->{originalPath}) }
 
 our $AUTOLOAD;
 sub AUTOLOAD {
   my $funcName=substr($AUTOLOAD,PACKAGE_PREFIX_LENGTH);
   die "Unable to import unitsync function \"$funcName\" (function not found in API source code)\n"
-      unless(exists $unitsyncFunctions{$funcName});
-  my $importError=importFunc($unitsyncFunctions{$funcName}{returnType},$funcName,$unitsyncFunctions{$funcName}{signature});
-  die "Unable to import unitsync function \"$funcName\" from $unitsyncLibName ($importError)\n"
-      if($importError);
-  {
-    no strict 'refs';
-    &{$funcName}(@_);
-  }
+      unless(exists $UNITSYNC_FUNCTIONS{$funcName});
+  ${PerlUnitSync::}{$funcName}=sub {
+    my $self=shift;
+    if(! exists $self->{api}{$funcName}) {
+      my $importError=$self->importFunc($UNITSYNC_FUNCTIONS{$funcName}{returnType},$funcName,$UNITSYNC_FUNCTIONS{$funcName}{signature});
+      die "Unable to import unitsync function \"$funcName\" from $self->{libName} ($importError)\n"
+          if($importError);
+    }
+    return $self->{api}{$funcName}->(@_);
+  };
+  return ${PerlUnitSync::}{$funcName}->(@_);
 }
 
 1;

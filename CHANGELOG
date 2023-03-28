@@ -197,6 +197,8 @@ PerlUnitSync.pm:
 106.0a: restore compatibility with all unitsync versions
         import requested unitsync functions only, on the fly
         use FFI::Platypus instead of SWIG pre-compiled wrappers (Linux)
+106.0b: change to object-oriented model for multiple simultaneous unitsync libraries support
+        add optional libstdc++ preload to workaround conflicts with versions statically linked in unitsync when multiple libraries are loaded simultaneously
 
 spads.pl:
 ========
@@ -965,6 +967,11 @@ spads.pl:
         check number of start positions available in map before launching a game in fixed or random start position type
         refactor dependency checking code
 0.13.1: the "lobbyReconnectDelay" global setting now accepts a range for delay randomization
+0.13.2: use new object-oriented unitsync interface
+        remove ugly "self-exec" at start on Linux (LD_PRELOAD trick no longer needed with new unitsync interface)
+        improve unitsync error logging and management
+        add progress report for map checksums caching process
+        improve progress report for map info caching process
 
 SpadsConf.pm:
 ============
@@ -1147,6 +1154,7 @@ SpadsConf.pm:
         the "colorSensitivity" global setting is now a preset setting
         automatically add new preferences fields in the SQLite database
 0.13.1: the "lobbyReconnectDelay" global setting now accepts a range for delay randomization
+0.13.2: do not rewrite shared map info data when no new map info is added (may happen when only buggy maps were uncached)
 
 spadsInstaller.pl:
 =================
@@ -1228,6 +1236,8 @@ spadsInstaller.pl:
 0.29: use new unitsync library wrapper mechanism on non-Windows systems (no pre-compilation required anymore)
       refactor dependency checking code
       check SQLite availability to warn if not available and autoconfigure the new "preferencesData" setting
+0.30: use new object-oriented unitsync interface
+      remove ugly "self-exec" to load unitsync on Linux (LD_PRELOAD trick no longer needed with new unitsync interface)
 
 SpadsPluginApi.pm:
 =================
