@@ -187,6 +187,7 @@ helpSettings.dat:
        change default value of "springieEmulation" global setting from "warn" to "off"
        change the "colorSensitivity" setting type from global setting to preset setting
 0.7.1: the "lobbyReconnectDelay" global setting now accepts a range for delay randomization
+0.7.2: fix default value of map link settings in doc
 
 PerlUnitSync.pm:
 ===============

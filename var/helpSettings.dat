@@ -38,7 +38,8 @@ But when it fails to reconnect due to network problems, it waits this amount of 
 A value of 0 disables reconnection.
 It is possible to specify a range, in this case the reconnect delay value is chosen randomly inside the range.
 -
-Integer
+Integer: number of seconds to wait before trying to reconnect
+<min>-<max>: range of seconds to wait before trying to reconnect (random delay mode)
 -
 30
 
@@ -1876,7 +1877,7 @@ This is a special preset setting: it cannot be changed by using !set command.
 <null> (no map link, !mapLink command disabled)
 Any string
 -
-http://springfiles.com/search_result.php?search=%m&select=select_all
+https://springfiles.springrts.com/index.html?type=1&filter=%m&category=map
 
 [set:ghostMapLink]
 Ghost map link
@@ -1889,7 +1890,7 @@ This is a special preset setting: it cannot be changed by using !set command.
 <null> (no map link, !mapLink command disabled)
 Any string
 -
-http://springfiles.com/search_result.php?search=%m&select=select_all
+https://springfiles.springrts.com/index.html?type=1&filter=%m&category=map
 
 [set:advertDelay]
 Advert delay

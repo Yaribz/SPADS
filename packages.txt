@@ -46,7 +46,7 @@ update.pl:update_0.13.pl
 argparse.py:argparse-1.2.1.py
 getDefaultModOptions.pl:getDefaultModOptions_0.7.pl
 help.dat:help_0.14.0.dat
-helpSettings.dat:helpSettings_0.7.1.dat
+helpSettings.dat:helpSettings_0.7.2.dat
 PerlUnitSync.pm:PerlUnitSync-106.0b.pm
 replay_upload.py:replay_upload_0.7.py
 SimpleEvent.pm:SimpleEvent_0.10.pm
@@ -67,7 +67,7 @@ update.pl:update_0.14.pl
 argparse.py:argparse-1.2.1.py
 getDefaultModOptions.pl:getDefaultModOptions_0.7.pl
 help.dat:help_0.14.0.dat
-helpSettings.dat:helpSettings_0.7.1.dat
+helpSettings.dat:helpSettings_0.7.2.dat
 PerlUnitSync.pm:PerlUnitSync-106.0b.pm
 replay_upload.py:replay_upload_0.7.py
 SimpleEvent.pm:SimpleEvent_0.10.pm
