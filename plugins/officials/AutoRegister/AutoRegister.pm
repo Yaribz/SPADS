@@ -4,7 +4,7 @@ use strict;
 
 use SpadsPluginApi;
 
-my $pluginVersion='0.1';
+my $pluginVersion='0.2';
 my $requiredSpadsVersion='0.12.18';
 
 my %globalPluginParams = ( enabled => ['bool'],
@@ -50,7 +50,7 @@ sub onLobbyLogin {
 sub hLobbyDenied {
   my (undef,$loginDeniedReason)=@_;
   
-  if($loginDeniedReason ne 'Invalid username or password') {
+  if($loginDeniedReason ne 'Invalid username or password' && substr($loginDeniedReason,0,13) ne 'No user found') {
     ::cbLoginDenied(undef,$loginDeniedReason);
     return;
   }
