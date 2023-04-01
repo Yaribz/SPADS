@@ -974,6 +974,7 @@ spads.pl:
         add progress report for map checksums caching process
         improve progress report for map info caching process
 0.13.3: try to load TLS module (IO::Socket::SSL) only when required (i.e. when lobbyTls is set to "on" or "auto", or when engine is auto-managed using GitHub)
+0.13.4: use host hashes provided by unitsync during login
 
 SpadsConf.pm:
 ============

@@ -50,7 +50,7 @@ use SpringLobbyInterface;
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.13.3';
+our $spadsVer='0.13.4';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
@@ -516,6 +516,7 @@ my %sentPlayersScriptTags;
 my $simpleEventLoopStopping;
 our $unitsync;
 my %unitsyncOptFuncs;
+my %unitsyncHostHashes;
 my $lobbyReconnectDelay;
 
 my $lobbySimpleLog=SimpleLog->new(logFiles => [$conf{logDir}."/spads.log",''],
@@ -842,8 +843,9 @@ sub setSpringEnv {
   $unitsync = eval {PerlUnitSync->new($conf{unitsyncDir} eq '' ? $dataDirs[1] : $conf{unitsyncDir})};
   fatalError($@) if (hasEvalError());
   fatalError("Failed to load unitsync library from \"$conf{unitsyncDir}\" - unknown error") unless(defined $unitsync);
-  map {$unitsyncOptFuncs{$_}=1 if($unitsync->hasFunc($_))} (qw'GetMapInfoCount');
-  
+  map {$unitsyncOptFuncs{$_}=1 if($unitsync->hasFunc($_))} (qw'GetMapInfoCount GetMacAddrHash GetSysInfoHash');
+  $unitsyncHostHashes{macAddr}=$unitsync->GetMacAddrHash() if($unitsyncOptFuncs{GetMacAddrHash});
+  $unitsyncHostHashes{sysInfo}=$unitsync->GetSysInfoHash() if($unitsyncOptFuncs{GetSysInfoHash});
 }
 
 sub setSpringServerBin {
@@ -13215,7 +13217,9 @@ sub initLobbyConnection {
   my $localLanIp=$conf{localLanIp};
   $localLanIp=getLocalLanIp() unless($localLanIp);
   my $legacyFlags = ($lobby->{serverParams}{protocolVersion} =~ /^(\d+\.\d+)/ && $1 > 0.36) ? '' : ' l t cl';
-  queueLobbyCommand(["LOGIN",$conf{lobbyLogin},$lobby->marshallPasswd($conf{lobbyPassword}),0,$localLanIp,"SPADS v$spadsVer",0,'b sp'.$legacyFlags],
+  my $hostHashes = ($unitsyncHostHashes{macAddr}//0).' '.(defined $unitsyncHostHashes{sysInfo} ? substr($unitsyncHostHashes{sysInfo},0,16) : 0);
+  
+  queueLobbyCommand(["LOGIN",$conf{lobbyLogin},$lobby->marshallPasswd($conf{lobbyPassword}),0,$localLanIp,"SPADS v$spadsVer",$hostHashes,'b sp'.$legacyFlags],
                     {ACCEPTED => \&cbLoginAccepted,
                      DENIED => \&cbLoginDenied,
                      AGREEMENTEND => \&cbAgreementEnd},
