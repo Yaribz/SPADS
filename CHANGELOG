@@ -973,6 +973,7 @@ spads.pl:
         improve unitsync error logging and management
         add progress report for map checksums caching process
         improve progress report for map info caching process
+0.13.3: try to load TLS module (IO::Socket::SSL) only when required (i.e. when lobbyTls is set to "on" or "auto", or when engine is auto-managed using GitHub)
 
 SpadsConf.pm:
 ============
@@ -1239,6 +1240,13 @@ spadsInstaller.pl:
       check SQLite availability to warn if not available and autoconfigure the new "preferencesData" setting
 0.30: use new object-oriented unitsync interface
       remove ugly "self-exec" to load unitsync on Linux (LD_PRELOAD trick no longer needed with new unitsync interface)
+0.31: auto-downloading games using pr-downloader is now supported
+      new games can be auto-downloaded during install: BA(new), TechA(test) and BAR
+      additonal map sets can be auto-downloaded during install (BAR maps)
+      progress bars are now shown when downloading maps
+      last run parameters are now saved in file "spadsInstaller.lastRun", which can be renamed to "spadsInstaller.auto" to generate auto-installations
+      remove obsolete handling of configuration settings passed as command line parameters (was used on Linux when self-restarting with previous unitsync interface module)
+      import File::Spec functions instead of using fully qualified names
 
 SpadsPluginApi.pm:
 =================
@@ -1361,6 +1369,8 @@ SpadsUpdater.pm:
       add engine release/version mapping cache system to secure engine auto-management
 0.22: use formatted UPDATE.md file from GitHub for major update documentation
 0.23: simplify message for upgrade procedure during major SPADS updates
+0.24: try to load TLS module (IO::Socket::SSL) only when required (i.e. when asked to download a file using HTTPS)
+      pr-downloader can now be extracted when auto-installing engines (used by SPADS installer for initial engine setup)
 
 springLobbyCertificates.dat:
 ===========================

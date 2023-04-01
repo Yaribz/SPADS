@@ -34,7 +34,7 @@ use Time::HiRes;
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $archName=($win?'win':'linux').($Config{ptrsize} > 4 ? 64 : 32);
 
-my $moduleVersion='0.23';
+our $VERSION='0.24';
 
 my @constructorParams = qw'sLog repository release packages';
 my @optionalConstructorParams = qw'localDir springDir';
@@ -44,19 +44,21 @@ my $springVersionUrl='http://planetspads.free.fr/spring/SpringVersion';
 our ($SPRING_MASTER_BRANCH,$SPRING_DEV_BRANCH)=('master','develop');
 
 our $HttpTinyCanSsl;
-if(HTTP::Tiny->can('can_ssl')) {
-  $HttpTinyCanSsl=HTTP::Tiny->can_ssl();
-}else{
-  $HttpTinyCanSsl=eval { require IO::Socket::SSL;
-                         IO::Socket::SSL->VERSION(1.42);
-                         require Net::SSLeay;
-                         Net::SSLeay->VERSION(1.49);
-                         1; };
+sub checkHttpsSupport {
+  return $HttpTinyCanSsl if(defined $HttpTinyCanSsl);
+  if(HTTP::Tiny->can('can_ssl')) {
+    $HttpTinyCanSsl = HTTP::Tiny->can_ssl() ? 1 : 0;
+  }else{
+    $HttpTinyCanSsl=eval { require IO::Socket::SSL;
+                           IO::Socket::SSL->VERSION(1.42);
+                           require Net::SSLeay;
+                           Net::SSLeay->VERSION(1.49);
+                           1; } ? 1 : 0;
+  }
+  return $HttpTinyCanSsl;
 }
 
-sub getVersion {
-  return $moduleVersion;
-}
+sub getVersion { return $VERSION }
 
 # Called by spadsInstaller.pl, spads.pl
 sub new {
@@ -439,7 +441,7 @@ sub downloadFile {
   my $sl=$self->{sLog};
   if($url !~ /^http:\/\//i) {
     if($url =~ /^https:\/\//i) {
-      if(! $HttpTinyCanSsl) {
+      if(! checkHttpsSupport()) {
         $sl->log("Unable to to download file to \"$file\", IO::Socket::SSL version 1.42 or superior and Net::SSLeay version 1.49 or superior are required for SSL support",1);
         return 0;
       }
@@ -699,7 +701,7 @@ sub _checkEngineVersionAvailabilityFromGithub {
   
 # Called by spadsInstaller.pl, spads.pl
 sub setupEngine {
-  my ($self,$version,$r_githubInfoOrSpringBranch)=@_;
+  my ($self,$version,$r_githubInfoOrSpringBranch,$getPrdownloader)=@_;
   my $isFromGithub = ref $r_githubInfoOrSpringBranch eq 'HASH';
   my $engineStr = $isFromGithub ? 'engine' : 'Spring';
   
@@ -748,7 +750,7 @@ sub setupEngine {
     close($lockFh);
     return -3;
   }
-  my $res=$self->_setupEngineLockProtected($version,$r_githubInfoOrSpringBranch,$engineDir);
+  my $res=$self->_setupEngineLockProtected($version,$r_githubInfoOrSpringBranch,$engineDir,$getPrdownloader);
   flock($lockFh, LOCK_UN);
   close($lockFh);
   return $res;
@@ -816,7 +818,7 @@ sub uncompress7zipFile {
 }
 
 sub _setupEngineLockProtected {
-  my ($self,$version,$r_githubInfoOrSpringBranch,$engineDir)=@_;
+  my ($self,$version,$r_githubInfoOrSpringBranch,$engineDir,$getPrdownloader)=@_;
   return 0 if(_checkEngineDir($engineDir,$version));
   
   my $isFromGithub = ref $r_githubInfoOrSpringBranch eq 'HASH';
@@ -843,7 +845,9 @@ sub _setupEngineLockProtected {
   }
 
   my $p_requiredFiles=_getSpringRequiredFiles($version);
-  if(! $self->uncompress7zipFile($tmpArchive,$engineDir,'base',@{$p_requiredFiles})) {
+  my @filesToExtract=@{$p_requiredFiles};
+  push(@filesToExtract,'pr-downloader'.($win?'.exe':'')) if($getPrdownloader);
+  if(! $self->uncompress7zipFile($tmpArchive,$engineDir,'base',@filesToExtract)) {
     unlink($tmpArchive);
     $sl->log("Unable to extract $engineStr archive \"$tmpArchive\"",1);
     return -13;

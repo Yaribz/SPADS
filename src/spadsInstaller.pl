@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.30 (2023/03/27)
+# Version 0.31 (2023/03/31)
 
 use strict;
 
@@ -28,10 +28,17 @@ use Digest::MD5 'md5_base64';
 use File::Basename 'fileparse';
 use File::Copy;
 use File::Path;
-use File::Spec;
+use File::Spec::Functions qw'canonpath catdir catfile devnull file_name_is_absolute splitdir splitpath';
 use FindBin;
 use HTTP::Tiny;
+use JSON::PP 'decode_json';
 use List::Util qw'any all none notall';
+use POSIX 'ceil';
+
+use constant {
+  MAX_PROGRESS_BAR_SIZE => 40,
+  REPORT_SEPARATOR => -t STDOUT ? "\r" : "\n",
+};
 
 use lib $FindBin::Bin;
 
@@ -43,6 +50,7 @@ my $macOs=$^O eq 'darwin';
 
 my $dynLibSuffix=$win?'dll':($macOs?'dylib':'so');
 my $unitsyncLibName=($win?'':'lib')."unitsync.$dynLibSuffix";
+my $PRD_BIN='pr-downloader'.($win?'.exe':'');
 
 my $spadsUrl='http://planetspads.free.fr/spads';
 my @packages=(qw'getDefaultModOptions.pl help.dat helpSettings.dat PerlUnitSync.pm springLobbyCertificates.dat SpringAutoHostInterface.pm SpringLobbyInterface.pm SimpleEvent.pm SimpleLog.pm spads.pl SpadsConf.pm spadsInstaller.pl SpadsUpdater.pm SpadsPluginApi.pm update.pl argparse.py replay_upload.py',$win?'7za.exe':'7za');
@@ -51,7 +59,15 @@ my $nbSteps=$macOs?14:15;
 my $isInteractive=-t STDIN;
 my $pathSep=$win?';':':';
 my @pathes=splitPaths($ENV{PATH});
-my %conf=(installDir => File::Spec->canonpath($FindBin::Bin));
+my %conf=(installDir => canonpath($FindBin::Bin));
+my %lastRun;
+my @lastRunOrder;
+my $isBarEngine;
+
+my @MAP_RESOLVERS=(
+  'https://springfiles.springrts.com/json.php?category=map&springname=',
+  'https://files-cdn.beyondallreason.dev/find?category=map&springname=',
+    );
 
 if($win) {
   eval { require Win32; 1; }
@@ -88,7 +104,7 @@ sub slog {
 }
 
 my %autoInstallData;
-my $autoInstallFile=File::Spec->catfile($conf{installDir},'spadsInstaller.auto');
+my $autoInstallFile=catfile($conf{installDir},'spadsInstaller.auto');
 if(-f $autoInstallFile) {
   my $fh=new FileHandle($autoInstallFile,'r');
   if(! defined $fh) {
@@ -110,9 +126,7 @@ if(-f $autoInstallFile) {
 }
 
 foreach my $installArg (@ARGV) {
-  if($installArg =~ /^([^=]+)=(.*)$/) {
-    $conf{$1}=$2;
-  }elsif(any {$installArg eq $_} qw'stable testing unstable contrib') {
+  if(! defined $conf{release} && (any {$installArg eq $_} qw'stable testing unstable contrib')) {
     $conf{release}=$installArg;
   }else{
     slog('Invalid usage',1);
@@ -123,13 +137,19 @@ foreach my $installArg (@ARGV) {
   }
 }
 
+sub setLastRun {
+  my ($k,$v)=@_;
+  push(@lastRunOrder,$k);
+  $lastRun{$k}=$v;
+}
+
 sub fatalError { slog(shift,0); exit 1; }
 
 sub splitPaths { return split(/$pathSep/,shift//''); }
 
 sub isAbsolutePath {
   my $fileName=shift;
-  my $fileSpecRes=File::Spec->file_name_is_absolute($fileName);
+  my $fileSpecRes=file_name_is_absolute($fileName);
   return $fileSpecRes == 2 if($win);
   return $fileSpecRes;
 }
@@ -138,17 +158,17 @@ sub isAbsoluteFilePath {
   my ($path,$fileName)=@_;
   return '' unless(isAbsolutePath($path));
   if(! -f $path) {
-    $path=File::Spec->catfile($path,$fileName);
+    $path=catfile($path,$fileName);
     return '' unless(-f $path);
   }
-  return '' unless((File::Spec->splitpath($path))[2] eq $fileName);
+  return '' unless((splitpath($path))[2] eq $fileName);
   return $path;
 }
 
 sub makeAbsolutePath {
   my ($path,$defaultBaseDir)=@_;
   $defaultBaseDir//=$conf{installDir};
-  $path=File::Spec->catdir($defaultBaseDir,$path) unless(isAbsolutePath($path));
+  $path=catdir($defaultBaseDir,$path) unless(isAbsolutePath($path));
   return $path;
 }
 
@@ -172,6 +192,212 @@ sub downloadFile {
   return 1;
 }
 
+{
+  my ($progressBar,$progressBarLength);
+  my ($nbUpdates,$remainingUpdates);
+  my ($currentTrunkNb,$currentTrunkSize);
+
+  sub newProgressBar {
+    ($progressBar,$progressBarLength)=('',0);
+    ($nbUpdates,$remainingUpdates)=($_[0],$_[0]);
+    ($currentTrunkNb,$currentTrunkSize)=(1,$remainingUpdates > MAX_PROGRESS_BAR_SIZE ? MAX_PROGRESS_BAR_SIZE : $remainingUpdates);
+    $|=1 if(REPORT_SEPARATOR eq "\r");
+    updateProgressBar();
+  }
+
+  sub updateProgressBar {
+    die "Invalid call to updateProgressBar(): uninitialized progress bar\n" unless(defined $progressBar);
+    if(defined $_[0]) {
+      $progressBar.=$_[0];
+      $progressBarLength++;
+      $remainingUpdates--;
+    }
+    my $updateDetails = defined $_[1] ? ' '.$_[1] : '';
+    my $updatesDone = ($currentTrunkNb-1) * MAX_PROGRESS_BAR_SIZE + $progressBarLength;
+    my $percentDone=sprintf('%3s',int($updatesDone*100/$nbUpdates+0.5));
+    my $trunkString = $nbUpdates > MAX_PROGRESS_BAR_SIZE ? $currentTrunkNb.'/'.ceil($nbUpdates/MAX_PROGRESS_BAR_SIZE).' ' : '';
+    my $updateString=$trunkString.'['.$progressBar.(' ' x ($currentTrunkSize-$progressBarLength)).'] '.$percentDone."% ($updatesDone/$nbUpdates)".$updateDetails;
+    my $paddingLength=80-length($updateString);
+    if($paddingLength>0) {
+      $updateString .= ' ' x  $paddingLength;
+    }elsif($paddingLength < 0) {
+      $updateString=substr($updateString,0,77).'...';
+    }
+    print $updateString.REPORT_SEPARATOR;
+    if(! $remainingUpdates) {
+      endProgressBar();
+      return;
+    }
+    if($progressBarLength == $currentTrunkSize) {
+      print "\n" if(REPORT_SEPARATOR eq "\r");
+      ($progressBar,$progressBarLength)=('',0);
+      $currentTrunkNb++;
+      $currentTrunkSize = $remainingUpdates > MAX_PROGRESS_BAR_SIZE ? MAX_PROGRESS_BAR_SIZE : $remainingUpdates;
+    }
+  }
+
+  sub endProgressBar {
+    undef $progressBar;
+    return if(REPORT_SEPARATOR eq "\n");
+    $|=0;
+    print "\n";
+  }
+}
+
+sub getHttpErrMsg {
+  my $httpRes=shift;
+  if($httpRes->{status} == 599) {
+    my $errMsg=$httpRes->{content};
+    chomp($errMsg);
+    return $errMsg;
+  }
+  return "HTTP $httpRes->{status}: $httpRes->{reason}";
+}
+
+sub downloadMapsWithProgressBar {
+  my ($r_urls,$targetDir)=@_;
+  my $httpTiny=HTTP::Tiny->new(timeout => 10);
+  my @dlErrors;
+  newProgressBar($#{$r_urls}+1);
+  my $downloadAborted;
+  for my $idx (0..$#{$r_urls}) {
+    my $url=$r_urls->[$idx];
+    if($url =~ /\/([^\/]+\.sd7)$/) {
+      my $fileName=$1;
+      updateProgressBar(undef,$fileName);
+      my $filePath=catfile($targetDir,$fileName);
+      if(-e $filePath) {
+        updateProgressBar('-');
+      }else{
+        my $httpRes=$httpTiny->mirror($url,$filePath);
+        if(! $httpRes->{success} || ! -f $filePath) {
+          push(@dlErrors,"Failed to download \"$url\" to \"$filePath\" (".getHttpErrMsg($httpRes).')');
+          updateProgressBar('!');
+          unlink($filePath);
+        }else{
+          updateProgressBar($httpRes->{status} == 304 ? '-' : '=');
+        }
+      }
+    }else{
+      push(@dlErrors,"Skipping unrecognized map download URL \"$url\"");
+      updateProgressBar('?');
+    }
+    if($idx == 4 && @dlErrors == 5) {
+      $downloadAborted=1;
+      endProgressBar();
+      last;
+    }
+  }
+  map {slog($_,2)} @dlErrors;
+  slog('Map downloads aborted',2) if($downloadAborted);
+}
+
+sub downloadMapsFromNameWithProgressBar {
+  my ($r_allBarMapNames,$targetDir)=@_;
+  my $httpTiny=HTTP::Tiny->new(timeout => 10);
+  my @dlErrors;
+  newProgressBar($#{$r_allBarMapNames}+1);
+  my $downloadAborted;
+  for my $idx (0..$#{$r_allBarMapNames}) {
+    my $mapName=$r_allBarMapNames->[$idx];
+    updateProgressBar(undef,$mapName);
+    my $resolverId=int(rand(1)+0.5); # load balancing
+    my $httpRes=$httpTiny->get($MAP_RESOLVERS[$resolverId].HTTP::Tiny->_uri_escape($mapName));
+    my $retried;
+    if(! $httpRes->{success}) { # high availability
+      $httpRes=$httpTiny->get($MAP_RESOLVERS[1-$resolverId].HTTP::Tiny->_uri_escape($mapName));
+      $retried=1;
+    }
+    if($httpRes->{success}) {
+      my $r_jsonMapData = eval { decode_json($httpRes->{content}) };
+      if(defined $r_jsonMapData) {
+        if(ref $r_jsonMapData eq 'ARRAY' && ref $r_jsonMapData->[0] eq 'HASH'
+           && ref $r_jsonMapData->[0]{mirrors} && 'ARRAY' && defined $r_jsonMapData->[0]{mirrors}[0]) {
+          my $url=$r_jsonMapData->[0]{mirrors}[0];
+          if($url =~ /\/([^\/]+\.sd[7z])$/) {
+            my $filePath=catfile($targetDir,$1);
+            if(-e $filePath) {
+              updateProgressBar($retried?'~':'-');
+            }else{
+              $httpRes=$httpTiny->mirror($url,$filePath);
+              if(! $httpRes->{success} || ! -f $filePath) {
+                push(@dlErrors,"Failed to download \"$url\" to \"$filePath\" (".getHttpErrMsg($httpRes).')');
+                updateProgressBar('!');
+                unlink($filePath);
+              }else{
+                if($retried) {
+                  updateProgressBar($httpRes->{status} == 304 ? '~' : '#');
+                }else{
+                  updateProgressBar($httpRes->{status} == 304 ? '-' : '=');
+                }
+              }
+            }
+          }else{
+            push(@dlErrors,"Skipping unrecognized map download URL \"$url\"");
+            updateProgressBar('?');
+          }
+        }else{
+          push(@dlErrors,"Unknown JSON response from Spring map name resolver for map $mapName");
+          updateProgressBar('?');
+        }
+      }else{
+        push(@dlErrors,"Invalid JSON response from Spring map name resolver for map $mapName");
+        updateProgressBar('?');
+      }
+    }else{
+      push(@dlErrors,"Unable to call Spring map name resolvers for map $mapName");
+      updateProgressBar('!');
+    }
+        
+    if($idx == 4 && @dlErrors == 5) {
+      $downloadAborted=1;
+      endProgressBar();
+      last;
+    }
+  }
+  map {slog($_,2)} @dlErrors;
+  slog('Map downloads aborted',2) if($downloadAborted);
+}
+
+sub downloadMapsUsingPrdWithProgressBar {
+  my ($prdPath,$mapModDataDir,$r_allBarMapNames)=@_;
+  my @dlErrors;
+  newProgressBar($#{$r_allBarMapNames}+1);
+  my $downloadAborted;
+  for my $idx (0..$#{$r_allBarMapNames}) {
+    my $mapName=$r_allBarMapNames->[$idx];
+    updateProgressBar(undef,$mapName);
+    open(my $previousStdout,'>&',\*STDOUT);
+    open(my $previousStderr,'>&',\*STDERR);
+    my $nullDevice=devnull();
+    open(STDOUT,'>',$nullDevice);
+    open(STDERR,'>',$nullDevice);
+    my ($rc,$errMsg)=portableSystem($prdPath,'--disable-logging','--filesystem-writepath',$mapModDataDir,'--download-map',$mapName);
+    open(STDOUT,'>&',$previousStdout);
+    open(STDERR,'>&',$previousStderr);
+    if(! defined $rc) {
+      push(@dlErrors,'Error when calling pr-downloader - '.$errMsg);
+      updateProgressBar('!');
+      $downloadAborted=1;
+      endProgressBar();
+      last;
+    }
+    if($rc) {
+      push(@dlErrors,"pr-downloader exited with return value $rc");
+      updateProgressBar('!');
+    }else{
+      updateProgressBar('=');
+    }
+    if($idx == 4 && @dlErrors == 5) {
+      $downloadAborted=1;
+      endProgressBar();
+      last;
+    }
+  }
+  map {slog($_,2)} @dlErrors;
+  slog('Map downloads aborted',2) if($downloadAborted);
+}
+
 sub escapeWin32Parameter {
   my $arg = shift;
   $arg =~ s/(\\*)"/$1$1\\"/g;
@@ -187,6 +413,20 @@ sub portableExec {
   my @args=($program,@params);
   @args=map {escapeWin32Parameter($_)} @args if($win);
   return exec {$program} @args;
+}
+
+sub portableSystem {
+  my ($program,@params)=@_;
+  my @args=($program,@params);
+  @args=map {escapeWin32Parameter($_)} @args if($win);
+  system {$program} @args;
+  if($? == -1) {
+    return (undef,"Failed to execute: $!");
+  }elsif($? & 127) {
+    return (undef,sprintf("Process died with signal %d, %s coredump", $? & 127 , ($? & 128) ? 'with' : 'without'));
+  }else{
+    return ($? >> 8);
+  }
 }
 
 sub promptStdin {
@@ -249,6 +489,7 @@ sub promptDir {
   my ($prompt,$dirName,$defaultDir,$defaultBaseDir)=@_;
   my $autoInstallValue=$autoInstallData{$dirName};
   my $dir=promptStdin($prompt,$defaultDir,$autoInstallValue);
+  setLastRun($dirName,$dir);
   $conf{$dirName}=$dir;
   my $fullDir=makeAbsolutePath($dir,$defaultBaseDir);
   createDir($fullDir);
@@ -269,7 +510,7 @@ sub promptString {
 }
 
 sub areSamePaths {
-  my ($p1,$p2)=map {File::Spec->canonpath($_)} @_;
+  my ($p1,$p2)=map {canonpath($_)} @_;
   ($p1,$p2)=map {lc($_)} ($p1,$p2) if($win);
   return $p1 eq $p2;
 }
@@ -308,25 +549,24 @@ sub configureUnitsyncDir {
     $unitsyncDir=$conf{autoInstalledSpringDir};
     return;
   }
-  if(! exists $conf{unitsyncDir}) {
-    my @potentialUnitsyncDirs;
-    if($win) {
-      @potentialUnitsyncDirs=(@pathes,File::Spec->catdir(Win32::GetFolderPath(Win32::CSIDL_PROGRAM_FILES()),'Spring'));
-    }elsif($macOs) {
-      @potentialUnitsyncDirs=sort {-M $a <=> -M $b} (grep {-d $_} </Applications/Spring*.app/Contents/MacOS>);
-    }else{
-      @potentialUnitsyncDirs=(split(/:/,$ENV{LD_LIBRARY_PATH}//''),File::Spec->catdir($ENV{HOME},'spring','lib'),'/usr/local/lib','/usr/lib','/usr/lib/spring');
-    }
-    my $defaultUnitsync;
-    foreach my $libPath (@potentialUnitsyncDirs) {
-      if(-f "$libPath/$unitsyncLibName") {
-        $defaultUnitsync=File::Spec->catfile($libPath,$unitsyncLibName);
-        last;
-      }
-    }
-    my $unitsync=promptExistingFile("$currentStep/$nbSteps - Please enter the absolute path of the unitsync library".($win?', usually located in the Spring installation directory on Windows systems':''),$unitsyncLibName,$defaultUnitsync,$autoInstallData{unitsyncPath});
-    $conf{unitsyncDir}=File::Spec->canonpath((fileparse($unitsync))[1]);
+  my @potentialUnitsyncDirs;
+  if($win) {
+    @potentialUnitsyncDirs=(@pathes,catdir(Win32::GetFolderPath(Win32::CSIDL_PROGRAM_FILES()),'Spring'));
+  }elsif($macOs) {
+    @potentialUnitsyncDirs=sort {-M $a <=> -M $b} (grep {-d $_} </Applications/Spring*.app/Contents/MacOS>);
+  }else{
+    @potentialUnitsyncDirs=(split(/:/,$ENV{LD_LIBRARY_PATH}//''),catdir($ENV{HOME},'spring','lib'),'/usr/local/lib','/usr/lib','/usr/lib/spring');
   }
+  my $defaultUnitsync;
+  foreach my $libPath (@potentialUnitsyncDirs) {
+    if(-f "$libPath/$unitsyncLibName") {
+      $defaultUnitsync=catfile($libPath,$unitsyncLibName);
+      last;
+    }
+  }
+  my $unitsync=promptExistingFile("[$currentStep/$nbSteps] Please enter the absolute path of the unitsync library".($win?', usually located in the Spring installation directory on Windows systems':''),$unitsyncLibName,$defaultUnitsync,$autoInstallData{unitsyncPath});
+  setLastRun('unitsyncPath',$unitsync);
+  $conf{unitsyncDir}=canonpath((fileparse($unitsync))[1]);
   $currentStep++;
   $unitsyncDir=$conf{unitsyncDir};
 }
@@ -344,9 +584,9 @@ sub uriEscape {
 }
 
 sub naiveParentDir {
-  my @dirs=File::Spec->splitdir(shift);
+  my @dirs=splitdir(shift);
   pop(@dirs);
-  return File::Spec->catdir(@dirs);
+  return catdir(@dirs);
 }
 
 sub configureSpringDataDir {
@@ -357,7 +597,7 @@ sub configureSpringDataDir {
     my @potentialBaseDataDirs=($unitsyncDir);
     if(! $win) {
       my $parentUnitsyncDir=naiveParentDir($unitsyncDir);
-      push(@potentialBaseDataDirs,File::Spec->canonpath("$parentUnitsyncDir/share/games/spring"));
+      push(@potentialBaseDataDirs,canonpath("$parentUnitsyncDir/share/games/spring"));
       push(@potentialBaseDataDirs,'/usr/share/games/spring') unless($macOs);
     }
     my $defaultBaseDataDir;
@@ -367,11 +607,12 @@ sub configureSpringDataDir {
         last;
       }
     }
-    $baseDataDir=promptExistingDir("$currentStep/$nbSteps - Please enter the absolute path of the main Spring data directory, containing Spring base content".($win?' (usually the Spring installation directory on Windows systems)':''),
+    $baseDataDir=promptExistingDir("[$currentStep/$nbSteps] Please enter the absolute path of the main Spring data directory, containing Spring base content".($win?' (usually the Spring installation directory on Windows systems)':''),
                                    $defaultBaseDataDir,
                                    undef,
                                    sub {my $dir=shift; return -d "$dir/base";},
                                    $autoInstallData{baseDataDir} );
+    setLastRun('baseDataDir',$baseDataDir);
     $currentStep++;
   }
 
@@ -380,12 +621,12 @@ sub configureSpringDataDir {
     my $win32PersonalDir=Win32::GetFolderPath(Win32::CSIDL_PERSONAL());
     my $win32CommonAppDataDir=Win32::GetFolderPath(Win32::CSIDL_COMMON_APPDATA());
     push(@potentialMapModDataDirs,
-         File::Spec->catdir($win32PersonalDir,'My Games','Spring'),
-         File::Spec->catdir($win32PersonalDir,'Spring'),
-         File::Spec->catdir($win32CommonAppDataDir,'Spring'));
+         catdir($win32PersonalDir,'My Games','Spring'),
+         catdir($win32PersonalDir,'Spring'),
+         catdir($win32CommonAppDataDir,'Spring'));
   }else{
-    push(@potentialMapModDataDirs,File::Spec->catdir($ENV{HOME},'.spring'),File::Spec->catdir($ENV{HOME},'.config','spring')) if(defined $ENV{HOME});
-    push(@potentialMapModDataDirs,File::Spec->catdir($ENV{XDG_CONFIG_HOME},'spring')) if(defined $ENV{XDG_CONFIG_HOME});
+    push(@potentialMapModDataDirs,catdir($ENV{HOME},'.spring'),catdir($ENV{HOME},'.config','spring')) if(defined $ENV{HOME});
+    push(@potentialMapModDataDirs,catdir($ENV{XDG_CONFIG_HOME},'spring')) if(defined $ENV{XDG_CONFIG_HOME});
   }
   my $defaultMapModDataDir=exists $conf{autoInstalledSpringDir}?'new':'none';
   foreach my $potentialMapModDataDir (@potentialMapModDataDirs) {
@@ -397,18 +638,20 @@ sub configureSpringDataDir {
     }
   }
   if(exists $conf{autoInstalledSpringDir}) {
-    $mapModDataDir=promptExistingDir("$currentStep/$nbSteps - Please enter the absolute path of the Spring data directory containing the games and maps hosted by the autohost, or ".($defaultMapModDataDir eq 'new' ? 'press enter' : 'enter "new"').' to use a new directory instead',
+    $mapModDataDir=promptExistingDir("[$currentStep/$nbSteps] Please enter the absolute path of the Spring data directory containing the games and maps that will be hosted by the autohost, or ".($defaultMapModDataDir eq 'new' ? 'press enter' : 'enter "new"').' to initialize a new directory instead',
                                      $defaultMapModDataDir,
                                      'new',
                                      undef,
                                      $autoInstallData{mapModDataDir});
+    setLastRun('mapModDataDir',$mapModDataDir);
     $currentStep++;
     if($mapModDataDir eq 'new') {
-      $mapModDataDir=File::Spec->catdir($conf{absoluteVarDir},'spring','data');
-      my $gamesDir=File::Spec->catdir($mapModDataDir,'games');
-      my $mapsDir=File::Spec->catdir($mapModDataDir,'maps');
+      $mapModDataDir=catdir($conf{absoluteVarDir},'spring','data');
+      my $gamesDir=catdir($mapModDataDir,'games');
+      my $mapsDir=catdir($mapModDataDir,'maps');
       slog('Retrieving the list of games available for download...',3);
       my %games=(ba => ['Balanced Annihilation','http://packages.springrts.com/builds/'],
+                 'ba(new)' => ['Balanced Annihilation'],
                  bac => ['BA Chicken Defense','http://packages.springrts.com/builds/'],
                  evo => ['Evolution RTS'],
                  jauria => ['Jauria RTS'],
@@ -422,46 +665,70 @@ sub configureSpringDataDir {
                  techa => ['Tech Annihilation'],
                  xta => ['XTA'],
                  zk => ['Zero-K']);
+      my $prdPath=catfile($conf{autoInstalledSpringDir},$PRD_BIN);
+      if(-f $prdPath && -x _) {
+        $games{'techa(test)'}=['Tech Annihilation','rapid://techa:test'];
+        $games{bar}=['Beyond All Reason','rapid://byar:test'];
+      }
       my %gamesData;
       foreach my $shortName (sort keys %games) {
         my ($name,$repoUrl,$separator)=@{$games{$shortName}};
-        $repoUrl//="http://repos.springrts.com/$shortName/builds/";
-        $separator//='-';
-        my $httpRes=HTTP::Tiny->new(timeout => 10)->request('GET',$repoUrl.'?C=M;O=A');
-        my @gameArchives;
-        @gameArchives=$httpRes->{content} =~ /href="$shortName$separator[^"]+\.sdz">($shortName$separator[^<]+\.sdz)</g if($httpRes->{success});
-        if(! @gameArchives) {
-          slog("Unable to retrieve archives list for game $name",2);
-          next;
-        }
-        my $latestGameArchive=pop(@gameArchives);
-        my $gameVersion;
-        if($latestGameArchive =~ /^$shortName$separator\s*(.+)\.sdz$/) {
-          $gameVersion=$1;
+        if(defined $repoUrl && substr($repoUrl,0,8) eq 'rapid://') {
+          my $rapidTag=substr($repoUrl,8);
+          $gamesData{$shortName}={name => "$name [$rapidTag]", rapid => $rapidTag};
         }else{
-          slog("Unable to retrieve latest archive name for game $name",2);
-          next;
+          my $shortNameInfra=$shortName;
+          $shortNameInfra=~s/\(.+\)$//;
+          $repoUrl//="http://repos.springrts.com/$shortNameInfra/builds/";
+          $separator//='-';
+          my $httpRes=HTTP::Tiny->new(timeout => 10)->request('GET',$repoUrl.'?C=M;O=A');
+          my @gameArchives;
+          @gameArchives=$httpRes->{content} =~ /href="$shortNameInfra$separator[^"]+\.sdz">($shortNameInfra$separator[^<]+\.sdz)</g if($httpRes->{success});
+          if(! @gameArchives) {
+            slog("Unable to retrieve archives list for game $name",2);
+            next;
+          }
+          my $latestGameArchive=pop(@gameArchives);
+          my $gameVersion;
+          if($latestGameArchive =~ /^$shortNameInfra$separator\s*(.+)\.sdz$/) {
+            $gameVersion=$1;
+          }else{
+            slog("Unable to retrieve latest archive name for game $name",2);
+            next;
+          }
+          $gamesData{$shortName}={name => "$name $gameVersion", url => $repoUrl.uriEscape($latestGameArchive), file => $latestGameArchive};
         }
-        $gamesData{$shortName}={name => "$name $gameVersion", url => $repoUrl.uriEscape($latestGameArchive), file => $latestGameArchive};
       }
       createDir($gamesDir);
       print "\nDirectory \"$gamesDir\" has been created to store the games used by the autohost.\n";
       if(%gamesData) {
-        print "You can download one of the following games in this directory automatically by entering the corresponding game abreviation, or you can choose to manually place some games archives there then enter \"none\" when finished:\n";
+        print "You can download one of the following games in this directory automatically by entering the corresponding game abbreviation, or you can choose to manually place some game archives there and enter \"none\" when finished:\n";
         my $defaultShortName;
         foreach my $shortName (sort keys %gamesData) {
           $defaultShortName//=$shortName;
+          $defaultShortName=$shortName if($shortName eq 'bar' && $isBarEngine);
           print "  $shortName : $gamesData{$shortName}{name}\n";
         }
         print "\n";
-        my $downloadedShortName=promptChoice("$currentStep/$nbSteps - Which game do you want to download to initialize the autohost \"games\" directory",[(sort keys %gamesData),'none'],$defaultShortName,$autoInstallData{downloadedGameShortName});
+        my $downloadedShortName=promptChoice("[$currentStep/$nbSteps] Which game do you want to download to initialize the autohost \"games\" directory",[(sort keys %gamesData),'none'],$defaultShortName,$autoInstallData{downloadedGameShortName});
+        setLastRun('downloadedGameShortName',$downloadedShortName);
         $currentStep++;
         if(exists $gamesData{$downloadedShortName}) {
           slog("Downloading $gamesData{$downloadedShortName}{name}...",3);
-          if(downloadFile($gamesData{$downloadedShortName}{url},File::Spec->catfile($gamesDir,$gamesData{$downloadedShortName}{file}))) {
-            slog("File $gamesData{$downloadedShortName}{file} downloaded.",3);
+          if(exists $gamesData{$downloadedShortName}{rapid}) {
+            open(my $previousStdout,'>&',\*STDOUT);
+            open(STDOUT,'>',devnull());
+            my ($rc,$errMsg)=portableSystem($prdPath,'--disable-logging','--filesystem-writepath',$mapModDataDir,'--download-game',$gamesData{$downloadedShortName}{rapid});
+            open(STDOUT,'>&',$previousStdout);
+            fatalError('Error when calling pr-downloader - '.$errMsg)
+                unless(defined $rc);
+            slog("pr-downloader exited with return value $rc",2) if($rc);
           }else{
-            slog("Unable to download file \"$gamesData{$downloadedShortName}{url}\"",2);
+            if(downloadFile($gamesData{$downloadedShortName}{url},catfile($gamesDir,$gamesData{$downloadedShortName}{file}))) {
+              slog("File $gamesData{$downloadedShortName}{file} downloaded.",3);
+            }else{
+              slog("Unable to download file \"$gamesData{$downloadedShortName}{url}\"",2);
+            }
           }
         }
       }else{
@@ -472,23 +739,84 @@ sub configureSpringDataDir {
       }
       createDir($mapsDir);
       print "\nDirectory \"$mapsDir\" has been created to store the maps used by the autohost.\n";
-      print "You can download a minimal set of 3 maps (\"Red Comet\", \"Comet Catcher Redux\" and \"Delta Siege Dry\") in this directory automatically, or you can choose to manually place some maps archives there then enter \"no\" when finished.\n\n";
-      my @mapFiles=(qw'red_comet.sd7 comet_catcher_redux.sd7 deltasiegedry.sd7');
-      my $downloadMaps=promptChoice("$currentStep/$nbSteps - Do you want to download a minimal set of 3 maps to initialize the autohost \"maps\" directory",['yes','no'],'yes',$autoInstallData{downloadMaps});
+      my (@featuredBarMapUrls,@allBarMapNames);
+      if(SpadsUpdater::checkHttpsSupport()) {
+        my $httpTiny=HTTP::Tiny->new(timeout => 10);
+        my $httpRes=$httpTiny->get('https://www.beyondallreason.info/maps');
+        if($httpRes->{success}) {
+          my %dedupLinks;
+          map {$dedupLinks{$_}=1} ($httpRes->{content} =~ /\"(https?\:\/\/[^\"]+\.sd7)\"/g);
+          @featuredBarMapUrls = sort {($a =~ /\/([^\/]+)$/)[0] cmp ($b =~ /\/([^\/]+)$/)[0]} keys %dedupLinks;
+          slog('Failed to retrieve the featured Beyond All Reason maps list (unable to find map URLs in HTML response)',2)
+              unless(@featuredBarMapUrls);
+        }else{
+          slog('Failed to retrieve the featured Beyond All Reason maps list ('.getHttpErrMsg($httpRes).')',2)
+        }
+        if(-f $prdPath && -x _) {
+          $httpRes=$httpTiny->get('https://raw.githubusercontent.com/beyond-all-reason/BYAR-Chobby/master/LuaMenu/configs/gameConfig/byar/mapDetails.lua');
+          if($httpRes->{success}) {
+            my %dedupMaps;
+            map {$dedupMaps{$_}=1} ($httpRes->{content} =~ /^\[\'([^\']+)\'\]\=\{/mg);
+            @allBarMapNames = sort keys %dedupMaps;
+            slog('Failed to retrieve the full list of Beyond All Reason maps (unable to find map names in LUA structure)',2)
+                unless(@allBarMapNames);
+          }else{
+            slog('Failed to retrieve the full list of Beyond All Reason maps ('.getHttpErrMsg($httpRes).')',2)
+          }
+        }
+      }else{
+        slog("Unable to retrieve Beyond All Reason map lists because TLS support is missing (IO::Socket::SSL version 1.42 or superior and Net::SSLeay version 1.49 or superior are required)",2);
+      }
+      my @availableMapSets=('minimal');
+      print "You can download a set of maps in this directory automatically by entering the corresponding name, or you can choose to manually place some map archives there and enter \"none\" when finished:\n";
+      print "  minimal  : minimal set of 3 basic maps (\"Red Comet\", \"Comet Catcher Redux\" and \"Delta Siege Dry\")\n";
+      if(@featuredBarMapUrls) {
+        print '  bar      : set of featured Beyond All Reason maps ('.(scalar @featuredBarMapUrls)." maps)\n";
+        push(@availableMapSets,'bar');
+      }
+      if(@allBarMapNames) {
+        print '  BAR      : all Beyond All Reason maps ('.(scalar @allBarMapNames)." maps)\n";
+        push(@availableMapSets,'BAR');
+      }
+      print "  none     : no automatic map download (map archives must be placed manually in \"$mapsDir\")\n";
+      print "\n";
+      push(@availableMapSets,'none');
+      my $defaultMapSet;
+      if($isBarEngine) {
+        $defaultMapSet = @featuredBarMapUrls ? 'bar' : @allBarMapNames ? 'BAR' : 'minimal';
+      }else{
+        $defaultMapSet='minimal';
+      }
+      my $autoDownloadMaps=promptChoice("[$currentStep/$nbSteps] Which map set do you want to download to initialize the autohost \"maps\" directory",\@availableMapSets,$defaultMapSet,$autoInstallData{autoDownloadMaps});
+      setLastRun('autoDownloadMaps',$autoDownloadMaps);
       $currentStep++;
-      if($downloadMaps eq 'yes') {
+      if($autoDownloadMaps eq 'BAR') {
         slog('Downloading maps...',3);
-        slog('Failed to download maps',2) unless(all {downloadFile("http://planetspads.free.fr/spring/maps/$_",File::Spec->catfile($mapsDir,$_))} @mapFiles);
+        ###  pr-downloader already has too different behaviors between Spring and Recoil...
+        # downloadMapsUsingPrdWithProgressBar($prdPath,$mapModDataDir,\@allBarMapNames);
+        downloadMapsFromNameWithProgressBar(\@allBarMapNames,$mapsDir);
+      }else{
+        my @mapUrls;
+        if($autoDownloadMaps eq 'bar') {
+          @mapUrls=@featuredBarMapUrls;
+        }elsif($autoDownloadMaps eq 'minimal') {
+          @mapUrls=map {'http://planetspads.free.fr/spring/maps/'.$_} (qw'comet_catcher_redux.sd7 deltasiegedry.sd7 red_comet.sd7');
+        }
+        if(@mapUrls) {
+          slog('Downloading maps...',3);
+          downloadMapsWithProgressBar(\@mapUrls,$mapsDir);
+        }
       }
     }else{
       $nbSteps-=2;
     }
   }else{
-    $mapModDataDir=promptExistingDir("$currentStep/$nbSteps - Please enter the absolute path of an optional ".($win?'':'secondary ')."Spring data directory containing additional games and maps (".($defaultMapModDataDir eq 'none' ? 'press enter' : 'enter "none"').' to skip)',
+    $mapModDataDir=promptExistingDir("[$currentStep/$nbSteps] Please enter the absolute path of an optional ".($win?'':'secondary ')."Spring data directory containing additional games and maps (".($defaultMapModDataDir eq 'none' ? 'press enter' : 'enter "none"').' to skip)',
                                      $defaultMapModDataDir,
                                      'none',
                                      undef,
                                      $autoInstallData{mapModDataDir});
+    setLastRun('mapModDataDir',$mapModDataDir);
     $currentStep++;
   }
 
@@ -513,7 +841,7 @@ sub configureSpringDataDir {
 sub checkUnitsync {
   my $cwd=cwd();
 
-  slog('Checking Perl Unitsync interface module...',3);
+  slog('Loading Perl Unitsync interface module...',3);
 
   eval {require PerlUnitSync};
   fatalError("Unable to load Perl UnitSync interface module ($@)") if ($@);
@@ -521,7 +849,8 @@ sub checkUnitsync {
   my $unitsync = eval {PerlUnitSync->new($unitsyncDir)};
   fatalError($@) if ($@);
   fatalError("Failed to load unitsync library from \"$unitsyncDir\" - unknown error") unless(defined $unitsync);
-  
+
+  slog('Initializing Unitsync library...',3);
   if(! $unitsync->Init(0,0)) {
     while(my $unitSyncErr=$unitsync->GetNextError()) {
       chomp($unitSyncErr);
@@ -555,14 +884,26 @@ sub checkUnitsync {
   return \@availableMods;
 }
 
+sub ghAssetTemplateToRegex {
+  my $assetTmpl=shift;
+  return undef if(index($assetTmpl,',') != -1);
+  my $osString = $win ? 'windows' : $macOs ? 'macos' : 'linux';
+  my $bitnessString = $Config{ptrsize} > 4 ? 64 : 32;
+  $assetTmpl=~s/\Q<os>\E/$osString/g;
+  $assetTmpl=~s/\Q<bitness>\E/$bitnessString/g;
+  return $assetTmpl if(eval { qw/^$assetTmpl$/ } && ! $@);
+  return undef;
+}
+
 if(! exists $conf{release}) {
   print "\nThis program will install SPADS in the current working directory, overwriting files if needed.\n";
   print "The installer will ask you $nbSteps questions maximum to customize your installation and pre-configure SPADS.\n";
   print "You can stop this installation at any time by hitting Ctrl-c.\n";
   print "Note: if SPADS is already installed on the system, you don't need to reinstall it to run multiple autohosts. Instead, you can share SPADS binaries and use multiple configuration files and/or configuration macros.\n\n";
 
-  $conf{release}=promptChoice("1/$nbSteps - Which SPADS release do you want to install",[qw'stable testing unstable contrib'],'testing',$autoInstallData{release});
+  $conf{release}=promptChoice("[1/$nbSteps] Which SPADS release do you want to install",[qw'stable testing unstable contrib'],'testing',$autoInstallData{release});
 }
+setLastRun('release',$conf{release});
 
 my $updaterLog=SimpleLog->new(logFiles => [''],
                               logLevels => [4],
@@ -602,151 +943,138 @@ if($sqliteUnavailableReason) {
   slog('--> if you plan to run multiple SPADS instances and want to share players preferences data between instances, you can hit Ctrl-C now to abort SPADS installation and fix the problem',2);
 }
 
-if(! exists $conf{absoluteEtcDir}) {
-  $conf{absoluteEtcDir}=promptDir("2/$nbSteps - Please choose the directory where SPADS configuration files will be stored",'etcDir','etc');
-  $conf{absoluteTemplatesDir}=File::Spec->catdir($conf{absoluteEtcDir},'templates');
-  createDir($conf{absoluteTemplatesDir});
-}
+$conf{absoluteEtcDir}=promptDir("[2/$nbSteps] Please choose the directory where SPADS configuration files will be stored",'etcDir','etc');
+$conf{absoluteTemplatesDir}=catdir($conf{absoluteEtcDir},'templates');
+createDir($conf{absoluteTemplatesDir});
 
-if(! exists $conf{absoluteVarDir}) {
-  $conf{absoluteVarDir}=promptDir("3/$nbSteps - Please choose the directory where SPADS dynamic data will be stored",'varDir','var');
-  createDir(File::Spec->catdir($conf{absoluteVarDir},'plugins'));
-  createDir(File::Spec->catdir($conf{absoluteVarDir},'spring'));
-}
-$updater->{springDir}=File::Spec->catdir($conf{absoluteVarDir},'spring');
+$conf{absoluteVarDir}=promptDir("[3/$nbSteps] Please choose the directory where SPADS dynamic data will be stored",'varDir','var');
+createDir(catdir($conf{absoluteVarDir},'plugins'));
+createDir(catdir($conf{absoluteVarDir},'spring'));
+$updater->{springDir}=catdir($conf{absoluteVarDir},'spring');
 
-if(! exists $conf{absoluteLogDir}) {
-  $conf{absoluteLogDir}=promptDir("4/$nbSteps - Please choose the directory where SPADS will write the logs",'logDir','log',$conf{absoluteVarDir});
-  createDir(File::Spec->catdir($conf{absoluteLogDir},'chat'));
-}
+$conf{absoluteLogDir}=promptDir("[4/$nbSteps] Please choose the directory where SPADS will write the logs",'logDir','log',$conf{absoluteVarDir});
+createDir(catdir($conf{absoluteLogDir},'chat'));
 
-sub ghAssetTemplateToRegex {
-  my $assetTmpl=shift;
-  return undef if(index($assetTmpl,',') != -1);
-  my $osString = $win ? 'windows' : $macOs ? 'macos' : 'linux';
-  my $bitnessString = $Config{ptrsize} > 4 ? 64 : 32;
-  $assetTmpl=~s/\Q<os>\E/$osString/g;
-  $assetTmpl=~s/\Q<bitness>\E/$bitnessString/g;
-  return $assetTmpl if(eval { qw/^$assetTmpl$/ } && ! $@);
-  return undef;
-}
-
-if(! exists $conf{autoManagedSpringVersion}) {
-
-  my $engineBinariesType;
-  if($macOs) {
-    $engineBinariesType='custom';
+my $engineBinariesType;
+if($macOs) {
+  $engineBinariesType='custom';
+}else{
+  my ($githubDescStr,@engineBinChoices);
+  if(SpadsUpdater::checkHttpsSupport()) {
+    $githubDescStr=' engine binaries from GitHub (auto-managed by SPADS),';
+    @engineBinChoices=(qw'official github custom');
   }else{
-    my ($githubDescStr,@engineBinChoices);
-    if($SpadsUpdater::HttpTinyCanSsl) {
-      $githubDescStr=' engine binaries from GitHub (auto-managed by SPADS),';
-      @engineBinChoices=(qw'official github custom');
-    }else{
-      slog("Engine auto-management using GitHub is unavailable because TLS support is missing (IO::Socket::SSL version 1.42 or superior and Net::SSLeay version 1.49 or superior are required)",2);
-      $githubDescStr='';
-      @engineBinChoices=(qw'official custom');
-    }
-    $engineBinariesType=promptChoice("5/$nbSteps - Do you want to use official Spring binary files (auto-managed by SPADS),$githubDescStr or a custom engine installation already existing on the system?",\@engineBinChoices,'official',$autoInstallData{springBinariesType});
+    slog("Engine auto-management using GitHub is unavailable because TLS support is missing (IO::Socket::SSL version 1.42 or superior and Net::SSLeay version 1.49 or superior are required)",2);
+    $githubDescStr='';
+    @engineBinChoices=(qw'official custom');
+  }
+  $engineBinariesType=promptChoice("[5/$nbSteps] Do you want to use official Spring binary files (auto-managed by SPADS),$githubDescStr or a custom engine installation already existing on the system?",\@engineBinChoices,'official',$autoInstallData{springBinariesType});
+  setLastRun('springBinariesType',$engineBinariesType);
+}
+
+if($engineBinariesType eq 'official' || $engineBinariesType eq 'github') {
+  
+  my $autoManagedSpringVersionPrefix='';
+  my $engineStr='Spring';
+  my @engineBranches=(qw'develop master');
+  my %engineReleases=(stable => 'recommended release',
+                      testing => 'next release candidate',
+                      unstable => 'latest develop version');
+  
+  my %ghInfo;
+  if($engineBinariesType eq 'github') {
+    $engineStr='engine';
+    shift(@engineBranches);
+    delete $engineReleases{unstable};
+    $ghInfo{owner}=promptString('       Please enter the GitHub repository owner name','beyond-all-reason',$autoInstallData{githubOwner},sub {$_[0]=~/^[\w\-]+$/});
+    setLastRun('githubOwner',$ghInfo{owner});
+    $isBarEngine=1 if($ghInfo{owner} eq 'beyond-all-reason');
+    $ghInfo{name}=promptString('       Please enter the GitHub repository name','spring',$autoInstallData{githubName},sub {$_[0]=~/^[\w\-\.]+$/});
+    setLastRun('githubName',$ghInfo{name});
+    $ghInfo{tag}=promptString('       Please enter the GitHub release tag template','spring_bar_{BAR105}<version>',$autoInstallData{githubTag}, sub {index($_[0],'<version>') != -1 && index($_[0],',') == -1});
+    setLastRun('githubTag',$ghInfo{tag});
+    my $ghAsset=promptString('       Please enter the GitHub asset regular expression','.+_<os>-<bitness>-minimal-portable\.7z',$autoInstallData{githubAsset},\&ghAssetTemplateToRegex);
+    setLastRun('githubAsset',$ghAsset);
+    $ghInfo{asset}=ghAssetTemplateToRegex($ghAsset);
+    my $ghRepoHash=substr(md5_base64(join('/',@ghInfo{qw'owner name'})),0,7);
+    $ghRepoHash=~tr/\/\+/ab/;
+    my $ghSubdir=$ghInfo{tag};
+    $ghSubdir =~ s/\Q<version>\E/($ghRepoHash)/g;
+    $ghSubdir =~ tr/\\\/\:\*\?\"\<\>\|/........./;
+    $ghInfo{subdir}=$ghSubdir;
+    $autoManagedSpringVersionPrefix="[GITHUB]{owner=$ghInfo{owner},name=$ghInfo{name},tag=$ghInfo{tag},asset=$ghAsset}";
   }
 
-  if($engineBinariesType eq 'official' || $engineBinariesType eq 'github') {
-    
-    my $autoManagedSpringVersionPrefix='';
-    my $engineStr='Spring';
-    my @engineBranches=(qw'develop master');
-    my %engineReleases=(stable => 'recommended release',
-                        testing => 'next release candidate',
-                        unstable => 'latest develop version');
-    
-    my %ghInfo;
-    if($engineBinariesType eq 'github') {
-      $engineStr='engine';
-      shift(@engineBranches);
-      delete $engineReleases{unstable};
-      $ghInfo{owner}=promptString('       Please enter the GitHub repository owner name','beyond-all-reason',$autoInstallData{githubOwner},sub {$_[0]=~/^[\w\-]+$/});
-      $ghInfo{name}=promptString('       Please enter the GitHub repository name','spring',$autoInstallData{githubName},sub {$_[0]=~/^[\w\-\.]+$/});
-      $ghInfo{tag}=promptString('       Please enter the GitHub release tag template','spring_bar_{BAR105}<version>',$autoInstallData{githubTag}, sub {index($_[0],'<version>') != -1 && index($_[0],',') == -1});
-      my $ghAsset=promptString('       Please enter the GitHub asset regular expression','.+_<os>-<bitness>-minimal-portable\.7z',$autoInstallData{githubAsset},\&ghAssetTemplateToRegex);
-      $ghInfo{asset}=ghAssetTemplateToRegex($ghAsset);
-      my $ghRepoHash=substr(md5_base64(join('/',@ghInfo{qw'owner name'})),0,7);
-      $ghRepoHash=~tr/\/\+/ab/;
-      my $ghSubdir=$ghInfo{tag};
-      $ghSubdir =~ s/\Q<version>\E/($ghRepoHash)/g;
-      $ghSubdir =~ tr/\\\/\:\*\?\"\<\>\|/........./;
-      $ghInfo{subdir}=$ghSubdir;
-      $autoManagedSpringVersionPrefix="[GITHUB]{owner=$ghInfo{owner},name=$ghInfo{name},tag=$ghInfo{tag},asset=$ghAsset}";
-    }
-    
-    my (%engineVersions,%engineReleasesVersion,%engineVersionsReleases);
-    slog("Checking available $engineStr versions...",3);
-    if($engineBinariesType eq 'official') {
-      map { my $r_availableSpringVersions=$updater->getAvailableSpringVersions($_);
-            fatalError("Couldn't check available Spring versions") unless(@{$r_availableSpringVersions});
-            $engineVersions{$_}=$r_availableSpringVersions; } @engineBranches;
-    }else{
-      my $r_availableEngineVersions=$updater->getAvailableEngineVersionsFromGithub(\%ghInfo);
-      fatalError("Couldn't check available engine versions") unless(@{$r_availableEngineVersions});
-      $engineVersions{master}=[reverse @{$r_availableEngineVersions}];
-    }
-    
-    map { my $releaseVersion=$updater->resolveEngineReleaseNameToVersion($_,%ghInfo ? \%ghInfo : undef);
-          if(defined $releaseVersion) {
-            $engineReleasesVersion{$_}=$releaseVersion;
-            $engineVersionsReleases{$releaseVersion}{$_}=1;
-          } } (keys %engineReleases);
-
-    my %availableVersions=%engineReleasesVersion;
-    
-    print "\nAvailable $engineStr versions:\n";
-    foreach my $engineBranch (@engineBranches) {
-      my $versionsToAdd=5;
-      while(@{$engineVersions{$engineBranch}}) {
-        my ($printedVersion,$versionComment)=(pop(@{$engineVersions{$engineBranch}}),undef);
-        $availableVersions{$printedVersion}=1;
-        if(exists $engineVersionsReleases{$printedVersion}) {
-          $versionComment=join(' + ', map { '['.uc($_)."] ($engineReleases{$_})" } (sort keys %{$engineVersionsReleases{$printedVersion}}));
-          $versionsToAdd=5;
-        }
-        if($versionsToAdd >= 0) {
-          if($versionsToAdd > 0) {
-            print "  $printedVersion".($versionComment ? " $versionComment":'')."\n";
-          }else{
-            print "  [...]\n";
-          }
-          $versionsToAdd--;
-        }
-      }
-    }
-    print "\nPlease choose the $engineStr version which will be used by the autohost.\n";
-    print 'If you choose "stable"'.(%ghInfo ? ' or "testing"' : ', "testing" or "unstable"').", SPADS will stay up to date with the corresponding $engineStr release by automatically downloading and using new binary files when needed.\n";
-    my @engineVersionExamples=($engineReleasesVersion{stable});
-    push(@engineVersionExamples,$engineReleasesVersion{testing}) unless($engineReleasesVersion{stable} eq $engineReleasesVersion{testing});
-    push(@engineVersionExamples,$engineReleasesVersion{unstable}) if(defined $engineReleasesVersion{unstable});
-    print "If you choose a specific $engineStr version number (\"".join('", "',@engineVersionExamples)."\", ...), SPADS will stick to this version until you manualy change it in the configuration file.\n\n";
-    my $engineVersion;
-    my $autoInstallValue=$autoInstallData{autoManagedSpringVersion};
-    my $autoManagedSpringVersion='';
-    while(! exists $availableVersions{$autoManagedSpringVersion}) {
-      $autoManagedSpringVersion=promptStdin("6/$nbSteps - Which $engineStr version do you want to use (".(join(',',@engineVersionExamples,(sort keys %engineReleases),'...')).')',$engineReleasesVersion{stable},$autoInstallValue);
-      $autoInstallValue=undef;
-      if(exists $availableVersions{$autoManagedSpringVersion}) {
-        $engineVersion=$engineReleasesVersion{$autoManagedSpringVersion} // $autoManagedSpringVersion;
-        my $engineSetupRes=$updater->setupEngine($engineVersion,%ghInfo ? \%ghInfo : undef);
-        if($engineSetupRes < -9) {
-          slog("Installation failed: unable to find, download and extract all required files for $engineStr $engineVersion, please choose a different version",2);
-          $autoManagedSpringVersion='';
-          next;
-        }
-        my $ucfEngineStr=ucfirst($engineStr);
-        fatalError("$ucfEngineStr installation failed: internal error (you can use a custom $engineStr installation as a workaround if you don't know how to fix this issue)") if($engineSetupRes < 0);
-        slog("$ucfEngineStr $engineVersion is already installed",3) if($engineSetupRes == 0);
-      }
-    }
-    $conf{autoManagedSpringVersion}=$autoManagedSpringVersionPrefix.$autoManagedSpringVersion;
-    $conf{autoInstalledSpringDir}=$updater->getEngineDir($engineVersion,%ghInfo ? \%ghInfo : undef);
+  my (%engineVersions,%engineReleasesVersion,%engineVersionsReleases);
+  slog("Checking available $engineStr versions...",3);
+  if($engineBinariesType eq 'official') {
+    map { my $r_availableSpringVersions=$updater->getAvailableSpringVersions($_);
+          fatalError("Couldn't check available Spring versions") unless(@{$r_availableSpringVersions});
+          $engineVersions{$_}=$r_availableSpringVersions; } @engineBranches;
   }else{
-    $conf{autoManagedSpringVersion}='';
+    my $r_availableEngineVersions=$updater->getAvailableEngineVersionsFromGithub(\%ghInfo);
+    fatalError("Couldn't check available engine versions") unless(@{$r_availableEngineVersions});
+    $engineVersions{master}=[reverse @{$r_availableEngineVersions}];
   }
+  
+  map { my $releaseVersion=$updater->resolveEngineReleaseNameToVersion($_,%ghInfo ? \%ghInfo : undef);
+        if(defined $releaseVersion) {
+          $engineReleasesVersion{$_}=$releaseVersion;
+          $engineVersionsReleases{$releaseVersion}{$_}=1;
+        } } (keys %engineReleases);
+
+  my %availableVersions=%engineReleasesVersion;
+  
+  print "\nAvailable $engineStr versions:\n";
+  foreach my $engineBranch (@engineBranches) {
+    my $versionsToAdd=5;
+    while(@{$engineVersions{$engineBranch}}) {
+      my ($printedVersion,$versionComment)=(pop(@{$engineVersions{$engineBranch}}),undef);
+      $availableVersions{$printedVersion}=1;
+      if(exists $engineVersionsReleases{$printedVersion}) {
+        $versionComment=join(' + ', map { '['.uc($_)."] ($engineReleases{$_})" } (sort keys %{$engineVersionsReleases{$printedVersion}}));
+        $versionsToAdd=5;
+      }
+      if($versionsToAdd >= 0) {
+        if($versionsToAdd > 0) {
+          print "  $printedVersion".($versionComment ? " $versionComment":'')."\n";
+        }else{
+          print "  [...]\n";
+        }
+        $versionsToAdd--;
+      }
+    }
+  }
+  print "\nPlease choose the $engineStr version which will be used by the autohost.\n";
+  print 'If you choose "stable"'.(%ghInfo ? ' or "testing"' : ', "testing" or "unstable"').", SPADS will stay up to date with the corresponding $engineStr release by automatically downloading and using new binary files when needed.\n";
+  my @engineVersionExamples=($engineReleasesVersion{stable});
+  push(@engineVersionExamples,$engineReleasesVersion{testing}) unless($engineReleasesVersion{stable} eq $engineReleasesVersion{testing});
+  push(@engineVersionExamples,$engineReleasesVersion{unstable}) if(defined $engineReleasesVersion{unstable});
+  print "If you choose a specific $engineStr version number (\"".join('", "',@engineVersionExamples)."\", ...), SPADS will stick to this version until you manualy change it in the configuration file.\n\n";
+  my $engineVersion;
+  my $autoInstallValue=$autoInstallData{autoManagedSpringVersion};
+  my $autoManagedSpringVersion='';
+  while(! exists $availableVersions{$autoManagedSpringVersion}) {
+    $autoManagedSpringVersion=promptStdin("[6/$nbSteps] Which $engineStr version do you want to use (".(join(',',@engineVersionExamples,(sort keys %engineReleases),'...')).')',$engineReleasesVersion{stable},$autoInstallValue);
+    $autoInstallValue=undef;
+    if(exists $availableVersions{$autoManagedSpringVersion}) {
+      $engineVersion=$engineReleasesVersion{$autoManagedSpringVersion} // $autoManagedSpringVersion;
+      my $engineSetupRes=$updater->setupEngine($engineVersion,%ghInfo ? \%ghInfo : undef,1);
+      if($engineSetupRes < -9) {
+        slog("Installation failed: unable to find, download and extract all required files for $engineStr $engineVersion, please choose a different version",2);
+        $autoManagedSpringVersion='';
+        next;
+      }
+      my $ucfEngineStr=ucfirst($engineStr);
+      fatalError("$ucfEngineStr installation failed: internal error (you can use a custom $engineStr installation as a workaround if you don't know how to fix this issue)") if($engineSetupRes < 0);
+      slog("$ucfEngineStr $engineVersion is already installed",3) if($engineSetupRes == 0);
+    }
+  }
+  setLastRun('autoManagedSpringVersion',$autoManagedSpringVersion);
+  $conf{autoManagedSpringVersion}=$autoManagedSpringVersionPrefix.$autoManagedSpringVersion;
+  $conf{autoInstalledSpringDir}=$updater->getEngineDir($engineVersion,%ghInfo ? \%ghInfo : undef);
+}else{
+  $conf{autoManagedSpringVersion}='';
 }
 
 if($macOs) {
@@ -762,10 +1090,11 @@ configureSpringDataDir();
 my $r_availableMods=checkUnitsync();
 my @availableMods=sort(@{$r_availableMods});
 
-my $springServerType=promptChoice("$currentStep/$nbSteps - Which type of server do you want to use (\"headless\" requires much more CPU/memory and doesn't support \"ghost maps\", but it allows running AI bots and LUA scripts on server side)?",
+my $springServerType=promptChoice("[$currentStep/$nbSteps] Which type of server do you want to use (\"headless\" requires much more CPU/memory and doesn't support \"ghost maps\", but it allows running AI bots and LUA scripts on server side)?",
                                   [qw'dedicated headless'],
                                   'dedicated',
                                   $autoInstallData{springServerType});
+setLastRun('springServerType',$springServerType);
 $conf{springServerType} = exists $conf{autoInstalledSpringDir} ? $springServerType : '';
 $currentStep++;
 
@@ -777,18 +1106,19 @@ if(exists $conf{autoInstalledSpringDir}) {
   my @potentialSpringServerDirs=($unitsyncDir);
   if(! $win) {
     my $parentUnitsyncDir=naiveParentDir($unitsyncDir);
-    push(@potentialSpringServerDirs,File::Spec->canonpath("$parentUnitsyncDir/bin"));
+    push(@potentialSpringServerDirs,canonpath("$parentUnitsyncDir/bin"));
     push(@potentialSpringServerDirs,'/usr/games') unless($macOs);
   }
   my $defaultSpringServerPath;
   foreach my $potentialSpringServerDir (@potentialSpringServerDirs) {
     if(-f "$potentialSpringServerDir/$springServerName") {
-      $defaultSpringServerPath=File::Spec->catfile($potentialSpringServerDir,$springServerName);
+      $defaultSpringServerPath=catfile($potentialSpringServerDir,$springServerName);
       last;
     }
   }
 
-  $conf{springServer}=promptExistingFile("$currentStep/$nbSteps - Please enter the absolute path of the spring $springServerType server",$springServerName,$defaultSpringServerPath,$autoInstallData{springServer});
+  $conf{springServer}=promptExistingFile("[$currentStep/$nbSteps] Please enter the absolute path of the spring $springServerType server",$springServerName,$defaultSpringServerPath,$autoInstallData{springServer});
+  setLastRun('springServer',$conf{springServer});
   $currentStep++;
 }
 
@@ -796,7 +1126,7 @@ $conf{modName}='_NO_GAME_FOUND_';
 if(defined $autoInstallData{modName}) {
   $conf{modName}=$autoInstallData{modName};
   slog("Default hosted game set to \"$conf{modName}\" from auto-install data",3);
-    $nbSteps-=2;
+  $nbSteps-=2;
 }else{
   if(! @availableMods) {
     slog("No Spring game found, consequently the \"modName\" parameter in \"hostingPresets.conf\" will NOT be auto-configured",2);
@@ -814,7 +1144,7 @@ if(defined $autoInstallData{modName}) {
       }
       print "\n";
       while($chosenModNb !~ /^\d+$/ || $chosenModNb > $#availableMods) {
-        print "$currentStep/$nbSteps - Please choose the default hosted game ? ";
+        print "[$currentStep/$nbSteps] Please choose the default hosted game ? ";
         $chosenModNb=<STDIN>;
         $chosenModNb//='';
         chomp($chosenModNb);
@@ -842,7 +1172,7 @@ if(defined $autoInstallData{modName}) {
 
     if($isLatestMod) {
       my $chosenModText=$#availableMods>0?'You chose the latest version of this game currently available in your "games" and "packages" folders. ':'';
-      my $useLatestMod=promptChoice("$currentStep/$nbSteps - ${chosenModText}Do you want to enable new game auto-detection to always host the latest version of the game available in your \"games\" and \"packages\" folders?",[qw'yes no'],'yes',$autoInstallData{useLatestMod});
+      my $useLatestMod=promptChoice("[$currentStep/$nbSteps] ${chosenModText}Do you want to enable new game auto-detection to always host the latest version of the game available in your \"games\" and \"packages\" folders?",[qw'yes no'],'yes');
       $currentStep++;
       if($useLatestMod eq 'yes') {
         slog("Using following regular expression as autohost default game filter: \"$modFilter\"",3);
@@ -857,24 +1187,28 @@ if(defined $autoInstallData{modName}) {
     }
   }
 }
+setLastRun('modName',$conf{modName});
 
-$conf{lobbyLogin}=promptString("$currentStep/$nbSteps - Please enter the autohost lobby login (the lobby account must already exist)",undef,$autoInstallData{lobbyLogin});
+$conf{lobbyLogin}=promptString("[$currentStep/$nbSteps] Please enter the autohost lobby login (the lobby account must already exist)",undef,$autoInstallData{lobbyLogin});
+setLastRun('lobbyLogin',$conf{lobbyLogin});
 $currentStep++;
-$conf{lobbyPassword}=promptString("$currentStep/$nbSteps - Please enter the autohost lobby password",undef,$autoInstallData{lobbyPassword});
+$conf{lobbyPassword}=promptString("[$currentStep/$nbSteps] Please enter the autohost lobby password",undef,$autoInstallData{lobbyPassword});
+setLastRun('lobbyPassword',$conf{lobbyPassword});
 $currentStep++;
-$conf{owner}=promptString("$currentStep/$nbSteps - Please enter the lobby login of the autohost owner",undef,$autoInstallData{owner});
+$conf{owner}=promptString("[$currentStep/$nbSteps] Please enter the lobby login of the autohost owner",undef,$autoInstallData{owner});
+setLastRun('owner',$conf{owner});
 $currentStep++;
 
 $conf{preferencesData}=$sqliteUnavailableReason?'private':'shared';
 
 my @confFiles=qw'banLists.conf battlePresets.conf commands.conf hostingPresets.conf levels.conf mapBoxes.conf mapLists.conf spads.conf users.conf';
 slog('Downloading SPADS configuration templates',3);
-exit 1 unless(all {downloadFile("$spadsUrl/conf/templates/$conf{release}/$_",File::Spec->catdir($conf{etcDir},'templates',$_))} @confFiles);
+exit 1 unless(all {downloadFile("$spadsUrl/conf/templates/$conf{release}/$_",catdir($conf{etcDir},'templates',$_))} @confFiles);
 slog('Customizing SPADS configuration',3);
 foreach my $confFile (@confFiles) {
-  my $confFileTemplate=File::Spec->catfile($conf{etcDir},'templates',$confFile);
+  my $confFileTemplate=catfile($conf{etcDir},'templates',$confFile);
   fatalError("Unable to read configuration template \"$confFileTemplate\"") unless(open(TEMPLATE,"<$confFileTemplate"));
-  my $confFilePath=File::Spec->catfile($conf{etcDir},$confFile);
+  my $confFilePath=catfile($conf{etcDir},$confFile);
   fatalError("Unable to write configuration file \"$confFilePath\"") unless(open(CONF,">$confFilePath"));
   while(<TEMPLATE>) {
     foreach my $macroName (keys %conf) {
@@ -886,6 +1220,14 @@ foreach my $confFile (@confFiles) {
   close(TEMPLATE);
 }
 
+my $lastRunFile=catfile($conf{installDir},'spadsInstaller.lastRun');
+if(open(my $lastRunFh,'>',$lastRunFile)) {
+  map {print $lastRunFh "$_:$lastRun{$_}\n"} @lastRunOrder;
+  close($lastRunFh);
+}else{
+  slog("Failed to save install parameters in \"last run\" file \"$lastRunFile\": $!",2);
+}
+
 print "\nSPADS has been installed in current directory with default configuration and minimal customization.\n";
 print "You can check your configuration files in \"$conf{etcDir}\" and update them if needed.\n";
-print "You can then launch SPADS with \"perl spads.pl ".File::Spec->catfile($conf{etcDir},'spads.conf')."\"\n";
+print "You can then launch SPADS with \"perl spads.pl ".catfile($conf{etcDir},'spads.conf')."\"\n";

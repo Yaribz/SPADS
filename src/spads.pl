@@ -50,14 +50,12 @@ use SpringLobbyInterface;
 sub int32 { return unpack('l',pack('l',shift)) }
 sub uint32 { return unpack('L',pack('L',shift)) }
 
-our $spadsVer='0.13.2';
+our $spadsVer='0.13.3';
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $macOs=$^O eq 'darwin';
 
 our $cwd=cwd();
-
-my $ioSocketSslVer=eval { require IO::Socket::SSL; $IO::Socket::SSL::VERSION; };
 
 my %optionTypes = (
   0 => "error",
@@ -653,11 +651,9 @@ if(defined $tlsAction && ($tlsAction eq 'revoke' || $tlsAction eq 'list' || defi
 }
 
 my $useTls;
-if($conf{lobbyTls} eq 'off') {
-  $useTls=0;
-}else{
-  fatalError('Module IO::Socket::SSL required for TLS support') if($conf{lobbyTls} eq 'on' &&  ! defined $ioSocketSslVer);
-  $useTls = defined $ioSocketSslVer ? 1 : 0;
+if($conf{lobbyTls} ne 'off') {
+  $useTls = eval {require IO::Socket::SSL; 1};
+  fatalError('Module IO::Socket::SSL required for TLS support') if($conf{lobbyTls} eq 'on' &&  ! $useTls);
 }
 
 # Console title update (Windows only) #########################################
@@ -12688,7 +12684,7 @@ sub hVersion {
   if(defined $simpleEventModel && $simpleEventModel ne 'internal') {
     $versionedComponents{AnyEvent}='v'.$AnyEvent::VERSION."$C{1} ($simpleEventModel)";
   }
-  $versionedComponents{'IO::Socket::SSL'}='v'.$ioSocketSslVer if(defined $ioSocketSslVer);
+  $versionedComponents{'IO::Socket::SSL'}='v'.$IO::Socket::SSL::VERSION if(defined $IO::Socket::SSL::VERSION);
   $versionedComponents{'DBD::SQLite'}="v$DBD::SQLite::VERSION $C{1}(SQLite $spads->{preferences}{sqlite_version})" if($spads->{sharedDataTs}{preferences});
   if(my $inlinePythonVer=getPerlModuleVersion('Inline::Python')) {
     my $inlinePythonVer="v$inlinePythonVer";
@@ -15263,7 +15259,7 @@ if(! $abortSpadsStartForAutoUpdate) {
   if($conf{autoManagedSpringVersion} ne '') {
     %autoManagedEngineData=%{SpadsConf::parseAutoManagedSpringVersion($conf{autoManagedSpringVersion})};
     fatalError("The \"autoManagedSpringVersion\" setting is configured to enable auto-download of engine using GitHub, but TLS support is missing (IO::Socket::SSL version 1.42 or superior and Net::SSLeay version 1.49 or superior are required)")
-        if(defined $autoManagedEngineData{github} && ! $SpadsUpdater::HttpTinyCanSsl);
+        if(defined $autoManagedEngineData{github} && ! SpadsUpdater::checkHttpsSupport());
     my $engineStr = defined $autoManagedEngineData{github} ? 'engine' : 'Spring';
     if($autoManagedEngineData{mode} eq 'version') {
       fatalError("Unable to auto-install $engineStr version \"$autoManagedEngineData{version}\"")
