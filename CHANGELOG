@@ -1247,6 +1247,7 @@ spadsInstaller.pl:
       last run parameters are now saved in file "spadsInstaller.lastRun", which can be renamed to "spadsInstaller.auto" to generate auto-installations
       remove obsolete handling of configuration settings passed as command line parameters (was used on Linux when self-restarting with previous unitsync interface module)
       import File::Spec functions instead of using fully qualified names
+0.32: fix installer not correctly auto-restarting after self-update
 
 SpadsPluginApi.pm:
 =================

@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.31 (2023/03/31)
+# Version 0.32 (2023/04/01)
 
 use strict;
 
@@ -926,7 +926,7 @@ if($updaterRc > 0) {
   }
   slog('Restarting installer after update...',3);
   sleep(2);
-  portableExec($^X,$0,@ARGV,$conf{release});
+  portableExec($^X,$0,$conf{release});
   fatalError('Unable to restart installer');
 }
 slog('SPADS components are up to date, proceeding with installation...',3);
