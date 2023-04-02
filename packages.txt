@@ -44,7 +44,7 @@ update.pl:update_0.13.pl
 7za:7za-16.2
 7za.exe:7za-9.20.exe
 argparse.py:argparse-1.2.1.py
-getDefaultModOptions.pl:getDefaultModOptions_0.7.pl
+getDefaultModOptions.pl:getDefaultModOptions_0.8.pl
 help.dat:help_0.14.0.dat
 helpSettings.dat:helpSettings_0.7.2.dat
 PerlUnitSync.pm:PerlUnitSync-106.0b.pm
@@ -65,7 +65,7 @@ update.pl:update_0.14.pl
 7za:7za-16.2
 7za.exe:7za-9.20.exe
 argparse.py:argparse-1.2.1.py
-getDefaultModOptions.pl:getDefaultModOptions_0.7.pl
+getDefaultModOptions.pl:getDefaultModOptions_0.8.pl
 help.dat:help_0.14.0.dat
 helpSettings.dat:helpSettings_0.7.2.dat
 PerlUnitSync.pm:PerlUnitSync-106.0b.pm

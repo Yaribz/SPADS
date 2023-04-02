@@ -23,6 +23,8 @@ getDefaultModOptions.pl:
      it is now possible to specify unitsync library path as command line parameter (compatibility with new PerlUnitSync interface module)
      several Spring data directories can now be specified
 0.7: replace the basic list functions any/all/none/notall with those provided by the List::Util Perl module (requires Perl >= 5.19.5)
+0.8: use new object-oriented unitsync interface
+     fix minor output misformatting when modoptions contain an empty section
 
 help.dat:
 ========
