@@ -4,7 +4,7 @@ use strict;
 
 use SpadsPluginApi;
 
-my $pluginVersion='0.2';
+my $pluginVersion='0.3';
 my $requiredSpadsVersion='0.12.18';
 
 my %globalPluginParams = ( enabled => ['bool'],
@@ -67,6 +67,8 @@ sub hLobbyDenied {
   my $registrationEmail=getPluginConf()->{registrationEmail};
   $registrationEmail =~ s/\%LOBBY_LOGIN\%/$lobbyLoginInEmail/g;
   push(@registerCommand,$registrationEmail) unless($registrationEmail eq '');
+
+  my $localSystemHash = defined &::getLocalSystemHashForLogin ? ::getLocalSystemHashForLogin() : 0;
   
   queueLobbyCommand(\@registerCommand,
                     { REGISTRATIONDENIED => sub { ::cbLoginDenied(undef,$loginDeniedReason." | failed to auto-register: $_[1]") },
@@ -75,7 +77,7 @@ sub hLobbyDenied {
                         my $localLanIp=$r_conf->{localLanIp};
                         $localLanIp=::getLocalLanIp() unless($localLanIp);
                         my $legacyFlags = ($lobby->{serverParams}{protocolVersion} =~ /^(\d+\.\d+)/ && $1 > 0.36) ? '' : ' l t cl';
-                        queueLobbyCommand(['LOGIN',$lobbyLogin,$lobby->marshallPasswd($r_conf->{lobbyPassword}),0,$localLanIp,"SPADS v$::spadsVer",0,'b sp'.$legacyFlags],
+                        queueLobbyCommand(['LOGIN',$lobbyLogin,$lobby->marshallPasswd($r_conf->{lobbyPassword}),0,$localLanIp,"SPADS v$spadsVersion",$localSystemHash,'b sp'.$legacyFlags],
                                           {ACCEPTED => \&::cbLoginAccepted,
                                            DENIED => \&::cbLoginDenied,
                                            AGREEMENTEND => \&hLobbyAgreementEnd},
