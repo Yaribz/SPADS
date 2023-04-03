@@ -22,7 +22,7 @@
 use strict;
 
 use Config;
-use Cwd;
+use Cwd 'cwd';
 use Digest::MD5 'md5_base64';
 use Fcntl qw':DEFAULT :flock';
 use File::Copy;
@@ -47,63 +47,60 @@ use SpadsUpdater;
 use SpringAutoHostInterface;
 use SpringLobbyInterface;
 
-sub int32 { return unpack('l',pack('l',shift)) }
-sub uint32 { return unpack('L',pack('L',shift)) }
+use constant {
+  MSWIN32 => $^O eq 'MSWin32',
+  DARWIN => $^O eq 'darwin',
+};
 
-our $spadsVer='0.13.4';
-
-my $win=$^O eq 'MSWin32' ? 1 : 0;
-my $macOs=$^O eq 'darwin';
-
-our $cwd=cwd();
-
-my %optionTypes = (
-  0 => "error",
-  1 => "bool",
-  2 => "list",
-  3 => "number",
-  4 => "string",
-  5 => "section"
-);
-
-my %ircColors;
-my %noColor;
-for my $i (0..15) {
-  $ircColors{$i}=''.sprintf('%02u',$i);
-  $noColor{$i}='';
-}
-my @ircStyle=(\%ircColors,'');
-my @noIrcStyle=(\%noColor,'');
-my @readOnlySettings=qw'description commandsfile battlepreset hostingpreset welcomemsg welcomemsgingame maplink ghostmaplink preset battlename advertmsg endgamecommand endgamecommandenv endgamecommandmsg';
-
-my @packagesSpads=qw'spads.pl help.dat helpSettings.dat PerlUnitSync.pm springLobbyCertificates.dat SpringAutoHostInterface.pm SpringLobbyInterface.pm SimpleEvent.pm SimpleLog.pm SpadsConf.pm SpadsUpdater.pm SpadsPluginApi.pm argparse.py replay_upload.py';
-if($win) {
-  push(@packagesSpads,'7za.exe');
-}elsif(! $macOs) {
-  push(@packagesSpads,'7za');
-}
-
-my ($lockFh,$pidFile,$lockAcquired,$auLockFh,$periodicAutoUpdateLockAcquired);
-
-eval "use HTML::Entities";
-my $htmlEntitiesUnavailable=$@;
-
-if($win) {
+if(MSWIN32) {
   eval { require Win32; 1; }
-    or die "$@Missing dependency: Win32 Perl module\n";
+      or die "$@Missing dependency: Win32 Perl module\n";
   eval { require Win32::API; 1; }
-    or die "$@Missing dependency: Win32::API Perl module\n";
+      or die "$@Missing dependency: Win32::API Perl module\n";
   eval { Win32::API->VERSION(0.73); 1; }
-    or die "$@SPADS requires Win32::API module version 0.73 or superior.\nPlease update your Perl installation (Perl 5.16.2 or superior is recommended)\n";
+      or die "$@SPADS requires Win32::API module version 0.73 or superior.\nPlease update your Perl installation (Perl 5.16.2 or superior is recommended)\n";
   eval { require Win32::TieRegistry; Win32::TieRegistry->import(':KEY_'); 1; }
-    or die "$@Missing dependency: Win32::TieRegistry Perl module\n";
+      or die "$@Missing dependency: Win32::TieRegistry Perl module\n";
+  Win32::API->Import('msvcrt', 'int __cdecl _putenv (char* envstring)')
+      or die 'Failed to import _putenv function from msvcrt.dll ('.getLastWin32Error().")\n";
 }else{
   eval { require FFI::Platypus; 1; }
     or die "$@Missing dependency: FFI::Platypus Perl module\n";
 }
 
-my %macOsData;
-if($macOs) {
+SimpleEvent::addProxyPackage('SpadsPluginApi');
+SimpleEvent::addProxyPackage('Inline');
+
+# Constants ###################################################################
+
+our $SPADS_VERSION='0.13.5';
+our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
+
+our $CWD=cwd();
+my $PATH_SEP=MSWIN32?';':':';
+
+my @SPADS_PACKAGES=qw'spads.pl help.dat helpSettings.dat PerlUnitSync.pm springLobbyCertificates.dat SpringAutoHostInterface.pm SpringLobbyInterface.pm SimpleEvent.pm SimpleLog.pm SpadsConf.pm SpadsUpdater.pm SpadsPluginApi.pm argparse.py replay_upload.py';
+if(MSWIN32) {
+  push(@SPADS_PACKAGES,'7za.exe');
+}elsif(! DARWIN) {
+  push(@SPADS_PACKAGES,'7za');
+}
+
+my %IRC_COLORS;
+my %NO_COLOR;
+for my $i (0..15) {
+  $IRC_COLORS{$i}=''.sprintf('%02u',$i);
+  $NO_COLOR{$i}='';
+}
+my @IRC_STYLE=(\%IRC_COLORS,'');
+my @NO_IRC_STYLE=(\%NO_COLOR,'');
+
+my @READ_ONLY_SETTINGS=qw'description commandsfile battlepreset hostingpreset welcomemsg welcomemsgingame maplink ghostmaplink preset battlename advertmsg endgamecommand endgamecommandenv endgamecommandmsg';
+
+my @OPTION_TYPES=qw'error bool list number string section';
+
+my %MACOS_SYSTEM_INFO;
+if(DARWIN) {
   my $sysctlBin;
   if(-x '/sbin/sysctl') {
     $sysctlBin='/sbin/sysctl';
@@ -116,7 +113,7 @@ if($macOs) {
     my @sysctlOut=`$sysctlBin -a 2>/dev/null`;
     foreach my $line (@sysctlOut) {
       if($line =~ /^\s*([^:]*[^\s:])\s*:\s*(.*[^\s])\s*$/) {
-        $macOsData{$1}=$2;
+        $MACOS_SYSTEM_INFO{$1}=$2;
       }
     }
   }
@@ -132,13 +129,13 @@ if($macOs) {
     my @swVersOut=`$swVersBin 2>/dev/null`;
     foreach my $line (@swVersOut) {
       if($line =~ /^\s*([^:]*[^\s:])\s*:\s*(.*[^\s])\s*$/) {
-        $macOsData{$1}=$2;
+        $MACOS_SYSTEM_INFO{$1}=$2;
       }
     }
   }
 }
 
-our %spadsHandlers = (
+my %SPADS_CORE_CMD_HANDLERS = (
   addbot => \&hAddBot,
   addbox => \&hAddBox,
   advert => \&hAdvert,
@@ -220,31 +217,31 @@ our %spadsHandlers = (
   whois => \&hWhois,
   '#skill' => \&hSkill );
 
-our %apiHandlers = ( getSettings => \&hApiGetSettings,
-                     status => \&hApiStatus );
-our %apiCmdRights = ( getSettings => 'list' );
+my %SPADS_CORE_API_HANDLERS = ( getSettings => \&hApiGetSettings,
+                                status => \&hApiStatus );
+my %SPADS_CORE_API_RIGHTS = ( getSettings => 'list' );
 
-my %alerts=('UPD-001' => 'Unable to check for SPADS update',
+my %ALERTS=('UPD-001' => 'Unable to check for SPADS update',
             'UPD-002' => 'Major SPADS update available',
             'UPD-003' => 'Unable to apply SPADS update',
             'SPR-001' => 'Spring server crashed');
 
-my %rankSkill=(0 => 10,
-               1 => 13,
-               2 => 16,
-               3 => 20,
-               4 => 25,
-               5 => 30,
-               6 => 35,
-               7 => 38);
-my %rankTrueSkill=(0 => 20,
-                   1 => 22,
-                   2 => 23,
-                   3 => 24,
-                   4 => 25,
-                   5 => 26,
-                   6 => 28,
-                   7 => 30);
+my %RANK_SKILL=(0 => 10,
+                1 => 13,
+                2 => 16,
+                3 => 20,
+                4 => 25,
+                5 => 30,
+                6 => 35,
+                7 => 38);
+my %RANK_TRUESKILL=(0 => 20,
+                    1 => 22,
+                    2 => 23,
+                    3 => 24,
+                    4 => 25,
+                    5 => 26,
+                    6 => 28,
+                    7 => 30);
 
 our %JSONRPC_ERRORS = ( RATE_LIMIT_EXCEEDED => -1,
                         INSUFFICIENT_PRIVILEGES => -2,
@@ -265,74 +262,26 @@ my %JSONRPC_ERRORMSGS = ( -1 => 'Rate limit exceeded',
                           -32603 => 'Internal error' );
 map {$JSONRPC_ERRORMSGS{$_}='Server error'} (-32099..-32000);
 
-# Basic checks ################################################################
+my @DEFAULT_COLOR_ORDER=(qw'red blue green yellow cyan magenta orange purple teal gold azure pink lime gray');
 
-sub invalidUsage {
-  print "usage: perl $0 <configurationFile> [--doc] [<macroName>=<macroValue> [...]]\n";
-  print <<EOH;
-       perl $0 <configurationFile> --tls-cert-trust
-       perl $0 <configurationFile> --tls-cert-trust=<certificateHash>
-       perl $0 <configurationFile> --tls-cert-trust=<hostName>:<certificateHash>
-       perl $0 <configurationFile> --tls-cert-revoke=<certificateHash>
-       perl $0 <configurationFile> --tls-cert-revoke=<hostName>:<certificateHash>
-       perl $0 <configurationFile> --tls-cert-list
-       perl $0 <configurationFile> --tls-cert-list=<hostName>
-EOH
-  exit 1;
-}
+# Command line parameters handling ############################################
 
 invalidUsage() if($#ARGV < 0 || ! (-f $ARGV[0]));
 
-my $genDoc=0;
-my ($tlsAction,$tlsHost,$tlsCert);
-sub parseMacroTokens {
-  my @macroTokens=@_;
-  my %macros;
-  foreach my $macroToken (@macroTokens) {
-    if($macroToken =~ /^--tls-cert-(trust|revoke|list)(?:=(.+))?$/i) {
-      return undef if(defined $tlsAction);
-      $tlsAction=lc($1);
-      my $tlsParam=lc($2) if(defined $2);
-      if(defined $tlsParam) {
-        if($tlsAction eq 'list') {
-          return undef unless($tlsParam =~ /^\w[\w\-\.]*$/);
-          $tlsHost=$tlsParam;
-        }elsif($tlsParam =~ /^(\w[\w\-\.]*):([\da-f]+)$/) {
-          ($tlsHost,$tlsCert)=($1,$2);
-        }elsif($tlsParam =~ /^[\da-f]+$/) {
-          $tlsCert=$tlsParam;
-        }else{
-          return undef;
-        }
-      }else{
-        return undef if($tlsAction eq 'revoke');
-      }
-    }elsif($macroToken =~ /^([^=]+)=(.*)$/) {
-      $macros{$1}=$2;
-    }elsif($macroToken eq "--doc") {
-      $genDoc=1;
-    }else{
-      return undef;
-    }
-  }
-  return \%macros;
+my ($confFile,$genDoc,$tlsAction,$tlsHost,$tlsCert);
+our %confMacros;
+{
+  my @cmdLineArgs=@ARGV;
+  $confFile=shift(@cmdLineArgs);
+  my $p_macroData;
+  ($p_macroData,$genDoc,$tlsAction,$tlsHost,$tlsCert)=parseCmdLineArgs(@cmdLineArgs);
+  invalidUsage() unless(defined $p_macroData);
+  %confMacros=%{$p_macroData};
 }
 
-my @macroDefinitions=@ARGV;
-my $confFile=shift(@macroDefinitions);
-my $p_macroData=parseMacroTokens(@macroDefinitions);
-invalidUsage() unless(defined $p_macroData);
-our %confMacros=%{$p_macroData};
-
-SimpleEvent::addProxyPackage('SpadsPluginApi');
-SimpleEvent::addProxyPackage('Inline');
+# Default logging system ######################################################
 
 my $sLog=SimpleLog->new(prefix => "[SPADS] ");
-our $spads=SpadsConf->new($confFile,$sLog,\%confMacros);
-
-sub slog {
-  $sLog->log(@_);
-}
 
 $SIG{__DIE__} = sub {
   return unless(defined $^S && ! $^S);
@@ -365,41 +314,36 @@ $SIG{__WARN__} = sub {
   }
 };
 
-sub hasEvalError {
-  if($@) {
-    chomp($@);
-    return 1;
-  }else{
-    return 0;
-  }
-}
+# Configuration loading #######################################################
 
-sub fatalError {
-  my $m=shift;
-  slog($m,0);
-  unlink($pidFile) if($lockAcquired);
-  exit 1;
-}
-
-sub intRand {
-  rand() =~ /\.(\d+)/;
-  return $1 % 99999999;
-}
-
+our $spads=SpadsConf->new($confFile,$sLog,\%confMacros);
 fatalError('Unable to load SPADS configuration at startup') unless($spads);
-fatalError('Unable to import _putenv from msvcrt.dll ('.getLastWin32Error().')') if($win && ! Win32::API->Import('msvcrt', 'int __cdecl _putenv (char* envstring)'));
+$sLog=$spads->{log};
+
+# State variables #############################################################
+#
+# Already declared:
+# . Command line parameters handling:
+#     my ($confFile,$genDoc,$tlsAction,$tlsHost,$tlsCert);
+#     our %confMacros;
+#
+# . Default logging system:
+#     my $sLog;
+#
+# . Configuration loading:
+#     our $spads;
+#
 
 my $masterChannel=$spads->{conf}->{masterChannel};
 $masterChannel=$1 if($masterChannel =~ /^([^\s]+)\s/);
 
-# State variables #############################################################
-
 my $spadsDir=File::Spec->canonpath($FindBin::Bin);
 our %conf=%{$spads->{conf}};
 my $abortSpadsStartForAutoUpdate=0;
-my %quitAfterGame=(action => undef, condition => undef);
-  # action 0: shutdown, 1: restart
-  # condition 0: no game is running, 1: no game is running and only spectators in battle lobby, 2: no game is running and battle lobby is empty
+my %quitAfterGame=(
+  action => undef, # 0: shutdown, 1: restart
+  condition => undef, # 0: no game is running, 1: no game is running and only spectators in battle lobby, 2: no game is running and battle lobby is empty
+    );
 my $closeBattleAfterGame=0;
 our %timestamps=(connectAttempt => 0,
                  ping => 0,
@@ -428,7 +372,7 @@ our %timestamps=(connectAttempt => 0,
                  prefCachePurge => time);
 my $syncedSpringVersion='';
 my $fullSpringVersion='';
-our $lobbyState=0; # (0:not_connected, 1:connecting, 2:connected, 3:logged_in, 4:start_data_received, 5:opening_battle, 6:battle_opened)
+our $lobbyState=0; # 0:not_connected, 1:connecting, 2:connected, 3:logged_in, 4:start_data_received, 5:opening_battle, 6:battle_opened
 my %pendingRedirect;
 my $lobbyBrokenConnection=0;
 my $loadArchivesInProgress=0;
@@ -468,8 +412,8 @@ my %lastBattleStatus;
 my %lastFloodKicks;
 my %lastCmds;
 my %ignoredUsers;
-my $balanceState=0; # (0: not balanced, 1: balanced)
-my $colorsState=0; # (0: not fixed, 1: fixed)
+my $balanceState=0; # 0: not balanced, 1: balanced
+my $colorsState=0; # 0: not fixed, 1: fixed
 my @predefinedColors;
 my %advColors;
 my %balanceTarget;
@@ -507,8 +451,12 @@ our $springServerType=$conf{springServerType};
 my $springServerBin=$conf{springServer};
 my %autoManagedEngineData=(mode => 'off');
 my $failedEngineInstallVersion;
+my ($lockFh,$pidFile,$lockAcquired,$auLockFh,$periodicAutoUpdateLockAcquired);
 my %prefCache;
 my %prefCacheTs;
+our %spadsCmdHandlers=%SPADS_CORE_CMD_HANDLERS;
+our %spadsApiHandlers=%SPADS_CORE_API_HANDLERS;
+our %spadsApiRights=%SPADS_CORE_API_RIGHTS;
 my %nbRelayedApiCalls;
 my %ignoredRelayedApiUsers;
 my %pendingRelayedJsonRpcChunks;
@@ -518,6 +466,7 @@ our $unitsync;
 my %unitsyncOptFuncs;
 my %unitsyncHostHashes;
 my $lobbyReconnectDelay;
+my $useTls;
 
 my $lobbySimpleLog=SimpleLog->new(logFiles => [$conf{logDir}."/spads.log",''],
                                   logLevels => [$conf{lobbyInterfaceLogLevel},3],
@@ -556,23 +505,12 @@ our $autohost = SpringAutoHostInterface->new(autoHostPort => $conf{autoHostPort}
 my $updater = SpadsUpdater->new(sLog => $updaterSimpleLog,
                                 repository => "http://planetspads.free.fr/spads/repository",
                                 release => $conf{autoUpdateRelease},
-                                packages => \@packagesSpads,
+                                packages => \@SPADS_PACKAGES,
                                 springDir => $conf{autoManagedSpringDir});
 
 # Binaries update (Windows only) ##############################################
 
-$sLog=$spads->{log};
-
-sub renameToBeDeleted {
-  my $fileName=shift;
-  my $i=1;
-  while(-f "$fileName.$i.toBeDeleted" && $i < 100) {
-    $i++;
-  }
-  return move($fileName,"$fileName.$i.toBeDeleted");
-}
-
-if($win) {
+if(MSWIN32) {
   if(opendir(BINDIR,$spadsDir)) {
     my @toBeDeletedFiles = grep {/\.toBeDeleted$/} readdir(BINDIR);
     closedir(BINDIR);
@@ -651,7 +589,6 @@ if(defined $tlsAction && ($tlsAction eq 'revoke' || $tlsAction eq 'list' || defi
   exit 0;
 }
 
-my $useTls;
 if($conf{lobbyTls} ne 'off') {
   $useTls = eval {require IO::Socket::SSL; 1};
   fatalError('Module IO::Socket::SSL required for TLS support') if($conf{lobbyTls} eq 'on' &&  ! $useTls);
@@ -659,18 +596,113 @@ if($conf{lobbyTls} ne 'off') {
 
 # Console title update (Windows only) #########################################
 
-if($win) {
+if(MSWIN32) {
   eval {
     require Win32::Console;
     my $title=$conf{lobbyLogin};
     $title.="\@$conf{lobbyHost}" if($conf{lobbyHost} ne 'lobby.springrts.com' || $conf{lobbyPort} != 8200);
     $title.=":$conf{lobbyPort}" if($conf{lobbyPort} != 8200);
-    $title.=" (SPADS $spadsVer)";
+    $title.=" (SPADS $SPADS_VERSION)";
     Win32::Console->new()->Title($title);
   };
 }
 
 # Subfunctions ################################################################
+
+sub invalidUsage {
+  print "usage: perl $0 <configurationFile> [--doc] [<macroName>=<macroValue> [...]]\n";
+  print <<EOH;
+       perl $0 <configurationFile> --tls-cert-trust
+       perl $0 <configurationFile> --tls-cert-trust=<certificateHash>
+       perl $0 <configurationFile> --tls-cert-trust=<hostName>:<certificateHash>
+       perl $0 <configurationFile> --tls-cert-revoke=<certificateHash>
+       perl $0 <configurationFile> --tls-cert-revoke=<hostName>:<certificateHash>
+       perl $0 <configurationFile> --tls-cert-list
+       perl $0 <configurationFile> --tls-cert-list=<hostName>
+EOH
+  exit 1;
+}
+
+sub parseCmdLineArgs {
+  my $parsedGenDoc=0;
+  my ($parsedTlsAction,$parsedTlsHost,$parsedTlsCert);
+  my %macros;
+  foreach my $arg (@_) {
+    if($arg =~ /^--tls-cert-(trust|revoke|list)(?:=(.+))?$/i) {
+      return undef if(defined $parsedTlsAction);
+      $parsedTlsAction=lc($1);
+      my $tlsParam=lc($2) if(defined $2);
+      if(defined $tlsParam) {
+        if($parsedTlsAction eq 'list') {
+          return undef unless($tlsParam =~ /^\w[\w\-\.]*$/);
+          $parsedTlsHost=$tlsParam;
+        }elsif($tlsParam =~ /^(\w[\w\-\.]*):([\da-f]+)$/) {
+          ($parsedTlsHost,$parsedTlsCert)=($1,$2);
+        }elsif($tlsParam =~ /^[\da-f]+$/) {
+          $parsedTlsCert=$tlsParam;
+        }else{
+          return undef;
+        }
+      }else{
+        return undef if($parsedTlsAction eq 'revoke');
+      }
+    }elsif($arg =~ /^([\w\:]+)=(.*)$/) {
+      $macros{$1}=$2;
+    }elsif($arg eq "--doc") {
+      $parsedGenDoc=1;
+    }else{
+      return undef;
+    }
+  }
+  return (\%macros,$parsedGenDoc,$parsedTlsAction,$parsedTlsHost,$parsedTlsCert);
+}
+
+sub parseMacroTokens {
+  my %macros;
+  foreach my $macroToken (@_) {
+    if($macroToken =~ /^([\w\:]+)=(.*)$/) {
+      $macros{$1}=$2;
+    }else{
+      return undef;
+    }
+  }
+  return \%macros;
+}
+
+sub slog { $sLog->log(@_) }
+
+sub fatalError {
+  my $m=shift;
+  slog($m,0);
+  unlink($pidFile) if($lockAcquired);
+  exit 1;
+}
+
+sub intRand {
+  rand() =~ /\.(\d+)/;
+  return $1 % 99999999;
+}
+
+sub renameToBeDeleted {
+  my $fileName=shift;
+  my $i=1;
+  while(-f "$fileName.$i.toBeDeleted" && $i < 100) {
+    $i++;
+  }
+  return move($fileName,"$fileName.$i.toBeDeleted");
+}
+
+sub int32 { return unpack('l',pack('l',shift)) }
+sub uint32 { return unpack('L',pack('L',shift)) }
+
+sub hasEvalError {
+  if($@) {
+    chomp($@);
+    return 1;
+  }else{
+    return 0;
+  }
+}
 
 sub getPerlModuleVersion {
   my @moduleParts=split(/::/,shift);
@@ -758,7 +790,7 @@ sub escapeWin32Parameter {
 sub portableExec {
   my ($program,@params)=@_;
   my @args=($program,@params);
-  @args=map {escapeWin32Parameter($_)} @args if($win);
+  @args=map {escapeWin32Parameter($_)} @args if(MSWIN32);
   return exec {$program} @args;
 }
 
@@ -784,24 +816,22 @@ sub autoRetry {
 
 sub areSamePaths {
   my ($p1,$p2)=map {File::Spec->canonpath($_)} @_;
-  ($p1,$p2)=map {lc($_)} ($p1,$p2) if($win);
+  ($p1,$p2)=map {lc($_)} ($p1,$p2) if(MSWIN32);
   return $p1 eq $p2;
 }
 
 sub splitPaths {
   my $pathsString=shift;
   return () unless(defined $pathsString);
-  my $pathSep=$win?';':':';
-  return split(/$pathSep/,$pathsString);
+  return split(/$PATH_SEP/,$pathsString);
 }
 
 sub setEnvVarFirstPaths {
   my ($varName,@firstPaths)=@_;
-  my $pathSep=$win?';':':';
   my $needRestart=0;
-  die "Unable to handle path containing \"$pathSep\" character!" if(any {index($_,$pathSep) != -1} @firstPaths);
+  die "Unable to handle path containing \"$PATH_SEP\" character!" if(any {index($_,$PATH_SEP) != -1} @firstPaths);
   $ENV{"SPADS_$varName"}=$ENV{$varName}//'_UNDEF_' unless(exists $ENV{"SPADS_$varName"});
-  my @currentPaths=split(/$pathSep/,$ENV{$varName}//'');
+  my @currentPaths=split(/$PATH_SEP/,$ENV{$varName}//'');
   $needRestart=1 if($#currentPaths < $#firstPaths);
   if(! $needRestart) {
     for my $i (0..$#firstPaths) {
@@ -812,12 +842,12 @@ sub setEnvVarFirstPaths {
     }
   }
   if($needRestart) {
-    my @origPaths=$ENV{"SPADS_$varName"} eq '_UNDEF_' ? () : split(/$pathSep/,$ENV{"SPADS_$varName"});
+    my @origPaths=$ENV{"SPADS_$varName"} eq '_UNDEF_' ? () : split(/$PATH_SEP/,$ENV{"SPADS_$varName"});
     my @newPaths;
     foreach my $path (@origPaths) {
       push(@newPaths,$path) unless(any {areSamePaths($path,$_)} @firstPaths);
     }
-    $ENV{$varName}=join($pathSep,@firstPaths,@newPaths);
+    $ENV{$varName}=join($PATH_SEP,@firstPaths,@newPaths);
   }
   return $needRestart;
 }
@@ -832,10 +862,10 @@ sub setSpringEnv {
   my @dataDirs=@_;
   
   setEnvVarFirstPaths('SPRING_DATADIR',@dataDirs);
-  exportWin32EnvVar('SPRING_DATADIR') if($win);
+  exportWin32EnvVar('SPRING_DATADIR') if(MSWIN32);
   
   $ENV{SPRING_WRITEDIR}=$dataDirs[0] unless(areSamePaths($dataDirs[0],$ENV{SPRING_WRITEDIR}//''));
-  exportWin32EnvVar('SPRING_WRITEDIR') if($win);
+  exportWin32EnvVar('SPRING_WRITEDIR') if(MSWIN32);
   
   eval {require PerlUnitSync};
   fatalError("Unable to load PerlUnitSync module ($@)") if (hasEvalError());
@@ -850,7 +880,7 @@ sub setSpringEnv {
 
 sub setSpringServerBin {
   my $baseDir=shift;
-  $springServerBin=catfile($baseDir,"spring-$springServerType".($win?'.exe':''));
+  $springServerBin=catfile($baseDir,"spring-$springServerType".(MSWIN32?'.exe':''));
 }
 
 sub generateGameId {
@@ -1521,7 +1551,7 @@ sub loadArchivesBlocking {
         my %option=(name => $unitsync->GetOptionName($optionIdx),
                     key => $unitsync->GetOptionKey($optionIdx),
                     description => $unitsync->GetOptionDesc($optionIdx),
-                    type => $optionTypes{$unitsync->GetOptionType($optionIdx)},
+                    type => $OPTION_TYPES[$unitsync->GetOptionType($optionIdx)],
                     section => $unitsync->GetOptionSection($optionIdx),
                     default => "");
         next if($option{type} eq "error" || $option{type} eq "section");
@@ -1607,7 +1637,7 @@ sub loadArchivesBlocking {
       my %option=(name => $unitsync->GetOptionName($optionIdx),
                   key => $unitsync->GetOptionKey($optionIdx),
                   description => $unitsync->GetOptionDesc($optionIdx),
-                  type => $optionTypes{$unitsync->GetOptionType($optionIdx)},
+                  type => $OPTION_TYPES[$unitsync->GetOptionType($optionIdx)],
                   section => $unitsync->GetOptionSection($optionIdx),
                   default => "");
       next if($option{type} eq "error" || $option{type} eq "section");
@@ -1656,7 +1686,7 @@ sub loadArchivesBlocking {
 sub loadArchivesPostActions {
   my ($r_availableMaps,$r_availableMods,$r_newCachedMaps,$verbose)=@_;
 
-  chdir($cwd);
+  chdir($CWD);
 
   $loadArchivesInProgress=0;
 
@@ -1799,7 +1829,7 @@ sub formatMemSize {
 sub getSysInfo {
   my ($osVersion,$memAmount,$uptime)=('','',0);
   my @uname=uname();
-  if($win) {
+  if(MSWIN32) {
     $osVersion=Win32::GetOSName();
     $osVersion.=" - $uname[0] $uname[2] - $uname[3]";
     
@@ -1868,10 +1898,10 @@ sub getSysInfo {
     }
 
     $uptime=int(Win32::GetTickCount() / 1000);
-  }elsif($macOs) {
-    $osVersion.=$macOsData{ProductName}.' ' if(defined $macOsData{ProductName});
-    $osVersion.=$macOsData{ProductVersion}.' ' if(defined $macOsData{ProductVersion});
-    $osVersion.="- Build $macOsData{BuildVersion}" if(defined $macOsData{BuildVersion});
+  }elsif(DARWIN) {
+    $osVersion.=$MACOS_SYSTEM_INFO{ProductName}.' ' if(defined $MACOS_SYSTEM_INFO{ProductName});
+    $osVersion.=$MACOS_SYSTEM_INFO{ProductVersion}.' ' if(defined $MACOS_SYSTEM_INFO{ProductVersion});
+    $osVersion.="- Build $MACOS_SYSTEM_INFO{BuildVersion}" if(defined $MACOS_SYSTEM_INFO{BuildVersion});
     my $kernelVersion="$uname[0] $uname[2]";
     if($kernelVersion ne ' ') {
       if($osVersion ne '') {
@@ -1880,8 +1910,8 @@ sub getSysInfo {
         $osVersion=$kernelVersion;
       }
     }
-    $memAmount=formatMemSize($macOsData{'hw.memsize'});
-    $uptime=time()-$1 if(defined $macOsData{'kern.boottime'} && $macOsData{'kern.boottime'} =~ /\bsec\s*=\s*(\d+)/);
+    $memAmount=formatMemSize($MACOS_SYSTEM_INFO{'hw.memsize'});
+    $uptime=time()-$1 if(defined $MACOS_SYSTEM_INFO{'kern.boottime'} && $MACOS_SYSTEM_INFO{'kern.boottime'} =~ /\bsec\s*=\s*(\d+)/);
   }else{
     my $r_osReleaseContent=fileToArray('/etc/os-release');
     if(defined $r_osReleaseContent && @{$r_osReleaseContent}) {
@@ -1924,7 +1954,7 @@ sub getSysInfo {
     $uptime=$1 if(defined $r_uptimeContent && @{$r_uptimeContent} && $r_uptimeContent->[0] =~ /^\s*(\d+)/);
   }
   my ($procName,$origin);
-  if($win) {
+  if(MSWIN32) {
     $origin='from Windows registry';
     eval {
       if(my $regLMachine=new Win32::TieRegistry('LMachine', { Access => KEY_READ() })) {
@@ -1934,9 +1964,9 @@ sub getSysInfo {
       }
     };
     slog("Failed to access Windows registry: $@",2) if(hasEvalError());
-  }elsif($macOs) {
+  }elsif(DARWIN) {
     $origin='using sysctl command';
-    $procName=$macOsData{'machdep.cpu.brand_string'} if(exists $macOsData{'machdep.cpu.brand_string'});
+    $procName=$MACOS_SYSTEM_INFO{'machdep.cpu.brand_string'} if(exists $MACOS_SYSTEM_INFO{'machdep.cpu.brand_string'});
   }elsif(-f '/proc/cpuinfo' && -r _) {
     $origin='from /proc/cpuinfo';
     my $r_cpuInfo=fileToArray('/proc/cpuinfo');
@@ -1968,7 +1998,7 @@ sub fileToArray {
 
 sub getLocalLanIp {
   my @ips;
-  if($win) {
+  if(MSWIN32) {
     my $netIntsEntry;
     eval {
       if(my $regLMachine=new Win32::TieRegistry('LMachine', { Access => KEY_READ() })) {
@@ -2604,7 +2634,7 @@ sub isUserAllowedToSpeakInGame {
 
 sub addAlert {
   my $alert=shift;
-  if(exists $alerts{$alert}) {
+  if(exists $ALERTS{$alert}) {
     $pendingAlerts{$alert}={occurrences => 0} unless(exists $pendingAlerts{$alert});
     $pendingAlerts{$alert}->{occurrences}++;
     $pendingAlerts{$alert}->{latest}=time;
@@ -2626,7 +2656,7 @@ sub alertUser {
       delete $pendingAlerts{$alert};
       next;
     }
-    my $alertMsg="[$B$C{4}ALERT$C{1}$B] - $C{12}$alert$C{1} - $alerts{$alert}";
+    my $alertMsg="[$B$C{4}ALERT$C{1}$B] - $C{12}$alert$C{1} - $ALERTS{$alert}";
     my $latestOccurrenceDelayString="";
     $latestOccurrenceDelayString=secToTime($latestOccurrenceDelay) if($latestOccurrenceDelay > 0);
     if($pendingAlerts{$alert}->{occurrences} > 1) {
@@ -2727,6 +2757,7 @@ sub getCommandLevels {
 
 sub getUserAccessLevel {
   my $user=shift;
+  return $user->{accessLevel} if(ref $user);
   my $p_userData;
   if(! exists $lobby->{users}->{$user}) {
     return 0 unless(exists $p_runningBattle->{users} && exists $p_runningBattle->{users}->{$user});
@@ -2891,7 +2922,7 @@ sub processAliases {
     }
   }
 
-  if($conf{allowSettingsShortcut} && ! exists $spads->{commands}->{$lcCmd} && none {$lcCmd eq $_} @readOnlySettings) {
+  if($conf{allowSettingsShortcut} && ! exists $spads->{commands}->{$lcCmd} && none {$lcCmd eq $_} @READ_ONLY_SETTINGS) {
     if(any {$lcCmd eq $_} qw'users presets hpresets bpresets settings bsettings hsettings vsettings aliases bans maps pref rotationmaps plugins psettings') {
       unshift(@cmd,"list");
       return (\@cmd,0);
@@ -3139,7 +3170,7 @@ sub executeCommand {
   my @cmd=@{$p_cmd};
   my $command=lc(shift(@cmd));
 
-  if(exists $spadsHandlers{$command}) {
+  if(exists $spadsCmdHandlers{$command}) {
     my $commandAllowed=1;
     if(! $checkOnly) {
       foreach my $pluginName (@pluginsOrder) {
@@ -3148,7 +3179,7 @@ sub executeCommand {
       }
     }
     return 0 unless($commandAllowed);
-    my $spadsCommandRes=&{$spadsHandlers{$command}}($source,$user,\@cmd,$checkOnly);
+    my $spadsCommandRes=&{$spadsCmdHandlers{$command}}($source,$user,\@cmd,$checkOnly);
     if(! $checkOnly) {
       foreach my $pluginName (@pluginsOrder) {
         $plugins{$pluginName}->postSpadsCommand($command,$source,$user,\@cmd,$spadsCommandRes) if($plugins{$pluginName}->can('postSpadsCommand'));
@@ -3244,9 +3275,9 @@ sub processJsonRpcRequest {
   
   my $cmd=$r_jsonReq->{method};
   
-  return sendApiResponse($r_origin,undef,'METHOD_NOT_FOUND') unless(exists $apiHandlers{$cmd});
+  return sendApiResponse($r_origin,undef,'METHOD_NOT_FOUND') unless(exists $spadsApiHandlers{$cmd});
   
-  my $requiredLevel=$apiCmdRights{$cmd}//$cmd;
+  my $requiredLevel=$spadsApiRights{$cmd}//$cmd;
   if(defined $requiredLevel && $requiredLevel !~ /^\d+$/) {
     my $lcEquivCmd=lc($requiredLevel);
     if(exists $spads->{commands}{$lcEquivCmd}) {
@@ -3271,7 +3302,7 @@ sub processJsonRpcRequest {
 
   return sendApiResponse($r_origin,undef,'INSUFFICIENT_PRIVILEGES') if(! defined $requiredLevel || ($requiredLevel > 0 && $level < $requiredLevel));
   
-  my ($r_result,$r_error)=&{$apiHandlers{$cmd}}($r_origin,$r_jsonReq->{params});
+  my ($r_result,$r_error)=&{$spadsApiHandlers{$cmd}}($r_origin,$r_jsonReq->{params});
   sendApiResponse($r_origin,$r_result,$r_error) if(defined $r_result || defined $r_error);
 }
 
@@ -4503,7 +4534,7 @@ sub balanceBattle {
         $nbSmurfs++ if($battleSkills{$player}->{rank} > $lobby->{users}->{$player}->{status}->{rank});
       }else{
         slog("Undefined skill for player $player, using direct lobbyRank/skill mapping as a workaround for balancing!",1);
-        $p_players->{$player}->{skill}=$rankSkill{$lobby->{users}->{$player}->{status}->{rank}};
+        $p_players->{$player}->{skill}=$RANK_SKILL{$lobby->{users}->{$player}->{status}->{rank}};
       }
     }else{
       $p_players->{$player}->{skill}=int(rand(39));
@@ -4511,7 +4542,7 @@ sub balanceBattle {
   }
   foreach my $bot (sort keys %{$p_bots}) {
     if($conf{balanceMode} =~ /skill$/) {
-      $p_bots->{$bot}->{skill}=$rankSkill{$conf{botsRank}};
+      $p_bots->{$bot}->{skill}=$RANK_SKILL{$conf{botsRank}};
     }else{
       $p_bots->{$bot}->{skill}=int(rand(39));
     }
@@ -4944,7 +4975,6 @@ sub nextColor {
   }
 }
 
-my @DEFAULT_COLOR_ORDER=(qw'red blue green yellow cyan magenta orange purple teal gold azure pink lime gray');
 sub getTeamAdvancedColors {
   my ($teamSize,$r_colorPanels,$r_colorsSortedByTeamOrder,$r_colorsSortedBySelectionOrder)=@_;
   return [] unless($teamSize);
@@ -5423,7 +5453,7 @@ sub launchGame {
   }
   $additionalData{HOSTOPTIONS}{forceStarted}=$force?1:0;
   $additionalData{HOSTOPTIONS}{springServerType}=$springServerType;
-  $additionalData{HOSTOPTIONS}{spadsVersion}=$spadsVer;
+  $additionalData{HOSTOPTIONS}{spadsVersion}=$SPADS_VERSION;
   $additionalData{'game/HostIP'}=$conf{forceHostIp};
   my %clansId;
   my $nextClanId=1;
@@ -5584,7 +5614,7 @@ sub launchGame {
     $springPid=SimpleEvent::forkProcess(
       sub {
         chdir($conf{instanceDir});
-        if($win) {
+        if(MSWIN32) {
           exec(join(' ',(map {escapeWin32Parameter($_)} ($springServerBin,@springServerCmdParams)),'>>'.escapeWin32Parameter($logFile),'2>&1'))
               or execError("Unable to launch Spring ($!)",1);
         }else{
@@ -6103,7 +6133,7 @@ sub updateBattleSkillForNewSkillAndRankModes {
   my $userSkillPref=getUserPref($user,'skillMode');
   if($userSkillPref eq 'TrueSkill') {
     $battleSkills{$user}->{skillOrigin}='TrueSkillDegraded';
-    $battleSkills{$user}->{skill}=$rankTrueSkill{$battleSkills{$user}->{rank}};
+    $battleSkills{$user}->{skill}=$RANK_TRUESKILL{$battleSkills{$user}->{rank}};
     if(exists $battleSkillsCache{$user}) {
       $battleSkills{$user}->{skill}=$battleSkillsCache{$user}->{$currentGameType}->{skill};
       $battleSkills{$user}->{sigma}=$battleSkillsCache{$user}->{$currentGameType}->{sigma};
@@ -6126,7 +6156,7 @@ sub updateBattleSkillForNewSkillAndRankModes {
     }
   }else{
     $battleSkills{$user}->{skillOrigin}='rank';
-    $battleSkills{$user}->{skill}=$rankSkill{$battleSkills{$user}->{rank}};
+    $battleSkills{$user}->{skill}=$RANK_SKILL{$battleSkills{$user}->{rank}};
     delete $battleSkills{$user}{sigma};
     pluginsUpdateSkill($battleSkills{$user},$accountId);
     sendPlayerSkill($user);
@@ -6228,10 +6258,10 @@ sub getBattleSkill {
   my $userSkillPref=getUserPref($user,'skillMode');
   if($userSkillPref eq 'TrueSkill') {
     $userSkill{skillOrigin}='TrueSkillDegraded';
-    $userSkill{skill}=$rankTrueSkill{$userSkill{rank}};
+    $userSkill{skill}=$RANK_TRUESKILL{$userSkill{rank}};
   }else{
     $userSkill{skillOrigin}='rank';
-    $userSkill{skill}=$rankSkill{$userSkill{rank}};
+    $userSkill{skill}=$RANK_SKILL{$userSkill{rank}};
   }
   if($userSkillPref eq 'TrueSkill' && exists $lobby->{users}->{$sldbLobbyBot} && $accountId) {
     my $getSkillParam=$accountId;
@@ -8692,8 +8722,12 @@ sub hGKick {
 
 sub initUserIrcColors {
   my $user=shift;
-  return @ircStyle if(getUserPref($user,'ircColors'));
-  return @noIrcStyle;
+  if(ref $user) {
+    return @{$user->{ircColors}} if(defined $user->{ircColors});
+  }else{
+    return @IRC_STYLE if(getUserPref($user,'ircColors'));
+  }
+  return @NO_IRC_STYLE;
 }
 
 sub hHelp {
@@ -8718,7 +8752,7 @@ sub hHelp {
     my $p_modOptions=getModOptions($modName);
     my $p_mapOptions=getMapOptions($currentMap);
 
-    if(! exists $spads->{help}->{$helpCommand} && $conf{allowSettingsShortcut} && none {$helpCommand eq $_} @readOnlySettings) {
+    if(! exists $spads->{help}->{$helpCommand} && $conf{allowSettingsShortcut} && none {$helpCommand eq $_} @READ_ONLY_SETTINGS) {
       if(exists $spads->{helpSettings}->{global}->{$helpCommand}) {
         $setting=$helpCommand;
         $helpCommand="global";
@@ -11482,7 +11516,7 @@ sub hSmurfs {
     foreach my $smurfUser (@smurfUsers) {
       next if($smurfUser eq $conf{lobbyLogin});
       my %result=("$C{5}Player$C{1}" => $C{10}.$smurfUser.$C{1}, "$C{5}Smurfs$C{1}" => '');
-      my ($p_smurfsData)=getSmurfsData($smurfUser,\%noColor);
+      my ($p_smurfsData)=getSmurfsData($smurfUser,\%NO_COLOR);
       if($#{$p_smurfsData} < 1) {
         push(@results,\%result);
         next;
@@ -11699,9 +11733,9 @@ sub hStats {
 sub getRoundedSkill {
   my $skill=shift;
   my ($roundedSkill,$deviation);
-  foreach my $rank (sort {$b <=> $a} keys %rankSkill) {
-    if(! defined $roundedSkill || abs($skill-$rankSkill{$rank}) < $deviation) {
-      $roundedSkill=$rankSkill{$rank};
+  foreach my $rank (sort {$b <=> $a} keys %RANK_SKILL) {
+    if(! defined $roundedSkill || abs($skill-$RANK_SKILL{$rank}) < $deviation) {
+      $roundedSkill=$RANK_SKILL{$rank};
       $deviation=abs($skill-$roundedSkill);
       next;
     }
@@ -11715,15 +11749,9 @@ sub getGameStatus {
   
   my $ahState=$autohost->getState();
   return undef unless($springPid && $ahState);
-  
-  my ($userLevel,$p_C,$B);
-  if(ref $user) {
-    $userLevel=$user->{accessLevel};
-    ($p_C,$B) = $user->{ircColors} ? @{$user->{ircColors}} : @noIrcStyle;
-  }else{
-    $userLevel=getUserAccessLevel($user);
-    ($p_C,$B)=initUserIrcColors($user);
-  }
+
+  my $userLevel=getUserAccessLevel($user);
+  my ($p_C,$B)=initUserIrcColors($user);
   my %C=%{$p_C};
   
   my @clientsStatus;
@@ -11898,14 +11926,8 @@ sub getBattleLobbyStatus {
   
   return undef unless($lobbyState > 5 && %{$lobby->{battle}});
   
-  my ($userLevel,$p_C,$B);
-  if(ref $user) {
-    $userLevel=$user->{accessLevel};
-    ($p_C,$B) = defined $user->{ircColors} ? @{$user->{ircColors}} : @noIrcStyle;
-  }else{
-    $userLevel=getUserAccessLevel($user);
-    ($p_C,$B)=initUserIrcColors($user);
-  }
+  my $userLevel=getUserAccessLevel($user);
+  my ($p_C,$B)=initUserIrcColors($user);
   my %C=%{$p_C};
 
   my $battleStatus = ($springPid && $autohost->getState()) ? 'in-game' : 'waiting for ready players in battle lobby';
@@ -11961,7 +11983,7 @@ sub getBattleLobbyStatus {
           if($player =~ /^(.+) \(bot\)$/) {
             my $botName=$1;
             $clientStatus{Rank}=$conf{botsRank};
-            $clientStatus{Skill}="($rankSkill{$conf{botsRank}})";
+            $clientStatus{Skill}="($RANK_SKILL{$conf{botsRank}})";
             $clientStatus{ID}="$p_bBots->{$botName}->{aiDll} ($p_bBots->{$botName}->{owner})";
           }else{
             $clientStatus{Ready}="$C{4}No$C{1}";
@@ -11974,7 +11996,7 @@ sub getBattleLobbyStatus {
               }
             }
             my $rank=$lobby->{users}->{$player}->{status}->{rank};
-            my $skill="$C{13}!$rankSkill{$rank}!$C{1}";
+            my $skill="$C{13}!$RANK_SKILL{$rank}!$C{1}";
             if(exists $battleSkills{$player}) {
               if($rank != $battleSkills{$player}->{rank}) {
                 my $diffRank=$battleSkills{$player}->{rank}-$rank;
@@ -12074,7 +12096,7 @@ sub getBattleLobbyStatus {
         }
       }
       my $rank=$lobby->{users}->{$spec}->{status}->{rank};
-      my $skill="$C{13}!$rankSkill{$rank}!$C{1}";
+      my $skill="$C{13}!$RANK_SKILL{$rank}!$C{1}";
       if(exists $battleSkills{$spec}) {
         if($rank != $battleSkills{$spec}->{rank}) {
           my $diffRank=$battleSkills{$spec}->{rank}-$rank;
@@ -12103,7 +12125,7 @@ sub getBattleLobbyStatus {
           }
         }
         if($skillOrigin eq 'rank') {
-          $skill="($rankSkill{$battleSkills{$spec}->{rank}})";
+          $skill="($RANK_SKILL{$battleSkills{$spec}->{rank}})";
         }elsif($skillOrigin eq 'TrueSkill') {
           if(exists $battleSkills{$spec}->{skillPrivacy}
              && ($battleSkills{$spec}->{skillPrivacy} == 0
@@ -12278,7 +12300,7 @@ sub hStop {
       answer("Stopping server") if($source eq "pv");
       $timestamps{autoStop}=-1;
       $autohost->sendChatMessage("/kill");
-    }elsif($win) {
+    }elsif(MSWIN32) {
       if($conf{useWin32Process} && defined $springWin32Process) {
         broadcastMsg("Killing Spring process (by $user)");
         answer("Killing Spring process") if($source eq "pv");
@@ -12623,7 +12645,7 @@ sub hUpdate {
   $updater = SpadsUpdater->new(sLog => $updaterSimpleLog,
                                repository => "http://planetspads.free.fr/spads/repository",
                                release => $release,
-                               packages => \@packagesSpads,
+                               packages => \@SPADS_PACKAGES,
                                springDir => $conf{autoManagedSpringDir});
   if(! SimpleEvent::forkCall(
          sub { return $updater->update() },
@@ -12667,7 +12689,7 @@ sub hVersion {
     my $autoDlInfo="\"$autoManagedEngineData{release}\"".$autoDlExtraInfo;
     $springVersion.=" (auto-download $autoDlInfo)";
   }
-  sayPrivate($user,"$C{12}$conf{lobbyLogin}$C{1} is running ${B}$C{5}SPADS $C{10}v$spadsVer$B$C{1} with following components:");
+  sayPrivate($user,"$C{12}$conf{lobbyLogin}$C{1} is running ${B}$C{5}SPADS $C{10}v$SPADS_VERSION$B$C{1} with following components:");
   my %versionedComponents=(Perl => $^V."$C{1} ($Config{archname})",
                            "Spring $springServerType" => 'v'.$springVersion,
                            SimpleEvent => 'v'.SimpleEvent::getVersion());
@@ -13182,6 +13204,8 @@ sub cbStlsTimeout {
   $lobby->disconnect();
 }
 
+sub getLocalSystemHashForLogin {  return ($unitsyncHostHashes{macAddr}//0).' '.(defined $unitsyncHostHashes{sysInfo} ? substr($unitsyncHostHashes{sysInfo},0,16) : 0) }
+
 sub initLobbyConnection {
   $lobby->addCallbacks({CHANNELTOPIC => \&cbChannelTopic,
                         LOGININFOEND => \&cbLoginInfoEnd,
@@ -13217,9 +13241,8 @@ sub initLobbyConnection {
   my $localLanIp=$conf{localLanIp};
   $localLanIp=getLocalLanIp() unless($localLanIp);
   my $legacyFlags = ($lobby->{serverParams}{protocolVersion} =~ /^(\d+\.\d+)/ && $1 > 0.36) ? '' : ' l t cl';
-  my $hostHashes = ($unitsyncHostHashes{macAddr}//0).' '.(defined $unitsyncHostHashes{sysInfo} ? substr($unitsyncHostHashes{sysInfo},0,16) : 0);
   
-  queueLobbyCommand(["LOGIN",$conf{lobbyLogin},$lobby->marshallPasswd($conf{lobbyPassword}),0,$localLanIp,"SPADS v$spadsVer",$hostHashes,'b sp'.$legacyFlags],
+  queueLobbyCommand(["LOGIN",$conf{lobbyLogin},$lobby->marshallPasswd($conf{lobbyPassword}),0,$localLanIp,"SPADS v$SPADS_VERSION",getLocalSystemHashForLogin(),'b sp'.$legacyFlags],
                     {ACCEPTED => \&cbLoginAccepted,
                      DENIED => \&cbLoginDenied,
                      AGREEMENTEND => \&cbAgreementEnd},
@@ -13711,7 +13734,7 @@ sub cbJoinedBattle {
                         d => $levelDescription,
                         m => $mapName,
                         n => $conf{lobbyLogin},
-                        v => $spadsVer,
+                        v => $SPADS_VERSION,
                         h => $mapHash,
                         a => $mapLink,
                         t => $gameAge,
@@ -14804,8 +14827,8 @@ sub instantiatePlugin {
     cancelPluginLoad($pluginName);
     return 0;
   }
-  if(compareVersions($spadsVer,$requiredSpadsVersion) < 0) {
-    slog("Unable to instantiate plugin $pluginName, this plugin requires a SPADS version >= $requiredSpadsVersion (current is $spadsVer)",1);
+  if(compareVersions($SPADS_VERSION,$requiredSpadsVersion) < 0) {
+    slog("Unable to instantiate plugin $pluginName, this plugin requires a SPADS version >= $requiredSpadsVersion (current is $SPADS_VERSION)",1);
     cancelPluginLoad($pluginName);
     return 0;
   }
@@ -14897,6 +14920,8 @@ sub pluginsUpdateSkill {
 if($genDoc) {
   slog("Generating SPADS documentation",3);
 
+  *encodeHtmlEntities = eval { require HTML::Entities; 1 } ? \&HTML::Entities::encode_entities : sub { my $html=shift; $html =~ s/</\&lt\;/g; $html =~ s/>/\&gt\;/g; return $html };
+  
   my $p_comHelp=$spads->getFullCommandsHelp();
   my $p_setHelp=$spads->{helpSettings};
   my %allHelp=();
@@ -14960,7 +14985,7 @@ EOF
 <!--NewPage-->
 <HTML>
 <HEAD>
-<!-- Generated by SPADS v$spadsVer on $genTime GMT-->
+<!-- Generated by SPADS v$SPADS_VERSION on $genTime GMT-->
 <TITLE>SPADS Doc</TITLE>
 </HEAD>
 
@@ -14986,7 +15011,7 @@ EOF
 <!--NewPage-->
 <HTML>
 <HEAD>
-<!-- Generated by SPADS v$spadsVer on $genTime GMT-->
+<!-- Generated by SPADS v$SPADS_VERSION on $genTime GMT-->
 <TITLE>SPADS doc index</TITLE>
 <LINK REL="stylesheet" TYPE="text/css" HREF="spadsDoc.css" TITLE="Style">
 </HEAD>
@@ -14996,7 +15021,7 @@ EOF
 <TABLE BORDER="0" WIDTH="100%" SUMMARY="">
 <TR>
 <TH ALIGN="left" NOWRAP><FONT size="+1" CLASS="FrameTitleFont">
-<B>SPADS v$spadsVer</B></FONT></TH>
+<B>SPADS v$SPADS_VERSION</B></FONT></TH>
 </TR>
 </TABLE>
 
@@ -15052,7 +15077,7 @@ EOF
 <!--NewPage-->
 <HTML>
 <HEAD>
-<!-- Generated by SPADS v$spadsVer on $genTime GMT-->
+<!-- Generated by SPADS v$SPADS_VERSION on $genTime GMT-->
 <TITLE>$listContents{$listType}->[0]</TITLE>
 <LINK REL="stylesheet" TYPE="text/css" HREF="spadsDoc.css" TITLE="Style">
 </HEAD>
@@ -15074,7 +15099,7 @@ EOF
 <!--NewPage-->
 <HTML>
 <HEAD>
-<!-- Generated by SPADS v$spadsVer on $genTime GMT-->
+<!-- Generated by SPADS v$SPADS_VERSION on $genTime GMT-->
 <TITLE>$listContents{$listType}->[0] help</TITLE>
 <LINK REL="stylesheet" TYPE="text/css" HREF="spadsDoc.css" TITLE="Style">
 </HEAD>
@@ -15154,17 +15179,6 @@ EOF
   exit 0;
 }
 
-sub encodeHtmlEntities {
-  my $htmlLine=shift;
-  if($htmlEntitiesUnavailable) {
-    $htmlLine =~ s/</\&lt\;/g;
-    $htmlLine =~ s/>/\&gt\;/g;
-  }else{
-    $htmlLine=encode_entities($htmlLine);
-  }
-  return $htmlLine;
-}
-
 sub encodeHtmlHelp {
   my $line=shift;
   my %items = (command => ["command","FrameCommandFont","E8E8FF"],
@@ -15200,8 +15214,8 @@ sub useFallbackEngineVersion {
 
 $timestamps{autoUpdate}=time if($conf{autoUpdateRelease} ne '');
 
-slog("Initializing SPADS $spadsVer (PID: $$)",3);
-slog('SPADS process is currently running as root!',2) unless($win || $>);
+slog("Initializing SPADS $SPADS_VERSION (PID: $$)",3);
+slog('SPADS process is currently running as root!',2) unless(MSWIN32 || $>);
 
 if($conf{autoUpdateRelease} ne "") {
   if($updater->isUpdateInProgress()) {
@@ -15304,7 +15318,7 @@ if(! $abortSpadsStartForAutoUpdate) {
   $fullSpringVersion=$syncedSpringVersion;
   if(! ($fullSpringVersion =~ /^(\d+)/ && $1 > 105)) {
     my $buggedUnitsync=0;
-    if(! $win) {
+    if(! MSWIN32) {
       my $fileBin;
       if(-x '/usr/bin/file') {
         $fileBin='/usr/bin/file';
@@ -15374,7 +15388,7 @@ if(! $abortSpadsStartForAutoUpdate) {
   $conf{eventModel}=~/^(auto|internal|AnyEvent)(?:\(([1-9]\d?\d?)\))?$/;
   my ($eventModel,$eventLoopTimeSlice)=($1,($2//50)/100);
   fatalError('Unable to initialize SimpleEvent module') unless(SimpleEvent::init(mode => ($eventModel eq 'auto' ? undef : $eventModel), timeSlice => $eventLoopTimeSlice, sLog => $simpleEventSimpleLog, maxChildProcesses => $conf{maxChildProcesses}));
-  fatalError('Unable to register SIGTERM') unless($win || SimpleEvent::registerSignal('TERM', sub { quitAfterGame('SIGTERM signal received'); } ));
+  fatalError('Unable to register SIGTERM') unless(MSWIN32 || SimpleEvent::registerSignal('TERM', sub { quitAfterGame('SIGTERM signal received'); } ));
   fatalError('Unable to create socket for Spring AutoHost interface') unless($autohost->open());
   fatalError('Unable to register Spring AutoHost interface socket') unless(SimpleEvent::registerSocket($autohost->{autoHostSock},sub { $autohost->receiveCommand() }));
   SimpleEvent::addAutoCloseOnFork(\$lockFh,\$auLockFh);
@@ -15572,7 +15586,7 @@ sub postMainLoop {
     SimpleEvent::unregisterSocket($lobby->{lobbySock});
     $lobby->disconnect();
   }
-  SimpleEvent::unregisterSignal('TERM') unless($win);
+  SimpleEvent::unregisterSignal('TERM') unless(MSWIN32);
   SimpleEvent::unregisterSocket($autohost->{autoHostSock});
   $autohost->close();
   SimpleEvent::removeTimer('SpadsMainLoop');
@@ -15584,11 +15598,11 @@ $spads->dumpDynamicData();
 unlink($pidFile) if(defined $pidFile);
 close($lockFh) if(defined $lockFh);
 if($quitAfterGame{action} == 1) {
-  if($win) {
+  if(MSWIN32) {
     if(! -t STDIN && ! -t STDOUT && ! -t STDERR) {
       SimpleEvent::createDetachedProcess($^X,
                                          [$0,$confFile,map {"$_=$confMacros{$_}"} (keys %confMacros)],
-                                         $cwd);
+                                         $CWD);
       exit 0;
     }
     close(STDIN);

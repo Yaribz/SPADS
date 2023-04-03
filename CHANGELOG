@@ -977,6 +977,8 @@ spads.pl:
         improve progress report for map info caching process
 0.13.3: try to load TLS module (IO::Socket::SSL) only when required (i.e. when lobbyTls is set to "on" or "auto", or when engine is auto-managed using GitHub)
 0.13.4: use host hashes provided by unitsync during login
+0.13.5: minor fix for !restart/!reload commands (conf macro redefinitions handling code)
+        code style and consistency improvements
 
 SpadsConf.pm:
 ============
@@ -1321,6 +1323,7 @@ SpadsPluginApi.pm:
 0.31: new plugin API accessor "getPluginList"
       plugins can now declare lobby command callbacks which will be called before the lobby interface module callbacks (new optional parameter for "addLobbyCommandHandler" and "removeLobbyCommandHandler" plugin API functions)
 0.32: allow plugins to update skill uncertainty value ("updatePlayerSkill" customization callback)
+0.33: use renammed SPADS core global constants and variables (code style and consistency improvements)
 
 SpadsUpdater.pm:
 ===============

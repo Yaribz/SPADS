@@ -1,6 +1,6 @@
 # SpadsPluginApi: SPADS plugin API
 #
-# Copyright (C) 2013-2021  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2013-2023  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -24,10 +24,10 @@ use List::Util qw'any none';
 use Exporter 'import';
 @EXPORT=qw/$spadsVersion $spadsDir loadPythonPlugin get_flag fix_string getLobbyState getSpringPid getSpringServerType getTimestamps getRunningBattle getConfMacros getCurrentVote getPlugin getPluginList addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess forkCall removeProcessCallback createDetachedProcess addTimer removeTimer addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog updateSetting secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives/;
 
-my $apiVersion='0.32';
+my $apiVersion='0.33';
 
-our $spadsVersion=$::spadsVer;
-our $spadsDir=$::cwd;
+our $spadsVersion=$::SPADS_VERSION;
+our $spadsDir=$::CWD;
 
 sub getVersion {
   return $apiVersion;
@@ -230,10 +230,10 @@ sub addSpadsCommandHandler {
   $replace=0 unless(defined $replace);
   foreach my $commandName (keys %{$p_handlers}) {
     my $lcName=lc($commandName);
-    if(exists $::spadsHandlers{$lcName} && (! $replace)) {
+    if(exists $::spadsCmdHandlers{$lcName} && (! $replace)) {
       ::slog("Ignoring addSpadsCommandHandler for plugin $plugin (\"$lcName\" command already exists)",2);
     }else{
-      $::spadsHandlers{$lcName}=$p_handlers->{$commandName};
+      $::spadsCmdHandlers{$lcName}=$p_handlers->{$commandName};
     }
   }
 }
@@ -261,7 +261,7 @@ sub removeSpadsCommandHandler {
   my $plugin=getCallerPlugin();
   foreach my $commandName (@{$p_commands}) {
     my $lcName=lc($commandName);
-    delete $::spadsHandlers{$lcName};
+    delete $::spadsCmdHandlers{$lcName};
   }
 }
 
@@ -2198,7 +2198,7 @@ recommended to use the accessors from the API instead:
 
 =item C<$::spads>
 
-=item C<%::spadsHandlers>
+=item C<%::spadsCmdHandlers>
 
 =item C<$::springPid>
 
