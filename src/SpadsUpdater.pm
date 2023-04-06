@@ -34,7 +34,7 @@ use Time::HiRes;
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $archName=($win?'win':'linux').($Config{ptrsize} > 4 ? 64 : 32);
 
-our $VERSION='0.24';
+our $VERSION='0.25';
 
 my @constructorParams = qw'sLog repository release packages';
 my @optionalConstructorParams = qw'localDir springDir';
@@ -204,6 +204,9 @@ sub _resolveEngineReleaseNameToVersion {
       }
       $sl->log("Unable to retrieve engine version number for $release release from GitHub repository \"$ghRepo\"",2);
       return undef;
+    }elsif($release eq 'testing') {
+      my $r_matchingVersions=$self->getAvailableEngineVersionsFromGithub($r_githubInfo,1);
+      return $r_matchingVersions->[0];
     }else{
       my $r_matchingVersions=$self->getAvailableEngineVersionsFromGithub($r_githubInfo);
       return $r_matchingVersions->[0];
@@ -273,23 +276,50 @@ sub getAvailableSpringVersions {
 
 # Called by spadsInstaller.pl
 sub getAvailableEngineVersionsFromGithub {
-  my ($self,$r_githubInfo)=@_;
+  my ($self,$r_githubInfo,$onlyWithLabel,$targetNbResults,$maxPages)=@_;
+  $targetNbResults//=1;
+  $maxPages//=20;
+  
   my $sl=$self->{sLog};
+  
   my $ghRepo=$r_githubInfo->{owner}.'/'.$r_githubInfo->{name};
-  my $httpRes=HTTP::Tiny->new(timeout => 10)->request('GET','https://github.com/'.$ghRepo.'/releases');
-  if($httpRes->{success}) {
-    my @versions = $httpRes->{content} =~ /\Q<a href="\/$ghRepo\/releases\/tag\/\E([^\"]+)\"/g;
-    if(@versions) {
-      my $tagRegexp=_buildTagRegexp($r_githubInfo->{tag});
-      my @matchingVersions;
-      map {push(@matchingVersions,$1) if(_unescapeUrl($_) =~ /^$tagRegexp$/)} @versions;
-      return \@matchingVersions if(@matchingVersions);
+  my $latestReleaseLink='"/'.$ghRepo.'/releases/latest"';
+  my $tagRegexp=_buildTagRegexp($r_githubInfo->{tag});
+  my $searchFilter = $onlyWithLabel ? ' with label' : '';
+  
+  my $httpTiny=HTTP::Tiny->new(timeout => 10);
+  my $pageNb=1;
+  my @results;
+  my $reachedEnd;
+  do {
+    my $httpRes=$httpTiny->request('GET','https://github.com/'.$ghRepo.'/releases?page='.$pageNb);
+    if($httpRes->{success}) {
+      my @versions;
+      if($onlyWithLabel) {
+        my @versionsAndHtmlDetails = $httpRes->{content} =~ /\Q<a href="\/$ghRepo\/releases\/tag\/\E([^\"]+)\"(.+?<a href=\"[^\"]+\")/sg;
+        $reachedEnd=1 unless(@versionsAndHtmlDetails);
+        for my $i (0..@versionsAndHtmlDetails/2-1) {
+          push(@versions,$versionsAndHtmlDetails[$i*2])
+              if(index($versionsAndHtmlDetails[$i*2+1],'>Pre-release<') != -1
+                 || substr($versionsAndHtmlDetails[$i*2+1],-length($latestReleaseLink)) eq $latestReleaseLink);
+        }
+      }else{
+        @versions = $httpRes->{content} =~ /\Q<a href="\/$ghRepo\/releases\/tag\/\E([^\"]+)\"/g;
+        $reachedEnd=1 unless(@versions);
+      }
+      map {push(@results,$1) if(_unescapeUrl($_) =~ /^$tagRegexp$/)} @versions;
+    }else{
+      if(@results) {
+        $sl->log("Failed to retrieve all available engine releases$searchFilter from GitHub repository \"$ghRepo\" (error at page $pageNb)",2);
+      }else{
+        $sl->log("Unable to retrieve available engine releases$searchFilter from GitHub repository \"$ghRepo\"",2);
+      }
+      return \@results;
     }
-    $sl->log("Unable to find available engine releases matching tag template \"$r_githubInfo->{tag}\" from GitHub repository \"$ghRepo\"",2);
-  }else{
-    $sl->log("Unable to get available engine releases from GitHub repository \"$ghRepo\"",2);
-  }
-  return [];
+    $pageNb++;
+  }while(! $reachedEnd && $pageNb <= $maxPages && ($targetNbResults == 0 || @results < $targetNbResults));
+  $sl->log("Unable to find available engine releases matching tag template \"$r_githubInfo->{tag}\" from GitHub repository \"$ghRepo\"",2) unless(@results);
+  return \@results;
 }
 
 # Called by spadsInstaller.pl, spads.pl

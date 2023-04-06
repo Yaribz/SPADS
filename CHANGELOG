@@ -190,6 +190,7 @@ helpSettings.dat:
        change the "colorSensitivity" setting type from global setting to preset setting
 0.7.1: the "lobbyReconnectDelay" global setting now accepts a range for delay randomization
 0.7.2: fix default value of map link settings in doc
+0.7.3: update description of "autoManagedSpringVersion" global setting (add "unstable" engine release from GitHub)
 
 PerlUnitSync.pm:
 ===============
@@ -1162,6 +1163,7 @@ SpadsConf.pm:
         automatically add new preferences fields in the SQLite database
 0.13.1: the "lobbyReconnectDelay" global setting now accepts a range for delay randomization
 0.13.2: do not rewrite shared map info data when no new map info is added (may happen when only buggy maps were uncached)
+0.13.3: add management of "unstable" engine release from GitHub (most recent release)
 
 spadsInstaller.pl:
 =================
@@ -1253,6 +1255,7 @@ spadsInstaller.pl:
       remove obsolete handling of configuration settings passed as command line parameters (was used on Linux when self-restarting with previous unitsync interface module)
       import File::Spec functions instead of using fully qualified names
 0.32: fix installer not correctly auto-restarting after self-update
+0.33: add management of "unstable" engine release from GitHub (most recent release)
 
 SpadsPluginApi.pm:
 =================
@@ -1378,6 +1381,8 @@ SpadsUpdater.pm:
 0.23: simplify message for upgrade procedure during major SPADS updates
 0.24: try to load TLS module (IO::Socket::SSL) only when required (i.e. when asked to download a file using HTTPS)
       pr-downloader can now be extracted when auto-installing engines (used by SPADS installer for initial engine setup)
+0.25: add management of "unstable" engine release from GitHub (most recent release)
+      fix management of "testing" engine release from GitHub (most recent release with tag "Pre-release" or "Latest")
 
 springLobbyCertificates.dat:
 ===========================

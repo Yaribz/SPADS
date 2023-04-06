@@ -272,7 +272,7 @@ Engine version auto-management can also be enabled for any Spring-based engine w
   <repositoryName> is the name of the GitHub repository containing the engine releases
   <releaseTagTemplate> is the template of the tags used for the releases, it must contain the "<version>" placeholder indicating where the engine version is located in the tag name
   <assetRegularExpression> is the regular expression used to select the release asset to download and install. This regular expression can contain the "<os>" and "<bitness>" placeholders: "<os>" will be automatically replaced by the current operating system ("linux" or "windows"), and "<bitness>" will be replaced by the system bitness ("64" or "32").
-As for official Spring engine, it is possible to select a specific engine version number or an engine release, but only "stable" and "testing" releases are supported: the "stable" release is the latest release in GitHub terminology (i.e. by default the most recent non-prerelease, non-draft release), and the "testing" release is the latest non-draft prerelease.
+As for official Spring engine, it is possible to select a specific engine version number or an engine release: the "stable" release is the release tagged "Latest" on GitHub, the "testing" release is the most recent release tagged "Pre-release" or "Latest" on GitHub, and the "unstable" release is simply the most recent release available on GitHub (ignoring release tags).
 -
 <null>: Spring version auto-management is disabled (the custom Spring installation specified by [global:unitsyncDir] and [global:springServer] is used instead)
 <springVersionNumber>: SPADS auto-downloads Spring binaries for this specific version if needed, and sticks to this version

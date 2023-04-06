@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.32 (2023/04/01)
+# Version 0.33 (2023/04/06)
 
 use strict;
 
@@ -985,7 +985,6 @@ if($engineBinariesType eq 'official' || $engineBinariesType eq 'github') {
   if($engineBinariesType eq 'github') {
     $engineStr='engine';
     shift(@engineBranches);
-    delete $engineReleases{unstable};
     $ghInfo{owner}=promptString('       Please enter the GitHub repository owner name','beyond-all-reason',$autoInstallData{githubOwner},sub {$_[0]=~/^[\w\-]+$/});
     setLastRun('githubOwner',$ghInfo{owner});
     $isBarEngine=1 if($ghInfo{owner} eq 'beyond-all-reason');
@@ -1012,7 +1011,11 @@ if($engineBinariesType eq 'official' || $engineBinariesType eq 'github') {
           fatalError("Couldn't check available Spring versions") unless(@{$r_availableSpringVersions});
           $engineVersions{$_}=$r_availableSpringVersions; } @engineBranches;
   }else{
-    my $r_availableEngineVersions=$updater->getAvailableEngineVersionsFromGithub(\%ghInfo);
+    my $r_availableEngineVersions=$updater->getAvailableEngineVersionsFromGithub(\%ghInfo,0,5);
+    my $r_availableTaggedEngineVersions=$updater->getAvailableEngineVersionsFromGithub(\%ghInfo,1,20);
+    foreach my $taggedVersion (@{$r_availableTaggedEngineVersions}) {
+      push(@{$r_availableEngineVersions},$taggedVersion) if(none {$taggedVersion eq $_} @{$r_availableEngineVersions});
+    }
     fatalError("Couldn't check available engine versions") unless(@{$r_availableEngineVersions});
     $engineVersions{master}=[reverse @{$r_availableEngineVersions}];
   }
@@ -1046,10 +1049,10 @@ if($engineBinariesType eq 'official' || $engineBinariesType eq 'github') {
     }
   }
   print "\nPlease choose the $engineStr version which will be used by the autohost.\n";
-  print 'If you choose "stable"'.(%ghInfo ? ' or "testing"' : ', "testing" or "unstable"').", SPADS will stay up to date with the corresponding $engineStr release by automatically downloading and using new binary files when needed.\n";
+  print "If you choose \"stable\", \"testing\" or \"unstable\", SPADS will stay up to date with the corresponding $engineStr release by automatically downloading and using new binary files when needed.\n";
   my @engineVersionExamples=($engineReleasesVersion{stable});
   push(@engineVersionExamples,$engineReleasesVersion{testing}) unless($engineReleasesVersion{stable} eq $engineReleasesVersion{testing});
-  push(@engineVersionExamples,$engineReleasesVersion{unstable}) if(defined $engineReleasesVersion{unstable});
+  push(@engineVersionExamples,$engineReleasesVersion{unstable}) if(defined $engineReleasesVersion{unstable} && $engineReleasesVersion{unstable} ne $engineReleasesVersion{testing});
   print "If you choose a specific $engineStr version number (\"".join('", "',@engineVersionExamples)."\", ...), SPADS will stick to this version until you manualy change it in the configuration file.\n\n";
   my $engineVersion;
   my $autoInstallValue=$autoInstallData{autoManagedSpringVersion};
