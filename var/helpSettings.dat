@@ -734,6 +734,9 @@ Message sent to promote channels when !promote command is used.
 %b is replaced by the battle name
 %o is replaced by the mod name
 %a is replaced by the map name
+%P is replaced by the number of players currently in battle
+%S is replaced by the number of spectators currently in battle
+%U is replaced by the number of users (players+spectators) currently in battle
 -
 <null> (functionality disabled)
 Any string

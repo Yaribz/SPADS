@@ -191,6 +191,7 @@ helpSettings.dat:
 0.7.1: the "lobbyReconnectDelay" global setting now accepts a range for delay randomization
 0.7.2: fix default value of map link settings in doc
 0.7.3: update description of "autoManagedSpringVersion" global setting (add "unstable" engine release from GitHub)
+0.7.4: add new placeholders for "promoteMsg" global setting ("%P": number of players in battle, "%S": number of spectators in battle, "%U": total number of users in battle)
 
 PerlUnitSync.pm:
 ===============
@@ -980,6 +981,7 @@ spads.pl:
 0.13.4: use host hashes provided by unitsync during login
 0.13.5: minor fix for !restart/!reload commands (conf macro redefinitions handling code)
         code style and consistency improvements
+0.13.6: add new placeholders for "promoteMsg" global setting ("%P": number of players in battle, "%S": number of spectators in battle, "%U": total number of users in battle)
 
 SpadsConf.pm:
 ============

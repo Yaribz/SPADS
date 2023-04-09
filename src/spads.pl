@@ -73,7 +73,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.5';
+our $SPADS_VERSION='0.13.6';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -10412,6 +10412,10 @@ sub hPromote {
   $timestamps{promote}=time;
   my $promoteMsg=$conf{promoteMsg};
   my %hSettings=%{$spads->{hSettings}};
+
+  my $nbSpecs=getNbSpec()-1;
+  my $nbUsers=$nbHumanPlayers+$nbSpecs;
+
   my $neededPlayer="";
   if($conf{autoLock} ne "off" || $conf{autoSpecExtraPlayers} || $conf{autoStart} ne "off") {
     my $nbPlayers=0;
@@ -10427,6 +10431,9 @@ sub hPromote {
   $promoteMsg=~s/\%b/$hSettings{battleName}/g;
   $promoteMsg=~s/\%o/$targetMod/g;
   $promoteMsg=~s/\%a/$conf{map}/g;
+  $promoteMsg=~s/\%P/$nbHumanPlayers/g;
+  $promoteMsg=~s/\%S/$nbSpecs/g;
+  $promoteMsg=~s/\%U/$nbUsers/g;
   my @promChans=split(/;/,$conf{promoteChannels});
   foreach my $chan (@promChans) {
     $chan=$1 if($chan =~ /^([^\s]+)\s/);
