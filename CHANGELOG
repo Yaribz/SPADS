@@ -982,6 +982,10 @@ spads.pl:
 0.13.5: minor fix for !restart/!reload commands (conf macro redefinitions handling code)
         code style and consistency improvements
 0.13.6: add new placeholders for "promoteMsg" global setting ("%P": number of players in battle, "%S": number of spectators in battle, "%U": total number of users in battle)
+0.13.7: use non-blocking TLS handshake
+        always allow unique boss to unboss himself
+        minor fix in broken lobby connection detection
+        add comments regarding unused timeout callbacks
 
 SpadsConf.pm:
 ============

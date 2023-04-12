@@ -73,7 +73,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.6';
+our $SPADS_VERSION='0.13.7';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -2246,7 +2246,7 @@ sub openBattle {
                      $targetMod],
                     {OPENBATTLE => \&cbOpenBattle,
                      OPENBATTLEFAILED => \&cbOpenBattleFailed},
-                    \&cbOpenBattleTimeout);
+                    \&cbOpenBattleTimeout); # lobby command timeouts aren't enabled currently (SpringLobbyInterface::checkTimeouts() is never called)
   $timestamps{autoRestore}=time if($timestamps{autoRestore});
   %bosses=();
   $currentNbNonPlayer=0;
@@ -3104,7 +3104,8 @@ sub handleRequest {
       $level=0 if(exists $p_bossLevels->{directLevel} && $level < $p_bossLevels->{directLevel});
     }
 
-    if(defined $p_levels->{directLevel} && $p_levels->{directLevel} ne "" && $level >= $p_levels->{directLevel}) {
+    if((defined $p_levels->{directLevel} && $p_levels->{directLevel} ne "" && $level >= $p_levels->{directLevel})
+       || ($lcCmd eq 'boss' && @cmd == 1 && keys %bosses == 1 && exists $bosses{$user})) {
       my @realCmd=@cmd;
       my $rewrittenCommand=executeCommand($source,$user,\@cmd);
       @realCmd=split(/ /,$rewrittenCommand) if(defined $rewrittenCommand && $rewrittenCommand && $rewrittenCommand ne '1');
@@ -13153,7 +13154,6 @@ sub hApiStatus {
 
 sub cbLobbyConnect {
   $lobbyState=2;
-  $lobbyBrokenConnection=0;
   my $lobbySyncedSpringVersion=$_[2];
   $lobbySyncedSpringVersion=$1 if($lobbySyncedSpringVersion =~ /^([^\.]+)\./);
   $lanMode=$_[4];
@@ -13170,14 +13170,15 @@ sub cbLobbyConnect {
   }
 
   if($useTls) {
-    queueLobbyCommand(["STLS"],{OK => \&cbOk},\&cbStlsTimeout);
+    $lobby->startTls(\&cbStartTls)
+        or startTlsFailed();
   }else{
     initLobbyConnection();
   }
 }
 
-sub cbOk {
-  if(defined $lobby->{tlsCertifHash}) {
+sub cbStartTls {
+  if($_[0] && defined $lobby->{tlsCertifHash}) {
     if($spads->isTrustedCertificateHash($conf{lobbyHost},$lobby->{tlsCertifHash})) {
       initLobbyConnection();
     }else{
@@ -13197,16 +13198,13 @@ sub cbOk {
       }
     }
   }else{
-    $lobbyState=0;
-    slog('Failed to enable TLS !',2);
-    SimpleEvent::unregisterSocket($lobby->{lobbySock});
-    $lobby->disconnect();
+    startTlsFailed();
   }
 }
 
-sub cbStlsTimeout {
+sub startTlsFailed {
   $lobbyState=0;
-  slog('Timeout while enabling TLS !',2);
+  slog('Failed to enable TLS !',2);
   SimpleEvent::unregisterSocket($lobby->{lobbySock});
   $lobby->disconnect();
 }
@@ -13253,7 +13251,7 @@ sub initLobbyConnection {
                     {ACCEPTED => \&cbLoginAccepted,
                      DENIED => \&cbLoginDenied,
                      AGREEMENTEND => \&cbAgreementEnd},
-                    \&cbLoginTimeout);
+                    \&cbLoginTimeout); # lobby command timeouts aren't enabled currently (SpringLobbyInterface::checkTimeouts() is never called)
   foreach my $pluginName (@pluginsOrder) {
     $plugins{$pluginName}->onLobbyLogin($lobby) if($plugins{$pluginName}->can('onLobbyLogin'));
   }
@@ -15442,6 +15440,7 @@ sub checkLobbyConnection {
         $timestamps{connectAttempt}=time;
         $lobbyState=1;
         $lobby->addCallbacks({REDIRECT => \&cbRedirect});
+        $lobbyBrokenConnection=0;
         if($lobby->connect(\&cbLobbyDisconnect,{TASSERVER => \&cbLobbyConnect},\&cbConnectTimeout)) {
           if(! SimpleEvent::registerSocket($lobby->{lobbySock},sub { $lobby->receiveCommand(); checkQueuedLobbyCommands(); })) {
             quitAfterGame('unable to register Spring lobby interface socket');
