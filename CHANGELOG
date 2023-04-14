@@ -986,6 +986,8 @@ spads.pl:
         always allow unique boss to unboss himself
         minor fix in broken lobby connection detection
         add comments regarding unused timeout callbacks
+0.13.8: do not print warnings when current game type changes and SPADS cannot update TrueSkill ratings, if ratings for previous game type were already unknown
+        fix instant map/preset change just after battle is open when recovering from an offline period longer than rotationDelay
 
 SpadsConf.pm:
 ============

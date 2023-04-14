@@ -73,7 +73,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.7';
+our $SPADS_VERSION='0.13.8';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -6074,7 +6074,8 @@ sub updateCurrentGameType {
     if($userSkillPref eq 'TrueSkill') {
       next if(exists $pendingGetSkills{$accountId});
       if(! exists $battleSkillsCache{$user}) {
-        slog("Unable to update battle skill of player $user for new game type, no cached skill available!",2);
+        slog("Unable to update battle skill of player $user for new game type, no cached skill available!",2)
+            if($battleSkills{$user}{skillOrigin} eq 'TrueSkill');
       }else{
         $battleSkills{$user}->{skill}=$battleSkillsCache{$user}->{$currentGameType}->{skill};
         $battleSkills{$user}->{sigma}=$battleSkillsCache{$user}->{$currentGameType}->{sigma};
@@ -13414,6 +13415,7 @@ sub cbOpenBattle {
   sendBattleSettings();
   applyMapBoxes();
   $lobbyState=6;
+  $timestamps{rotationEmpty}=time;
   logMsg("battle","=== $conf{lobbyLogin} joined ===") if($conf{logBattleJoinLeave});
   foreach my $pluginName (@pluginsOrder) {
     $plugins{$pluginName}->onBattleOpened() if($plugins{$pluginName}->can('onBattleOpened'));
