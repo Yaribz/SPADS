@@ -73,7 +73,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.8';
+our $SPADS_VERSION='0.13.9';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -451,6 +451,7 @@ our $springServerType=$conf{springServerType};
 my $springServerBin=$conf{springServer};
 my %autoManagedEngineData=(mode => 'off');
 my $failedEngineInstallVersion;
+my $engineVersionAutoManagementInProgress;
 my ($lockFh,$pidFile,$lockAcquired,$auLockFh,$periodicAutoUpdateLockAcquired);
 my %prefCache;
 my %prefCacheTs;
@@ -3623,7 +3624,7 @@ sub checkAutoUpdate {
     $timestamps{autoUpdate}=time;
     if(acquireAutoUpdateLock()) {
       if($updater->isUpdateInProgress()) {
-        slog('Skipping auto-update, another updater instance is already running',2);
+        slog('Skipping auto-update check, another updater instance is already running',2);
       }else{
         if(! SimpleEvent::forkCall(
                sub { return $updater->update() },
@@ -3645,12 +3646,29 @@ sub checkAutoUpdate {
 }
 
 sub engineVersionAutoManagement {
-  my $autoManagedEngineVersion=$updater->resolveEngineReleaseNameToVersion($autoManagedEngineData{release},$autoManagedEngineData{github});
+  if($engineVersionAutoManagementInProgress) {
+    slog('Skipping engine version auto-management run, previous run is still running...',4);
+    return;
+  }
+  slog('Starting engine version auto-management',5);
+  $engineVersionAutoManagementInProgress=1;
+  if(! SimpleEvent::forkCall(sub {return $updater->resolveEngineReleaseNameToVersion($autoManagedEngineData{release},$autoManagedEngineData{github})},
+                             \&resolveEngineReleaseNameToVersionPostActions)) {
+    slog('Unable to fork to perform engine release resolution',1);
+    $engineVersionAutoManagementInProgress=0;
+  }
+}
+
+sub resolveEngineReleaseNameToVersionPostActions {
+  my $autoManagedEngineVersion=shift;
+  
+  $engineVersionAutoManagementInProgress=0;
   my $engineStr = defined $autoManagedEngineData{github} ? 'engine' : 'Spring';
   if(! defined $autoManagedEngineVersion) {
     slog("Unable to identify current version of auto-managed $autoManagedEngineData{release} $engineStr release, skipping $engineStr version auto-management",2);
     return;
   }
+  slog("Engine release resolved to version $autoManagedEngineVersion",5);
   return if($autoManagedEngineVersion eq $autoManagedEngineData{version});
   if(defined $failedEngineInstallVersion && $failedEngineInstallVersion eq $autoManagedEngineVersion) {
     slog("Installation failed previously for $engineStr version $failedEngineInstallVersion, skipping $engineStr version auto-management",5);
@@ -3661,7 +3679,23 @@ sub engineVersionAutoManagement {
     slog("Skipping installation of $engineStr $autoManagedEngineVersion, another process is already installing this version",2);
     return;
   }
-  my $setupResult=$updater->setupEngine($autoManagedEngineVersion,$autoManagedEngineData{github});
+  
+  $engineVersionAutoManagementInProgress=1;
+  if(! SimpleEvent::forkCall(sub {return $updater->setupEngine($autoManagedEngineVersion,$autoManagedEngineData{github})},
+                             sub {setupEnginePostActions($autoManagedEngineVersion,@_)})) {
+    slog('Unable to fork to perform engine installation',1);
+    $engineVersionAutoManagementInProgress=0;
+  }
+}
+
+sub setupEnginePostActions {
+  my ($autoManagedEngineVersion,$setupResult)=@_;
+  $engineVersionAutoManagementInProgress=0;
+  my $engineStr = defined $autoManagedEngineData{github} ? 'engine' : 'Spring';
+  if(! defined $setupResult) {
+    slog("Unknown error during installation of $engineStr $autoManagedEngineVersion",1);
+    return;
+  }
   if($setupResult < 0) {
     my $setupFailedMsg="Unable to install $engineStr $autoManagedEngineVersion for version auto-management";
     if($setupResult < -9) {
@@ -3673,7 +3707,7 @@ sub engineVersionAutoManagement {
   }
   broadcastMsg("Installed new version for $autoManagedEngineData{release} $engineStr release: $autoManagedEngineVersion") if($setupResult > 0);
   $autoManagedEngineData{version}=$autoManagedEngineVersion;
-  my $autoManagedEngineFile="$conf{instanceDir}/autoManagedEngineVersion.dat";
+  my $autoManagedEngineFile=catfile($conf{instanceDir},'autoManagedEngineVersion.dat');
   nstore(\%autoManagedEngineData,$autoManagedEngineFile)
       or slog("Unable to write auto-managed $engineStr version file \"$autoManagedEngineFile\"",2);
   applyQuitAction(1,{on => 0, whenOnlySpec => 1, whenEmpty => 2}->{$autoManagedEngineData{restart}},$engineStr.' version auto-management') unless($autoManagedEngineData{restart} eq 'off');
@@ -15547,7 +15581,7 @@ sub manageBattle {
 
 sub checkExit {
   return if($simpleEventLoopStopping);
-  if($autohost->getState() == 0 && $springPid == 0 && defined $quitAfterGame{action} && ! $loadArchivesInProgress) {
+  if($autohost->getState() == 0 && $springPid == 0 && defined $quitAfterGame{action} && ! $loadArchivesInProgress && ! $engineVersionAutoManagementInProgress) {
     if($quitAfterGame{condition} == 0) {
       slog("Game is not running, exiting",3);
       $simpleEventLoopStopping=1;
