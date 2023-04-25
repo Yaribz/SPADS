@@ -73,7 +73,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.9';
+our $SPADS_VERSION='0.13.10';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -369,7 +369,8 @@ our %timestamps=(connectAttempt => 0,
                  floodPurge => time,
                  advert => time,
                  gameOver => 0,
-                 prefCachePurge => time);
+                 prefCachePurge => time,
+                 usLockRequestForGameStart => 0);
 my $syncedSpringVersion='';
 my $fullSpringVersion='';
 our $lobbyState=0; # 0:not_connected, 1:connecting, 2:connected, 3:logged_in, 4:start_data_received, 5:opening_battle, 6:battle_opened
@@ -452,7 +453,7 @@ my $springServerBin=$conf{springServer};
 my %autoManagedEngineData=(mode => 'off');
 my $failedEngineInstallVersion;
 my $engineVersionAutoManagementInProgress;
-my ($lockFh,$pidFile,$lockAcquired,$auLockFh,$periodicAutoUpdateLockAcquired);
+my ($lockFh,$pidFile,$lockAcquired,$auLockFh,$periodicAutoUpdateLockAcquired,$usLockFhForGameStart);
 my %prefCache;
 my %prefCacheTs;
 our %spadsCmdHandlers=%SPADS_CORE_CMD_HANDLERS;
@@ -720,6 +721,10 @@ sub onSpringProcessExit {
   my (undef,$exitCode,$signalNb,$hasCoreDump)=@_;
   $signalNb//=0;
   $hasCoreDump//=0;
+  if($usLockFhForGameStart) {
+    close($usLockFhForGameStart);
+    undef $usLockFhForGameStart;
+  }
   if(%{$p_runningBattle}) {
     %springPrematureEndData=(ec => $exitCode, ts => time, signal => $signalNb, core => $hasCoreDump);
   }else{
@@ -1424,12 +1429,12 @@ sub loadArchivesBlocking {
   if($conf{sequentialUnitsync}) {
     my $usLockFile="$conf{varDir}/unitsync.lock";
     open($usLockFh,'>',$usLockFile)
-        or fatalError("Unable to write Unitsync library lock file \"$usLockFile\" ($!)");
+        or fatalError("Unable to write unitsync library lock file \"$usLockFile\" ($!)");
     if(! flock($usLockFh, LOCK_EX|LOCK_NB)) {
       slog('Another instance is using unitsync, waiting for lock... (sequential unitsync mode)',3);
       if(! flock($usLockFh, LOCK_EX)) {
         close($usLockFh);
-        fatalError("Unable to acquire Unitsync library lock ($!)");
+        fatalError("Unable to acquire unitsync library lock ($!)");
       }
       slog('Unitsync library lock acquired',3);
     }
@@ -2054,7 +2059,7 @@ sub getLocalLanIp {
     }
   }
   foreach my $ip (@ips) {
-    if($ip =~ /^10\./ || $ip =~ /192\.168\./) {
+    if($ip =~ /^10\./ || $ip =~ /^192\.168\./) {
       slog("Following local LAN IP address detected: $ip",4);
       return $ip;
     }
@@ -5336,10 +5341,12 @@ sub getBattleState {
   my @bUsers=keys %{$p_bUsers};
   return { battleState => -4 } if($#bUsers > 250);
 
+  my @players;
   foreach my $bUser (@bUsers) {
     if(! defined $p_bUsers->{$bUser}->{battleStatus}) {
       push(@unsyncedPlayers,$bUser);
     }elsif($p_bUsers->{$bUser}->{battleStatus}->{mode}) {
+      push(@players,$bUser);
       if($p_bUsers->{$bUser}->{battleStatus}->{sync} != 1) {
         push(@unsyncedPlayers,$bUser);
       }elsif($lobby->{users}->{$bUser}->{status}->{inGame}) {
@@ -5412,18 +5419,21 @@ sub getBattleState {
     }
   }
 
-  return { battleState => 0,
+  return { battleState => @warnings ? 0 : 1,
            nbIds => $nbIds,
-           warning => join(" and ",@warnings) } if(@warnings);
-
-  return { battleState => 1,
-           nbIds => $nbIds };
+           players => \@players,
+           warning => join(" and ",@warnings) };
 }
 
 sub launchGame {
   my ($force,$checkOnly,$automatic,$checkBypassLevel)=@_;
   $checkBypassLevel//=0;
 
+  if($timestamps{usLockRequestForGameStart}) {
+    answer('Game start is already in progress (waiting for exclusive acess to archives cache)') unless($automatic);
+    return 0;
+  }
+  
   my $p_battleState = getBattleState();
 
   if($p_battleState->{battleState} < -$checkBypassLevel) {
@@ -5479,61 +5489,37 @@ sub launchGame {
     return 0;
   }
 
-  my %additionalData=('game/AutohostPort' => $conf{autoHostPort},
-                      playerData => {},
-                      HOSTOPTIONS => {});
-  foreach my $hostOption (qw'autoAddBotNb autoBalance autoBlockBalance autoBlockColors autoFixColors autoSpecExtraPlayers autoStart autoStop balanceMode clanMode extraBox idShareMode maxSpecs minPlayers minTeamSize nbPlayerById nbTeams noSpecChat noSpecDraw rankMode skillMode speedControl teamSize botsRank colorSensitivity') {
-    $additionalData{HOSTOPTIONS}{$hostOption}=$conf{$hostOption};
-    $additionalData{HOSTOPTIONS}{$hostOption}=~tr/;/:/;
-  }
-  $additionalData{HOSTOPTIONS}{forceStarted}=$force?1:0;
-  $additionalData{HOSTOPTIONS}{springServerType}=$springServerType;
-  $additionalData{HOSTOPTIONS}{spadsVersion}=$SPADS_VERSION;
-  $additionalData{'game/HostIP'}=$conf{forceHostIp};
-  my %clansId;
-  my $nextClanId=1;
-  foreach my $bUser (keys %{$lobby->{battle}{users}}) {
-    next unless(exists $lobby->{users}{$bUser} && exists $lobby->{users}{$bUser}{accountId} && $lobby->{users}{$bUser}{accountId});
-    my $accountId=$lobby->{users}{$bUser}{accountId};
-    my $clanPref=getUserPref($bUser,'clan');
-    if($clanPref ne '') {
-      $clansId{$clanPref}=$nextClanId++ unless(exists $clansId{$clanPref});
-      $additionalData{playerData}{$accountId}{ClanId}=$clansId{$clanPref};
-    }
-    next unless(exists $battleSkills{$bUser} && exists $battleSkills{$bUser}{class});
-    $additionalData{playerData}{$accountId}{SkillClass}=$battleSkills{$bUser}{class};
-  }
+  my $mapIsAvailableLocally = exists $availableMapsNameToNb{$currentMap} ? 1 : 0;
 
-  my $mapAvailableLocally = exists $availableMapsNameToNb{$currentMap} ? 1 : 0;
-
-  if($spads->{bSettings}->{startpostype} == 2) {
-    if(! $force && ! %{$lobby->{battle}->{startRects}}) {
+  if($spads->{bSettings}{startpostype} == 2) {
+    if(! $force && ! %{$lobby->{battle}{startRects}}) {
       answer("Unable to start game, start position type is set to \"Choose in game\" but no start box is set - use !forceStart to bypass") unless($automatic);
       return 0;
     }
   }else{
-    if(! $mapAvailableLocally) {
+    if(! $mapIsAvailableLocally) {
       answer("Unable to start game, start position type must be set to \"Choose in game\" when using a map unavailable on server (\"!bSet startPosType 2\")") unless($automatic);
       return 0;
     }
 
     my $r_mapInfo=$spads->getCachedMapInfo($currentMap);
     if($p_battleState->{nbIds} > $r_mapInfo->{nbStartPos}) {
-      my $currentStartPosType=$spads->{bSettings}->{startpostype} ? 'random' : 'fixed';
+      my $currentStartPosType=$spads->{bSettings}{startpostype} ? 'random' : 'fixed';
       answer("Unable to start game, not enough start positions on map for $currentStartPosType start position type") unless($automatic);
       return 0;
     }
-
   }
 
-  if((! $force) && $conf{autoBalance} ne 'off' && ! $balanceState) {
-    answer("Unable to start game, autoBalance is enabled but battle hasn't been balanced yet - use !forceStart to bypass");
-    return 0;
-  }
+  if(! $force) {
+    if($conf{autoBalance} ne 'off' && ! $balanceState) {
+      answer("Unable to start game, autoBalance is enabled but battle hasn't been balanced yet - use !forceStart to bypass");
+      return 0;
+    }
 
-  if((! $force) && $conf{autoFixColors} ne 'off' && ! $colorsState) {
-    answer("Unable to start game, autoFixColors is enabled but colors haven't been fixed yet - use !forceStart to bypass");
-    return 0;
+    if($conf{autoFixColors} ne 'off' && ! $colorsState) {
+      answer("Unable to start game, autoFixColors is enabled but colors haven't been fixed yet - use !forceStart to bypass");
+      return 0;
+    }
   }
 
   foreach my $pluginName (@pluginsOrder) {
@@ -5547,8 +5533,6 @@ sub launchGame {
   }
 
   return 1 if($checkOnly);
-
-  $additionalData{"game/MapHash"}=uint32($spads->getMapHash($currentMap,$syncedSpringVersion)) unless($mapAvailableLocally);
 
   if($conf{autoSaveBoxes}) {
     my $p_startRects=$lobby->{battle}->{startRects};
@@ -5567,6 +5551,34 @@ sub launchGame {
       $spads->saveMapBoxes($smfMapName,$p_startRects,$conf{extraBox}) if($saveBoxes);
     }
   }
+
+  my %additionalData=('game/AutohostPort' => $conf{autoHostPort},
+                      playerData => {},
+                      HOSTOPTIONS => {});
+  foreach my $hostOption (qw'autoAddBotNb autoBalance autoBlockBalance autoBlockColors autoFixColors autoSpecExtraPlayers autoStart autoStop balanceMode clanMode extraBox idShareMode maxSpecs minPlayers minTeamSize nbPlayerById nbTeams noSpecChat noSpecDraw rankMode skillMode speedControl teamSize botsRank colorSensitivity') {
+    $additionalData{HOSTOPTIONS}{$hostOption}=$conf{$hostOption};
+    $additionalData{HOSTOPTIONS}{$hostOption}=~tr/;/:/;
+  }
+  $additionalData{HOSTOPTIONS}{forceStarted}=$force?1:0;
+  $additionalData{HOSTOPTIONS}{springServerType}=$springServerType;
+  $additionalData{HOSTOPTIONS}{spadsVersion}=$SPADS_VERSION;
+  $additionalData{'game/HostIP'}=$conf{forceHostIp};
+  {
+    my %clansId;
+    my $nextClanId=1;
+    foreach my $bUser (keys %{$lobby->{battle}{users}}) {
+      next unless(exists $lobby->{users}{$bUser} && exists $lobby->{users}{$bUser}{accountId} && $lobby->{users}{$bUser}{accountId});
+      my $accountId=$lobby->{users}{$bUser}{accountId};
+      my $clanPref=getUserPref($bUser,'clan');
+      if($clanPref ne '') {
+        $clansId{$clanPref}=$nextClanId++ unless(exists $clansId{$clanPref});
+        $additionalData{playerData}{$accountId}{ClanId}=$clansId{$clanPref};
+      }
+      next unless(exists $battleSkills{$bUser} && exists $battleSkills{$bUser}{class});
+      $additionalData{playerData}{$accountId}{SkillClass}=$battleSkills{$bUser}{class};
+    }
+  }
+  $additionalData{"game/MapHash"}=uint32($spads->getMapHash($currentMap,$syncedSpringVersion)) unless($mapIsAvailableLocally);
 
   foreach my $pluginName (@pluginsOrder) {
     my $r_newStartScriptTags=$plugins{$pluginName}->addStartScriptTags(\%additionalData) if($plugins{$pluginName}->can('addStartScriptTags'));
@@ -5594,15 +5606,83 @@ sub launchGame {
       }
     }
   }
-  my $p_modSides=getModSides($lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod});
-  my ($p_startData,$p_teamsMap,$p_allyTeamsMap)=$lobby->generateStartData(\%additionalData,$p_modSides,undef,$springServerType eq 'dedicated' ? 1 : 2);
+  
+  my ($p_startData,$p_teamsMap,$p_allyTeamsMap)=$lobby->generateStartData(
+    \%additionalData,
+    getModSides($lobby->{battles}{$lobby->{battle}{battleId}}{mod}),
+    undef,
+    $springServerType eq 'dedicated' ? 1 : 2,
+      );
   if(! $p_startData) {
     slog("Unable to start game: start script generation failed",1);
     closeBattleAfterGame("Unable to start game (start script generation failed)");
     return 0;
   }
-  my %reversedTeamsMap=reverse %{$p_teamsMap};
-  my %reversedAllyTeamsMap=reverse %{$p_allyTeamsMap};
+
+  if($conf{sequentialUnitsync}) {
+    my $usLockFile="$conf{varDir}/unitsync.lock";
+    open($usLockFhForGameStart,'>',$usLockFile)
+        or fatalError("Unable to write unitsync library lock file \"$usLockFile\" for game start ($!)");
+    return startGameServer($p_startData,$p_teamsMap,$p_allyTeamsMap)
+        if(flock($usLockFhForGameStart, LOCK_EX|LOCK_NB));
+    close($usLockFhForGameStart);
+    undef $usLockFhForGameStart;
+    if(%currentVote && exists $currentVote{command}) {
+      broadcastMsg("Vote cancelled, preparing to launch game... (waiting for exclusive access to archives cache)");
+      foreach my $pluginName (@pluginsOrder) {
+        $plugins{$pluginName}->onVoteStop(0) if($plugins{$pluginName}->can('onVoteStop'));
+      }
+      %currentVote=();
+    }else{
+      broadcastMsg('Preparing to launch game... (waiting for exclusive access to archives cache)');
+    }
+    slog('Another instance is using unitsync, waiting for lock to start game... (sequential unitsync mode)',3);
+    $timestamps{usLockRequestForGameStart}=time;
+    return SimpleEvent::requestFileLock(
+      'unitsyncLock',
+      $usLockFile,
+      LOCK_EX,
+      sub {
+        my $requestDelay=time-$timestamps{usLockRequestForGameStart};
+        slog("Acquiring exclusive access to archives cache took $requestDelay seconds (starting game in sequential unitsync mode)",2)
+            if($requestDelay > 5);
+        $timestamps{usLockRequestForGameStart}=0;
+        $usLockFhForGameStart=shift;
+        startGameServer($p_startData,$p_teamsMap,$p_allyTeamsMap,$p_battleState->{players});
+      },
+      30,
+      sub {
+        $timestamps{usLockRequestForGameStart}=0;
+        my $errMsg='Failed to launch game (timeout when acquiring exclusive access to archives cache)';
+        slog($errMsg,1);
+        broadcastMsg($errMsg);
+      },
+        );
+  }else{
+    return startGameServer($p_startData,$p_teamsMap,$p_allyTeamsMap);
+  }
+}
+
+sub startGameServer {
+  my ($p_startData,$p_teamsMap,$p_allyTeamsMap,$p_players)=@_;
+
+  if(defined $p_players) {
+    my $cancelMsg;
+    if($lobbyState < 6 || ! %{$lobby->{battle}}) {
+      $cancelMsg='battle lobby closed';
+    }elsif(any {! exists $lobby->{battle}{users}{$_}} @{$p_players}) {
+      $cancelMsg='players left battle lobby';
+    }
+    if(defined $cancelMsg) {
+      $cancelMsg="Cancelling game start ($cancelMsg during game launch)";
+      broadcastMsg($cancelMsg);
+      slog($cancelMsg,2);
+      close($usLockFhForGameStart);
+      undef $usLockFhForGameStart;
+      return;
+    }
+  }
+  
   open(SCRIPT,">$conf{instanceDir}/startscript.txt");
   for my $i (0..$#{$p_startData}) {
     print SCRIPT $p_startData->[$i]."\n";
@@ -5642,6 +5722,10 @@ sub launchGame {
     if(! $springWin32Process) {
       $springWin32Process=undef;
       slog('Unable to create Win32 process to launch Spring',1);
+      if($usLockFhForGameStart) {
+        close($usLockFhForGameStart);
+        undef $usLockFhForGameStart;
+      }
       return;
     }
     $springPid=$springWin32Process->GetProcessID();
@@ -5669,6 +5753,10 @@ sub launchGame {
     if(! $springPid) {
       $springPid=0;
       slog('Unable to fork to launch Spring',1);
+      if($usLockFhForGameStart) {
+        close($usLockFhForGameStart);
+        undef $usLockFhForGameStart;
+      }
       return;
     }
   }
@@ -5684,8 +5772,8 @@ sub launchGame {
   $p_runningBattle=$lobby->getRunningBattle();
   %runningBattleMapping=(teams => $p_teamsMap,
                          allyTeams => $p_allyTeamsMap);
-  %runningBattleReversedMapping=(teams => \%reversedTeamsMap,
-                                 allyTeams => \%reversedAllyTeamsMap);
+  %runningBattleReversedMapping=(teams => {reverse %{$p_teamsMap}},
+                                 allyTeams => {reverse %{$p_allyTeamsMap}});
   $p_gameOverResults={};
   %defeatTimes=();
   %inGameAddedUsers=();
@@ -6526,6 +6614,7 @@ sub autoManageBattle {
   if($conf{autoStart} ne 'off') {
     return if(%{$lobby->{battle}->{bots}});
     return if($conf{autoStart} eq 'on' && $battleState < 2);
+    return if($timestamps{usLockRequestForGameStart});
     launchGame(0,0,1);
   }
 
@@ -8699,7 +8788,11 @@ sub hForceStart {
   my $gameState=$autohost->getState();
   if($gameState == 0) {
     if($lobbyState < 6) {
-      answer("Unable to launch game, battle lobby is closed");
+      answer("Unable to start game, battle lobby is closed");
+      return 0;
+    }
+    if($springPid) {
+      answer("Unable to start game, it is already running");
       return 0;
     }
     return launchGame(1,$checkOnly);
@@ -11973,7 +12066,13 @@ sub getBattleLobbyStatus {
   my ($p_C,$B)=initUserIrcColors($user);
   my %C=%{$p_C};
 
-  my $battleStatus = ($springPid && $autohost->getState()) ? 'in-game' : 'waiting for ready players in battle lobby';
+  my $battleStatus;
+  if($springPid && $autohost->getState()) {
+    $battleStatus='in-game';
+  }else{
+    $battleStatus='waiting for ';
+    $battleStatus .= $timestamps{usLockRequestForGameStart} ? 'exclusive access to archives cache to start game' : 'ready players in battle lobby';
+  }
   $battleStatus.=' (last game finished '.secToTime(time-$timestamps{lastGameEnd}).' ago)' if($timestamps{lastGameEnd});
   my %globalStatus = ("$B$C{10}Battle status$B$C{1}" => $battleStatus,
                       "$B$C{10}Game type$B$C{1}" => $currentGameType,
@@ -11981,7 +12080,7 @@ sub getBattleLobbyStatus {
                       "$B$C{10}Mod$B$C{1}" => $lobby->{battles}{$lobby->{battle}{battleId}}{mod},
                       "$B$C{10}Preset$B$C{1}" => "$conf{preset} ($conf{description})");
   if(ref $user) {
-    $globalStatus{battleStatus} = ($springPid && $autohost->getState()) ? 'running' : 'waiting';
+    $globalStatus{battleStatus} = ($springPid && $autohost->getState()) ? 'running' : ($timestamps{usLockRequestForGameStart} ? 'preparing' : 'waiting');
     $globalStatus{delaySinceLastGame} = $timestamps{lastGameEnd} ? time-$timestamps{lastGameEnd} : undef;
   }
   
@@ -14286,6 +14385,10 @@ sub cbAhPlayerChat {
 
 sub cbAhServerStarted {
   slog("Spring server started",4);
+  if($usLockFhForGameStart) {
+    close($usLockFhForGameStart);
+    undef $usLockFhForGameStart;
+  }
   if($conf{noSpecDraw}) {
     if($syncedSpringVersion =~ /^(\d+)/ && $1 < 96) {
       $autohost->sendChatMessage('/nospecdraw 0') ;
@@ -15432,7 +15535,7 @@ if(! $abortSpadsStartForAutoUpdate) {
   fatalError('Unable to register SIGTERM') unless(MSWIN32 || SimpleEvent::registerSignal('TERM', sub { quitAfterGame('SIGTERM signal received'); } ));
   fatalError('Unable to create socket for Spring AutoHost interface') unless($autohost->open());
   fatalError('Unable to register Spring AutoHost interface socket') unless(SimpleEvent::registerSocket($autohost->{autoHostSock},sub { $autohost->receiveCommand() }));
-  SimpleEvent::addAutoCloseOnFork(\$lockFh,\$auLockFh);
+  SimpleEvent::addAutoCloseOnFork(\$lockFh,\$auLockFh,\$usLockFhForGameStart);
 
   if($conf{autoLoadPlugins} ne '') {
     my @pluginNames=split(/;/,$conf{autoLoadPlugins});
@@ -15634,6 +15737,7 @@ sub postMainLoop {
   SimpleEvent::removeTimer('SpadsMainLoop');
   SimpleEvent::removeTimer('EngineVersionAutoManagement') if($autoManagedEngineData{mode} eq 'release');
   SimpleEvent::removeTimer('RefreshSharedData') if($conf{sharedDataRefreshDelay});
+  SimpleEvent::removeFileLockRequest('unitsyncLock') if($timestamps{usLockRequestForGameStart});
 }
 
 $spads->dumpDynamicData();
