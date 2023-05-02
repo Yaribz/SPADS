@@ -49,7 +49,7 @@ help.dat:help_0.14.0.dat
 helpSettings.dat:helpSettings_0.7.4.dat
 PerlUnitSync.pm:PerlUnitSync-106.0b.pm
 replay_upload.py:replay_upload_0.7.py
-SimpleEvent.pm:SimpleEvent_0.12.pm
+SimpleEvent.pm:SimpleEvent_0.13.pm
 SimpleLog.pm:SimpleLog_0.8.pm
 spads.pl:spads_0.13.10.pl
 SpadsConf.pm:SpadsConf_0.13.3.pm
@@ -70,7 +70,7 @@ help.dat:help_0.14.0.dat
 helpSettings.dat:helpSettings_0.7.4.dat
 PerlUnitSync.pm:PerlUnitSync-106.0b.pm
 replay_upload.py:replay_upload_0.7.py
-SimpleEvent.pm:SimpleEvent_0.12.pm
+SimpleEvent.pm:SimpleEvent_0.13.pm
 SimpleLog.pm:SimpleLog_0.8.pm
 spads.pl:spads_0.13.10.pl
 SpadsConf.pm:SpadsConf_0.13.3.pm
