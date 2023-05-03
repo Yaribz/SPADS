@@ -992,6 +992,7 @@ spads.pl:
 0.13.10: fix race condition between dedicated/headless server and unitsync that caused the archive cache to be cleared
          minor fix in local LAN IP address detection
          fix detection of game server already being launched in !forceStart command processing
+0.13.11: share "bosses" data with plugins
 
 SpadsConf.pm:
 ============
@@ -1339,6 +1340,7 @@ SpadsPluginApi.pm:
       plugins can now declare lobby command callbacks which will be called before the lobby interface module callbacks (new optional parameter for "addLobbyCommandHandler" and "removeLobbyCommandHandler" plugin API functions)
 0.32: allow plugins to update skill uncertainty value ("updatePlayerSkill" customization callback)
 0.33: use renammed SPADS core global constants and variables (code style and consistency improvements)
+0.34: new plugin API accessor "getBosses"
 
 SpadsUpdater.pm:
 ===============

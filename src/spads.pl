@@ -73,7 +73,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.10';
+our $SPADS_VERSION='0.13.11';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -437,7 +437,7 @@ my ($os,$mem,$sysUptime,$cpuModel)=getSysInfo();
 my %pendingAlerts;
 my %alertedUsers;
 my %springPrematureEndData=();
-my %bosses=();
+our %bosses=();
 my $balRandSeed=intRand();
 my %authenticatedUsers;
 my $lanMode=0;
