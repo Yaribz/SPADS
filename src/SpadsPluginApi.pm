@@ -24,7 +24,7 @@ use List::Util qw'any none';
 use Exporter 'import';
 @EXPORT=qw/$spadsVersion $spadsDir loadPythonPlugin get_flag fix_string getLobbyState getSpringPid getSpringServerType getTimestamps getBosses getRunningBattle getConfMacros getCurrentVote getPlugin getPluginList addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess forkCall removeProcessCallback createDetachedProcess addTimer removeTimer addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog updateSetting secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives/;
 
-my $apiVersion='0.34';
+my $apiVersion='0.35';
 
 our $spadsVersion=$::SPADS_VERSION;
 our $spadsDir=$::CWD;
@@ -1567,8 +1567,8 @@ see BATTLESTATUS hash description below), C<color> (data specifying the team
 color of the AI bot using RGB model, see COLOR hash description below), C<owner>
 (name of the user hosting the AI bot)
 
-=item * C<disabledUnits>: a reference to an array containing the names of the
-game units currently disabled
+=item * C<restrictedUnits>: a reference to a hash whose keys are the names of the
+game units currently restricted, and values are the corresponding unit limit.
 
 =item * C<modHash>: the hash of the mod (game) used by the battle lobby
 

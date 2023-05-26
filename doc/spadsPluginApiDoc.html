@@ -874,7 +874,7 @@
 <li><p><code>bots</code>: a reference to a hash containing the data regarding the AI bots currently in the battle lobby. This hash is indexed by AI bot names and the values are references to hashes with following content: <code>aiDll</code> (details regarding the AI bot, usually the AI name and version, or the AI DLL), <code>battleStatus</code> (data representing the status of the AI bot in the battle lobby, see BATTLESTATUS hash description below), <code>color</code> (data specifying the team color of the AI bot using RGB model, see COLOR hash description below), <code>owner</code> (name of the user hosting the AI bot)</p>
 
 </li>
-<li><p><code>disabledUnits</code>: a reference to an array containing the names of the game units currently disabled</p>
+<li><p><code>restrictedUnits</code>: a reference to a hash whose keys are the names of the game units currently restricted, and values are the corresponding unit limit.</p>
 
 </li>
 <li><p><code>modHash</code>: the hash of the mod (game) used by the battle lobby</p>

@@ -1341,6 +1341,7 @@ SpadsPluginApi.pm:
 0.32: allow plugins to update skill uncertainty value ("updatePlayerSkill" customization callback)
 0.33: use renammed SPADS core global constants and variables (code style and consistency improvements)
 0.34: new plugin API accessor "getBosses"
+0.35: update documentation regarding the data structure returned by the getBattle() method of the SpringLobbyInterface module ("disabledUnits" array --> "restrictedUnits" hash)
 
 SpadsUpdater.pm:
 ===============
