@@ -73,7 +73,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.11';
+our $SPADS_VERSION='0.13.12';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -8163,7 +8163,7 @@ sub hCallVote {
   sayPrivate($user,$warnMes) if($warnMes && $conf{springieEmulation} eq "warn" && exists $lobby->{users}->{$user} && (! $lobby->{users}->{$user}->{status}->{inGame}));
 
   my $checkValue=executeCommand($source,$user,$p_params,1);
-  return unless($checkValue);
+  return 0 unless($checkValue);
 
   if($checkValue ne '1') {
     my @rewrittenCommand=split(/ /,$checkValue);
@@ -8174,7 +8174,7 @@ sub hCallVote {
 
   if(! defined $p_levelsForVote->{voteLevel} || $p_levelsForVote->{voteLevel} eq '') {
     answer("$user, you are not allowed to vote for command \"$p_params->[0]\" in current context.");
-    return;
+    return 0;
   }
 
   my $voterLevel=getUserAccessLevel($user);
@@ -8187,7 +8187,7 @@ sub hCallVote {
     }else{
       answer("$user, you are not allowed to vote for command \"$p_params->[0]\" in current context.");
     }
-    return;
+    return 0;
   }
 
   if(%currentVote) {
@@ -8200,16 +8200,13 @@ sub hCallVote {
             last;
           }
         }
-        if($isSameCmd) {
-          executeCommand($source,$user,['vote','y']);
-          return;
-        }
+        return executeCommand($source,$user,['vote','y']) if($isSameCmd);
       }
       answer("$user, there is already a vote in progress, please wait for it to finish before calling another one.");
-      return;
+      return 0;
     }elsif($user eq $currentVote{user}) {
       answer("$user, please wait ".($currentVote{expireTime} + $conf{reCallVoteDelay} - time)." more second(s) before calling another vote (vote flood protection).");
-      return;
+      return 0;
     }
   }
 
@@ -8257,11 +8254,8 @@ sub hCallVote {
       delete @remainingVoters{@{$voteCallAllowed}} if(ref $voteCallAllowed eq 'ARRAY');
       last unless($voteCallAllowed && %remainingVoters);
     }
-    return unless($voteCallAllowed);
-    if(! %remainingVoters) {
-      executeCommand($source,$user,$p_params);
-      return;
-    }
+    return 0 unless($voteCallAllowed);
+    return executeCommand($source,$user,$p_params) unless(%remainingVoters);
     my $r_cmdVoteSettings=getCmdVoteSettings(lc($p_params->[0]));
     my $awayVoteDelay=$r_cmdVoteSettings->{awayVoteDelay};
     my $awayVoteTime=0;
@@ -8294,8 +8288,9 @@ sub hCallVote {
     foreach my $pluginName (@pluginsOrder) {
       $plugins{$pluginName}->onVoteStart($user,$p_params) if($plugins{$pluginName}->can('onVoteStart'));
     }
+    return 1;
   }else{
-    executeCommand($source,$user,$p_params);
+    return executeCommand($source,$user,$p_params);
   }
 
 }
@@ -12924,7 +12919,7 @@ sub hVote {
 
   if($#{$p_params} != 0) {
     invalidSyntax($user,'vote');
-    return;
+    return 0;
   }
 
   my $vote=lc($p_params->[0]);
@@ -12940,17 +12935,17 @@ sub hVote {
   }
   if($isInvalid) {
     invalidSyntax($user,'vote');
-    return;
+    return 0;
   }
 
   if(! exists $currentVote{command}) {
     answer("$user, you cannot vote currently, there is no vote in progress.");
-    return;
+    return 0;
   }
 
   if(! (exists $currentVote{remainingVoters}->{$user} || exists $currentVote{awayVoters}->{$user} || exists $currentVote{manualVoters}->{$user})) {
     answer("$user, you are not allowed to vote for current vote.");
-    return;
+    return 0;
   }
 
   if(exists $currentVote{remainingVoters}->{$user}) {
@@ -12961,7 +12956,7 @@ sub hVote {
   }elsif(exists $currentVote{manualVoters}->{$user}) {
     if($currentVote{manualVoters}->{$user} eq $vote) {
       answer("$user, you have already voted for current vote.");
-      return;
+      return 0;
     }
     --$currentVote{$currentVote{manualVoters}->{$user}.'Count'};
   }
@@ -12972,6 +12967,7 @@ sub hVote {
   setUserPref($user,'voteMode','normal') if(getUserPref($user,'autoSetVoteMode'));
 
   printVoteState();
+  return 1;
 }
 
 sub hWhois {
