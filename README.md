@@ -13,8 +13,7 @@ Components
 * [src/spads.pl](src/spads.pl): SPADS application.
 * [src/SpadsConf.pm](src/SpadsConf.pm): Perl module handling SPADS
   configuration and dynamic data files.
-* [src/spadsInstaller.pl](src/spadsInstaller.pl): SPADS installation script
-  (also used to compile Perl Unitsync interface module).
+* [src/spadsInstaller.pl](src/spadsInstaller.pl): SPADS installation script.
 * [src/SpadsUpdater.pm](src/SpadsUpdater.pm): Perl module handling SPADS
   automatic update.
 * [src/update.pl](src/update.pl): Application to update SPADS components
@@ -25,8 +24,8 @@ Components
   retrieve the list of modoptions for all installed mods, and convert them
   optionnaly in SPADS format to copy-paste in the battlePresets.conf
   configuration file.
-* [src/PerlUnitSync.pm](src/PerlUnitSync.pm): Perl module for unitsync library
-  interface on Windows
+* [src/PerlUnitSync.pm](src/PerlUnitSync.pm): Perl module implementing the
+  unitsync library interface.
 * [SPADS configuration templates](etc): Templates for SPADS configuration
   files.
 * [var/help.dat](var/help.dat): Data file for SPADS commands help.
@@ -34,8 +33,8 @@ Components
   help.
 * [SPADS reference guide](doc/spadsDoc.html): HTML documentation of all SPADS
   commands and settings (generated from help data files).
-* [SPADS plugin API](doc/spadsPluginApiDoc.html): HTML documentation of the SPADS
-  plugin API (generated from SPADS plugin API module)
+* [SPADS plugin API](doc/spadsPluginApiDoc.html): HTML documentation of the
+  SPADS plugin API (generated from SPADS plugin API module).
 * [Official SPADS plugins](plugins/officials): Official SPADS plugins sources.
 * [SPADS plugins templates](plugins/templates): Templates for SPADS plugins
   development.
