@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.33 (2023/04/06)
+# Version 0.34 (2023/07/28)
 
 use strict;
 
@@ -1008,7 +1008,7 @@ if($engineBinariesType eq 'official' || $engineBinariesType eq 'github') {
   slog("Checking available $engineStr versions...",3);
   if($engineBinariesType eq 'official') {
     map { my $r_availableSpringVersions=$updater->getAvailableSpringVersions($_);
-          fatalError("Couldn't check available Spring versions") unless(@{$r_availableSpringVersions});
+          fatalError("Couldn't check available Spring versions") unless(@{$r_availableSpringVersions} || $_ eq 'develop');
           $engineVersions{$_}=$r_availableSpringVersions; } @engineBranches;
   }else{
     my $r_availableEngineVersions=$updater->getAvailableEngineVersionsFromGithub(\%ghInfo,0,5);

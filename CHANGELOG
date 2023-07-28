@@ -1270,6 +1270,7 @@ spadsInstaller.pl:
       import File::Spec functions instead of using fully qualified names
 0.32: fix installer not correctly auto-restarting after self-update
 0.33: add management of "unstable" engine release from GitHub (most recent release)
+0.34: workaround for missing Spring engine binaries ("develop" branch binaries unavailable for download)
 
 SpadsPluginApi.pm:
 =================
