@@ -994,6 +994,7 @@ spads.pl:
          fix detection of game server already being launched in !forceStart command processing
 0.13.11: share "bosses" data with plugins
 0.13.12: fix value of $commandResult parameter of "postSpadsCommand" plugin API callback for !callVote and !vote commands
+0.13.13: revamp SPADS exit code management
 
 SpadsConf.pm:
 ============
@@ -1344,6 +1345,7 @@ SpadsPluginApi.pm:
 0.33: use renammed SPADS core global constants and variables (code style and consistency improvements)
 0.34: new plugin API accessor "getBosses"
 0.35: update documentation regarding the data structure returned by the getBattle() method of the SpringLobbyInterface module ("disabledUnits" array --> "restrictedUnits" hash)
+0.36: allow plugins to set SPADS exit code when calling "quit" function from SPADS plugin API
 
 SpadsUpdater.pm:
 ===============

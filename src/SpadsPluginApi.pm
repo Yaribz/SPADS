@@ -24,7 +24,7 @@ use List::Util qw'any none';
 use Exporter 'import';
 @EXPORT=qw/$spadsVersion $spadsDir loadPythonPlugin get_flag fix_string getLobbyState getSpringPid getSpringServerType getTimestamps getBosses getRunningBattle getConfMacros getCurrentVote getPlugin getPluginList addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess forkCall removeProcessCallback createDetachedProcess addTimer removeTimer addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog updateSetting secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives/;
 
-my $apiVersion='0.35';
+my $apiVersion='0.36';
 
 our $spadsVersion=$::SPADS_VERSION;
 our $spadsDir=$::CWD;
@@ -377,14 +377,14 @@ sub queueLobbyCommand {
 }
 
 sub quit {
-  my ($type,$reason)=@_;
-  my %typeFunctions=( 1 => \&::quitAfterGame,
-                      2 => \&::restartAfterGame,
-                      3 => \&::quitWhenEmpty,
-                      4 => \&::restartWhenEmpty,
-                      5 => \&::quitWhenOnlySpec,
-                      6 => \&::restartWhenOnlySpec );
-  &{$typeFunctions{$type}}($reason);
+  my ($type,$reason,$exitCode)=@_;
+  $exitCode//=0;
+  {1 => \&::quitAfterGame,
+   2 => \&::restartAfterGame,
+   3 => \&::quitWhenOnlySpec,
+   4 => \&::restartWhenOnlySpec,
+   5 => \&::quitWhenEmpty,
+   6 => \&::restartWhenEmpty}->{$type}->($reason,$exitCode);
 }
 
 sub rehost {
@@ -1858,7 +1858,7 @@ be prevented.
 
 =item C<queueLobbyCommand(\@lobbyCommand)>
 
-=item C<quit($type,$reason)>
+=item C<quit($type,$reason,$exitCode=0)>
 
 =item C<rehost($reason)>
 

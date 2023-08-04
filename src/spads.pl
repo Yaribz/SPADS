@@ -48,24 +48,48 @@ use SpringAutoHostInterface;
 use SpringLobbyInterface;
 
 use constant {
+
   MSWIN32 => $^O eq 'MSWin32',
   DARWIN => $^O eq 'darwin',
+
+
+  EXIT_SUCCESS => 0,
+  EXIT_FAILURE => 1,
+
+  # Command/environment problems
+  EXIT_USAGE => 2,         # invalid usage
+  EXIT_CONFIG => 3,        # invalid configuration
+  EXIT_DEPENDENCY => 4,    # missing dependency
+
+  # Data/state problems
+  EXIT_CONFLICT => 16,     # instance directory conflict
+  EXIT_INPUTDATA => 17,    # inconsistent input data
+
+  # Other local problems
+  EXIT_SYSTEM => 32,       # system call failure
+  EXIT_SOFTWARE => 33,     # software failure
+
+  # Network/remote system problems
+  EXIT_REMOTE => 48,       # network error or deny from remote system
+  EXIT_CERTIFICATE => 49,  # invalid/untrusted certificate
+  EXIT_LOGIN => 50,        # login failure
+
 };
 
 if(MSWIN32) {
   eval { require Win32; 1; }
-      or die "$@Missing dependency: Win32 Perl module\n";
+      or fatalError("$@Missing dependency: Win32 Perl module",EXIT_DEPENDENCY);
   eval { require Win32::API; 1; }
-      or die "$@Missing dependency: Win32::API Perl module\n";
+      or fatalError("$@Missing dependency: Win32::API Perl module",EXIT_DEPENDENCY);
   eval { Win32::API->VERSION(0.73); 1; }
-      or die "$@SPADS requires Win32::API module version 0.73 or superior.\nPlease update your Perl installation (Perl 5.16.2 or superior is recommended)\n";
+      or fatalError("$@SPADS requires Win32::API module version 0.73 or superior, please update your Perl installation (Perl 5.16.2 or superior is recommended)",EXIT_DEPENDENCY);
   eval { require Win32::TieRegistry; Win32::TieRegistry->import(':KEY_'); 1; }
-      or die "$@Missing dependency: Win32::TieRegistry Perl module\n";
+      or fatalError("$@Missing dependency: Win32::TieRegistry Perl module",EXIT_DEPENDENCY);
   Win32::API->Import('msvcrt', 'int __cdecl _putenv (char* envstring)')
-      or die 'Failed to import _putenv function from msvcrt.dll ('.getLastWin32Error().")\n";
+      or fatalError('Failed to import _putenv function from msvcrt.dll ('.getLastWin32Error().')',EXIT_DEPENDENCY);
 }else{
   eval { require FFI::Platypus; 1; }
-    or die "$@Missing dependency: FFI::Platypus Perl module\n";
+    or fatalError("$@Missing dependency: FFI::Platypus Perl module",EXIT_DEPENDENCY);
 }
 
 SimpleEvent::addProxyPackage('SpadsPluginApi');
@@ -73,7 +97,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.12';
+our $SPADS_VERSION='0.13.13';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -317,7 +341,7 @@ $SIG{__WARN__} = sub {
 # Configuration loading #######################################################
 
 our $spads=SpadsConf->new($confFile,$sLog,\%confMacros);
-fatalError('Unable to load SPADS configuration at startup') unless($spads);
+fatalError('Unable to load SPADS configuration at startup',EXIT_CONFIG) unless($spads);
 $sLog=$spads->{log};
 
 # State variables #############################################################
@@ -343,6 +367,7 @@ my $abortSpadsStartForAutoUpdate=0;
 my %quitAfterGame=(
   action => undef, # 0: shutdown, 1: restart
   condition => undef, # 0: no game is running, 1: no game is running and only spectators in battle lobby, 2: no game is running and battle lobby is empty
+  exitCode => EXIT_SUCCESS,
     );
 my $closeBattleAfterGame=0;
 our %timestamps=(connectAttempt => 0,
@@ -527,7 +552,7 @@ if(MSWIN32) {
       }
       close(UPDATE_INFO);
     }else{
-      fatalError("Unable to read \"$spadsDir/updateInfo.txt\" file");
+      fatalError("Unable to read \"$spadsDir/updateInfo.txt\" file",EXIT_SYSTEM);
     }
   }
   foreach my $updatedPackage (keys %updatedPackages) {
@@ -542,7 +567,7 @@ if(MSWIN32) {
       renameToBeDeleted($updatedPackagePath) if(-f $updatedPackagePath);
     }
     if(! copy($versionedUpdatedPackagePath,$updatedPackagePath)) {
-      fatalError("Unable to copy \"$versionedUpdatedPackagePath\" to \"$updatedPackagePath\", system consistency must be checked manually !");
+      fatalError("Unable to copy \"$versionedUpdatedPackagePath\" to \"$updatedPackagePath\", system consistency must be checked manually !",EXIT_SYSTEM);
     }
     slog("Copied \"$versionedUpdatedPackagePath\" to \"$updatedPackagePath\" (Windows binary update mode)",5);
   }
@@ -552,11 +577,13 @@ if(MSWIN32) {
 
 if(defined $tlsAction && ($tlsAction eq 'revoke' || $tlsAction eq 'list' || defined $tlsCert)) {
   $tlsHost//=$conf{lobbyHost} unless($tlsAction eq 'list');
+  my $exitCode=EXIT_SUCCESS;
   if($tlsAction eq 'trust') {
     my $res=$spads->addTrustedCertificateHash({lobbyHost => $tlsHost, certHash => $tlsCert});
     if($res) {
       slog("Added trusted certificate hash (SHA-256) $tlsCert for host $tlsHost",3);
     }else{
+      $exitCode=EXIT_INPUTDATA;
       slog('Failed to add trusted certificate!',1);
     }
   }elsif($tlsAction eq 'revoke') {
@@ -564,6 +591,7 @@ if(defined $tlsAction && ($tlsAction eq 'revoke' || $tlsAction eq 'list' || defi
     if($res) {
       slog("Revoked certificate hash (SHA-256) $tlsCert for host $tlsHost",3);
     }else{
+      $exitCode=EXIT_INPUTDATA;
       slog('Failed to revoke certificate!',1) unless($res);
     }
   }else{
@@ -588,12 +616,12 @@ if(defined $tlsAction && ($tlsAction eq 'revoke' || $tlsAction eq 'list' || defi
       print 'No trusted lobby certificate'.(defined $tlsHost ? " for host $tlsHost" : '')."!\n";
     }
   }
-  exit 0;
+  exit $exitCode;
 }
 
 if($conf{lobbyTls} ne 'off') {
   $useTls = eval {require IO::Socket::SSL; 1};
-  fatalError('Module IO::Socket::SSL required for TLS support') if($conf{lobbyTls} eq 'on' &&  ! $useTls);
+  fatalError('Module IO::Socket::SSL required for TLS support',EXIT_DEPENDENCY) if($conf{lobbyTls} eq 'on' &&  ! $useTls);
 }
 
 # Console title update (Windows only) #########################################
@@ -622,7 +650,7 @@ sub invalidUsage {
        perl $0 <configurationFile> --tls-cert-list
        perl $0 <configurationFile> --tls-cert-list=<hostName>
 EOH
-  exit 1;
+  exit EXIT_USAGE;
 }
 
 sub parseCmdLineArgs {
@@ -674,10 +702,11 @@ sub parseMacroTokens {
 sub slog { $sLog->log(@_) }
 
 sub fatalError {
-  my $m=shift;
-  slog($m,0);
+  my ($m,$ec)=@_;
+  $ec//=EXIT_SOFTWARE;
+  defined $sLog ? $sLog->log($m,0) : print STDERR $m."\n";
   unlink($pidFile) if($lockAcquired);
-  exit 1;
+  exit $ec;
 }
 
 sub intRand {
@@ -803,7 +832,7 @@ sub portableExec {
 sub execError {
   my ($msg,$level)=@_;
   slog($msg,$level);
-  exit 1;
+  exit EXIT_FAILURE;
 }
 
 sub autoRetry {
@@ -835,7 +864,7 @@ sub splitPaths {
 sub setEnvVarFirstPaths {
   my ($varName,@firstPaths)=@_;
   my $needRestart=0;
-  die "Unable to handle path containing \"$PATH_SEP\" character!" if(any {index($_,$PATH_SEP) != -1} @firstPaths);
+  fatalError("Unable to handle path containing \"$PATH_SEP\" character!") if(any {index($_,$PATH_SEP) != -1} @firstPaths);
   $ENV{"SPADS_$varName"}=$ENV{$varName}//'_UNDEF_' unless(exists $ENV{"SPADS_$varName"});
   my @currentPaths=split(/$PATH_SEP/,$ENV{$varName}//'');
   $needRestart=1 if($#currentPaths < $#firstPaths);
@@ -861,7 +890,7 @@ sub setEnvVarFirstPaths {
 sub exportWin32EnvVar {
   my $envVar=shift;
   my $envVarDef="$envVar=".($ENV{$envVar}//'');
-  fatalError("Unable to export environment variable definition \"$envVarDef\"") unless(int32(_putenv($envVarDef)) == 0);
+  fatalError("Unable to export environment variable definition \"$envVarDef\"",EXIT_SYSTEM) unless(int32(_putenv($envVarDef)) == 0);
 }
 
 sub setSpringEnv {
@@ -1429,12 +1458,12 @@ sub loadArchivesBlocking {
   if($conf{sequentialUnitsync}) {
     my $usLockFile="$conf{varDir}/unitsync.lock";
     open($usLockFh,'>',$usLockFile)
-        or fatalError("Unable to write unitsync library lock file \"$usLockFile\" ($!)");
+        or fatalError("Unable to write unitsync library lock file \"$usLockFile\" ($!)",EXIT_SYSTEM);
     if(! flock($usLockFh, LOCK_EX|LOCK_NB)) {
       slog('Another instance is using unitsync, waiting for lock... (sequential unitsync mode)',3);
       if(! flock($usLockFh, LOCK_EX)) {
         close($usLockFh);
-        fatalError("Unable to acquire unitsync library lock ($!)");
+        fatalError("Unable to acquire unitsync library lock ($!)",EXIT_SYSTEM);
       }
       slog('Unitsync library lock acquired',3);
     }
@@ -2103,22 +2132,28 @@ sub isRestartForUpdateApplicable {
 }
 
 sub applyQuitAction {
-  my ($action,$condition,$reason)=@_;
+  my ($action,$condition,$reason,$exitCode)=@_;
+  $exitCode//=EXIT_SUCCESS;
   return 0 unless(isQuitActionApplicable($action,$condition));
   if(defined $action) {
     $quitAfterGame{action}=$action if(! defined $quitAfterGame{action} || $action<$quitAfterGame{action});
     $quitAfterGame{condition}=$condition if(! defined $quitAfterGame{condition} || $condition<$quitAfterGame{condition});
+    $quitAfterGame{exitCode}=$exitCode unless($exitCode == EXIT_SUCCESS);
   }
   my $msg='AutoHost '.('shutdown','restart')[$quitAfterGame{action}].' '.(defined $action?'scheduled'.('',' when battle only contains spectators',' when battle is empty')[$quitAfterGame{condition}]:'cancelled')." (reason: $reason)";
-  %quitAfterGame=(action => undef, condition => undef) unless(defined $action);
+  %quitAfterGame=(action => undef, condition => undef, exitCode => EXIT_SUCCESS) unless(defined $action);
   broadcastMsg($msg);
   slog($msg,3);
   checkExit() if(SimpleEvent::getModel());
   return 1;
 }
 
-sub quitAfterGame { applyQuitAction(0,0,shift); }
-sub restartAfterGame { applyQuitAction(1,0,shift); }
+sub quitAfterGame { applyQuitAction(0,0,$_[0],$_[1]//EXIT_SOFTWARE) }
+sub quitWhenOnlySpec { applyQuitAction(0,1,@_) }
+sub quitWhenEmpty { applyQuitAction(0,2,@_) }
+sub restartAfterGame { applyQuitAction(1,0,shift) }
+sub restartWhenOnlySpec { applyQuitAction(1,1,shift) }
+sub restartWhenEmpty { applyQuitAction(1,2,shift) }
 
 sub closeBattleAfterGame {
   my ($reason,$silentMode)=@_;
@@ -5622,7 +5657,7 @@ sub launchGame {
   if($conf{sequentialUnitsync}) {
     my $usLockFile="$conf{varDir}/unitsync.lock";
     open($usLockFhForGameStart,'>',$usLockFile)
-        or fatalError("Unable to write unitsync library lock file \"$usLockFile\" for game start ($!)");
+        or fatalError("Unable to write unitsync library lock file \"$usLockFile\" for game start ($!)",EXIT_SYSTEM);
     return startGameServer($p_startData,$p_teamsMap,$p_allyTeamsMap)
         if(flock($usLockFhForGameStart, LOCK_EX|LOCK_NB));
     close($usLockFhForGameStart);
@@ -13324,7 +13359,7 @@ sub cbStartTls {
         $lobbyState=0;
         SimpleEvent::unregisterSocket($lobby->{lobbySock});
         $lobby->disconnect();
-        quitAfterGame('untrusted lobby certificate');
+        quitAfterGame('untrusted lobby certificate',EXIT_CERTIFICATE);
       }
     }
   }else{
@@ -13486,7 +13521,7 @@ sub cbLoginDenied {
   my (undef,$reason)=@_;
   slog("Login denied on lobby server ($reason)",1);
   if(($reason !~ /^Already logged in/ && $reason !~ /^This account has already logged in/) || $triedGhostWorkaround > 2) {
-    quitAfterGame("loggin denied on lobby server");
+    quitAfterGame("loggin denied on lobby server",EXIT_LOGIN);
   }
   if($reason =~ /^Already logged in/) {
     $triedGhostWorkaround++;
@@ -13500,7 +13535,7 @@ sub cbLoginDenied {
 
 sub cbAgreementEnd {
   slog("Spring Lobby agreement has not been accepted for this account yet, please login with a Spring lobby client and accept the agreement",1);
-  quitAfterGame("Spring Lobby agreement not accepted yet for this account");
+  quitAfterGame("Spring Lobby agreement not accepted yet for this account",EXIT_LOGIN);
   $lobbyState=0;
   SimpleEvent::unregisterSocket($lobby->{lobbySock});
   $lobby->disconnect();
@@ -15316,7 +15351,7 @@ EOF
     close(HTML2);
   }
 
-  exit 0;
+  exit EXIT_SUCCESS;
 }
 
 sub encodeHtmlHelp {
@@ -15406,17 +15441,17 @@ if(! $abortSpadsStartForAutoUpdate) {
           slog("Unable to read SPADS PID file \"$pidFile\" ($!)",2);
         }
       }
-      fatalError("Another SPADS instance (PID $spadsPid) is already running using same instanceDir ($conf{instanceDir}), please use a different instanceDir for every SPADS instance");
+      fatalError("Another SPADS instance (PID $spadsPid) is already running using same instanceDir ($conf{instanceDir}), please use a different instanceDir for every SPADS instance",EXIT_CONFLICT);
     }
   }else{
-    fatalError("Unable to write SPADS lock file \"$lockFile\" ($!)");
+    fatalError("Unable to write SPADS lock file \"$lockFile\" ($!)",EXIT_SYSTEM);
   }
 
 # Spring environment setup #############
 
   if($conf{autoManagedSpringVersion} ne '') {
     %autoManagedEngineData=%{SpadsConf::parseAutoManagedSpringVersion($conf{autoManagedSpringVersion})};
-    fatalError("The \"autoManagedSpringVersion\" setting is configured to enable auto-download of engine using GitHub, but TLS support is missing (IO::Socket::SSL version 1.42 or superior and Net::SSLeay version 1.49 or superior are required)")
+    fatalError("The \"autoManagedSpringVersion\" setting is configured to enable auto-download of engine using GitHub, but TLS support is missing (IO::Socket::SSL version 1.42 or superior and Net::SSLeay version 1.49 or superior are required)",EXIT_DEPENDENCY)
         if(defined $autoManagedEngineData{github} && ! SpadsUpdater::checkHttpsSupport());
     my $engineStr = defined $autoManagedEngineData{github} ? 'engine' : 'Spring';
     if($autoManagedEngineData{mode} eq 'version') {
@@ -15446,7 +15481,7 @@ if(! $abortSpadsStartForAutoUpdate) {
         }
       }
     }else{
-      fatalError("Invalid value of \"autoManagedSpringVersion\" setting: $conf{autoManagedSpringVersion}");
+      fatalError("Invalid value of \"autoManagedSpringVersion\" setting: $conf{autoManagedSpringVersion}",EXIT_CONFIG);
     }
   }else{
     setSpringEnv($conf{instanceDir},splitPaths($conf{springDataDir}));
@@ -15494,7 +15529,7 @@ if(! $abortSpadsStartForAutoUpdate) {
     }elsif($conf{springServer} =~ /spring-headless(?:\.exe)?$/i) {
       $springServerType='headless';
     }else{
-      fatalError("Unable to determine server type (dedicated or headless) automatically from Spring server binary name ($conf{springServer}), please update 'springServerType' setting manually");
+      fatalError("Unable to determine server type (dedicated or headless) automatically from Spring server binary name ($conf{springServer}), please update 'springServerType' setting manually",EXIT_CONFIG);
     }
   }
   slog("Spring server mode: $springServerType",3);
@@ -15528,8 +15563,8 @@ if(! $abortSpadsStartForAutoUpdate) {
   $conf{eventModel}=~/^(auto|internal|AnyEvent)(?:\(([1-9]\d?\d?)\))?$/;
   my ($eventModel,$eventLoopTimeSlice)=($1,($2//50)/100);
   fatalError('Unable to initialize SimpleEvent module') unless(SimpleEvent::init(mode => ($eventModel eq 'auto' ? undef : $eventModel), timeSlice => $eventLoopTimeSlice, sLog => $simpleEventSimpleLog, maxChildProcesses => $conf{maxChildProcesses}));
-  fatalError('Unable to register SIGTERM') unless(MSWIN32 || SimpleEvent::registerSignal('TERM', sub { quitAfterGame('SIGTERM signal received'); } ));
-  fatalError('Unable to create socket for Spring AutoHost interface') unless($autohost->open());
+  fatalError('Unable to register SIGTERM') unless(MSWIN32 || SimpleEvent::registerSignal('TERM', sub { quitAfterGame('SIGTERM signal received',EXIT_SUCCESS); } ));
+  fatalError('Unable to create socket for Spring AutoHost interface',EXIT_SYSTEM) unless($autohost->open());
   fatalError('Unable to register Spring AutoHost interface socket') unless(SimpleEvent::registerSocket($autohost->{autoHostSock},sub { $autohost->receiveCommand() }));
   SimpleEvent::addAutoCloseOnFork(\$lockFh,\$auLockFh,\$usLockFhForGameStart);
 
@@ -15559,7 +15594,7 @@ sub mainLoop {
 sub checkLobbyConnection {
   if(! $lobbyState && ! defined $quitAfterGame{action}) {
     if($timestamps{connectAttempt} != 0 && index($conf{lobbyReconnectDelay},'-') == -1 && $conf{lobbyReconnectDelay} == 0) {
-      quitAfterGame('disconnected from lobby server, no reconnection delay configured');
+      quitAfterGame('disconnected from lobby server, no reconnection delay configured',EXIT_REMOTE);
     }else{
       if(! defined $lobbyReconnectDelay) {
         if(index($conf{lobbyReconnectDelay},'-') == -1) {
@@ -15745,13 +15780,13 @@ if($quitAfterGame{action} == 1) {
       SimpleEvent::createDetachedProcess($^X,
                                          [$0,$confFile,map {"$_=$confMacros{$_}"} (keys %confMacros)],
                                          $CWD);
-      exit 0;
+      exit EXIT_SUCCESS;
     }
     close(STDIN);
   }
   SimpleEvent::closeAllUserFds();
   portableExec($^X,$0,$confFile,map {"$_=$confMacros{$_}"} (keys %confMacros))
-      or die "Unable to restart SPADS ($!)";
+      or fatalError("Unable to restart SPADS ($!)");
 }
 
-exit 0;
+exit $quitAfterGame{exitCode};
