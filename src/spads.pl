@@ -97,7 +97,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.13';
+our $SPADS_VERSION='0.13.14';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -8032,6 +8032,8 @@ sub hBPreset {
 
 sub hBSet {
   my ($source,$user,$p_params,$checkOnly)=@_;
+  
+  $p_params->[1]='' if($#{$p_params} == 0);
   if($#{$p_params} != 1) {
     invalidSyntax($user,"bset");
     return 0;

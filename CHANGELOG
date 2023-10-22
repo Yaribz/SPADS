@@ -995,6 +995,7 @@ spads.pl:
 0.13.11: share "bosses" data with plugins
 0.13.12: fix value of $commandResult parameter of "postSpadsCommand" plugin API callback for !callVote and !vote commands
 0.13.13: revamp SPADS exit code management
+0.13.14: allow setting empty battle settings using "!bSet" command
 
 SpadsConf.pm:
 ============
