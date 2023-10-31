@@ -97,7 +97,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.14';
+our $SPADS_VERSION='0.13.15';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -2963,7 +2963,7 @@ sub processAliases {
     }
   }
 
-  if($conf{allowSettingsShortcut} && ! exists $spads->{commands}->{$lcCmd} && none {$lcCmd eq $_} @READ_ONLY_SETTINGS) {
+  if($conf{allowSettingsShortcut} && ! exists $spadsCmdHandlers{$lcCmd} && none {$lcCmd eq $_} @READ_ONLY_SETTINGS) {
     if(any {$lcCmd eq $_} qw'users presets hpresets bpresets settings bsettings hsettings vsettings aliases bans maps pref rotationmaps plugins psettings') {
       unshift(@cmd,"list");
       return (\@cmd,0);
