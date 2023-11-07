@@ -97,7 +97,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.15';
+our $SPADS_VERSION='0.13.16';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -5761,7 +5761,7 @@ sub startGameServer {
         close($usLockFhForGameStart);
         undef $usLockFhForGameStart;
       }
-      return;
+      return 0;
     }
     $springPid=$springWin32Process->GetProcessID();
   }else{
@@ -5792,7 +5792,7 @@ sub startGameServer {
         close($usLockFhForGameStart);
         undef $usLockFhForGameStart;
       }
-      return;
+      return 0;
     }
   }
   if(%currentVote && exists $currentVote{command}) {
@@ -5819,6 +5819,7 @@ sub startGameServer {
   foreach my $pluginName (@pluginsOrder) {
     $plugins{$pluginName}->onSpringStart($springPid) if($plugins{$pluginName}->can('onSpringStart'));
   }
+  return 1;
 }
 
 sub listBans {
@@ -7418,6 +7419,7 @@ sub hAddBot {
   sayBattle("Adding local AI bot $botName (by $user)");
   $pendingLocalBotManual{$botName}=time;
   queueLobbyCommand(['ADDBOT',$botName,$lobby->marshallBattleStatus({side => $botSide, sync => 0, bonus => 0, mode => 1, team => 0, id => 0, ready => 1}),$lobby->marshallColor($p_botColor),$botAi]);
+  return 1;
 }
 
 sub hAddBox {
@@ -7471,6 +7473,7 @@ sub hAddBox {
   return 1 if($checkOnly);
 
   queueLobbyCommand(["ADDSTARTRECT",$teamNb,$left,$top,$right,$bottom]);
+  return 1;
 
 }
 
@@ -7483,6 +7486,7 @@ sub hAdvert {
   $spads->{values}->{advertMsg}=\@newAdvertMsgs;
   $conf{advertMsg}=$newAdvertMsgs[0];
   answer("Advert message updated.");
+  return 1;
 }
 
 sub hAuth {
@@ -7530,6 +7534,7 @@ sub hAuth {
   }else{
     sayPrivate($user,"Keeping following access level: $C{12}$levelDescription");
   }
+  return 1;
 }
 
 sub hBalance {
@@ -7563,6 +7568,7 @@ sub hBalance {
   my $extraString=join(", ",@extraStrings);
   $balanceMsg.=" ($extraString)" if($extraString);
   answer($balanceMsg);
+  return 1;
 }
 
 sub hBan {
@@ -7685,6 +7691,8 @@ sub hBan {
       }
     }
   }
+
+  return $banRes == 1 ? 1 : 0;
 }
 
 sub hBanIp {
@@ -7794,6 +7802,8 @@ sub hBanIp {
       }
     }
   }
+
+  return $banRes == 1 ? 1 : 0;
 }
 
 sub hBanIps {
@@ -7909,6 +7919,7 @@ sub hBanIps {
       }
     }
   }
+  return $banRes == 1 ? 1 : 0;
 }
 
 sub hBKick {
@@ -8028,6 +8039,7 @@ sub hBPreset {
   %conf=%{$spads->{conf}};
   sendBattleSettings() if($lobbyState >= 6);
   sayBattleAndGame("Battle preset \"$bPreset\" ($spads->{bSettings}->{description}) applied by $user");
+  return 1;
 }
 
 sub hBSet {
@@ -8104,7 +8116,7 @@ sub hBSet {
     sayBattleAndGame("Battle setting changed by $user ($bSetting=$val)");
     answer("Battle setting changed ($bSetting=$val)") if($source eq "pv");
     applyMapBoxes() if($bSetting eq "startpostype");
-    return;
+    return 1;
   }else{
     answer("Value \"$val\" for battle setting \"$bSetting\" is not allowed with current $optionScope or battle preset"); 
     return 0;
@@ -8126,49 +8138,7 @@ sub hCancelQuit {
                       battle => "battle lobby" );
 
   applyQuitAction(undef,undef,"requested by $user in $sourceNames{$source}");
-}
-
-sub hCheat {
-  my ($source,$user,$p_params,$checkOnly)=@_;
-
-  if($autohost->getState() == 0) {
-    answer("Unable to send data on AutoHost interface, game is not running");
-    return 0;
-  }
-
-  return 1 if($checkOnly);
-
-  $cheating=1;
-
-  if($#{$p_params} == -1) {
-    $autohost->sendChatMessage("/cheat");
-    logMsg("game","> /cheat") if($conf{logGameChat});
-    return 1;
-  }
-  if($#{$p_params} == 0) {
-    if($p_params->[0] eq "0") {
-      $autohost->sendChatMessage("/cheat 0");
-      logMsg("game","> /cheat 0") if($conf{logGameChat});
-      return 1;
-    }
-    if($p_params->[0] eq "1") {
-      $autohost->sendChatMessage("/cheat 1");
-      logMsg("game","> /cheat 1") if($conf{logGameChat});
-      return 1;
-    }
-  }
-  my $params=join(" ",@{$p_params});
-  $params="/$params" unless($params =~ /^\//);
-
-  $autohost->sendChatMessage("/cheat 1");
-  logMsg("game","> /cheat 1") if($conf{logGameChat});
-  $autohost->sendChatMessage($params);
-  logMsg("game","> $params") if($conf{logGameChat});
-  $autohost->sendChatMessage("/cheat 0");
-  logMsg("game","> /cheat 0") if($conf{logGameChat});
-  
   return 1;
-  
 }
 
 sub isNotAllowedToVoteForResign {
@@ -8332,6 +8302,49 @@ sub hCallVote {
 
 }
 
+sub hCheat {
+  my ($source,$user,$p_params,$checkOnly)=@_;
+
+  if($autohost->getState() == 0) {
+    answer("Unable to send data on AutoHost interface, game is not running");
+    return 0;
+  }
+
+  return 1 if($checkOnly);
+
+  $cheating=1;
+
+  if($#{$p_params} == -1) {
+    $autohost->sendChatMessage("/cheat");
+    logMsg("game","> /cheat") if($conf{logGameChat});
+    return 1;
+  }
+  if($#{$p_params} == 0) {
+    if($p_params->[0] eq "0") {
+      $autohost->sendChatMessage("/cheat 0");
+      logMsg("game","> /cheat 0") if($conf{logGameChat});
+      return 1;
+    }
+    if($p_params->[0] eq "1") {
+      $autohost->sendChatMessage("/cheat 1");
+      logMsg("game","> /cheat 1") if($conf{logGameChat});
+      return 1;
+    }
+  }
+  my $params=join(" ",@{$p_params});
+  $params="/$params" unless($params =~ /^\//);
+
+  $autohost->sendChatMessage("/cheat 1");
+  logMsg("game","> /cheat 1") if($conf{logGameChat});
+  $autohost->sendChatMessage($params);
+  logMsg("game","> $params") if($conf{logGameChat});
+  $autohost->sendChatMessage("/cheat 0");
+  logMsg("game","> /cheat 0") if($conf{logGameChat});
+  
+  return 1;
+  
+}
+
 sub hChpasswd {
   my ($source,$user,$p_params,$checkOnly)=@_;
   if($#{$p_params} < 0 || $#{$p_params} > 1) {
@@ -8358,9 +8371,10 @@ sub hChpasswd {
     setAccountUserPref($aId,$passwdUser,'password',md5_base64($p_params->[1]));
     answer("Password set to \"$p_params->[1]\" for user $passwdUser");
   }
-  if($lobbyState > 3 && exists $lobby->{users}->{$passwdUser}) {
+  if($user ne $passwdUser && $lobbyState > 3 && exists $lobby->{users}->{$passwdUser}) {
     sayPrivate($passwdUser,"Your AutoHost password has been modified by $user");
   }
+  return 1;
 }
 
 sub hChrank {
@@ -8379,7 +8393,6 @@ sub hChrank {
     }
     return 0;
   }
-  return 1 if($checkOnly);
   if($#{$p_params} == 0) {
     return 1 if($checkOnly);
     setAccountUserPref($aId,$modifiedUser,"rankMode","");
@@ -8402,6 +8415,7 @@ sub hChrank {
       %balanceTarget=();
     }
   }
+  return 1;
 }
 
 sub hChskill {
@@ -8420,7 +8434,6 @@ sub hChskill {
     }
     return 0;
   }
-  return 1 if($checkOnly);
   if($#{$p_params} == 0) {
     return 1 if($checkOnly);
     setAccountUserPref($aId,$modifiedUser,'skillMode','');
@@ -8443,6 +8456,7 @@ sub hChskill {
       %balanceTarget=();
     }
   }
+  return 1;
 }
 
 sub hCKick {
@@ -8523,6 +8537,7 @@ sub hClearBox {
     next if($teamNb < $minNb);
     queueLobbyCommand(["REMOVESTARTRECT",$teamNb]);
   }
+  return 1;
 }
 
 sub hCloseBattle {
@@ -8543,6 +8558,7 @@ sub hCloseBattle {
                       battle => "battle lobby" );
 
   closeBattleAfterGame("requested by $user in $sourceNames{$source}");
+  return 1;
 }
 
 sub hEndVote {
@@ -8561,6 +8577,7 @@ sub hEndVote {
     }
     delete @currentVote{(qw'awayVoteTime source command remainingVoters yesCount noCount blankCount awayVoters manualVoters')};
     $currentVote{expireTime}=time;
+    return 1;
   }else{
     answer("Unable to cancel vote (no vote in progress)");
     return 0;
@@ -8582,6 +8599,7 @@ sub hFixColors {
 
   return 1 if($checkOnly);
   fixColors();
+  return 1;
 }
 
 sub hForce {
@@ -8807,6 +8825,7 @@ sub hForcePreset {
   my $msg="Preset \"$preset\" ($conf{description}) applied by $user";
   $msg.=" (some pending settings need rehosting to be applied)" if(needRehost());
   sayBattleAndGame($msg);
+  return 1;
 }
 
 sub hForceStart {
@@ -8834,6 +8853,7 @@ sub hForceStart {
     $timestamps{autoForcePossible}=-2;
     $autohost->sendChatMessage("/forcestart");
     logMsg("game","> /forcestart") if($conf{logGameChat});
+    return 1;
   }else{
     answer("Unable to force start game, it is already running");
     return 0;
@@ -9054,7 +9074,8 @@ sub hHelp {
     }
     sayPrivate($user,"  --> Use \"$C{3}!list aliases$C{1}\" to list available command aliases.");
   }
-
+  
+  return 1;
 }
 
 sub sayPrivateArray {
@@ -9098,6 +9119,8 @@ sub hHelpAll {
       }
     }
   }
+  
+  return 1;
 }
 
 sub hHostStats {
@@ -9182,6 +9205,7 @@ sub hHPreset {
   my $msg="Hosting preset \"$hPreset\" ($spads->{hSettings}->{description}) applied by $user";
   $msg.=" (some pending settings need rehosting to be applied)" if(needRehost());
   sayBattleAndGame($msg);
+  return 1;
 }
 
 sub hHSet {
@@ -9219,7 +9243,7 @@ sub hHSet {
         $timestamps{autoRestore}=time;
         sayBattleAndGame("Hosting setting changed by $user ($hParam=$val), use !rehost to apply new value.");
         answer("Hosting setting changed ($hParam=$val)") if($source eq "pv");
-        return;
+        return 1;
       }else{
         answer("Value \"$val\" for hosting setting \"$hParam\" is not allowed in current hosting preset");
         return 0;

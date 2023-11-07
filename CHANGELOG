@@ -997,6 +997,7 @@ spads.pl:
 0.13.13: revamp SPADS exit code management
 0.13.14: allow setting empty battle settings using "!bSet" command
 0.13.15: minor fix regarding settings shortcuts management
+0.13.16: fix return code for several SPADS commands (so that the "postSpadsCommand" plugin callback receives consistent "commandResult" value)
 
 SpadsConf.pm:
 ============
