@@ -28,19 +28,21 @@ use File::Spec::Functions qw'catdir catfile devnull';
 use FindBin;
 use HTTP::Tiny;
 use IO::Uncompress::Unzip qw'unzip $UnzipError';
+use JSON::PP 'decode_json';
 use List::Util qw'any all none notall max';
 use Time::HiRes;
 
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $archName=($win?'win':'linux').($Config{ptrsize} > 4 ? 64 : 32);
 
-our $VERSION='0.25';
+our $VERSION='0.26';
 
 my @constructorParams = qw'sLog repository release packages';
 my @optionalConstructorParams = qw'localDir springDir';
 
 my $springBuildbotUrl='http://springrts.com/dl/buildbot/default';
 my $springVersionUrl='http://planetspads.free.fr/spring/SpringVersion';
+my $barLauncherConfigUrl='https://launcher-config.beyondallreason.dev/config.json';
 our ($SPRING_MASTER_BRANCH,$SPRING_DEV_BRANCH)=('master','develop');
 
 our $HttpTinyCanSsl;
@@ -188,6 +190,46 @@ sub _resolveEngineReleaseNameToVersion {
   my ($self,$release,$r_githubInfo)=@_;
   my $sl=$self->{sLog};
   if(defined $r_githubInfo) {
+    if($r_githubInfo->{owner} eq 'beyond-all-reason' && (any {$release eq $_} (qw'stable testing'))) {
+      my $httpRes=HTTP::Tiny->new(timeout => 10)->request('GET',$barLauncherConfigUrl);
+      if($httpRes->{success}) {
+        my $r_barOnlineConfig;
+        eval {
+          $r_barOnlineConfig=decode_json($httpRes->{content});
+        };
+        if(defined $r_barOnlineConfig) {
+          if(ref $r_barOnlineConfig eq 'HASH' && ref $r_barOnlineConfig->{setups} eq 'ARRAY') {
+            my @idFilter = $release eq 'stable' ? (qw'manual-linux manual-win manual-linux-no-cdn manual-win-no-cdn') : (qw'manual-linux-test-engine manual-win-test-engine');
+            my @displayFilter = $release eq 'stable' ? ('Alpha','Alpha (no CDN)') : ('Engine Test');
+            foreach my $r_barSetup (@{$r_barOnlineConfig->{setups}}) {
+              if(ref $r_barSetup eq 'HASH' && ref $r_barSetup->{package} eq 'HASH') {
+                my $r_barPackage=$r_barSetup->{package};
+                if((defined $r_barPackage->{id} && ref $r_barPackage->{id} eq '' && (any {$r_barPackage->{id} eq $_} @idFilter))
+                   || (defined $r_barPackage->{display} && ref $r_barPackage->{display} eq '' && (any {$r_barPackage->{display} eq $_} @displayFilter))) {
+                  if(ref $r_barSetup->{launch} eq 'HASH' && defined $r_barSetup->{launch}{engine} && ref $r_barSetup->{launch}{engine} eq ''
+                     && $r_barSetup->{launch}{engine} =~ /^(\d+(?:\.\d+){1,3}(?:-\d+-g[0-9a-f]+)?)/) {
+                    return $1;
+                  }
+                }
+              }
+            }
+          }
+          $sl->log("Unable to find $release engine version number in Beyond All Reason JSON config file",2);
+        }else{
+          my $jsonDecodeError='unknown error';
+          if($@) {
+            chomp($@);
+            $jsonDecodeError=$@;
+          }
+          $sl->log("Failed to parse Beyond All Reason JSON config file to retrieve $release engine version number: $jsonDecodeError",2);
+        }
+      }else{
+        my $errorMsg = $httpRes->{status} == 599 ? $httpRes->{content} : "HTTP status: $httpRes->{status}, reason: $httpRes->{reason}";
+        chomp($errorMsg);
+        $sl->log("Failed to download Beyond All Reason JSON config file to retrieve $release engine version number: $errorMsg",2);
+      }
+      return undef;
+    }
     if($release eq 'stable') {
       my $ghRepo=$r_githubInfo->{owner}.'/'.$r_githubInfo->{name};
       my $ghRepoUrl='https://github.com/'.$ghRepo.'/';

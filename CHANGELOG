@@ -1406,6 +1406,7 @@ SpadsUpdater.pm:
       pr-downloader can now be extracted when auto-installing engines (used by SPADS installer for initial engine setup)
 0.25: add management of "unstable" engine release from GitHub (most recent release)
       fix management of "testing" engine release from GitHub (most recent release with tag "Pre-release" or "Latest")
+0.26: use a specific system for BAR engine release name resolution because BAR GitHub release tags are meaningless
 
 springLobbyCertificates.dat:
 ===========================
