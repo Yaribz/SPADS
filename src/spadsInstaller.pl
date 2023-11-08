@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.34 (2023/07/28)
+# Version 0.35 (2023/11/08)
 
 use strict;
 
@@ -53,7 +53,7 @@ my $unitsyncLibName=($win?'':'lib')."unitsync.$dynLibSuffix";
 my $PRD_BIN='pr-downloader'.($win?'.exe':'');
 
 my $spadsUrl='http://planetspads.free.fr/spads';
-my @packages=(qw'getDefaultModOptions.pl help.dat helpSettings.dat PerlUnitSync.pm springLobbyCertificates.dat SpringAutoHostInterface.pm SpringLobbyInterface.pm SimpleEvent.pm SimpleLog.pm spads.pl SpadsConf.pm spadsInstaller.pl SpadsUpdater.pm SpadsPluginApi.pm update.pl argparse.py replay_upload.py',$win?'7za.exe':'7za');
+my @packages=(qw'getDefaultModOptions.pl help.dat helpSettings.dat PerlUnitSync.pm springLobbyCertificates.dat SpringAutoHostInterface.pm SpringLobbyInterface.pm SimpleEvent.pm SimpleLog.pm spads.pl SpadsConf.pm spadsInstaller.pl SpadsUpdater.pm SpadsPluginApi.pm update.pl argparse.py replay_upload.py sequentialSpadsUnitsyncProcess.pl',$win?'7za.exe':'7za');
 
 my $nbSteps=$macOs?14:15;
 my $isInteractive=-t STDIN;

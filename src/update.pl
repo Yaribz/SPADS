@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.14 (2023/03/20)
+# Version 0.15 (2023/11/08)
 
 use strict;
 
@@ -82,7 +82,8 @@ for my $argNb (1..$#ARGV) {
                'SpadsUpdater.pm' => 1,
                'update.pl' => 1,
                'argparse.py' => 1,
-               'replay_upload.py' => 1);
+               'replay_upload.py' => 1,
+               'sequentialSpadsUnitsyncProcess.pl' => 1);
     if($win) {
       $packages{'7za.exe'}=1;
     }elsif(! $macOs) {

@@ -7,6 +7,7 @@ help.dat:help_0.14.0.dat
 helpSettings.dat:helpSettings_0.7.4.dat
 PerlUnitSync.pm:PerlUnitSync-106.0b.pm
 replay_upload.py:replay_upload_0.7.py
+sequentialSpadsUnitsyncProcess.pl:sequentialSpadsUnitsyncProcess_0.1.pl
 SimpleEvent.pm:SimpleEvent_0.13.pm
 SimpleLog.pm:SimpleLog_0.8.pm
 spads.pl:spads_0.13.11.pl
@@ -28,6 +29,7 @@ help.dat:help_0.14.0.dat
 helpSettings.dat:helpSettings_0.7.4.dat
 PerlUnitSync.pm:PerlUnitSync-106.0b.pm
 replay_upload.py:replay_upload_0.7.py
+sequentialSpadsUnitsyncProcess.pl:sequentialSpadsUnitsyncProcess_0.1.pl
 SimpleEvent.pm:SimpleEvent_0.13.pm
 SimpleLog.pm:SimpleLog_0.8.pm
 spads.pl:spads_0.13.13.pl
@@ -49,17 +51,18 @@ help.dat:help_0.14.0.dat
 helpSettings.dat:helpSettings_0.7.4.dat
 PerlUnitSync.pm:PerlUnitSync-106.0b.pm
 replay_upload.py:replay_upload_0.7.py
+sequentialSpadsUnitsyncProcess.pl:sequentialSpadsUnitsyncProcess_0.1.pl
 SimpleEvent.pm:SimpleEvent_0.14.pm
 SimpleLog.pm:SimpleLog_0.8.pm
 spads.pl:spads_0.13.16.pl
 SpadsConf.pm:SpadsConf_0.13.3.pm
-spadsInstaller.pl:spadsInstaller_0.34.pl
+spadsInstaller.pl:spadsInstaller_0.35.pl
 SpadsPluginApi.pm:SpadsPluginApi_0.36.pm
 SpadsUpdater.pm:SpadsUpdater_0.25.pm
 SpringAutoHostInterface.pm:SpringAutoHostInterface_0.13.pm
 SpringLobbyInterface.pm:SpringLobbyInterface_0.47.pm
 springLobbyCertificates.dat:springLobbyCertificates_0.1.dat
-update.pl:update_0.14.pl
+update.pl:update_0.15.pl
 
 [contrib]
 7za:7za-16.2
@@ -70,14 +73,15 @@ help.dat:help_0.14.0.dat
 helpSettings.dat:helpSettings_0.7.4.dat
 PerlUnitSync.pm:PerlUnitSync-106.0b.pm
 replay_upload.py:replay_upload_0.7.py
+sequentialSpadsUnitsyncProcess.pl:sequentialSpadsUnitsyncProcess_0.1.pl
 SimpleEvent.pm:SimpleEvent_0.14.pm
 SimpleLog.pm:SimpleLog_0.8.pm
 spads.pl:spads_0.13.16.pl
 SpadsConf.pm:SpadsConf_0.13.3.pm
-spadsInstaller.pl:spadsInstaller_0.34.pl
+spadsInstaller.pl:spadsInstaller_0.35.pl
 SpadsPluginApi.pm:SpadsPluginApi_0.36.pm
 SpadsUpdater.pm:SpadsUpdater_0.25.pm
 SpringAutoHostInterface.pm:SpringAutoHostInterface_0.13.pm
 SpringLobbyInterface.pm:SpringLobbyInterface_0.47.pm
 springLobbyCertificates.dat:springLobbyCertificates_0.1.dat
-update.pl:update_0.14.pl
+update.pl:update_0.15.pl

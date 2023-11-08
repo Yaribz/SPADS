@@ -1275,6 +1275,7 @@ spadsInstaller.pl:
 0.32: fix installer not correctly auto-restarting after self-update
 0.33: add management of "unstable" engine release from GitHub (most recent release)
 0.34: workaround for missing Spring engine binaries ("develop" branch binaries unavailable for download)
+0.35: add sequentialSpadsUnitsyncProcess.pl component
 
 SpadsPluginApi.pm:
 =================
@@ -1439,3 +1440,4 @@ update.pl:
 0.12: add "springLobbyCertificates.dat" to the list of auto-updated modules
 0.13: replace the basic list functions any/all/none/notall with those provided by the List::Util Perl module (requires Perl >= 5.19.5)
 0.14: package PerlUnitSync.pm is now downloaded for all systems (new unitsync interface using FFI::Platypus)
+0.15: add sequentialSpadsUnitsyncProcess.pl component
