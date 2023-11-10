@@ -11,7 +11,15 @@ use Text::ParseWords 'shellwords';
 
 use SpadsPluginApi;
 
-my $pluginVersion='0.6';
+use constant {
+  EXIT_FAILURE => 1,
+  EXIT_CONFIG => 3,        # invalid configuration
+  EXIT_CONFLICT => 16,     # instance directory conflict
+  EXIT_SYSTEM => 32,       # system call failure
+  EXIT_SOFTWARE => 33,     # software failure
+};
+
+my $pluginVersion='0.7';
 my $requiredSpadsVersion='0.13.0';
 
 my %globalPluginParams = ( commandsFile => ['notNull'],
@@ -51,7 +59,7 @@ sub new {
   my $pidDir=catdir(getSpadsConf()->{varDir},'ClusterManager');
   if(! -d $pidDir && ! mkdir($pidDir)) {
     slog("Unable to create directory for persistent plugin data \"$pidDir\"",1);
-    quit(1,'unable to load ClusterManager plugin') if($context eq 'autoload');
+    quit(1,'unable to load ClusterManager plugin',EXIT_SYSTEM) if($context eq 'autoload');
     return undef;
   }
 
@@ -68,7 +76,7 @@ sub new {
       getPlugin('AutoRegister')->enable();
     }
     if(! onReloadConf($self)) {
-      quit(1,'unable to load ClusterManager plugin') if($context eq 'autoload');
+      quit(1,'unable to load ClusterManager plugin',EXIT_CONFIG) if($context eq 'autoload');
       return undef;
     }
     closeBattle('Cluster Manager mode',1);
@@ -76,13 +84,13 @@ sub new {
     if(open(my $lockFh,'>',$lockFile)) {
       if(! flock($lockFh, LOCK_EX|LOCK_NB)) {
         slog("Another manager instance is running in same directory ($pidDir)",1);
-        quit(1,'unable to load ClusterManager plugin') if($context eq 'autoload');
+        quit(1,'unable to load ClusterManager plugin',EXIT_CONFLICT) if($context eq 'autoload');
         return undef;
       }
       $self->{lock}=$lockFh;
     }else{
       slog("Unable to open ClusterManager lock file \"$lockFile\"",1);
-      quit(1,'unable to load ClusterManager plugin') if($context eq 'autoload');
+      quit(1,'unable to load ClusterManager plugin',EXIT_SYSTEM) if($context eq 'autoload');
       return undef;
     }
     my $r_existingAccounts={};
@@ -91,14 +99,14 @@ sub new {
       $r_existingAccounts=retrieve($existingAccountsFile);
       if(! defined $r_existingAccounts) {
         slog("Unable to load existing accounts data from file \"$existingAccountsFile\"",1);
-        quit(1,'unable to load ClusterManager plugin') if($context eq 'autoload');
+        quit(1,'unable to load ClusterManager plugin',EXIT_FAILURE) if($context eq 'autoload');
         return undef;
       }
     }
     $self->{existingAccounts}=$r_existingAccounts;
     $self->{setBotModeSent}={};
     if(getLobbyState() > 3 && ! c_lobbyConnectedInitializations($self)) {
-      quit(1,'unable to load ClusterManager plugin') if($context eq 'autoload');
+      quit(1,'unable to load ClusterManager plugin',EXIT_FAILURE) if($context eq 'autoload');
       return undef;
     }
     addTimer('checkClusters',1,1,\&checkClusters);
@@ -122,7 +130,7 @@ sub new {
       my $macroName=ucfirst($fieldName);
       if(! defined $r_confMacros->{$macroName}) {
         slog("Missing configuration macro $macroName for loading ClusterManager plugin in slave instance mode",1);
-        quit(1,'unable to load ClusterManager plugin');
+        quit(1,'unable to load ClusterManager plugin',EXIT_SOFTWARE);
         return undef;
       }
       $self->{$fieldName}=$r_confMacros->{$macroName};
@@ -130,18 +138,18 @@ sub new {
     unlink("$pidDir/$self->{instNb}.exiting");
     my ($lockFh,$pidFile)=c_acquirePidFileLock($self->{instNb},LOCK_EX);
     if(! defined $lockFh) {
-      quit(1,'unable to load ClusterManager plugin');
+      quit(1,'unable to load ClusterManager plugin',EXIT_FAILURE);
       return undef;
     }
     if(! defined $pidFile) {
       slog("No PID file found for instance $self->{instNb}",1);
-      quit(1,'unable to load ClusterManager plugin');
+      quit(1,'unable to load ClusterManager plugin',EXIT_FAILURE);
       close($lockFh);
       return undef;
     }
     my ($r_pidData,$instState)=c_loadLockedPidFile($pidFile);
     if(! c_checkPidDataOnInstanceStart($self,$context,\@macroPassedFields,$r_pidData,$instState)) {
-      quit(1,'unable to load ClusterManager plugin');
+      quit(1,'unable to load ClusterManager plugin',EXIT_FAILURE);
       close($lockFh);
       return undef;
     }
@@ -149,7 +157,7 @@ sub new {
     if($context ne 'autoload') {
       if(! move($pidFile,$newPidFile)) {
         slog("Unable to rename PID file from \"$pidFile\" to \"$newPidFile\"",1);
-        quit(1,'unable to load ClusterManager plugin');
+        quit(1,'unable to load ClusterManager plugin',EXIT_SYSTEM);
         close($lockFh);
         return undef;
       }
@@ -160,7 +168,7 @@ sub new {
       $r_pidData->{instPid}=$$;
       if(! c_saveLockedPidFile($r_pidData,$newPidFile)) {
         slog("Unable to write new PID file \"$newPidFile\"",1);
-        quit(1,'unable to load ClusterManager plugin');
+        quit(1,'unable to load ClusterManager plugin',EXIT_SYSTEM);
         close($lockFh);
         return undef;
       }
@@ -567,7 +575,7 @@ sub onLobbyConnected {
   my $self=shift;
   if($self->{isManager}) {
     c_lobbyConnectedInitializations($self)
-        or quit(1,'unable to initialize ClusterManager plugin data');
+        or quit(1,'unable to initialize ClusterManager plugin data',EXIT_FAILURE);
   }else{
     $self->{orphanTs}=0 if(exists getLobbyInterface()->{users}{$self->{managerName}});
     addLobbyCommandHandler({ADDUSER => \&hLobbyAddUser,
