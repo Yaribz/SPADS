@@ -1276,6 +1276,9 @@ spadsInstaller.pl:
 0.33: add management of "unstable" engine release from GitHub (most recent release)
 0.34: workaround for missing Spring engine binaries ("develop" branch binaries unavailable for download)
 0.35: add sequentialSpadsUnitsyncProcess.pl component
+0.36: fix BAR engine releases not showing in list of available engines when too many releases have been made afterward
+      improve automatic download of BAR maps (use live BAR map list containing URLs if available)
+      improve HTTP download error messages
 
 SpadsPluginApi.pm:
 =================

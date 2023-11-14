@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.35 (2023/11/08)
+# Version 0.36 (2023/11/14)
 
 use strict;
 
@@ -64,6 +64,9 @@ my %lastRun;
 my @lastRunOrder;
 my $isBarEngine;
 
+my %ENGINE_RELEASES=(stable => 'recommended release',
+                     testing => 'next release candidate',
+                     unstable => 'latest develop version');
 my @MAP_RESOLVERS=(
   'https://springfiles.springrts.com/json.php?category=map&springname=',
   'https://files-cdn.beyondallreason.dev/find?category=map&springname=',
@@ -184,7 +187,7 @@ sub downloadFile {
   my ($url,$file)=@_;
   my $httpRes=HTTP::Tiny->new(timeout => 10)->mirror($url,$file);
   if(! $httpRes->{success} || ! -f $file) {
-    slog("Unable to download $file from $url",1);
+    slog("Unable to download $file from $url (".getHttpErrMsg($httpRes).')',1);
     unlink($file);
     return 0;
   }
@@ -292,80 +295,111 @@ sub downloadMapsWithProgressBar {
   slog('Map downloads aborted',2) if($downloadAborted);
 }
 
-sub downloadMapsFromNameWithProgressBar {
-  my ($r_allBarMapNames,$targetDir)=@_;
+sub downloadMapsFromUrlOrNameWithProgressBar {
+  my ($r_mapNames,$targetDir)=@_;
   my $httpTiny=HTTP::Tiny->new(timeout => 10);
   my @dlErrors;
-  newProgressBar($#{$r_allBarMapNames}+1);
+  newProgressBar($#{$r_mapNames}+1);
   my $downloadAborted;
-  for my $idx (0..$#{$r_allBarMapNames}) {
-    my $mapName=$r_allBarMapNames->[$idx];
+  MAPS_LOOP: for my $idx (0..$#{$r_mapNames}) {
+    my ($mapName,$mapUrl) = ref $r_mapNames->[$idx] eq 'ARRAY' ? @{$r_mapNames->[$idx]} : ($r_mapNames->[$idx]);
     updateProgressBar(undef,$mapName);
-    my $resolverId=int(rand(1)+0.5); # load balancing
-    my $httpRes=$httpTiny->get($MAP_RESOLVERS[$resolverId].HTTP::Tiny->_uri_escape($mapName));
-    my $retried;
-    if(! $httpRes->{success}) { # high availability
-      $httpRes=$httpTiny->get($MAP_RESOLVERS[1-$resolverId].HTTP::Tiny->_uri_escape($mapName));
-      $retried=1;
-    }
-    if($httpRes->{success}) {
-      my $r_jsonMapData = eval { decode_json($httpRes->{content}) };
-      if(defined $r_jsonMapData) {
-        if(ref $r_jsonMapData eq 'ARRAY' && ref $r_jsonMapData->[0] eq 'HASH'
-           && ref $r_jsonMapData->[0]{mirrors} && 'ARRAY' && defined $r_jsonMapData->[0]{mirrors}[0]) {
-          my $url=$r_jsonMapData->[0]{mirrors}[0];
-          if($url =~ /\/([^\/]+\.sd[7z])$/) {
-            my $filePath=catfile($targetDir,$1);
-            if(-e $filePath) {
-              updateProgressBar($retried?'~':'-');
-            }else{
-              $httpRes=$httpTiny->mirror($url,$filePath);
-              if(! $httpRes->{success} || ! -f $filePath) {
-                push(@dlErrors,"Failed to download \"$url\" to \"$filePath\" (".getHttpErrMsg($httpRes).')');
-                updateProgressBar('!');
-                unlink($filePath);
-              }else{
-                if($retried) {
-                  updateProgressBar($httpRes->{status} == 304 ? '~' : '#');
-                }else{
-                  updateProgressBar($httpRes->{status} == 304 ? '-' : '=');
-                }
-              }
-            }
-          }else{
-            push(@dlErrors,"Skipping unrecognized map download URL \"$url\"");
-            updateProgressBar('?');
-          }
+    my $lastErrorSymbol;
+    if(defined $mapUrl) {
+      if($mapUrl =~ /\/([^\/]+\.sd[7z])$/) {
+        my $filePath=catfile($targetDir,$1);
+        if(-e $filePath) {
+          updateProgressBar('-');
+          next MAPS_LOOP;
         }else{
-          push(@dlErrors,"Unknown JSON response from Spring map name resolver for map $mapName");
-          updateProgressBar('?');
+          my $httpRes=$httpTiny->mirror($mapUrl,$filePath);
+          if(! $httpRes->{success} || ! -f $filePath) {
+            push(@dlErrors,"Failed to download \"$mapUrl\" to \"$filePath\" (".getHttpErrMsg($httpRes).')');
+            $lastErrorSymbol='!'; # (in case @MAP_RESOLVERS is empty)
+            unlink($filePath);
+          }else{
+            updateProgressBar($httpRes->{status} == 304 ? '-' : '=');
+            next MAPS_LOOP;
+          }
         }
       }else{
-        push(@dlErrors,"Invalid JSON response from Spring map name resolver for map $mapName");
-        updateProgressBar('?');
+        push(@dlErrors,"Skipping unrecognized map download URL \"$mapUrl\" from map list with links");
+        $lastErrorSymbol='?'; # (in case @MAP_RESOLVERS is empty)
       }
-    }else{
-      push(@dlErrors,"Unable to call Spring map name resolvers for map $mapName");
-      updateProgressBar('!');
     }
-        
-    if($idx == 4 && @dlErrors == 5) {
+    my $resolverId = $#MAP_RESOLVERS > 0 ? int(rand($#MAP_RESOLVERS)+0.5) : 0;
+    my $nbRetry=0;
+    while($nbRetry < @MAP_RESOLVERS) {
+      my $httpRes=$httpTiny->get($MAP_RESOLVERS[$resolverId].HTTP::Tiny->_uri_escape($mapName));
+      if($httpRes->{success}) {
+        my $r_jsonMapData = eval { decode_json($httpRes->{content}) };
+        if(defined $r_jsonMapData) {
+          if(ref $r_jsonMapData eq 'ARRAY' && ref $r_jsonMapData->[0] eq 'HASH'
+             && ref $r_jsonMapData->[0]{mirrors} && 'ARRAY' && defined $r_jsonMapData->[0]{mirrors}[0]) {
+            my $url=$r_jsonMapData->[0]{mirrors}[0];
+            if($url =~ /\/([^\/]+\.sd[7z])$/) {
+              my $filePath=catfile($targetDir,$1);
+              if(-e $filePath) {
+                updateProgressBar('~');
+                next MAPS_LOOP;
+              }else{
+                $httpRes=$httpTiny->mirror($url,$filePath);
+                if(! $httpRes->{success} || ! -f $filePath) {
+                  push(@dlErrors,"Failed to download \"$url\" to \"$filePath\" (".getHttpErrMsg($httpRes).')');
+                  $lastErrorSymbol='!';
+                  unlink($filePath);
+                }else{
+                  updateProgressBar($httpRes->{status} == 304 ? '~' : '#');
+                  next MAPS_LOOP;
+                }
+              }
+            }else{
+              push(@dlErrors,"Skipping unrecognized map download URL \"$url\" from map name resolver \#$resolverId");
+              $lastErrorSymbol='?';
+            }
+          }else{
+            push(@dlErrors,"Unknown JSON response from map name resolver \#$resolverId for map $mapName");
+            $lastErrorSymbol='?';
+          }
+        }else{
+          push(@dlErrors,"Invalid JSON response from map name resolver \#$resolverId for map $mapName");
+          $lastErrorSymbol='?';
+        }
+      }else{
+        push(@dlErrors,"Unable to call map name resolver \#$resolverId for map $mapName (".getHttpErrMsg($httpRes).')');
+        $lastErrorSymbol='!';
+      }
+      $nbRetry++;
+      if($nbRetry == @MAP_RESOLVERS) {
+        updateProgressBar($lastErrorSymbol);
+        last;
+      }
+      $resolverId = ($resolverId+1) % @MAP_RESOLVERS;
+    }
+    if($idx == 4 && @dlErrors == 5 * (@MAP_RESOLVERS+1)) {
       $downloadAborted=1;
       endProgressBar();
       last;
     }
   }
-  map {slog($_,2)} @dlErrors;
+  if(@dlErrors < 11) {
+    map {slog($_,2)} @dlErrors;
+  }else{
+    map {slog($dlErrors[$_],2)} (0..8);
+    slog('... ('.(@dlErrors-9).' more)',2);
+  }
   slog('Map downloads aborted',2) if($downloadAborted);
 }
 
+# This function is not used because SpringRTS and Recoil pr-downloader have different behavior.
+# (Recoil pr-downloader always re-downloads maps, even if they have already been downloaded)
 sub downloadMapsUsingPrdWithProgressBar {
-  my ($prdPath,$mapModDataDir,$r_allBarMapNames)=@_;
+  my ($prdPath,$mapModDataDir,$r_mapNames)=@_;
   my @dlErrors;
-  newProgressBar($#{$r_allBarMapNames}+1);
+  newProgressBar($#{$r_mapNames}+1);
   my $downloadAborted;
-  for my $idx (0..$#{$r_allBarMapNames}) {
-    my $mapName=$r_allBarMapNames->[$idx];
+  for my $idx (0..$#{$r_mapNames}) {
+    my $mapName=$r_mapNames->[$idx];
     updateProgressBar(undef,$mapName);
     open(my $previousStdout,'>&',\*STDOUT);
     open(my $previousStderr,'>&',\*STDERR);
@@ -739,7 +773,7 @@ sub configureSpringDataDir {
       }
       createDir($mapsDir);
       print "\nDirectory \"$mapsDir\" has been created to store the maps used by the autohost.\n";
-      my (@featuredBarMapUrls,@allBarMapNames);
+      my (@featuredBarMapUrls,@allBarMaps);
       if(SpadsUpdater::checkHttpsSupport()) {
         my $httpTiny=HTTP::Tiny->new(timeout => 10);
         my $httpRes=$httpTiny->get('https://www.beyondallreason.info/maps');
@@ -747,19 +781,41 @@ sub configureSpringDataDir {
           my %dedupLinks;
           map {$dedupLinks{$_}=1} ($httpRes->{content} =~ /\"(https?\:\/\/[^\"]+\.sd7)\"/g);
           @featuredBarMapUrls = sort {($a =~ /\/([^\/]+)$/)[0] cmp ($b =~ /\/([^\/]+)$/)[0]} keys %dedupLinks;
-          slog('Failed to retrieve the featured Beyond All Reason maps list (unable to find map URLs in HTML response)',2)
+          slog('Failed to retrieve the list of featured Beyond All Reason maps (unable to find map URLs in HTML response)',2)
               unless(@featuredBarMapUrls);
         }else{
-          slog('Failed to retrieve the featured Beyond All Reason maps list ('.getHttpErrMsg($httpRes).')',2)
+          slog('Failed to retrieve the list of featured Beyond All Reason maps ('.getHttpErrMsg($httpRes).')',2)
         }
-        if(-f $prdPath && -x _) {
+        $httpRes=$httpTiny->get('https://maps-metadata.beyondallreason.dev/latest/live_maps.validated.json');
+        if($httpRes->{success}) {
+          my $r_jsonBarMapList = eval { decode_json($httpRes->{content}) };
+          if(defined $r_jsonBarMapList) {
+            if(ref $r_jsonBarMapList eq 'ARRAY') {
+              foreach my $r_jsonBarMapData (@{$r_jsonBarMapList}) {
+                next unless(ref $r_jsonBarMapData eq 'HASH' && defined $r_jsonBarMapData->{springName} && ref $r_jsonBarMapData->{springName} eq '');
+                if(defined $r_jsonBarMapData->{downloadURL} && ref $r_jsonBarMapData->{downloadURL} eq '') {
+                  push(@allBarMaps,[@{$r_jsonBarMapData}{qw'springName downloadURL'}]);
+                }else{
+                  push(@allBarMaps,$r_jsonBarMapData->{springName});
+                }
+              }
+            }
+            slog('Failed to parse the full list of Beyond All Reason maps with links (unknown JSON structure), trying fallback method...',2)
+                unless(@allBarMaps);
+          }else{
+            slog('Failed to parse the full list of Beyond All Reason maps with links (invalid JSON data), trying fallback method...',2);
+          }
+        }else{
+          slog('Failed to retrieve the full list of Beyond All Reason maps with links ('.getHttpErrMsg($httpRes).'), trying fallback method...',2);
+        }
+        if(! @allBarMaps) {
           $httpRes=$httpTiny->get('https://raw.githubusercontent.com/beyond-all-reason/BYAR-Chobby/master/LuaMenu/configs/gameConfig/byar/mapDetails.lua');
           if($httpRes->{success}) {
             my %dedupMaps;
             map {$dedupMaps{$_}=1} ($httpRes->{content} =~ /^\[\'([^\']+)\'\]\=\{/mg);
-            @allBarMapNames = sort keys %dedupMaps;
+            @allBarMaps = sort keys %dedupMaps;
             slog('Failed to retrieve the full list of Beyond All Reason maps (unable to find map names in LUA structure)',2)
-                unless(@allBarMapNames);
+                unless(@allBarMaps);
           }else{
             slog('Failed to retrieve the full list of Beyond All Reason maps ('.getHttpErrMsg($httpRes).')',2)
           }
@@ -774,8 +830,8 @@ sub configureSpringDataDir {
         print '  bar      : set of featured Beyond All Reason maps ('.(scalar @featuredBarMapUrls)." maps)\n";
         push(@availableMapSets,'bar');
       }
-      if(@allBarMapNames) {
-        print '  BAR      : all Beyond All Reason maps ('.(scalar @allBarMapNames)." maps)\n";
+      if(@allBarMaps) {
+        print '  BAR      : all Beyond All Reason maps ('.(scalar @allBarMaps)." maps)\n";
         push(@availableMapSets,'BAR');
       }
       print "  none     : no automatic map download (map archives must be placed manually in \"$mapsDir\")\n";
@@ -783,7 +839,7 @@ sub configureSpringDataDir {
       push(@availableMapSets,'none');
       my $defaultMapSet;
       if($isBarEngine) {
-        $defaultMapSet = @featuredBarMapUrls ? 'bar' : @allBarMapNames ? 'BAR' : 'minimal';
+        $defaultMapSet = @featuredBarMapUrls ? 'bar' : @allBarMaps ? 'BAR' : 'minimal';
       }else{
         $defaultMapSet='minimal';
       }
@@ -794,7 +850,7 @@ sub configureSpringDataDir {
         slog('Downloading maps...',3);
         ###  pr-downloader already has too different behaviors between Spring and Recoil...
         # downloadMapsUsingPrdWithProgressBar($prdPath,$mapModDataDir,\@allBarMapNames);
-        downloadMapsFromNameWithProgressBar(\@allBarMapNames,$mapsDir);
+        downloadMapsFromUrlOrNameWithProgressBar(\@allBarMaps,$mapsDir);
       }else{
         my @mapUrls;
         if($autoDownloadMaps eq 'bar') {
@@ -972,75 +1028,38 @@ if($macOs) {
   setLastRun('springBinariesType',$engineBinariesType);
 }
 
-if($engineBinariesType eq 'official' || $engineBinariesType eq 'github') {
+if($engineBinariesType eq 'official') {
   
-  my $autoManagedSpringVersionPrefix='';
-  my $engineStr='Spring';
+  slog('Checking available Spring versions...',3);
+  
   my @engineBranches=(qw'develop master');
-  my %engineReleases=(stable => 'recommended release',
-                      testing => 'next release candidate',
-                      unstable => 'latest develop version');
-  
-  my %ghInfo;
-  if($engineBinariesType eq 'github') {
-    $engineStr='engine';
-    shift(@engineBranches);
-    $ghInfo{owner}=promptString('       Please enter the GitHub repository owner name','beyond-all-reason',$autoInstallData{githubOwner},sub {$_[0]=~/^[\w\-]+$/});
-    setLastRun('githubOwner',$ghInfo{owner});
-    $isBarEngine=1 if($ghInfo{owner} eq 'beyond-all-reason');
-    $ghInfo{name}=promptString('       Please enter the GitHub repository name','spring',$autoInstallData{githubName},sub {$_[0]=~/^[\w\-\.]+$/});
-    setLastRun('githubName',$ghInfo{name});
-    $ghInfo{tag}=promptString('       Please enter the GitHub release tag template','spring_bar_{BAR105}<version>',$autoInstallData{githubTag}, sub {index($_[0],'<version>') != -1 && index($_[0],',') == -1});
-    setLastRun('githubTag',$ghInfo{tag});
-    my $ghAsset=promptString('       Please enter the GitHub asset regular expression','.+_<os>-<bitness>-minimal-portable\.7z',$autoInstallData{githubAsset},\&ghAssetTemplateToRegex);
-    setLastRun('githubAsset',$ghAsset);
-    $ghInfo{asset}=ghAssetTemplateToRegex($ghAsset);
-    my $ghRepoHash=substr(md5_base64(join('/',@ghInfo{qw'owner name'})),0,7);
-    $ghRepoHash=~tr/\/\+/ab/;
-    my $ghSubdir=$ghInfo{tag};
-    $ghSubdir =~ s/\Q<version>\E/($ghRepoHash)/g;
-    $ghSubdir =~ tr/\\\/\:\*\?\"\<\>\|/........./;
-    $ghInfo{subdir}=$ghSubdir;
-    $autoManagedSpringVersionPrefix="[GITHUB]{owner=$ghInfo{owner},name=$ghInfo{name},tag=$ghInfo{tag},asset=$ghAsset}";
-  }
+  my %engineBranchesVersions;
+  map { my $r_availableSpringVersions=$updater->getAvailableSpringVersions($_);
+        fatalError("Couldn't check available Spring versions") unless(@{$r_availableSpringVersions} || $_ eq 'develop');
+        $engineBranchesVersions{$_}=$r_availableSpringVersions; } @engineBranches;
 
-  my (%engineVersions,%engineReleasesVersion,%engineVersionsReleases);
-  slog("Checking available $engineStr versions...",3);
-  if($engineBinariesType eq 'official') {
-    map { my $r_availableSpringVersions=$updater->getAvailableSpringVersions($_);
-          fatalError("Couldn't check available Spring versions") unless(@{$r_availableSpringVersions} || $_ eq 'develop');
-          $engineVersions{$_}=$r_availableSpringVersions; } @engineBranches;
-  }else{
-    my $r_availableEngineVersions=$updater->getAvailableEngineVersionsFromGithub(\%ghInfo,0,5);
-    my $r_availableTaggedEngineVersions=$updater->getAvailableEngineVersionsFromGithub(\%ghInfo,1,20);
-    foreach my $taggedVersion (@{$r_availableTaggedEngineVersions}) {
-      push(@{$r_availableEngineVersions},$taggedVersion) if(none {$taggedVersion eq $_} @{$r_availableEngineVersions});
-    }
-    fatalError("Couldn't check available engine versions") unless(@{$r_availableEngineVersions});
-    $engineVersions{master}=[reverse @{$r_availableEngineVersions}];
-  }
-  
-  map { my $releaseVersion=$updater->resolveEngineReleaseNameToVersion($_,%ghInfo ? \%ghInfo : undef);
+  my (%engineReleasesVersion,%engineVersionsReleases);
+  map { my $releaseVersion=$updater->resolveEngineReleaseNameToVersion($_);
         if(defined $releaseVersion) {
           $engineReleasesVersion{$_}=$releaseVersion;
           $engineVersionsReleases{$releaseVersion}{$_}=1;
-        } } (keys %engineReleases);
+        } } (keys %ENGINE_RELEASES);
 
-  my %availableVersions=%engineReleasesVersion;
+  print "\nAvailable Spring versions:\n";
   
-  print "\nAvailable $engineStr versions:\n";
+  my %availableVersions=%engineReleasesVersion;
   foreach my $engineBranch (@engineBranches) {
     my $versionsToAdd=5;
-    while(@{$engineVersions{$engineBranch}}) {
-      my ($printedVersion,$versionComment)=(pop(@{$engineVersions{$engineBranch}}),undef);
+    for my $idx (1..@{$engineBranchesVersions{$engineBranch}}) {
+      my ($printedVersion,$versionComment)=($engineBranchesVersions{$engineBranch}[-$idx],'');
       $availableVersions{$printedVersion}=1;
       if(exists $engineVersionsReleases{$printedVersion}) {
-        $versionComment=join(' + ', map { '['.uc($_)."] ($engineReleases{$_})" } (sort keys %{$engineVersionsReleases{$printedVersion}}));
+        $versionComment=' '.join(' + ', map { '['.uc($_)."] ($ENGINE_RELEASES{$_})" } (sort keys %{$engineVersionsReleases{$printedVersion}}));
         $versionsToAdd=5;
       }
       if($versionsToAdd >= 0) {
         if($versionsToAdd > 0) {
-          print "  $printedVersion".($versionComment ? " $versionComment":'')."\n";
+          print "  $printedVersion$versionComment\n";
         }else{
           print "  [...]\n";
         }
@@ -1048,34 +1067,143 @@ if($engineBinariesType eq 'official' || $engineBinariesType eq 'github') {
       }
     }
   }
-  print "\nPlease choose the $engineStr version which will be used by the autohost.\n";
-  print "If you choose \"stable\", \"testing\" or \"unstable\", SPADS will stay up to date with the corresponding $engineStr release by automatically downloading and using new binary files when needed.\n";
-  my @engineVersionExamples=($engineReleasesVersion{stable});
-  push(@engineVersionExamples,$engineReleasesVersion{testing}) unless($engineReleasesVersion{stable} eq $engineReleasesVersion{testing});
-  push(@engineVersionExamples,$engineReleasesVersion{unstable}) if(defined $engineReleasesVersion{unstable} && $engineReleasesVersion{unstable} ne $engineReleasesVersion{testing});
-  print "If you choose a specific $engineStr version number (\"".join('", "',@engineVersionExamples)."\", ...), SPADS will stick to this version until you manualy change it in the configuration file.\n\n";
+  
+  print "\nPlease choose the Spring version which will be used by the autohost.\n";
+  print "If you choose \"stable\", \"testing\" or \"unstable\", SPADS will stay up to date with the corresponding Spring release by automatically downloading and using new binary files when needed.\n";
+  my @engineVersionExamples;
+  push(@engineVersionExamples,$engineReleasesVersion{stable}) if(defined $engineReleasesVersion{stable});
+  push(@engineVersionExamples,$engineReleasesVersion{testing}) if(defined $engineReleasesVersion{testing} && (none {$engineReleasesVersion{testing} eq $_} @engineVersionExamples));
+  push(@engineVersionExamples,$engineReleasesVersion{unstable}) if(defined $engineReleasesVersion{unstable} && (none {$engineReleasesVersion{unstable} eq $_} @engineVersionExamples));
+  push(@engineVersionExamples,$engineBranchesVersions{master}[-1]) unless(@engineVersionExamples);
+  print "If you choose a specific Spring version number (\"".join('", "',@engineVersionExamples)."\", ...), SPADS will stick to this version until you manually change it in the configuration file.\n\n";
   my $engineVersion;
   my $autoInstallValue=$autoInstallData{autoManagedSpringVersion};
   my $autoManagedSpringVersion='';
   while(! exists $availableVersions{$autoManagedSpringVersion}) {
-    $autoManagedSpringVersion=promptStdin("[6/$nbSteps] Which $engineStr version do you want to use (".(join(',',@engineVersionExamples,(sort keys %engineReleases),'...')).')',$engineReleasesVersion{stable},$autoInstallValue);
+    $autoManagedSpringVersion=promptStdin("[6/$nbSteps] Which Spring version do you want to use (".(join(',',@engineVersionExamples,(sort grep {defined $engineReleasesVersion{$_}} keys %ENGINE_RELEASES),'...')).')',$engineVersionExamples[0],$autoInstallValue);
     $autoInstallValue=undef;
     if(exists $availableVersions{$autoManagedSpringVersion}) {
       $engineVersion=$engineReleasesVersion{$autoManagedSpringVersion} // $autoManagedSpringVersion;
-      my $engineSetupRes=$updater->setupEngine($engineVersion,%ghInfo ? \%ghInfo : undef,1);
+      my $engineSetupRes=$updater->setupEngine($engineVersion,undef,1);
       if($engineSetupRes < -9) {
-        slog("Installation failed: unable to find, download and extract all required files for $engineStr $engineVersion, please choose a different version",2);
+        slog("Installation failed: unable to find, download and extract all required files for Spring $engineVersion, please choose a different version",2);
         $autoManagedSpringVersion='';
         next;
       }
-      my $ucfEngineStr=ucfirst($engineStr);
-      fatalError("$ucfEngineStr installation failed: internal error (you can use a custom $engineStr installation as a workaround if you don't know how to fix this issue)") if($engineSetupRes < 0);
-      slog("$ucfEngineStr $engineVersion is already installed",3) if($engineSetupRes == 0);
+      fatalError("Spring installation failed: internal error (you can use a custom Spring installation as a workaround if you don't know how to fix this issue)") if($engineSetupRes < 0);
+      slog("Spring $engineVersion is already installed",3) if($engineSetupRes == 0);
     }
   }
   setLastRun('autoManagedSpringVersion',$autoManagedSpringVersion);
-  $conf{autoManagedSpringVersion}=$autoManagedSpringVersionPrefix.$autoManagedSpringVersion;
-  $conf{autoInstalledSpringDir}=$updater->getEngineDir($engineVersion,%ghInfo ? \%ghInfo : undef);
+  $conf{autoManagedSpringVersion}=$autoManagedSpringVersion;
+  $conf{autoInstalledSpringDir}=$updater->getEngineDir($engineVersion);
+  
+}elsif($engineBinariesType eq 'github') {
+  
+  my %ghInfo;
+  $ghInfo{owner}=promptString('       Please enter the GitHub repository owner name','beyond-all-reason',$autoInstallData{githubOwner},sub {$_[0]=~/^[\w\-]+$/});
+  setLastRun('githubOwner',$ghInfo{owner});
+  $isBarEngine=1 if($ghInfo{owner} eq 'beyond-all-reason');
+  $ghInfo{name}=promptString('       Please enter the GitHub repository name','spring',$autoInstallData{githubName},sub {$_[0]=~/^[\w\-\.]+$/});
+  setLastRun('githubName',$ghInfo{name});
+  $ghInfo{tag}=promptString('       Please enter the GitHub release tag template','spring_bar_{BAR105}<version>',$autoInstallData{githubTag}, sub {index($_[0],'<version>') != -1 && index($_[0],',') == -1});
+  setLastRun('githubTag',$ghInfo{tag});
+  my $ghAsset=promptString('       Please enter the GitHub asset regular expression','.+_<os>-<bitness>-minimal-portable\.7z',$autoInstallData{githubAsset},\&ghAssetTemplateToRegex);
+  setLastRun('githubAsset',$ghAsset);
+  $ghInfo{asset}=ghAssetTemplateToRegex($ghAsset);
+  my $ghRepoHash=substr(md5_base64(join('/',@ghInfo{qw'owner name'})),0,7);
+  $ghRepoHash=~tr/\/\+/ab/;
+  my $ghSubdir=$ghInfo{tag};
+  $ghSubdir =~ s/\Q<version>\E/($ghRepoHash)/g;
+  $ghSubdir =~ tr/\\\/\:\*\?\"\<\>\|/........./;
+  $ghInfo{subdir}=$ghSubdir;
+
+  slog('Checking available engine versions...',3);
+
+  my @latestEngineVersions;
+  {
+    my $r_engineVersions=$updater->getAvailableEngineVersionsFromGithub(\%ghInfo,0,10);
+    @latestEngineVersions=@{$r_engineVersions};
+    $r_engineVersions=$updater->getAvailableEngineVersionsFromGithub(\%ghInfo,1,20);
+    foreach my $taggedVersion (@{$r_engineVersions}) {
+      push(@latestEngineVersions,$taggedVersion) if(none {$taggedVersion eq $_} @latestEngineVersions);
+    }
+  }
+  fatalError("Couldn't check available engine versions") unless(@latestEngineVersions);
+
+  my (%engineReleasesVersion,%engineVersionsReleases);
+  map { my $releaseVersion=$updater->resolveEngineReleaseNameToVersion($_,\%ghInfo);
+        if(defined $releaseVersion) {
+          $engineReleasesVersion{$_}=$releaseVersion;
+          $engineVersionsReleases{$releaseVersion}{$_}=1;
+        } } (keys %ENGINE_RELEASES);
+
+  print "\nAvailable engine versions:\n";
+
+  my @availableEngineReleases=sort grep {defined $engineReleasesVersion{$_}} keys %ENGINE_RELEASES;
+  {
+    my $versionsToAdd=5;
+    my %engineReleasesToPrint = map {$_ => 1} @availableEngineReleases;
+    for my $idx (0..$#latestEngineVersions) {
+      my ($printedVersion,$versionComment)=($latestEngineVersions[$idx],'');
+      if(exists $engineVersionsReleases{$printedVersion}) {
+        my @matchingEngineReleases=sort keys %{$engineVersionsReleases{$printedVersion}};
+        delete @engineReleasesToPrint{@matchingEngineReleases};
+        $versionComment=' '.join(' + ', map { '['.uc($_)."] ($ENGINE_RELEASES{$_})" } @matchingEngineReleases);
+        $versionsToAdd=5;
+      }
+      if($versionsToAdd >= 0) {
+        if($versionsToAdd > 0) {
+          print "  $printedVersion$versionComment\n";
+        }else{
+          print "  [...]\n";
+        }
+        $versionsToAdd--;
+      }
+    }
+    while(%engineReleasesToPrint) {
+      my $printedVersion=$engineReleasesVersion{(sort {$b cmp $a} keys %engineReleasesToPrint)[0]};
+      my @matchingEngineReleases=sort keys %{$engineVersionsReleases{$printedVersion}};
+      delete @engineReleasesToPrint{@matchingEngineReleases};
+      my $versionComment=' '.join(' + ', map { '['.uc($_)."] ($ENGINE_RELEASES{$_})" } @matchingEngineReleases);
+      print "  $printedVersion$versionComment\n  [...]\n";
+    }
+  }
+  
+  print "\nPlease choose the engine version which will be used by the autohost.\n";
+  print "If you choose \"stable\", \"testing\" or \"unstable\", SPADS will stay up to date with the corresponding engine release by automatically downloading and using new binary files when needed.\n";
+  my @engineVersionExamples;
+  push(@engineVersionExamples,$engineReleasesVersion{stable}) if(defined $engineReleasesVersion{stable});
+  push(@engineVersionExamples,$engineReleasesVersion{testing}) if(defined $engineReleasesVersion{testing} && (none {$engineReleasesVersion{testing} eq $_} @engineVersionExamples));
+  push(@engineVersionExamples,$engineReleasesVersion{unstable}) if(defined $engineReleasesVersion{unstable} && (none {$engineReleasesVersion{unstable} eq $_} @engineVersionExamples));
+  push(@engineVersionExamples,$latestEngineVersions[0]) unless(@engineVersionExamples);
+  print "If you choose a specific engine version number (\"".join('", "',@engineVersionExamples)."\", ...), SPADS will stick to this version until you manually change it in the configuration file.\n\n";
+  my $engineVersion;
+  my $autoInstallValue=$autoInstallData{autoManagedSpringVersion};
+  my $autoManagedSpringVersion='';
+  while(1) {
+    $autoManagedSpringVersion=promptStdin("[6/$nbSteps] Which engine version do you want to use (".(join(',',@engineVersionExamples,@availableEngineReleases,'...')).')',$engineVersionExamples[0],$autoInstallValue);
+    $autoInstallValue=undef;
+    $engineVersion=$engineReleasesVersion{$autoManagedSpringVersion} // $autoManagedSpringVersion;
+    if($engineVersion !~ /^\d/) {
+      slog("Invalid engine version \"$engineVersion\"",2);
+      $autoManagedSpringVersion='';
+      next;
+    }
+    my $engineSetupRes=$updater->setupEngine($engineVersion,\%ghInfo,1);
+    if($engineSetupRes < -9) {
+      slog("Installation failed: unable to find, download and extract all required files for engine $engineVersion, please choose a different version",2);
+      $autoManagedSpringVersion='';
+      next;
+    }
+    fatalError("Engine installation failed: internal error (you can use a custom engine installation as a workaround if you don't know how to fix this issue)") if($engineSetupRes < 0);
+    slog("Engine $engineVersion is already installed",3) if($engineSetupRes == 0);
+    last;
+  }
+  setLastRun('autoManagedSpringVersion',$autoManagedSpringVersion);
+  $conf{autoManagedSpringVersion}="[GITHUB]{owner=$ghInfo{owner},name=$ghInfo{name},tag=$ghInfo{tag},asset=$ghAsset}".$autoManagedSpringVersion;
+  $conf{autoInstalledSpringDir}=$updater->getEngineDir($engineVersion,\%ghInfo);
+  
 }else{
   $conf{autoManagedSpringVersion}='';
 }
