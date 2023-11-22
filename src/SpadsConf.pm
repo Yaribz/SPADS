@@ -39,7 +39,7 @@ use SimpleLog;
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.13.3';
+my $moduleVersion='0.13.4';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -331,7 +331,7 @@ sub parseAutoManagedSpringVersion {
     if($autoManagedString =~ /^(stable|testing|unstable)(?:;(\d*)(?:;(on|off|whenEmpty|whenOnlySpec))?)?$/) {
       $autoManagedInfo{mode}='release';
       $autoManagedInfo{release}=$1;
-      $autoManagedInfo{delay}=$2//{stable => 60, testing => 30, unstable => 15}->{$1};
+      $autoManagedInfo{delay} = (defined $2 && $2 ne '') ? $2 : {stable => 60, testing => 30, unstable => 15}->{$1};
       $autoManagedInfo{restart}=$3//'whenEmpty';
       return \%autoManagedInfo;
     }
@@ -345,7 +345,7 @@ sub parseAutoManagedSpringVersion {
   if($_[0] =~ /^(stable|testing|unstable)(?:;(\d*)(?:;(on|off|whenEmpty|whenOnlySpec))?)?$/) {
     $autoManagedInfo{mode}='release';
     $autoManagedInfo{release}=$1;
-    $autoManagedInfo{delay}=$2//{stable => 60, testing => 30, unstable => 15}->{$1};
+    $autoManagedInfo{delay} = (defined $2 && $2 ne '') ? $2 : {stable => 60, testing => 30, unstable => 15}->{$1};
     $autoManagedInfo{restart}=$3//'whenEmpty';
     return \%autoManagedInfo;
   }

@@ -97,7 +97,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.16';
+our $SPADS_VERSION='0.13.17';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -15602,8 +15602,10 @@ if(! $abortSpadsStartForAutoUpdate) {
   }
 
   SimpleEvent::addTimer('SpadsMainLoop',0,0.5,\&mainLoop);
-  SimpleEvent::addTimer('EngineVersionAutoManagement',$autoManagedEngineData{delay}*60,$autoManagedEngineData{delay}*60,\&engineVersionAutoManagement) if($autoManagedEngineData{mode} eq 'release');
-  SimpleEvent::addTimer('RefreshSharedData',$conf{sharedDataRefreshDelay},$conf{sharedDataRefreshDelay},sub {$spads->refreshSharedDataIfNeeded()}) if($conf{sharedDataRefreshDelay});
+  SimpleEvent::addTimer('EngineVersionAutoManagement',$autoManagedEngineData{delay}*60,$autoManagedEngineData{delay}*60,\&engineVersionAutoManagement)
+      if($autoManagedEngineData{mode} eq 'release' && $autoManagedEngineData{delay});
+  SimpleEvent::addTimer('RefreshSharedData',$conf{sharedDataRefreshDelay},$conf{sharedDataRefreshDelay},sub {$spads->refreshSharedDataIfNeeded()})
+      if($conf{sharedDataRefreshDelay});
   SimpleEvent::startLoop(\&postMainLoop);
 }
 
@@ -15792,7 +15794,7 @@ sub postMainLoop {
   SimpleEvent::unregisterSocket($autohost->{autoHostSock});
   $autohost->close();
   SimpleEvent::removeTimer('SpadsMainLoop');
-  SimpleEvent::removeTimer('EngineVersionAutoManagement') if($autoManagedEngineData{mode} eq 'release');
+  SimpleEvent::removeTimer('EngineVersionAutoManagement') if($autoManagedEngineData{mode} eq 'release' && $autoManagedEngineData{delay});
   SimpleEvent::removeTimer('RefreshSharedData') if($conf{sharedDataRefreshDelay});
   SimpleEvent::removeFileLockRequest('unitsyncLock') if($timestamps{usLockRequestForGameStart});
 }
