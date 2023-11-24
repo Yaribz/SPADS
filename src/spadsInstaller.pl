@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.36 (2023/11/14)
+# Version 0.37 (2023/11/24)
 
 use strict;
 
@@ -773,20 +773,10 @@ sub configureSpringDataDir {
       }
       createDir($mapsDir);
       print "\nDirectory \"$mapsDir\" has been created to store the maps used by the autohost.\n";
-      my (@featuredBarMapUrls,@allBarMaps);
+      my @allBarMaps;
       if(SpadsUpdater::checkHttpsSupport()) {
         my $httpTiny=HTTP::Tiny->new(timeout => 10);
-        my $httpRes=$httpTiny->get('https://www.beyondallreason.info/maps');
-        if($httpRes->{success}) {
-          my %dedupLinks;
-          map {$dedupLinks{$_}=1} ($httpRes->{content} =~ /\"(https?\:\/\/[^\"]+\.sd7)\"/g);
-          @featuredBarMapUrls = sort {($a =~ /\/([^\/]+)$/)[0] cmp ($b =~ /\/([^\/]+)$/)[0]} keys %dedupLinks;
-          slog('Failed to retrieve the list of featured Beyond All Reason maps (unable to find map URLs in HTML response)',2)
-              unless(@featuredBarMapUrls);
-        }else{
-          slog('Failed to retrieve the list of featured Beyond All Reason maps ('.getHttpErrMsg($httpRes).')',2)
-        }
-        $httpRes=$httpTiny->get('https://maps-metadata.beyondallreason.dev/latest/live_maps.validated.json');
+        my $httpRes=$httpTiny->get('https://maps-metadata.beyondallreason.dev/latest/live_maps.validated.json');
         if($httpRes->{success}) {
           my $r_jsonBarMapList = eval { decode_json($httpRes->{content}) };
           if(defined $r_jsonBarMapList) {
@@ -800,13 +790,13 @@ sub configureSpringDataDir {
                 }
               }
             }
-            slog('Failed to parse the full list of Beyond All Reason maps with links (unknown JSON structure), trying fallback method...',2)
+            slog('Failed to parse the list of Beyond All Reason maps with links (unknown JSON structure), trying fallback method...',2)
                 unless(@allBarMaps);
           }else{
-            slog('Failed to parse the full list of Beyond All Reason maps with links (invalid JSON data), trying fallback method...',2);
+            slog('Failed to parse the list of Beyond All Reason maps with links (invalid JSON data), trying fallback method...',2);
           }
         }else{
-          slog('Failed to retrieve the full list of Beyond All Reason maps with links ('.getHttpErrMsg($httpRes).'), trying fallback method...',2);
+          slog('Failed to retrieve the list of Beyond All Reason maps with links ('.getHttpErrMsg($httpRes).'), trying fallback method...',2);
         }
         if(! @allBarMaps) {
           $httpRes=$httpTiny->get('https://raw.githubusercontent.com/beyond-all-reason/BYAR-Chobby/master/LuaMenu/configs/gameConfig/byar/mapDetails.lua');
@@ -814,10 +804,10 @@ sub configureSpringDataDir {
             my %dedupMaps;
             map {$dedupMaps{$_}=1} ($httpRes->{content} =~ /^\[\'([^\']+)\'\]\=\{/mg);
             @allBarMaps = sort keys %dedupMaps;
-            slog('Failed to retrieve the full list of Beyond All Reason maps (unable to find map names in LUA structure)',2)
+            slog('Failed to retrieve the list of Beyond All Reason maps (unable to find map names in LUA structure)',2)
                 unless(@allBarMaps);
           }else{
-            slog('Failed to retrieve the full list of Beyond All Reason maps ('.getHttpErrMsg($httpRes).')',2)
+            slog('Failed to retrieve the list of Beyond All Reason maps ('.getHttpErrMsg($httpRes).')',2)
           }
         }
       }else{
@@ -826,42 +816,26 @@ sub configureSpringDataDir {
       my @availableMapSets=('minimal');
       print "You can download a set of maps in this directory automatically by entering the corresponding name, or you can choose to manually place some map archives there and enter \"none\" when finished:\n";
       print "  minimal  : minimal set of 3 basic maps (\"Red Comet\", \"Comet Catcher Redux\" and \"Delta Siege Dry\")\n";
-      if(@featuredBarMapUrls) {
-        print '  bar      : set of featured Beyond All Reason maps ('.(scalar @featuredBarMapUrls)." maps)\n";
-        push(@availableMapSets,'bar');
-      }
       if(@allBarMaps) {
-        print '  BAR      : all Beyond All Reason maps ('.(scalar @allBarMaps)." maps)\n";
-        push(@availableMapSets,'BAR');
+        print '  bar      : all Beyond All Reason maps ('.(scalar @allBarMaps)." maps)\n";
+        push(@availableMapSets,'bar');
       }
       print "  none     : no automatic map download (map archives must be placed manually in \"$mapsDir\")\n";
       print "\n";
       push(@availableMapSets,'none');
-      my $defaultMapSet;
-      if($isBarEngine) {
-        $defaultMapSet = @featuredBarMapUrls ? 'bar' : @allBarMaps ? 'BAR' : 'minimal';
-      }else{
-        $defaultMapSet='minimal';
-      }
+      my $defaultMapSet = ($isBarEngine && @allBarMaps) ? 'bar' : 'minimal';
       my $autoDownloadMaps=promptChoice("[$currentStep/$nbSteps] Which map set do you want to download to initialize the autohost \"maps\" directory",\@availableMapSets,$defaultMapSet,$autoInstallData{autoDownloadMaps});
       setLastRun('autoDownloadMaps',$autoDownloadMaps);
       $currentStep++;
-      if($autoDownloadMaps eq 'BAR') {
+      if($autoDownloadMaps eq 'bar') {
         slog('Downloading maps...',3);
         ###  pr-downloader already has too different behaviors between Spring and Recoil...
         # downloadMapsUsingPrdWithProgressBar($prdPath,$mapModDataDir,\@allBarMapNames);
         downloadMapsFromUrlOrNameWithProgressBar(\@allBarMaps,$mapsDir);
-      }else{
-        my @mapUrls;
-        if($autoDownloadMaps eq 'bar') {
-          @mapUrls=@featuredBarMapUrls;
-        }elsif($autoDownloadMaps eq 'minimal') {
-          @mapUrls=map {'http://planetspads.free.fr/spring/maps/'.$_} (qw'comet_catcher_redux.sd7 deltasiegedry.sd7 red_comet.sd7');
-        }
-        if(@mapUrls) {
-          slog('Downloading maps...',3);
-          downloadMapsWithProgressBar(\@mapUrls,$mapsDir);
-        }
+      }elsif($autoDownloadMaps eq 'minimal') {
+        slog('Downloading maps...',3);
+        my @mapUrls=map {'http://planetspads.free.fr/spring/maps/'.$_} (qw'comet_catcher_redux.sd7 deltasiegedry.sd7 red_comet.sd7');
+        downloadMapsWithProgressBar(\@mapUrls,$mapsDir);
       }
     }else{
       $nbSteps-=2;
