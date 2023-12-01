@@ -97,7 +97,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.17';
+our $SPADS_VERSION='0.13.18';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -3643,6 +3643,7 @@ sub acquireAutoUpdateLock {
   my $autoUpdateLockFile=catfile($spadsDir,'autoUpdate.lock');
   if(open($auLockFh,'>',$autoUpdateLockFile)) {
     if(flock($auLockFh, LOCK_EX|LOCK_NB)) {
+      SimpleEvent::win32HdlDisableInheritance($auLockFh) if(MSWIN32);
       slog('Auto-update has been automatically re-enabled on this instance (auto-update was previously managed by another instance running from same directory)',3) if(defined $periodicAutoUpdateLockAcquired);
       $periodicAutoUpdateLockAcquired=1;
     }else{
@@ -5658,6 +5659,7 @@ sub launchGame {
     my $usLockFile="$conf{varDir}/unitsync.lock";
     open($usLockFhForGameStart,'>',$usLockFile)
         or fatalError("Unable to write unitsync library lock file \"$usLockFile\" for game start ($!)",EXIT_SYSTEM);
+    SimpleEvent::win32HdlDisableInheritance($usLockFhForGameStart) if(MSWIN32);
     return startGameServer($p_startData,$p_teamsMap,$p_allyTeamsMap)
         if(flock($usLockFhForGameStart, LOCK_EX|LOCK_NB));
     close($usLockFhForGameStart);
@@ -15593,6 +15595,7 @@ if(! $abortSpadsStartForAutoUpdate) {
   fatalError('Unable to create socket for Spring AutoHost interface',EXIT_SYSTEM) unless($autohost->open());
   fatalError('Unable to register Spring AutoHost interface socket') unless(SimpleEvent::registerSocket($autohost->{autoHostSock},sub { $autohost->receiveCommand() }));
   SimpleEvent::addAutoCloseOnFork(\$lockFh,\$auLockFh,\$usLockFhForGameStart);
+  SimpleEvent::win32HdlDisableInheritance($lockFh) if(MSWIN32);
 
   if($conf{autoLoadPlugins} ne '') {
     my @pluginNames=split(/;/,$conf{autoLoadPlugins});
