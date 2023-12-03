@@ -97,7 +97,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.18';
+our $SPADS_VERSION='0.13.19';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -15746,7 +15746,25 @@ sub manageBattle {
 
 sub checkExit {
   return if($simpleEventLoopStopping);
-  if($autohost->getState() == 0 && $springPid == 0 && defined $quitAfterGame{action} && ! $loadArchivesInProgress && ! $engineVersionAutoManagementInProgress) {
+  return unless($autohost->getState() == 0 && $springPid == 0 && defined $quitAfterGame{action});
+  if($loadArchivesInProgress || $engineVersionAutoManagementInProgress || (any {$plugins{$_}->can('delayShutdown') && $plugins{$_}->delayShutdown()} @pluginsOrder)) {
+    return if($closeBattleAfterGame == 1);
+    if($quitAfterGame{condition} == 0) {
+      slog('Game is not running, closing battle (preparing to shutdown)',3);
+      $closeBattleAfterGame=1;
+    }elsif($lobbyState > 5) {
+      my @players=grep {$_ ne $conf{lobbyLogin} && ! $lobby->{users}{$_}{status}{bot}} (keys %{$lobby->{battle}{users}});
+      if(! @players) {
+        slog('Game is not running and battle is empty, closing battle (preparing to shutdown)',3);
+        $closeBattleAfterGame=1;
+      }elsif($quitAfterGame{condition} == 1) {
+        if(none {defined $lobby->{battle}{users}{$_}{battleStatus} && $lobby->{battle}{users}{$_}{battleStatus}{mode}} @players) {
+          slog('Game is not running and battle only contains spectators, closing battle (preparing to shutdown)',3);
+          $closeBattleAfterGame=1;
+        }
+      }
+    }    
+  }else{
     if($quitAfterGame{condition} == 0) {
       slog("Game is not running, exiting",3);
       $simpleEventLoopStopping=1;

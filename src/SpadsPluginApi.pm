@@ -24,7 +24,7 @@ use List::Util qw'any none';
 use Exporter 'import';
 @EXPORT=qw/$spadsVersion $spadsDir loadPythonPlugin get_flag fix_string getLobbyState getSpringPid getSpringServerType getTimestamps getBosses getRunningBattle getConfMacros getCurrentVote getPlugin getPluginList addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess forkCall removeProcessCallback createDetachedProcess addTimer removeTimer addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog updateSetting secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives/;
 
-my $apiVersion='0.36';
+my $apiVersion='0.37';
 
 our $spadsVersion=$::SPADS_VERSION;
 our $spadsDir=$::CWD;
@@ -1108,6 +1108,15 @@ lobby server only, 2: authenticated by autohost)
 
 The callback must return the new access level value if changed, or undef if not
 changed.
+
+=item C<delayShutdown($self)>
+
+This callback is called by SPADS each time it needs to quit or restart. It
+allows plugins to delay the shutdown operation, which can be useful to prevent
+SPADS from exiting before a process forked by the plugin ends for example.
+
+The callback must return a false value if SPADS can quit right now, or a true
+value if SPADS must wait before exiting.
 
 =item C<filterRotationMaps($self,\@rotationMaps)>
 

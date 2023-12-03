@@ -527,6 +527,14 @@
 <p>The callback must return the new access level value if changed, or undef if not changed.</p>
 
 </dd>
+<dt id="delayShutdown-self"><code>delayShutdown($self)</code></dt>
+<dd>
+
+<p>This callback is called by SPADS each time it needs to quit or restart. It allows plugins to delay the shutdown operation, which can be useful to prevent SPADS from exiting before a process forked by the plugin ends for example.</p>
+
+<p>The callback must return a false value if SPADS can quit right now, or a true value if SPADS must wait before exiting.</p>
+
+</dd>
 <dt id="filterRotationMaps-self-rotationMaps"><code>filterRotationMaps($self,\@rotationMaps)</code></dt>
 <dd>
 
@@ -1128,7 +1136,7 @@
 <dd>
 
 </dd>
-<dt id="quit-type-reason"><code>quit($type,$reason)</code></dt>
+<dt id="quit-type-reason-exitCode-0"><code>quit($type,$reason,$exitCode=0)</code></dt>
 <dd>
 
 </dd>

@@ -1000,6 +1000,8 @@ spads.pl:
 0.13.16: fix return code for several SPADS commands (so that the "postSpadsCommand" plugin callback receives consistent "commandResult" value)
 0.13.17: allow value "0" for "checkDelay" field in "autoManagedSpringVersion" global setting (engine release version is identified at start only, no periodic check for update)
 0.13.18: prevent lock file handles from being inherited by subprocesses (Windows)
+0.13.19: new customization callback for plugins: "delayShutdown" (plugins can now delay SPADS shutdown operation)
+         when a SPADS shutdown/restart is required and no game is in progress, the battle is now closed to prepare for shutdown if the shutdown operation cannot be performed immediately
 
 SpadsConf.pm:
 ============
@@ -1357,6 +1359,7 @@ SpadsPluginApi.pm:
 0.34: new plugin API accessor "getBosses"
 0.35: update documentation regarding the data structure returned by the getBattle() method of the SpringLobbyInterface module ("disabledUnits" array --> "restrictedUnits" hash)
 0.36: allow plugins to set SPADS exit code when calling "quit" function from SPADS plugin API
+0.37: new customization callback for plugins: "delayShutdown" (plugins can now delay SPADS shutdown operation)
 
 SpadsUpdater.pm:
 ===============
