@@ -97,7 +97,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.19';
+our $SPADS_VERSION='0.13.20';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -1454,25 +1454,22 @@ sub fetchAndLogUnitsyncErrors {
 sub loadArchivesBlocking {
   my $full=shift;
 
-  my $usLockFh;
-  if($conf{sequentialUnitsync}) {
-    my $usLockFile="$conf{varDir}/unitsync.lock";
-    open($usLockFh,'>',$usLockFile)
-        or fatalError("Unable to write unitsync library lock file \"$usLockFile\" ($!)",EXIT_SYSTEM);
-    if(! flock($usLockFh, LOCK_EX|LOCK_NB)) {
-      slog('Another instance is using unitsync, waiting for lock... (sequential unitsync mode)',3);
-      if(! flock($usLockFh, LOCK_EX)) {
-        close($usLockFh);
-        fatalError("Unable to acquire unitsync library lock ($!)",EXIT_SYSTEM);
-      }
-      slog('Unitsync library lock acquired',3);
+  my $usLockFile = catfile($conf{$conf{sequentialUnitsync} ? 'varDir' : 'instanceDir'},'unitsync.lock');
+  open(my $usLockFh,'>',$usLockFile)
+      or fatalError("Unable to write unitsync library lock file \"$usLockFile\" ($!)",EXIT_SYSTEM);
+  if(! flock($usLockFh, LOCK_EX|LOCK_NB)) {
+    slog('Another process is using unitsync, waiting for lock...',3);
+    if(! flock($usLockFh, LOCK_EX)) {
+      close($usLockFh);
+      fatalError("Unable to acquire unitsync library lock ($!)",EXIT_SYSTEM);
     }
+    slog('Unitsync library lock acquired',3);
   }
 
   if(! $unitsync->Init(0,0)) {
     fetchAndLogUnitsyncErrors();
     slog("Unable to initialize UnitSync library",1);
-    close($usLockFh) if($usLockFh);
+    close($usLockFh);
     return ([],[],{});
   }
   my $nbMaps = $unitsync->GetMapCount();
@@ -1481,7 +1478,7 @@ sub loadArchivesBlocking {
   if(! $nbMods) {
     slog("No Spring mod found",1);
     $unitsync->UnInit();
-    close($usLockFh) if($usLockFh);
+    close($usLockFh);
     return ([],[],{});
   }
   my @newAvailableMaps;
@@ -1558,6 +1555,7 @@ sub loadArchivesBlocking {
               slog("Inconsistentcy in start position data for map $mapName",1);
               $unitsync->UnInit();
               $spads->cacheMapsInfo({}) if($spads->{sharedDataTs}{mapInfoCache}); # release lock
+              close($usLockFh);
               return ([],[],{});
             }
             push(@{$newCachedMaps{$mapName}{startPos}[-1]},$unitsync->GetInfoValueFloat($infoNb));
@@ -1660,7 +1658,7 @@ sub loadArchivesBlocking {
     my $modChecksum = int32($unitsync->GetPrimaryModChecksum($modNb));
     if(defined $newAvailableMods[$modNb]{hash} && $modChecksum && $modChecksum == $newAvailableMods[$modNb]{hash}) {
       $unitsync->UnInit();
-      close($usLockFh) if($usLockFh);
+      close($usLockFh);
       return (\@newAvailableMaps,\@newAvailableMods,\%newCachedMaps);
     }
     $newAvailableMods[$modNb]{hash}=$modChecksum;
@@ -1714,7 +1712,7 @@ sub loadArchivesBlocking {
   }
 
   $unitsync->UnInit();
-  close($usLockFh) if($usLockFh);
+  close($usLockFh);
   return (\@newAvailableMaps,\@newAvailableMods,\%newCachedMaps);
 }
 
@@ -5655,49 +5653,45 @@ sub launchGame {
     return 0;
   }
 
-  if($conf{sequentialUnitsync}) {
-    my $usLockFile="$conf{varDir}/unitsync.lock";
-    open($usLockFhForGameStart,'>',$usLockFile)
-        or fatalError("Unable to write unitsync library lock file \"$usLockFile\" for game start ($!)",EXIT_SYSTEM);
-    SimpleEvent::win32HdlDisableInheritance($usLockFhForGameStart) if(MSWIN32);
-    return startGameServer($p_startData,$p_teamsMap,$p_allyTeamsMap)
-        if(flock($usLockFhForGameStart, LOCK_EX|LOCK_NB));
-    close($usLockFhForGameStart);
-    undef $usLockFhForGameStart;
-    if(%currentVote && exists $currentVote{command}) {
-      broadcastMsg("Vote cancelled, preparing to launch game... (waiting for exclusive access to archives cache)");
-      foreach my $pluginName (@pluginsOrder) {
-        $plugins{$pluginName}->onVoteStop(0) if($plugins{$pluginName}->can('onVoteStop'));
-      }
-      %currentVote=();
-    }else{
-      broadcastMsg('Preparing to launch game... (waiting for exclusive access to archives cache)');
+  my $usLockFile = catfile($conf{$conf{sequentialUnitsync} ? 'varDir' : 'instanceDir'},'unitsync.lock');
+  open($usLockFhForGameStart,'>',$usLockFile)
+      or fatalError("Unable to write unitsync library lock file \"$usLockFile\" for game start ($!)",EXIT_SYSTEM);
+  SimpleEvent::win32HdlDisableInheritance($usLockFhForGameStart) if(MSWIN32);
+  return startGameServer($p_startData,$p_teamsMap,$p_allyTeamsMap)
+      if(flock($usLockFhForGameStart, LOCK_EX|LOCK_NB));
+  close($usLockFhForGameStart);
+  undef $usLockFhForGameStart;
+  if(%currentVote && exists $currentVote{command}) {
+    broadcastMsg("Vote cancelled, preparing to launch game... (waiting for exclusive access to archives cache)");
+    foreach my $pluginName (@pluginsOrder) {
+      $plugins{$pluginName}->onVoteStop(0) if($plugins{$pluginName}->can('onVoteStop'));
     }
-    slog('Another instance is using unitsync, waiting for lock to start game... (sequential unitsync mode)',3);
-    $timestamps{usLockRequestForGameStart}=time;
-    return SimpleEvent::requestFileLock(
-      'unitsyncLock',
-      $usLockFile,
-      LOCK_EX,
-      sub {
-        my $requestDelay=time-$timestamps{usLockRequestForGameStart};
-        slog("Acquiring exclusive access to archives cache took $requestDelay seconds (starting game in sequential unitsync mode)",2)
-            if($requestDelay > 5);
-        $timestamps{usLockRequestForGameStart}=0;
-        $usLockFhForGameStart=shift;
-        startGameServer($p_startData,$p_teamsMap,$p_allyTeamsMap,$p_battleState->{players});
-      },
-      30,
-      sub {
-        $timestamps{usLockRequestForGameStart}=0;
-        my $errMsg='Failed to launch game (timeout when acquiring exclusive access to archives cache)';
-        slog($errMsg,1);
-        broadcastMsg($errMsg);
-      },
-        );
+    %currentVote=();
   }else{
-    return startGameServer($p_startData,$p_teamsMap,$p_allyTeamsMap);
+    broadcastMsg('Preparing to launch game... (waiting for exclusive access to archives cache)');
   }
+  slog('Another process is using unitsync, waiting for lock to start game...',3);
+  $timestamps{usLockRequestForGameStart}=time;
+  return SimpleEvent::requestFileLock(
+    'unitsyncLock',
+    $usLockFile,
+    LOCK_EX,
+    sub {
+      my $requestDelay=time-$timestamps{usLockRequestForGameStart};
+      slog("Acquiring exclusive access to archives cache to start game took $requestDelay seconds",2)
+          if($requestDelay > 5);
+      $timestamps{usLockRequestForGameStart}=0;
+      $usLockFhForGameStart=shift;
+      startGameServer($p_startData,$p_teamsMap,$p_allyTeamsMap,$p_battleState->{players});
+    },
+    30,
+    sub {
+      $timestamps{usLockRequestForGameStart}=0;
+      my $errMsg='Failed to launch game (timeout when acquiring exclusive access to archives cache)';
+      slog($errMsg,1);
+      broadcastMsg($errMsg);
+    },
+      );
 }
 
 sub startGameServer {

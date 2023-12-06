@@ -1002,6 +1002,7 @@ spads.pl:
 0.13.18: prevent lock file handles from being inherited by subprocesses (Windows)
 0.13.19: new customization callback for plugins: "delayShutdown" (plugins can now delay SPADS shutdown operation)
          when a SPADS shutdown/restart is required and no game is in progress, the battle is now closed to prepare for shutdown if the shutdown operation cannot be performed immediately
+0.13.20: use unitsync lock file even if sequential unitsync mode is disabled (in this case the lock file is in the instance dir instead of the var dir)
 
 SpadsConf.pm:
 ============
