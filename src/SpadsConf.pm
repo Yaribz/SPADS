@@ -39,7 +39,7 @@ use SimpleLog;
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.13.4';
+my $moduleVersion='0.13.5';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -2390,6 +2390,40 @@ sub getMapHashes {
 # Business functions ##########################################################
 
 # Business functions - Configuration ##########################################
+
+sub reloadMapBoxes {
+  my ($self,$r_macros)=@_;
+  my $sLog=$self->{log};
+  my $r_mapBoxes=loadFastTableFile($sLog,$self->{conf}{etcDir}.'/mapBoxes.conf',\@mapBoxesFields,$r_macros);
+  if(! %{$r_mapBoxes}) {
+    $sLog->log('Unable to reload map boxes',1);
+    return 0;
+  }
+  $self->{mapBoxes}=$r_mapBoxes->{''};
+  return 1;
+}
+
+sub reloadMapLists {
+  my ($self,$r_macros)=@_;
+  my $sLog=$self->{log};
+  my $r_mapLists=loadSimpleTableFile($sLog,$self->{conf}{etcDir}.'/mapLists.conf',$r_macros);
+  if(! %{$r_mapLists}) {
+    $sLog->log('Unable to reload map lists',1);
+    return 0;
+  }
+  my $defaultMapList=$self->{presets}{$self->{conf}{defaultPreset}}{mapList}[0];
+  if(! exists $r_mapLists->{$defaultMapList}) {
+    $sLog->log("Unable to reload map lists: default map list \"$defaultMapList\" is not defined",1);
+    return 0;
+  }
+  my $currentMapList=$self->{conf}{mapList};
+  if(! exists $r_mapLists->{$currentMapList}) {
+    $sLog->log("Unable to reload map lists: current map list \"$currentMapList\" is not defined",1);
+    return 0;
+  }
+  $self->{mapLists}=$r_mapLists;
+  return 1;
+}
 
 sub applyPreset {
   my ($self,$preset,$commandsAlreadyLoaded)=@_;
