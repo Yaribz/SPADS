@@ -52,7 +52,8 @@ my $dynLibSuffix=$win?'dll':($macOs?'dylib':'so');
 my $unitsyncLibName=($win?'':'lib')."unitsync.$dynLibSuffix";
 my $PRD_BIN='pr-downloader'.($win?'.exe':'');
 
-my $spadsUrl='http://planetspads.free.fr/spads';
+my $URL_SPADS='http://planetspads.free.fr/spads';
+my $URL_TEMPLATES="$URL_SPADS/installer/auto/";
 my @packages=(qw'getDefaultModOptions.pl help.dat helpSettings.dat PerlUnitSync.pm springLobbyCertificates.dat SpringAutoHostInterface.pm SpringLobbyInterface.pm SimpleEvent.pm SimpleLog.pm spads.pl SpadsConf.pm spadsInstaller.pl SpadsUpdater.pm SpadsPluginApi.pm update.pl argparse.py replay_upload.py sequentialSpadsUnitsyncProcess.pl',$win?'7za.exe':'7za');
 
 my $nbSteps=$macOs?14:15;
@@ -106,36 +107,111 @@ sub slog {
   $sLog->log(@_);
 }
 
-my %autoInstallData;
-my $autoInstallFile=catfile($conf{installDir},'spadsInstaller.auto');
-if(-f $autoInstallFile) {
-  my $fh=new FileHandle($autoInstallFile,'r');
-  if(! defined $fh) {
-    print "ERROR - Unable to read auto-install data from file \"$autoInstallFile\" ($!)\n";
+sub invalidUsage {
+  my $err=shift;
+  slog('Invalid usage'.(defined $err ? " ($err)" : ''),1);
+  print "Usage:\n";
+  print "  perl $0 [<release>] [--auto <templateNameOrUrl>]\n";
+  print "  perl $0 --list-templates\n";
+  print "      release: \"stable\", \"testing\", \"unstable\" or \"contrib\"\n";
+  print "      templateNameOrUrl: auto-install template name or URL\n";
+  exit 1;
+}
+
+sub getAvailableOnlineTemplates {
+  my $httpRes=HTTP::Tiny->new(timeout => 10)->get($URL_TEMPLATES);
+  if($httpRes->{success}) {
+    my @availableTemplates=($httpRes->{content} =~ /<a href="([\w\.\-]+)\/">\1\/<\/a>/ig);
+    return \@availableTemplates;
+  }else{
+    print "ERROR - Unable to retrieve available installation templates (".getHttpErrMsg($httpRes).")\n";
     exit 1;
   }
-  while(<$fh>) {
-    next if(/^\s*(\#.*)?$/);
-    if(/^\s*([^:]*[^:\s])\s*:\s*((?:.*[^\s])?)\s*$/) {
-      $autoInstallData{$1}=$2;
+}
+
+if(any {$_ eq '--list-templates'} @ARGV) {
+  invalidUsage('the --list-templates parameter cannot be used with other parameter') unless(@ARGV == 1);
+  my $r_availableTemplates=getAvailableOnlineTemplates();
+  if(@{$r_availableTemplates}) {
+    print 'Available installation template'.($#{$r_availableTemplates}?'s':'').":\n";
+    map {print "  . $_\n"} (@{$r_availableTemplates});
+  }else{
+    print "No available installation template found.\n";
+  }
+  exit 0;
+}
+
+my $templateName;
+my $templateUrl;
+my $releaseIsFromCmdLineParam;
+{
+  my $nextParamIsOnlineTemplate;
+  foreach my $installArg (@ARGV) {
+    if($nextParamIsOnlineTemplate) {
+      if($installArg =~ /^[\w\.\-]+$/) {
+        $templateName=$installArg;
+        my $r_availableTemplates=getAvailableOnlineTemplates();
+        invalidUsage("unknown installation template \"$templateName\"")
+            unless(any {$templateName eq $_} @{$r_availableTemplates});
+        $templateUrl="$URL_TEMPLATES$templateName/spadsInstaller.auto";
+      }elsif($installArg =~ /^https?:\/\//i) {
+        fatalError('Cannot use online installation template from HTTPS URL because TLS support is missing (IO::Socket::SSL version 1.42 or superior and Net::SSLeay version 1.49 or superior are required)')
+            if(lc(substr($installArg,4,1)) eq 's' && ! SpadsUpdater::checkHttpsSupport());
+        $templateUrl=$installArg;
+      }else{
+        invalidUsage("invalid installation template name or URL \"$installArg\"");
+      }
+      $nextParamIsOnlineTemplate=0;
+    }elsif($installArg eq '--auto') {
+      if(defined $templateUrl) {
+        invalidUsage('duplicate installation template declaration');
+      }else{
+        $nextParamIsOnlineTemplate=1;
+      }
+    }elsif(any {$installArg eq $_} qw'stable testing unstable contrib') {
+      if(defined $conf{release}) {
+        invalidUsage('duplicate installation release parameter');
+      }else{
+        $releaseIsFromCmdLineParam=1;
+        $conf{release}=$installArg;
+      }
     }else{
-      s/[\cJ\cM]*$//;
-      print "ERROR - Invalid line \"$_\" in auto-install file \"$autoInstallFile\"\n";
-      exit 1;
+      invalidUsage("invalid parameter \"$installArg\"");
     }
   }
-  $fh->close();
+  invalidUsage('missing installation template parameter') if($nextParamIsOnlineTemplate);
+}
+
+my @autoInstallLines;
+my $autoInstallFile=catfile($conf{installDir},'spadsInstaller.auto');
+if(defined $templateUrl) {
+  my $httpRes=HTTP::Tiny->new(timeout => 10)->get($templateUrl);
+  if($httpRes->{success}) {
+    @autoInstallLines=split(/\cJ\cM?/,$httpRes->{content});
+  }else{
+    print "ERROR - Unable to retrieve auto-install data from \"$templateUrl\" (".getHttpErrMsg($httpRes).")\n";
+    exit 1;
+  }
+  slog("Using auto-install data from URL \"$templateUrl\"...",3);
+}elsif(-f $autoInstallFile) {
+  open(my $fh,'<',$autoInstallFile)
+      or do {
+        print "ERROR - Unable to read auto-install data from file \"$autoInstallFile\" ($!)\n";
+        exit 1;
+  };
+  @autoInstallLines=<$fh>;
+  close($fh);
   slog("Using auto-install data from file \"$autoInstallFile\"...",3);
 }
 
-foreach my $installArg (@ARGV) {
-  if(! defined $conf{release} && (any {$installArg eq $_} qw'stable testing unstable contrib')) {
-    $conf{release}=$installArg;
+my %autoInstallData;
+foreach my $autoInstallLine (@autoInstallLines) {
+  next if($autoInstallLine =~ /^\s*(\#.*)?$/);
+  if($autoInstallLine =~ /^\s*([^:]*[^:\s])\s*:\s*((?:.*[^\s])?)\s*$/) {
+    $autoInstallData{$1}=$2;
   }else{
-    slog('Invalid usage',1);
-    print "Usage:\n";
-    print "  perl $0 [release]\n";
-    print "      release: \"stable\", \"testing\", \"unstable\" or \"contrib\"\n";
+    $autoInstallLine =~ s/[\cJ\cM]*$//;
+    print "ERROR - Invalid line \"$autoInstallLine\" in auto-install data from ".($templateUrl // "file \"$autoInstallFile\"")."\n";
     exit 1;
   }
 }
@@ -943,20 +1019,26 @@ my $updaterLog=SimpleLog->new(logFiles => [''],
 
 my $updater=SpadsUpdater->new(sLog => $updaterLog,
                               localDir => $conf{installDir},
-                              repository => "$spadsUrl/repository",
+                              repository => "$URL_SPADS/repository",
                               release => $conf{release},
                               packages => \@packages);
 
 my $updaterRc=$updater->update();
 fatalError('Unable to retrieve SPADS packages') if($updaterRc < 0);
 if($updaterRc > 0) {
+  my @restartCmd=($0);
+  push(@restartCmd,$conf{release}) unless(! $releaseIsFromCmdLineParam
+                                          && defined $autoInstallData{release}
+                                          && ($autoInstallData{release} eq $conf{release} || $autoInstallData{release} eq ''));
+  push(@restartCmd,'--auto',$templateName//$templateUrl) if(defined $templateUrl);
   if($win) {
-    print "\nSPADS installer has been updated, it must now be restarted as follows: \"perl $0 $conf{release}\"\n";
+    @restartCmd=map {escapeWin32Parameter($_)} @restartCmd;
+    print "\nSPADS installer has been updated, it must now be restarted as follows:\n  perl ".join(' ',@restartCmd)."\n";
     exit 0;
   }
   slog('Restarting installer after update...',3);
   sleep(2);
-  portableExec($^X,$0,$conf{release});
+  portableExec($^X,@restartCmd);
   fatalError('Unable to restart installer');
 }
 slog('SPADS components are up to date, proceeding with installation...',3);
@@ -1308,7 +1390,7 @@ $conf{preferencesData}=$sqliteUnavailableReason?'private':'shared';
 
 my @confFiles=qw'banLists.conf battlePresets.conf commands.conf hostingPresets.conf levels.conf mapBoxes.conf mapLists.conf spads.conf users.conf';
 slog('Downloading SPADS configuration templates',3);
-exit 1 unless(all {downloadFile("$spadsUrl/conf/templates/$conf{release}/$_",catdir($conf{etcDir},'templates',$_))} @confFiles);
+exit 1 unless(all {downloadFile("$URL_SPADS/conf/templates/$conf{release}/$_",catdir($conf{etcDir},'templates',$_))} @confFiles);
 slog('Customizing SPADS configuration',3);
 foreach my $confFile (@confFiles) {
   my $confFileTemplate=catfile($conf{etcDir},'templates',$confFile);

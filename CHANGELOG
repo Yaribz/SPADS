@@ -1287,6 +1287,7 @@ spadsInstaller.pl:
       improve automatic download of BAR maps (use live BAR map list containing URLs if available)
       improve HTTP download error messages
 0.37: remove the option to auto-download the set of featured maps of BAR (the "bar" map set now contains all BAR maps and replaces the previous "BAR" set)
+0.38: add support for remote installation templates (new "--auto" command line parameter)
 
 SpadsPluginApi.pm:
 =================
