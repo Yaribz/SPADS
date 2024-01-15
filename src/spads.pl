@@ -97,7 +97,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.20';
+our $SPADS_VERSION='0.13.21';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -6357,14 +6357,18 @@ sub sendPlayerSkill {
   if(($skillOrigin eq 'TrueSkill' || $skillOrigin eq 'Plugin')
      && exists $battleSkills{$player}->{sigma}) {
     my $skillSigma;
-    if($battleSkills{$player}->{sigma} > 3) {
-      $skillSigma=3;
-    }elsif($battleSkills{$player}->{sigma} > 2) {
-      $skillSigma=2;
-    }elsif($battleSkills{$player}->{sigma} > 1.5) {
-      $skillSigma=1;
+    if($skillOrigin eq 'TrueSkill') {
+      if($battleSkills{$player}->{sigma} > 3) {
+        $skillSigma=3;
+      }elsif($battleSkills{$player}->{sigma} > 2) {
+        $skillSigma=2;
+      }elsif($battleSkills{$player}->{sigma} > 1.5) {
+        $skillSigma=1;
+      }else{
+        $skillSigma=0;
+      }
     }else{
-      $skillSigma=0;
+      $skillSigma=$battleSkills{$player}{sigma};
     }
     queueLobbyCommand(["SETSCRIPTTAGS","game/players/$lcPlayer/skilluncertainty=$skillSigma"]);
     $sentPlayersScriptTags{$lcPlayer}{skilluncertainty}=1;
