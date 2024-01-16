@@ -192,6 +192,7 @@ helpSettings.dat:
 0.7.2: fix default value of map link settings in doc
 0.7.3: update description of "autoManagedSpringVersion" global setting (add "unstable" engine release from GitHub)
 0.7.4: add new placeholders for "promoteMsg" global setting ("%P": number of players in battle, "%S": number of spectators in battle, "%U": total number of users in battle)
+0.7.5: new engine version auto-management functionalities (multi-branch GitHub release tags, Recoil engine shortcut and BAR rolling releases)
 
 PerlUnitSync.pm:
 ===============
@@ -1004,6 +1005,7 @@ spads.pl:
          when a SPADS shutdown/restart is required and no game is in progress, the battle is now closed to prepare for shutdown if the shutdown operation cannot be performed immediately
 0.13.20: use unitsync lock file even if sequential unitsync mode is disabled (in this case the lock file is in the instance dir instead of the var dir)
 0.13.21: forward raw skill uncertainty values coming from plugins directly instead of mapping them to the integer set 0,1,2,3
+0.13.22: support new SpadsUpdater module for improved engine version auto-management from GitHub (multi-branch release tags, Recoil engine shortcut and BAR rolling releases)
 
 SpadsConf.pm:
 ============
@@ -1190,6 +1192,10 @@ SpadsConf.pm:
 0.13.3: add management of "unstable" engine release from GitHub (most recent release)
 0.13.4: allow empty "checkDelay" field  in "autoManagedSpringVersion" global setting (use default check delay in this case)
 0.13.5: add support dynamic reload of map boxes and map lists configuration files (new "reloadMapBoxes" and "reloadMapLists" functions)
+0.13.6: "autoManagedSpringVersion" setting: add "RECOIL" engine version auto-management mode (shortcut for GitHub auto-management mode with "Beyond All Reason" engine repository)
+        "autoManagedSpringVersion" setting: support multi-branch GitHub release tag templates
+        "autoManagedSpringVersion" setting: add "bar" and "barTesting" rolling releases (synchronized with the versions used by official "Beyond All Reason" launcher)
+        "autoManagedSpringVersion" setting: factorize parsing code
 
 spadsInstaller.pl:
 =================
@@ -1289,6 +1295,11 @@ spadsInstaller.pl:
       improve HTTP download error messages
 0.37: remove the option to auto-download the set of featured maps of BAR (the "bar" map set now contains all BAR maps and replaces the previous "BAR" set)
 0.38: add support for remote installation templates (new "--auto" command line parameter)
+0.39: new "recoil" engine auto-management mode (shortcut for "github" mode using "Beyond All Reason" repository)
+      add support for GitHub branches in github/recoil engine version auto-management modes
+      redesign the engine binary type choice message
+      redesign the available engine versions listing message
+      fix warnings for missing releases
 
 SpadsPluginApi.pm:
 =================
@@ -1421,6 +1432,11 @@ SpadsUpdater.pm:
 0.25: add management of "unstable" engine release from GitHub (most recent release)
       fix management of "testing" engine release from GitHub (most recent release with tag "Pre-release" or "Latest")
 0.26: use a specific system for BAR engine release name resolution because BAR GitHub release tags are meaningless
+0.27: engine version auto-management: support multi-branch GitHub release tag templates
+      engine version auto-management: new "bar" and "barTesting" rolling releases (synchronized with the versions used by official "Beyond All Reason" launcher)
+      engine version auto-management: add GitHub release cache system
+      engine version auto-management: allow disabling warning messages for missing releases
+      improve logging of HTTP errors
 
 springLobbyCertificates.dat:
 ===========================

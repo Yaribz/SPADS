@@ -2,7 +2,7 @@
 #
 # This program installs SPADS in current directory from remote repository.
 #
-# Copyright (C) 2008-2023  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2024  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.37 (2023/11/24)
+# Version 0.39 (2024/01/15)
 
 use strict;
 
@@ -63,11 +63,20 @@ my @pathes=splitPaths($ENV{PATH});
 my %conf=(installDir => canonpath($FindBin::Bin));
 my %lastRun;
 my @lastRunOrder;
-my $isBarEngine;
+my $isRecoilEngine;
 
-my %ENGINE_RELEASES=(stable => 'recommended release',
+my %SPRING_RELEASES=(stable => 'recommended release',
                      testing => 'next release candidate',
                      unstable => 'latest develop version');
+my @RECOIL_SPECIFIC_RELEASES=(qw'bar barTesting');
+
+my %RECOIL_GITHUB_REPO_PARAMS=(
+  owner => 'beyond-all-reason',
+  name => 'spring',
+  tag => 'spring_bar_{<branch>}<version>',
+  asset => '.+_<os>-<bitness>-minimal-portable\.7z',
+    );
+
 my @MAP_RESOLVERS=(
   'https://springfiles.springrts.com/json.php?category=map&springname=',
   'https://files-cdn.beyondallreason.dev/find?category=map&springname=',
@@ -816,7 +825,7 @@ sub configureSpringDataDir {
         my $defaultShortName;
         foreach my $shortName (sort keys %gamesData) {
           $defaultShortName//=$shortName;
-          $defaultShortName=$shortName if($shortName eq 'bar' && $isBarEngine);
+          $defaultShortName=$shortName if($shortName eq 'bar' && $isRecoilEngine);
           print "  $shortName : $gamesData{$shortName}{name}\n";
         }
         print "\n";
@@ -899,7 +908,7 @@ sub configureSpringDataDir {
       print "  none     : no automatic map download (map archives must be placed manually in \"$mapsDir\")\n";
       print "\n";
       push(@availableMapSets,'none');
-      my $defaultMapSet = ($isBarEngine && @allBarMaps) ? 'bar' : 'minimal';
+      my $defaultMapSet = ($isRecoilEngine && @allBarMaps) ? 'bar' : 'minimal';
       my $autoDownloadMaps=promptChoice("[$currentStep/$nbSteps] Which map set do you want to download to initialize the autohost \"maps\" directory",\@availableMapSets,$defaultMapSet,$autoInstallData{autoDownloadMaps});
       setLastRun('autoDownloadMaps',$autoDownloadMaps);
       $currentStep++;
@@ -1001,6 +1010,14 @@ sub ghAssetTemplateToRegex {
   return undef;
 }
 
+sub buildQuotedSortedKeysString {
+  my @quotedItems=map {'"'.$_.'"'} sort keys %{shift()};
+  return $quotedItems[0]//'' if(@quotedItems < 2);
+  return join(' or ',@quotedItems) if(@quotedItems == 2);
+  my $lastItem=pop(@quotedItems);
+  return join(', ',@quotedItems).' or '.$lastItem;
+}
+
 if(! exists $conf{release}) {
   print "\nThis program will install SPADS in the current working directory, overwriting files if needed.\n";
   print "The installer will ask you $nbSteps questions maximum to customize your installation and pre-configure SPADS.\n";
@@ -1071,16 +1088,25 @@ my $engineBinariesType;
 if($macOs) {
   $engineBinariesType='custom';
 }else{
-  my ($githubDescStr,@engineBinChoices);
+  my ($availableAutoMgmtDesc,@engineBinChoices);
   if(SpadsUpdater::checkHttpsSupport()) {
-    $githubDescStr=' engine binaries from GitHub (auto-managed by SPADS),';
-    @engineBinChoices=(qw'official github custom');
+    print <<EOT;
+
+Available engine auto-management modes:
+  - official: use Spring engine from official Spring download location
+  - recoil: use Recoil engine from "$RECOIL_GITHUB_REPO_PARAMS{owner}/$RECOIL_GITHUB_REPO_PARAMS{name}" GitHub repository
+  - github: use an engine from a custom GitHub repository
+
+EOT
+
+    $availableAutoMgmtDesc='one of the engine auto-management modes listed above';
+    @engineBinChoices=(qw'official recoil github custom');
   }else{
     slog("Engine auto-management using GitHub is unavailable because TLS support is missing (IO::Socket::SSL version 1.42 or superior and Net::SSLeay version 1.49 or superior are required)",2);
-    $githubDescStr='';
+    $availableAutoMgmtDesc='official Spring binary files (auto-managed by SPADS)';
     @engineBinChoices=(qw'official custom');
   }
-  $engineBinariesType=promptChoice("[5/$nbSteps] Do you want to use official Spring binary files (auto-managed by SPADS),$githubDescStr or a custom engine installation already existing on the system?",\@engineBinChoices,'official',$autoInstallData{springBinariesType});
+  $engineBinariesType=promptChoice("[5/$nbSteps] Do you want to use $availableAutoMgmtDesc or a custom engine installation already existing on the system?",\@engineBinChoices,'official',$autoInstallData{springBinariesType});
   setLastRun('springBinariesType',$engineBinariesType);
 }
 
@@ -1090,16 +1116,16 @@ if($engineBinariesType eq 'official') {
   
   my @engineBranches=(qw'develop master');
   my %engineBranchesVersions;
-  map { my $r_availableSpringVersions=$updater->getAvailableSpringVersions($_);
+  map { my $r_availableSpringVersions=$updater->getAvailableSpringVersions($_,1);
         fatalError("Couldn't check available Spring versions") unless(@{$r_availableSpringVersions} || $_ eq 'develop');
         $engineBranchesVersions{$_}=$r_availableSpringVersions; } @engineBranches;
 
   my (%engineReleasesVersion,%engineVersionsReleases);
-  map { my $releaseVersion=$updater->resolveEngineReleaseNameToVersion($_);
+  map { my ($releaseVersion)=$updater->resolveEngineReleaseNameToVersion($_,undef,1);
         if(defined $releaseVersion) {
           $engineReleasesVersion{$_}=$releaseVersion;
           $engineVersionsReleases{$releaseVersion}{$_}=1;
-        } } (keys %ENGINE_RELEASES);
+        } } (keys %SPRING_RELEASES);
 
   print "\nAvailable Spring versions:\n";
   
@@ -1110,7 +1136,7 @@ if($engineBinariesType eq 'official') {
       my ($printedVersion,$versionComment)=($engineBranchesVersions{$engineBranch}[-$idx],'');
       $availableVersions{$printedVersion}=1;
       if(exists $engineVersionsReleases{$printedVersion}) {
-        $versionComment=' '.join(' + ', map { '['.uc($_)."] ($ENGINE_RELEASES{$_})" } (sort keys %{$engineVersionsReleases{$printedVersion}}));
+        $versionComment=' '.join(' + ', map { '['.uc($_)."] ($SPRING_RELEASES{$_})" } (sort keys %{$engineVersionsReleases{$printedVersion}}));
         $versionsToAdd=5;
       }
       if($versionsToAdd >= 0) {
@@ -1125,22 +1151,25 @@ if($engineBinariesType eq 'official') {
   }
   
   print "\nPlease choose the Spring version which will be used by the autohost.\n";
-  print "If you choose \"stable\", \"testing\" or \"unstable\", SPADS will stay up to date with the corresponding Spring release by automatically downloading and using new binary files when needed.\n";
+
   my @engineVersionExamples;
-  push(@engineVersionExamples,$engineReleasesVersion{stable}) if(defined $engineReleasesVersion{stable});
-  push(@engineVersionExamples,$engineReleasesVersion{testing}) if(defined $engineReleasesVersion{testing} && (none {$engineReleasesVersion{testing} eq $_} @engineVersionExamples));
-  push(@engineVersionExamples,$engineReleasesVersion{unstable}) if(defined $engineReleasesVersion{unstable} && (none {$engineReleasesVersion{unstable} eq $_} @engineVersionExamples));
-  push(@engineVersionExamples,$engineBranchesVersions{master}[-1]) unless(@engineVersionExamples);
-  print "If you choose a specific Spring version number (\"".join('", "',@engineVersionExamples)."\", ...), SPADS will stick to this version until you manually change it in the configuration file.\n\n";
+  if(%engineReleasesVersion) {
+    my $releasesString=buildQuotedSortedKeysString(\%engineReleasesVersion);
+    print "If you choose a rolling release ($releasesString), SPADS will follow the corresponding Spring release by automatically downloading and using new binary files when needed.\n";
+    map {my $version=$engineReleasesVersion{$_}; push(@engineVersionExamples,$version) if(none {$version eq $_} @engineVersionExamples)} (sort keys %engineReleasesVersion);
+    print "If you choose a specific Spring version number (\"".join('", "',@engineVersionExamples)."\", ...), SPADS will stick to this version until you manually change it in the configuration file.\n\n";
+  }else{
+    @engineVersionExamples=($engineBranchesVersions{master}[-1]);
+  }
   my $engineVersion;
   my $autoInstallValue=$autoInstallData{autoManagedSpringVersion};
   my $autoManagedSpringVersion='';
   while(! exists $availableVersions{$autoManagedSpringVersion}) {
-    $autoManagedSpringVersion=promptStdin("[6/$nbSteps] Which Spring version do you want to use (".(join(',',@engineVersionExamples,(sort grep {defined $engineReleasesVersion{$_}} keys %ENGINE_RELEASES),'...')).')',$engineVersionExamples[0],$autoInstallValue);
+    $autoManagedSpringVersion=promptStdin("[6/$nbSteps] Which Spring version do you want to use (".(join(',',@engineVersionExamples,(sort keys %engineReleasesVersion),'...')).')',$engineVersionExamples[0],$autoInstallValue);
     $autoInstallValue=undef;
     if(exists $availableVersions{$autoManagedSpringVersion}) {
       $engineVersion=$engineReleasesVersion{$autoManagedSpringVersion} // $autoManagedSpringVersion;
-      my $engineSetupRes=$updater->setupEngine($engineVersion,undef,1);
+      my $engineSetupRes=$updater->setupEngine($engineVersion,undef,undef,1);
       if($engineSetupRes < -9) {
         slog("Installation failed: unable to find, download and extract all required files for Spring $engineVersion, please choose a different version",2);
         $autoManagedSpringVersion='';
@@ -1154,62 +1183,94 @@ if($engineBinariesType eq 'official') {
   $conf{autoManagedSpringVersion}=$autoManagedSpringVersion;
   $conf{autoInstalledSpringDir}=$updater->getEngineDir($engineVersion);
   
-}elsif($engineBinariesType eq 'github') {
-  
+}elsif(any {$engineBinariesType eq $_} (qw'recoil github')) {
+
   my %ghInfo;
-  $ghInfo{owner}=promptString('       Please enter the GitHub repository owner name','beyond-all-reason',$autoInstallData{githubOwner},sub {$_[0]=~/^[\w\-]+$/});
-  setLastRun('githubOwner',$ghInfo{owner});
-  $isBarEngine=1 if($ghInfo{owner} eq 'beyond-all-reason');
-  $ghInfo{name}=promptString('       Please enter the GitHub repository name','spring',$autoInstallData{githubName},sub {$_[0]=~/^[\w\-\.]+$/});
-  setLastRun('githubName',$ghInfo{name});
-  $ghInfo{tag}=promptString('       Please enter the GitHub release tag template','spring_bar_{BAR105}<version>',$autoInstallData{githubTag}, sub {index($_[0],'<version>') != -1 && index($_[0],',') == -1});
-  setLastRun('githubTag',$ghInfo{tag});
-  my $ghAsset=promptString('       Please enter the GitHub asset regular expression','.+_<os>-<bitness>-minimal-portable\.7z',$autoInstallData{githubAsset},\&ghAssetTemplateToRegex);
-  setLastRun('githubAsset',$ghAsset);
+  my $ghAsset;
+  if($engineBinariesType eq 'recoil') {
+    @ghInfo{qw'owner name tag'}=@RECOIL_GITHUB_REPO_PARAMS{qw'owner name tag'};
+    $ghAsset=$RECOIL_GITHUB_REPO_PARAMS{asset};
+  }else{
+    $ghInfo{owner}=promptString('       Please enter the GitHub repository owner name',$RECOIL_GITHUB_REPO_PARAMS{owner},$autoInstallData{githubOwner},sub {$_[0]=~/^[\w\-]+$/});
+    setLastRun('githubOwner',$ghInfo{owner});
+    $ghInfo{name}=promptString('       Please enter the GitHub repository name',$RECOIL_GITHUB_REPO_PARAMS{name},$autoInstallData{githubName},sub {$_[0]=~/^[\w\-\.]+$/});
+    setLastRun('githubName',$ghInfo{name});
+    $ghInfo{tag}=promptString('       Please enter the GitHub release tag template',$RECOIL_GITHUB_REPO_PARAMS{tag},$autoInstallData{githubTag}, sub {index($_[0],'<version>') != -1 && index($_[0],',') == -1});
+    setLastRun('githubTag',$ghInfo{tag});
+    $ghAsset=promptString('       Please enter the GitHub asset regular expression',$RECOIL_GITHUB_REPO_PARAMS{asset},$autoInstallData{githubAsset},\&ghAssetTemplateToRegex);
+    setLastRun('githubAsset',$ghAsset);
+  }
   $ghInfo{asset}=ghAssetTemplateToRegex($ghAsset);
-  my $ghRepoHash=substr(md5_base64(join('/',@ghInfo{qw'owner name'})),0,7);
+  
+  my $ghRepo=join('/',@ghInfo{qw'owner name'});
+  my $ghRepoHash=substr(md5_base64($ghRepo),0,7);
   $ghRepoHash=~tr/\/\+/ab/;
   my $ghSubdir=$ghInfo{tag};
   $ghSubdir =~ s/\Q<version>\E/($ghRepoHash)/g;
+  $ghSubdir =~ s/\Q<branch>\E/BRANCH/g;
   $ghSubdir =~ tr/\\\/\:\*\?\"\<\>\|/........./;
   $ghInfo{subdir}=$ghSubdir;
+  $isRecoilEngine=1 if($ghInfo{owner} eq $RECOIL_GITHUB_REPO_PARAMS{owner});
 
   slog('Checking available engine versions...',3);
 
-  my @latestEngineVersions;
+  my ($r_orderedEngineVersionsAndTags,$r_engineVersionToReleaseTag,%engineReleasesVersionAndTag,%engineVersionsReleases);
   {
-    my $r_engineVersions=$updater->getAvailableEngineVersionsFromGithub(\%ghInfo,0,10);
-    @latestEngineVersions=@{$r_engineVersions};
-    $r_engineVersions=$updater->getAvailableEngineVersionsFromGithub(\%ghInfo,1,20);
-    foreach my $taggedVersion (@{$r_engineVersions}) {
-      push(@latestEngineVersions,$taggedVersion) if(none {$taggedVersion eq $_} @latestEngineVersions);
+    my ($testingVersion,$unstableVersion);
+    ($r_orderedEngineVersionsAndTags,$r_engineVersionToReleaseTag,$testingVersion,$unstableVersion)=$updater->checkEngineReleasesFromGithub(\%ghInfo);
+    fatalError("Couldn't check available engine versions") unless(defined $r_orderedEngineVersionsAndTags);
+    fatalError("Couldn't find suitable engine versions") unless(@{$r_orderedEngineVersionsAndTags});
+    if(defined $unstableVersion) {
+      $engineReleasesVersionAndTag{unstable}=[$unstableVersion,$r_engineVersionToReleaseTag->{$unstableVersion}];
+      $engineVersionsReleases{$unstableVersion}{unstable}=1;
+      if(defined $testingVersion) {
+        $engineReleasesVersionAndTag{testing}=[$testingVersion,$r_engineVersionToReleaseTag->{$testingVersion}];
+        $engineVersionsReleases{$testingVersion}{testing}=1;
+      }else{
+        slog('Unable to identify engine version for testing release',2);
+      }
+    }else{
+      slog('Unable to identify engine version for testing and unstable releases',2);
     }
   }
-  fatalError("Couldn't check available engine versions") unless(@latestEngineVersions);
 
-  my (%engineReleasesVersion,%engineVersionsReleases);
-  map { my $releaseVersion=$updater->resolveEngineReleaseNameToVersion($_,\%ghInfo);
-        if(defined $releaseVersion) {
-          $engineReleasesVersion{$_}=$releaseVersion;
-          $engineVersionsReleases{$releaseVersion}{$_}=1;
-        } } (keys %ENGINE_RELEASES);
+  foreach my $engineReleaseName ('stable', $isRecoilEngine ? @RECOIL_SPECIFIC_RELEASES : ()) {
+    my ($releaseVersion,$releaseTag)=$updater->resolveEngineReleaseNameToVersion($engineReleaseName,\%ghInfo,1);
+    next unless(defined $releaseVersion);
+    $engineReleasesVersionAndTag{$engineReleaseName}=[$releaseVersion,$releaseTag];
+    $engineVersionsReleases{$releaseVersion}{$engineReleaseName}=1;
+  }
+  
+  my ($defaultBranch,$tagRegexp);
+  my $tagTemplateHasBranch = index($ghInfo{tag},'<branch>') > -1;
+  if($tagTemplateHasBranch) {
+    $tagRegexp=SpadsUpdater::buildTagRegexp($ghInfo{tag},'branch');
+    my $errMsg;
+    ($defaultBranch,$errMsg)=SpadsUpdater::getGithubDefaultBranch($ghInfo{owner},$ghInfo{name});
+    if(defined $defaultBranch) {
+      slog("Failed to identify default branch of GitHub repository \"$ghRepo\" using main method ($errMsg), but fallback method worked",2)
+          if(defined $errMsg);
+    }else{
+      slog("Unable to identify default branch of GitHub repository \"$ghRepo\" - $errMsg",2);
+    }
+  }
 
   print "\nAvailable engine versions:\n";
 
-  my @availableEngineReleases=sort grep {defined $engineReleasesVersion{$_}} keys %ENGINE_RELEASES;
   {
-    my $versionsToAdd=5;
-    my %engineReleasesToPrint = map {$_ => 1} @availableEngineReleases;
-    for my $idx (0..$#latestEngineVersions) {
-      my ($printedVersion,$versionComment)=($latestEngineVersions[$idx],'');
+    my $versionsToAdd=3;
+    my %engineReleasesToPrint = map {$_ => 1} keys %engineReleasesVersionAndTag;
+    for my $idx (0..$#{$r_orderedEngineVersionsAndTags}) {
+      my ($printedVersion,$ghReleaseTag,$versionComment)=(@{$r_orderedEngineVersionsAndTags->[$idx]}[0,1],'');
       if(exists $engineVersionsReleases{$printedVersion}) {
         my @matchingEngineReleases=sort keys %{$engineVersionsReleases{$printedVersion}};
         delete @engineReleasesToPrint{@matchingEngineReleases};
-        $versionComment=' '.join(' + ', map { '['.uc($_)."] ($ENGINE_RELEASES{$_})" } @matchingEngineReleases);
-        $versionsToAdd=5;
+        $versionComment='    '.join(' ', map { '['.$_.']' } @matchingEngineReleases);
+        $versionsToAdd=3;
       }
       if($versionsToAdd >= 0) {
         if($versionsToAdd > 0) {
+          $printedVersion.='('.$1.')' if(defined $ghReleaseTag && defined $tagRegexp && $ghReleaseTag =~ /^$tagRegexp$/ && (! defined $defaultBranch || $1 ne $defaultBranch));
           print "  $printedVersion$versionComment\n";
         }else{
           print "  [...]\n";
@@ -1218,38 +1279,82 @@ if($engineBinariesType eq 'official') {
       }
     }
     while(%engineReleasesToPrint) {
-      my $printedVersion=$engineReleasesVersion{(sort {$b cmp $a} keys %engineReleasesToPrint)[0]};
+      my ($printedVersion,$ghReleaseTag)=@{$engineReleasesVersionAndTag{(sort {$b cmp $a} keys %engineReleasesToPrint)[0]}}[0,1];
       my @matchingEngineReleases=sort keys %{$engineVersionsReleases{$printedVersion}};
       delete @engineReleasesToPrint{@matchingEngineReleases};
-      my $versionComment=' '.join(' + ', map { '['.uc($_)."] ($ENGINE_RELEASES{$_})" } @matchingEngineReleases);
+      my $versionComment='    '.join(' ', map { '['.$_.']' } @matchingEngineReleases);
+      $printedVersion.='('.$1.')' if(defined $ghReleaseTag && defined $tagRegexp && $ghReleaseTag =~ /^$tagRegexp$/ && (! defined $defaultBranch || $1 ne $defaultBranch));
       print "  $printedVersion$versionComment\n  [...]\n";
     }
   }
   
   print "\nPlease choose the engine version which will be used by the autohost.\n";
-  print "If you choose \"stable\", \"testing\" or \"unstable\", SPADS will stay up to date with the corresponding engine release by automatically downloading and using new binary files when needed.\n";
-  my @engineVersionExamples;
-  push(@engineVersionExamples,$engineReleasesVersion{stable}) if(defined $engineReleasesVersion{stable});
-  push(@engineVersionExamples,$engineReleasesVersion{testing}) if(defined $engineReleasesVersion{testing} && (none {$engineReleasesVersion{testing} eq $_} @engineVersionExamples));
-  push(@engineVersionExamples,$engineReleasesVersion{unstable}) if(defined $engineReleasesVersion{unstable} && (none {$engineReleasesVersion{unstable} eq $_} @engineVersionExamples));
-  push(@engineVersionExamples,$latestEngineVersions[0]) unless(@engineVersionExamples);
-  print "If you choose a specific engine version number (\"".join('", "',@engineVersionExamples)."\", ...), SPADS will stick to this version until you manually change it in the configuration file.\n\n";
-  my $engineVersion;
+
+  my $engineVersionExample;
+  if(%engineReleasesVersionAndTag) {
+    my $releasesString=buildQuotedSortedKeysString(\%engineReleasesVersionAndTag);
+    print "If you choose a rolling release ($releasesString), SPADS will follow the corresponding engine release by automatically downloading and using new binary files when needed.\n";
+    $engineVersionExample=$engineReleasesVersionAndTag{(sort keys %engineReleasesVersionAndTag)[0]}[0];
+    print "If you choose a specific engine version number like \"$engineVersionExample\", SPADS will stick to this version until you manually change it in the configuration file.\n"
+  }else{
+    $engineVersionExample=$r_orderedEngineVersionsAndTags->[0][0];
+  }
+  print "\n";
+  my ($engineVersion,$releaseTag);
   my $autoInstallValue=$autoInstallData{autoManagedSpringVersion};
   my $autoManagedSpringVersion='';
   while(1) {
-    $autoManagedSpringVersion=promptStdin("[6/$nbSteps] Which engine version do you want to use (".(join(',',@engineVersionExamples,@availableEngineReleases,'...')).')',$engineVersionExamples[0],$autoInstallValue);
+    $autoManagedSpringVersion=promptStdin("[6/$nbSteps] Which engine version do you want to use (".(join(',',$engineVersionExample,sort(keys %engineReleasesVersionAndTag),'...')).')',$engineVersionExample,$autoInstallValue);
     $autoInstallValue=undef;
-    $engineVersion=$engineReleasesVersion{$autoManagedSpringVersion} // $autoManagedSpringVersion;
-    if($engineVersion !~ /^\d/) {
-      slog("Invalid engine version \"$engineVersion\"",2);
-      $autoManagedSpringVersion='';
-      next;
+    if(exists $engineReleasesVersionAndTag{$autoManagedSpringVersion}) {
+      ($engineVersion,$releaseTag)=@{$engineReleasesVersionAndTag{$autoManagedSpringVersion}};
+      if($engineVersion !~ /^\d/) {
+        slog("Invalid engine version \"$engineVersion\"",2);
+        ($engineVersion,$releaseTag,$autoManagedSpringVersion)=(undef,undef,'');
+        next;
+      }
+    }else{
+      if($autoManagedSpringVersion !~ /^\d/) {
+        slog("Invalid engine version \"$autoManagedSpringVersion\"",2);
+        ($engineVersion,$releaseTag,$autoManagedSpringVersion)=(undef,undef,'');
+        next;
+      }
+      if($autoManagedSpringVersion =~ /^(.+)\(([\w\-\.\/]+)\)$/) {
+        my $ghBranch;
+        ($engineVersion,$ghBranch)=($1,$2);
+        if($tagTemplateHasBranch) {
+          $releaseTag=$ghInfo{tag};
+          $releaseTag =~ s/\Q<version>\E/$engineVersion/g;
+          $releaseTag =~ s/\Q<branch>\E/$ghBranch/g;
+        }else{
+          slog("Inconsistent engine version format: engine branch \"$ghBranch\" specified but the GitHub release tag template \"$ghInfo{tag}\" does NOT contain any \"<branch>\" placeholder",2);
+          ($engineVersion,$releaseTag,$autoManagedSpringVersion)=(undef,undef,'');
+          next;
+        }
+      }else{
+        $engineVersion=$autoManagedSpringVersion;
+        if($tagTemplateHasBranch) {
+          $releaseTag=$r_engineVersionToReleaseTag->{$engineVersion};
+          if(defined $releaseTag) {
+            if(defined $tagRegexp && $releaseTag =~ /^$tagRegexp$/) {
+              $autoManagedSpringVersion.='('.$1.')' unless(defined $defaultBranch && $1 eq $defaultBranch);
+            }
+          }elsif(defined $defaultBranch) {
+            $releaseTag=$ghInfo{tag};
+            $releaseTag =~ s/\Q<version>\E/$engineVersion/g;
+            $releaseTag =~ s/\Q<branch>\E/$defaultBranch/g;
+          }else{
+            slog("Could not auto-detect branch for engine version \"$engineVersion\" (specify desired branch between parentheses after engine version or select a different engine version)",2);
+            ($engineVersion,$releaseTag,$autoManagedSpringVersion)=(undef,undef,'');
+            next;
+          }
+        }
+      }
     }
-    my $engineSetupRes=$updater->setupEngine($engineVersion,\%ghInfo,1);
+    my $engineSetupRes=$updater->setupEngine($engineVersion,$releaseTag,\%ghInfo,1);
     if($engineSetupRes < -9) {
       slog("Installation failed: unable to find, download and extract all required files for engine $engineVersion, please choose a different version",2);
-      $autoManagedSpringVersion='';
+      ($engineVersion,$releaseTag,$autoManagedSpringVersion)=(undef,undef,'');
       next;
     }
     fatalError("Engine installation failed: internal error (you can use a custom engine installation as a workaround if you don't know how to fix this issue)") if($engineSetupRes < 0);
@@ -1257,7 +1362,7 @@ if($engineBinariesType eq 'official') {
     last;
   }
   setLastRun('autoManagedSpringVersion',$autoManagedSpringVersion);
-  $conf{autoManagedSpringVersion}="[GITHUB]{owner=$ghInfo{owner},name=$ghInfo{name},tag=$ghInfo{tag},asset=$ghAsset}".$autoManagedSpringVersion;
+  $conf{autoManagedSpringVersion} = ($engineBinariesType eq 'recoil' ? '[RECOIL]' : "[GITHUB]{owner=$ghInfo{owner},name=$ghInfo{name},tag=$ghInfo{tag},asset=$ghAsset}").$autoManagedSpringVersion;
   $conf{autoInstalledSpringDir}=$updater->getEngineDir($engineVersion,\%ghInfo);
   
 }else{

@@ -1,6 +1,6 @@
 # Object-oriented Perl module handling SPADS configuration files
 #
-# Copyright (C) 2008-2023  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2024  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -39,7 +39,7 @@ use SimpleLog;
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.13.5';
+my $moduleVersion='0.13.6';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -304,10 +304,24 @@ my %paramTypes = (login => '[\w\[\]]{2,20}',
                   shareableDataType => '(private|shared(\(.+\))?)',
     );
 
+sub _computeGhInfoSubdir {
+  my $r_ghInfo=shift;
+  my $ghRepoHash=substr(md5_base64(join('/',@{$r_ghInfo}{qw'owner name'})),0,7);
+  $ghRepoHash=~tr/\/\+/ab/;
+  my $ghSubdir=$r_ghInfo->{tag};
+  $ghSubdir =~ s/\Q<version>\E/($ghRepoHash)/g;
+  $ghSubdir =~ s/\Q<branch>\E/BRANCH/g;
+  $ghSubdir =~ tr/\\\/\:\*\?\"\<\>\|/........./;
+  $r_ghInfo->{subdir}=$ghSubdir;
+}
+
 sub parseAutoManagedSpringVersion {
+  my $autoManagedString=shift;
+  substr($autoManagedString,0,8)='[GITHUB]{owner=beyond-all-reason,name=spring,tag=spring_bar_{<branch>}<version>,asset=.+_<os>-<bitness>-minimal-portable\.7z}' if(substr($autoManagedString,0,8) eq '[RECOIL]');
   my %autoManagedInfo;
-  if($_[0] =~ /^\[GITHUB\]\{(.+)\}([^\}]+)$/) {
-    my ($githubInfoString,$autoManagedString,%ghInfo)=($1,$2);
+  if($autoManagedString =~ /^\[GITHUB\]\{(.+)\}([^\}]+)$/) {
+    my ($githubInfoString,%ghInfo);
+    ($githubInfoString,$autoManagedString)=($1,$2);
     foreach my $ghInfoString (split(/,/,$githubInfoString)) {
       return undef unless($ghInfoString =~ /^([^\=]+)=(.+)$/);
       return undef unless(any {$1 eq $_} (qw'owner name tag asset'));
@@ -321,37 +335,33 @@ sub parseAutoManagedSpringVersion {
     $ghInfo{asset}=~s/\Q<os>\E/$osString/g;
     $ghInfo{asset}=~s/\Q<bitness>\E/$bitnessString/g;
     return undef if(! eval { qw/^$ghInfo{asset}$/ } || $@);
-    my $ghRepoHash=substr(md5_base64(join('/',@ghInfo{qw'owner name'})),0,7);
-    $ghRepoHash=~tr/\/\+/ab/;
-    my $ghSubdir=$ghInfo{tag};
-    $ghSubdir =~ s/\Q<version>\E/($ghRepoHash)/g;
-    $ghSubdir =~ tr/\\\/\:\*\?\"\<\>\|/........./;
-    $ghInfo{subdir}=$ghSubdir;
+    _computeGhInfoSubdir(\%ghInfo);
     $autoManagedInfo{github}=\%ghInfo;
-    if($autoManagedString =~ /^(stable|testing|unstable)(?:;(\d*)(?:;(on|off|whenEmpty|whenOnlySpec))?)?$/) {
-      $autoManagedInfo{mode}='release';
-      $autoManagedInfo{release}=$1;
-      $autoManagedInfo{delay} = (defined $2 && $2 ne '') ? $2 : {stable => 60, testing => 30, unstable => 15}->{$1};
-      $autoManagedInfo{restart}=$3//'whenEmpty';
-      return \%autoManagedInfo;
-    }
-    if($autoManagedString =~ /^\d+(?:\.\d+){1,3}(?:-\d+-g[0-9a-f]+)?$/) {
-      $autoManagedInfo{mode}='version';
-      $autoManagedInfo{version}=$autoManagedString;
-      return \%autoManagedInfo;
-    }
-    return undef;
   }
-  if($_[0] =~ /^(stable|testing|unstable)(?:;(\d*)(?:;(on|off|whenEmpty|whenOnlySpec))?)?$/) {
+  if($autoManagedString =~ /^((?:stable|testing|unstable|bar|barTesting)(?:\([\w\-\.\/]+\))?)(?:;(\d*)(?:;(on|off|whenEmpty|whenOnlySpec))?)?$/) {
+    my ($release,$delay,$restartMode)=($1,$2,$3);
+    if($release =~ /^([^\(]+)\((.+)\)$/) {
+      my $ghBranch;
+      ($release,$ghBranch)=($1,$2);
+      return undef unless(defined $autoManagedInfo{github} && index($autoManagedInfo{github}{tag},'<branch>') > -1);
+      $autoManagedInfo{github}{tag} =~ s/\Q<branch>\E/$ghBranch/g;
+      _computeGhInfoSubdir($autoManagedInfo{github});
+    }
+    return undef if(substr($release,0,3) eq 'bar' && ! (defined $autoManagedInfo{github} && $autoManagedInfo{github}{owner} eq 'beyond-all-reason'));
     $autoManagedInfo{mode}='release';
-    $autoManagedInfo{release}=$1;
-    $autoManagedInfo{delay} = (defined $2 && $2 ne '') ? $2 : {stable => 60, testing => 30, unstable => 15}->{$1};
-    $autoManagedInfo{restart}=$3//'whenEmpty';
+    $autoManagedInfo{release}=$release;
+    $autoManagedInfo{delay} = (defined $delay && $delay ne '') ? $delay+0 : {stable => 60, testing => 30, unstable => 15, bar => 60, barTesting => 30}->{$release};
+    $autoManagedInfo{restart}=$restartMode//'whenEmpty';
     return \%autoManagedInfo;
   }
-  if($_[0] =~ /^\d+(?:\.\d+){1,3}(?:-\d+-g[0-9a-f]+)?$/) {
+  if($autoManagedString =~ /^(\d+(?:\.\d+){1,3}(?:-\d+-g[0-9a-f]+)?)(?:\(([\w\-\.\/]+)\))?$/) {
+    $autoManagedInfo{version}=$1;
     $autoManagedInfo{mode}='version';
-    $autoManagedInfo{version}=$_[0];
+    my $ghBranch=$2;
+    if(defined $ghBranch) {
+      return undef unless(defined $autoManagedInfo{github} && index($autoManagedInfo{github}{tag},'<branch>') > -1);
+      $autoManagedInfo{github}{tag} =~ s/\Q<branch>\E/$ghBranch/g
+    }
     return \%autoManagedInfo;
   }
   return undef;

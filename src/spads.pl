@@ -2,7 +2,7 @@
 #
 # SPADS: Spring Perl Autohost for Dedicated Server
 #
-# Copyright (C) 2008-2023  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2024  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -97,7 +97,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.21';
+our $SPADS_VERSION='0.13.22';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -3699,7 +3699,7 @@ sub engineVersionAutoManagement {
 }
 
 sub resolveEngineReleaseNameToVersionPostActions {
-  my $autoManagedEngineVersion=shift;
+  my ($autoManagedEngineVersion,$releaseTag)=@_;
   
   $engineVersionAutoManagementInProgress=0;
   my $engineStr = defined $autoManagedEngineData{github} ? 'engine' : 'Spring';
@@ -3707,7 +3707,7 @@ sub resolveEngineReleaseNameToVersionPostActions {
     slog("Unable to identify current version of auto-managed $autoManagedEngineData{release} $engineStr release, skipping $engineStr version auto-management",2);
     return;
   }
-  slog("Engine release resolved to version $autoManagedEngineVersion",5);
+  slog("Engine release resolved to version $autoManagedEngineVersion".(defined $releaseTag ? " (GitHub release tag $releaseTag)" : ''),5);
   return if($autoManagedEngineVersion eq $autoManagedEngineData{version});
   if(defined $failedEngineInstallVersion && $failedEngineInstallVersion eq $autoManagedEngineVersion) {
     slog("Installation failed previously for $engineStr version $failedEngineInstallVersion, skipping $engineStr version auto-management",5);
@@ -3720,7 +3720,7 @@ sub resolveEngineReleaseNameToVersionPostActions {
   }
   
   $engineVersionAutoManagementInProgress=1;
-  if(! SimpleEvent::forkCall(sub {return $updater->setupEngine($autoManagedEngineVersion,$autoManagedEngineData{github})},
+  if(! SimpleEvent::forkCall(sub {return $updater->setupEngine($autoManagedEngineVersion,$releaseTag,$autoManagedEngineData{github})},
                              sub {setupEnginePostActions($autoManagedEngineVersion,@_)})) {
     slog('Unable to fork to perform engine installation',1);
     $engineVersionAutoManagementInProgress=0;
@@ -15482,16 +15482,16 @@ if(! $abortSpadsStartForAutoUpdate) {
     my $engineStr = defined $autoManagedEngineData{github} ? 'engine' : 'Spring';
     if($autoManagedEngineData{mode} eq 'version') {
       fatalError("Unable to auto-install $engineStr version \"$autoManagedEngineData{version}\"")
-          if($updater->setupEngine($autoManagedEngineData{version},$autoManagedEngineData{github}) < 0);
+          if($updater->setupEngine($autoManagedEngineData{version},undef,$autoManagedEngineData{github}) < 0);
       my $engineDir=$updater->getEngineDir($autoManagedEngineData{version},$autoManagedEngineData{github});
       setSpringEnv($conf{instanceDir},$engineDir,splitPaths($conf{springDataDir}));
       setSpringServerBin($engineDir);
     }elsif($autoManagedEngineData{mode} eq 'release') {
-      my $autoManagedEngineVersion=$updater->resolveEngineReleaseNameToVersionWithFallback($autoManagedEngineData{release},$autoManagedEngineData{github});
+      my ($autoManagedEngineVersion,$releaseTag)=$updater->resolveEngineReleaseNameToVersionWithFallback($autoManagedEngineData{release},$autoManagedEngineData{github});
       if(! defined $autoManagedEngineVersion) {
         useFallbackEngineVersion("Unable to identify the auto-managed $engineStr release");
       }else{
-        my $setupResult=$updater->setupEngine($autoManagedEngineVersion,$autoManagedEngineData{github});
+        my $setupResult=$updater->setupEngine($autoManagedEngineVersion,$releaseTag,$autoManagedEngineData{github});
         if($setupResult < 0) {
           $failedEngineInstallVersion=$autoManagedEngineVersion if($setupResult < -9);
           useFallbackEngineVersion("Unable to auto-install $autoManagedEngineData{release} $engineStr release (version $autoManagedEngineVersion)");

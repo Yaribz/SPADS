@@ -270,9 +270,11 @@ Engine version auto-management can also be enabled for any Spring-based engine w
 [GITHUB]{owner=<repositoryOwner>,name=<repositoryName>,tag=<releaseTagTemplate>,asset=<assetRegularExpresion>}
   <repositoryOwner> is the name of the GitHub user/organization who owns the repository
   <repositoryName> is the name of the GitHub repository containing the engine releases
-  <releaseTagTemplate> is the template of the tags used for the releases, it must contain the "<version>" placeholder indicating where the engine version is located in the tag name
+  <releaseTagTemplate> is the template of the tags used for the releases. It must contain the "<version>" placeholder indicating where the engine version is located in the tag name, and it can contain the "<branch>" placeholder indicating where the Git branch is located in the tag name (for multi-branch tag templates).
   <assetRegularExpression> is the regular expression used to select the release asset to download and install. This regular expression can contain the "<os>" and "<bitness>" placeholders: "<os>" will be automatically replaced by the current operating system ("linux" or "windows"), and "<bitness>" will be replaced by the system bitness ("64" or "32").
 As for official Spring engine, it is possible to select a specific engine version number or an engine release: the "stable" release is the release tagged "Latest" on GitHub, the "testing" release is the most recent release tagged "Pre-release" or "Latest" on GitHub, and the "unstable" release is simply the most recent release available on GitHub (ignoring release tags).
+As a special case of engine auto-management from GitHub, it is also possible to use the "[RECOIL]" prefix instead of "[GITHUB]{owner=...}". The "[RECOIL]" prefix is simply a shortcut for "[GITHUB]{owner=beyond-all-reason,name=spring,tag=spring_bar_{<branch>}<version>,asset=.+_<os>-<bitness>-minimal-portable\.7z}".
+When using Recoil engine, two additional rolling releases are available for engine auto-management: "bar" and "barTesting", which correspond to the versions used by official "Beyond All Reason" launcher.
 -
 <null>: Spring version auto-management is disabled (the custom Spring installation specified by [global:unitsyncDir] and [global:springServer] is used instead)
 <springVersionNumber>: SPADS auto-downloads Spring binaries for this specific version if needed, and sticks to this version
@@ -281,6 +283,7 @@ As for official Spring engine, it is possible to select a specific engine versio
     <checkDelay> is the delay in minutes between Spring version checks for selected release (integer). Default is "60" for "stable" Spring release, "30" for "testing" and "15" for "unstable"
     <autoRestartMode> specifies if and when SPADS must auto-restart after Spring release updates, allowed values: "off", "whenEmpty", "whenOnlySpec", "on". Default is "whenEmpty"
 [GITHUB]{owner=<repositoryOwner>,name=<repositoryName>,tag=<releaseTagTemplate>,asset=<assetRegularExpresion>}<engineVersionNumberOrRelease>
+[RECOIL]<engineVersionNumberOrRelease>
 -
 %autoManagedSpringVersion% (set during installation)
 
