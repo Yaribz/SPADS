@@ -1006,6 +1006,7 @@ spads.pl:
 0.13.20: use unitsync lock file even if sequential unitsync mode is disabled (in this case the lock file is in the instance dir instead of the var dir)
 0.13.21: forward raw skill uncertainty values coming from plugins directly instead of mapping them to the integer set 0,1,2,3
 0.13.22: support new SpadsUpdater module for improved engine version auto-management from GitHub (multi-branch release tags, Recoil engine shortcut and BAR rolling releases)
+0.13.23: allow spaces in battle setting values
 
 SpadsConf.pm:
 ============

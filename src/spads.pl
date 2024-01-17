@@ -97,7 +97,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.22';
+our $SPADS_VERSION='0.13.23';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -240,6 +240,26 @@ my %SPADS_CORE_CMD_HANDLERS = (
   vote => \&hVote,
   whois => \&hWhois,
   '#skill' => \&hSkill );
+
+my %SPADS_CORE_CMD_ALIASES=(
+  b => ['vote','b'],
+  coop => ['pSet','shareId'],
+  cv => ['callVote'],
+  ev => ['endVote'],
+  fb => ['force','*'],
+  h => ['help'],
+  map => ['set','map'],
+  n => ['vote','n'],
+  rc => ['reloadConf'],
+  rck => ['reloadConf','keepSettings'],
+  s => ['status'],
+  sb => ['status','battle'],
+  spec => ['force','%1%','spec'],
+  su => ['searchUser'],
+  us => ['unlockSpec'],
+  w => ['whois'],
+  y => ['vote','y'],
+    );
 
 my %SPADS_CORE_API_HANDLERS = ( getSettings => \&hApiGetSettings,
                                 status => \&hApiStatus );
@@ -3013,23 +3033,7 @@ sub processAliases {
 }
 
 sub getCmdAliases {
-  my %cmdAliases=(b => ['vote','b'],
-                  coop => ['pSet','shareId'],
-                  cv => ['callVote'],
-                  ev => ['endVote'],
-                  fb => ['force','*'],
-                  h => ['help'],
-                  map => ['set','map'],
-                  n => ['vote','n'],
-                  rc => ['reloadConf'],
-                  rck => ['reloadConf','keepSettings'],
-                  s => ['status'],
-                  sb => ['status','battle'],
-                  spec => ['force','%1%','spec'],
-                  su => ['searchUser'],
-                  us => ['unlockSpec'],
-                  w => ['whois'],
-                  y => ['vote','y']);
+  my %cmdAliases=%SPADS_CORE_CMD_ALIASES;
   foreach my $pluginName (@pluginsOrder) {
     my $r_newAliases=$plugins{$pluginName}->updateCmdAliases(\%cmdAliases) if($plugins{$pluginName}->can('updateCmdAliases'));
     (map {$cmdAliases{$_}=$r_newAliases->{$_}} (keys %{$r_newAliases})) if(ref $r_newAliases eq 'HASH');
@@ -3056,7 +3060,7 @@ sub handleRequest {
     $p_answerFunction=$answerFunctions{$source};
   }
   
-  my @cmd=grep {$_ ne ''} (split(/ /,$command));
+  my @cmd=split(/ +/,$command);
   
   my ($p_cmd,$warnMes)=processAliases($user,\@cmd);
   @cmd=@{$p_cmd} if($p_cmd);
@@ -8044,14 +8048,14 @@ sub hBPreset {
 
 sub hBSet {
   my ($source,$user,$p_params,$checkOnly)=@_;
-  
-  $p_params->[1]='' if($#{$p_params} == 0);
-  if($#{$p_params} != 1) {
+
+  if($#{$p_params} < 0) {
     invalidSyntax($user,"bset");
     return 0;
   }
 
-  my ($bSetting,$val)=@{$p_params};
+  my ($bSetting,@vals)=@{$p_params};
+  my $val=join(" ",@vals);
   $bSetting=lc($bSetting);
 
   my $modName=$targetMod;
