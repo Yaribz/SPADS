@@ -97,7 +97,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.23';
+our $SPADS_VERSION='0.13.24';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -835,7 +835,7 @@ sub getLastWin32Error {
 sub escapeWin32Parameter {
   my $arg = shift;
   $arg =~ s/(\\*)"/$1$1\\"/g;
-  if($arg =~ /[ \t]/) {
+  if($arg =~ /[ \t\(]/) {
     $arg =~ s/(\\*)$/$1$1/;
     $arg = "\"$arg\"";
   }

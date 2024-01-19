@@ -1007,6 +1007,7 @@ spads.pl:
 0.13.21: forward raw skill uncertainty values coming from plugins directly instead of mapping them to the integer set 0,1,2,3
 0.13.22: support new SpadsUpdater module for improved engine version auto-management from GitHub (multi-branch release tags, Recoil engine shortcut and BAR rolling releases)
 0.13.23: allow spaces in battle setting values
+0.13.24: escape command line tokens containing '(' character on Windows (fix engine not starting when path contains '(' ) [Windows]
 
 SpadsConf.pm:
 ============
@@ -1301,6 +1302,9 @@ spadsInstaller.pl:
       redesign the engine binary type choice message
       redesign the available engine versions listing message
       fix warnings for missing releases
+0.40: alternate configuration file download URLs can now be provided by installation templates
+      SPADS plugins can now be auto-installed by installation templates (new special auto-install setting: "autoInstallPlugins")
+      SPADS configuration files can now be auto-patched during installation using special syntax in installation templates
 
 SpadsPluginApi.pm:
 =================

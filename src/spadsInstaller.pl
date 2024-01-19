@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.39 (2024/01/15)
+# Version 0.40 (2024/01/19)
 
 use strict;
 
@@ -29,8 +29,10 @@ use File::Basename 'fileparse';
 use File::Copy;
 use File::Path;
 use File::Spec::Functions qw'canonpath catdir catfile devnull file_name_is_absolute splitdir splitpath';
+use File::Temp ();
 use FindBin;
 use HTTP::Tiny;
+use IO::Uncompress::Unzip '$UnzipError';
 use JSON::PP 'decode_json';
 use List::Util qw'any all none notall';
 use POSIX 'ceil';
@@ -213,15 +215,26 @@ if(defined $templateUrl) {
   slog("Using auto-install data from file \"$autoInstallFile\"...",3);
 }
 
-my %autoInstallData;
-foreach my $autoInstallLine (@autoInstallLines) {
-  next if($autoInstallLine =~ /^\s*(\#.*)?$/);
-  if($autoInstallLine =~ /^\s*([^:]*[^:\s])\s*:\s*((?:.*[^\s])?)\s*$/) {
-    $autoInstallData{$1}=$2;
-  }else{
-    $autoInstallLine =~ s/[\cJ\cM]*$//;
-    print "ERROR - Invalid line \"$autoInstallLine\" in auto-install data from ".($templateUrl // "file \"$autoInstallFile\"")."\n";
-    exit 1;
+my (%autoInstallData,%confChangesData,%confTemplateUrl);
+{
+  my ($currentConfSection,$currentConfFile)=('');
+  foreach my $autoInstallLine (@autoInstallLines) {
+    next if($autoInstallLine =~ /^\s*(\#.*)?$/);
+    if($autoInstallLine =~ /^\s*([^:{\[]*[^:\s])\s*:\s*((?:.*[^\s])?)\s*$/) {
+      if(defined $currentConfFile) {
+        $confChangesData{$currentConfFile}{$currentConfSection}{$1}=$2;
+      }else{
+        $autoInstallData{$1}=$2;
+      }
+    }elsif($autoInstallLine =~ /^\s*{([^}]+\.conf)}\s*(http[^\s]+)?\s*$/) {
+      ($currentConfFile,$confTemplateUrl{$1},$currentConfSection)=($1,$2,'');
+    }elsif(defined $currentConfFile && $autoInstallLine =~ /^\s*\[([^\]]+)\]\s*$/) {
+      $currentConfSection=$1;
+    }else{
+      $autoInstallLine =~ s/[\cJ\cM]*$//;
+      print "ERROR - Invalid line \"$autoInstallLine\" in auto-install data from ".($templateUrl // "file \"$autoInstallFile\"")."\n";
+      exit 1;
+    }
   }
 }
 
@@ -269,10 +282,16 @@ sub createDir {
 }
 
 sub downloadFile {
-  my ($url,$file)=@_;
-  my $httpRes=HTTP::Tiny->new(timeout => 10)->mirror($url,$file);
+  my ($url,$file,$httpTiny)=@_;
+  my $silent;
+  if(defined $httpTiny) {
+    $silent=1;
+  }else{
+    $httpTiny=HTTP::Tiny->new(timeout => 10);
+  }
+  my $httpRes=$httpTiny->mirror($url,$file);
   if(! $httpRes->{success} || ! -f $file) {
-    slog("Unable to download $file from $url (".getHttpErrMsg($httpRes).')',1);
+    slog("Unable to download file \"$url\" to \"$file\" (".getHttpErrMsg($httpRes).')',1) unless($silent);
     unlink($file);
     return 0;
   }
@@ -1077,7 +1096,8 @@ $conf{absoluteTemplatesDir}=catdir($conf{absoluteEtcDir},'templates');
 createDir($conf{absoluteTemplatesDir});
 
 $conf{absoluteVarDir}=promptDir("[3/$nbSteps] Please choose the directory where SPADS dynamic data will be stored",'varDir','var');
-createDir(catdir($conf{absoluteVarDir},'plugins'));
+my $pluginsDir=catdir($conf{absoluteVarDir},'plugins');
+createDir($pluginsDir);
 createDir(catdir($conf{absoluteVarDir},'spring'));
 $updater->{springDir}=catdir($conf{absoluteVarDir},'spring');
 
@@ -1495,8 +1515,8 @@ $conf{preferencesData}=$sqliteUnavailableReason?'private':'shared';
 
 my @confFiles=qw'banLists.conf battlePresets.conf commands.conf hostingPresets.conf levels.conf mapBoxes.conf mapLists.conf spads.conf users.conf';
 slog('Downloading SPADS configuration templates',3);
-exit 1 unless(all {downloadFile("$URL_SPADS/conf/templates/$conf{release}/$_",catdir($conf{etcDir},'templates',$_))} @confFiles);
-slog('Customizing SPADS configuration',3);
+exit 1 unless(all {downloadFile($confTemplateUrl{$_}//"$URL_SPADS/conf/templates/$conf{release}/$_",catdir($conf{etcDir},'templates',$_))} @confFiles);
+slog('Customizing SPADS configuration'.(%confChangesData ? ' (pass 1)' : ''),3);
 foreach my $confFile (@confFiles) {
   my $confFileTemplate=catfile($conf{etcDir},'templates',$confFile);
   fatalError("Unable to read configuration template \"$confFileTemplate\"") unless(open(TEMPLATE,"<$confFileTemplate"));
@@ -1510,6 +1530,80 @@ foreach my $confFile (@confFiles) {
   }
   close(CONF);
   close(TEMPLATE);
+}
+
+if(defined $autoInstallData{autoInstallPlugins} && $autoInstallData{autoInstallPlugins} ne '') {
+  my @autoInstallPlugins=split(/;/,$autoInstallData{autoInstallPlugins});
+  slog('Auto-installing plugin'.(@autoInstallPlugins>1?'s':'').': '.join(', ',@autoInstallPlugins),3);
+  my $tmpDir=File::Temp::tempdir(CLEANUP => 1);
+  my $httpTiny=HTTP::Tiny->new(timeout => 10);
+  foreach my $pluginName (@autoInstallPlugins) {
+    my $pluginFile=$pluginName.'.zip';
+    my $pluginFileFullPath=catfile($tmpDir,$pluginFile);
+    if(downloadFile("$URL_SPADS/plugins/$pluginFile",$pluginFileFullPath,$httpTiny)) {
+      my $r_pluginZip=IO::Uncompress::Unzip->new($pluginFileFullPath)
+          or fatalError("Failed to open plugin archive file \"$pluginFileFullPath\": $UnzipError");
+      my $unzipStatus=1;
+      do {
+        fatalError("Error while unzipping plugin archive file \"$pluginFileFullPath\": $UnzipError")
+            if($unzipStatus < 0);
+        my $unzippedFileName=(splitpath($r_pluginZip->getHeaderInfo()->{Name}))[2];
+        my $unzippedFileFullPath=catfile(
+          ($unzippedFileName =~ /\.conf$/ ? $conf{absoluteEtcDir} : $pluginsDir),
+          ($unzippedFileName eq 'README' ? 'README.'.$pluginName : $unzippedFileName));
+        open(my $unzippedFh,'>',$unzippedFileFullPath)
+            or fatalError("Failed to open \"$unzippedFileFullPath\" for writing to unzip plugin file ($!)");
+        binmode($unzippedFh);
+        while($unzipStatus = $r_pluginZip->read(my $readBuf)) {
+          fatalError("Failed to unzip plugin file \"$unzippedFileName\" from archive \"$pluginFileFullPath\": $UnzipError")
+              if($unzipStatus < 0);
+          print {$unzippedFh} $readBuf
+              or fatalError("Failed to write to \"$unzippedFileFullPath\" to unzip plugin file ($!)");
+        }
+        close($unzippedFh);
+      } while($unzipStatus = $r_pluginZip->nextStream());
+    }else{
+      $pluginFile=$pluginName.'.pm';
+      $pluginFileFullPath=catfile($tmpDir,$pluginFile);
+      if(downloadFile("$URL_SPADS/plugins/$pluginFile",$pluginFileFullPath,$httpTiny)) {
+        move($pluginFileFullPath,$pluginsDir)
+            or fatalError("Failed to move plugin file from \"$pluginFileFullPath\" to directory \"$pluginsDir\" ($!)");
+      }else{
+        fatalError("Failed to download plugin \"$pluginName\" for plugin auto-installation");
+      }
+    }
+  }
+}
+
+if(%confChangesData) {
+  slog('Customizing SPADS configuration (pass 2)',3);
+  foreach my $confFile (keys %confChangesData) {
+    my $r_confChanges=$confChangesData{$confFile};
+    my $currentSection='';
+    my $confFilePath=catfile($conf{etcDir},$confFile);
+    fatalError("Unable to perform pass 2 of SPADS configuration customization: mising configuration file \"$confFilePath\"")
+        unless(-f $confFilePath);
+    open(my $confFh,'<',$confFilePath)
+        or fatalError("Failed to open configuration file \"$confFilePath\" for reading: $!");
+    my $confFilePatched=catfile($conf{etcDir},$confFile.'.patched.tmp');
+    open(my $confPatchedFh,'>',$confFilePatched)
+        or fatalError("Failed to open temporary output file \"$confFilePatched\" for writing: $!");
+    while(my $confLine=<$confFh>) {
+      if($confLine !~ /^\s*(?:\#.*)?$/) {
+        if($confLine =~ /^\s*\[([^\]]+)\]/) {
+          $currentSection=$1;
+        }elsif($confLine =~ /^([^:]+):/) {
+          my $param=$1;
+          $confLine=$param.':'.$r_confChanges->{$currentSection}{$param}."\n" if(exists $r_confChanges->{$currentSection} && exists $r_confChanges->{$currentSection}{$param});
+        }
+      }
+      print $confPatchedFh $confLine;
+    }
+    close($confPatchedFh);
+    close($confFh);
+    move($confFilePatched,$confFilePath)
+        or fatalError("Failed to overwrite original configuration file \"$confFilePath\" with customized file \"$confFilePatched\" ($!)");
+  }
 }
 
 my $lastRunFile=catfile($conf{installDir},'spadsInstaller.lastRun');
