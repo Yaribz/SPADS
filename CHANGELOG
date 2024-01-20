@@ -1008,6 +1008,7 @@ spads.pl:
 0.13.22: support new SpadsUpdater module for improved engine version auto-management from GitHub (multi-branch release tags, Recoil engine shortcut and BAR rolling releases)
 0.13.23: allow spaces in battle setting values
 0.13.24: escape command line tokens containing '(' character on Windows (fix engine not starting when path contains '(' ) [Windows]
+0.13.25: new SPADS client API function: "getPreferences"
 
 SpadsConf.pm:
 ============

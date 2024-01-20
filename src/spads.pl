@@ -97,7 +97,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.24';
+our $SPADS_VERSION='0.13.25';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -261,9 +261,15 @@ my %SPADS_CORE_CMD_ALIASES=(
   y => ['vote','y'],
     );
 
-my %SPADS_CORE_API_HANDLERS = ( getSettings => \&hApiGetSettings,
-                                status => \&hApiStatus );
-my %SPADS_CORE_API_RIGHTS = ( getSettings => 'list' );
+my %SPADS_CORE_API_HANDLERS = (
+  getPreferences => \&hApiGetPreferences,
+  getSettings => \&hApiGetSettings,
+  status => \&hApiStatus,
+    );
+my %SPADS_CORE_API_RIGHTS = (
+  getPreferences => 'list',
+  getSettings => 'list',
+    );
 
 my %ALERTS=('UPD-001' => 'Unable to check for SPADS update',
             'UPD-002' => 'Major SPADS update available',
@@ -3286,7 +3292,7 @@ sub processJsonRpcRequest {
   my ($r_origin,$jsonString,$floodCheckStatus)=@_;
 
   $r_origin->{protocol}='jsonrpc';
-  $r_origin->{user}//='UNAUTHENTICATED USER';
+  $r_origin->{user}//='<UNAUTHENTICATED USER>';
   if($r_origin->{source} eq 'tcp') {
     $r_origin->{accessLevel}//=0;
     $r_origin->{origin}="$r_origin->{user} [$r_origin->{ipAddr}:$r_origin->{tcpPort}]";
@@ -13268,6 +13274,41 @@ sub hSkill {
 }
 
 # SPADS JSONRPC commands handlers #############################################
+
+sub hApiGetPreferences {
+  my ($r_origin,$r_params)=@_;
+  
+  return (undef,'INVALID_PARAMS') unless(ref $r_params eq 'ARRAY' && @{$r_params} && (all {defined $_ && ref $_ eq ''} @{$r_params}));
+
+  my $user=$r_origin->{user};
+  return (undef,'INSUFFICIENT_PRIVILEGES') if($user eq '<UNAUTHENTICATED USER>');
+
+  my @forbiddenPrefs=qw'password';
+  
+  my $aId=getLatestUserAccountId($user);
+  my $p_prefs=$spads->getUserPrefs($aId,$user);
+  my %result;
+  if(@{$r_params} == 1 && $r_params->[0] eq '*') {
+    foreach my $pref (keys %{$p_prefs}) {
+      next if(any {$pref eq $_} @forbiddenPrefs);
+      $result{$pref} = $p_prefs->{$pref} eq '' ? ($conf{$pref} // '') : $p_prefs->{$pref};
+    }
+    return (\%result,undef);
+  }
+  
+  my @invalidPrefs;
+  foreach my $pref (@{$r_params}) {
+    if(exists $p_prefs->{$pref} && (none {$pref eq $_} @forbiddenPrefs)) {
+      $result{$pref} = $p_prefs->{$pref} eq '' ? ($conf{$pref} // '') : $p_prefs->{$pref};
+    }else{
+      push(@invalidPrefs,$pref);
+    }
+  }
+  if(@invalidPrefs) {
+    return (undef,{code => 'INVALID_PARAMS', data => 'Invalid preference'.(@invalidPrefs>1?'s':'').' : '.join(', ',@invalidPrefs)});
+  }
+  return (\%result,undef);
+}
 
 sub hApiGetSettings {
   my ($r_origin,$r_params)=@_;
