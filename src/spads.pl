@@ -97,7 +97,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.25';
+our $SPADS_VERSION='0.13.26';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -264,11 +264,13 @@ my %SPADS_CORE_CMD_ALIASES=(
 my %SPADS_CORE_API_HANDLERS = (
   getPreferences => \&hApiGetPreferences,
   getSettings => \&hApiGetSettings,
+  getVoteSettings => \&hApiGetVoteSettings,
   status => \&hApiStatus,
     );
 my %SPADS_CORE_API_RIGHTS = (
   getPreferences => 'list',
   getSettings => 'list',
+  getVoteSettings => 'list',
     );
 
 my %ALERTS=('UPD-001' => 'Unable to check for SPADS update',
@@ -9543,6 +9545,29 @@ sub hLearnMaps {
 
 }
 
+sub getVoteSettings {
+  my @globalVoteSettingNames=(qw'autoSetVoteMode awayVoteDelay majorityVoteMargin minVoteParticipation reCallVoteDelay voteTime');
+  my @specificVoteSettingNames=(qw'awayVoteDelay majorityVoteMargin minVoteParticipation voteTime');
+  
+  my %globalVoteSettings;
+  map {$globalVoteSettings{$_}=$conf{$_}} @globalVoteSettingNames;
+  
+  my %specificVoteSettings;
+  foreach my $spadsCmd (keys %{$spads->{commandsAttributes}}) {
+    map {$specificVoteSettings{$spadsCmd}{$_}=$spads->{commandsAttributes}{$spadsCmd}{$_} if(exists $spads->{commandsAttributes}{$spadsCmd}{$_})} @specificVoteSettingNames;
+  }
+  foreach my $pluginName (keys %{$spads->{pluginsConf}}) {
+    my $r_pluginCmdAttribs=$spads->{pluginsConf}{$pluginName}{commandsAttributes};
+    foreach my $pluginCmd (keys %{$r_pluginCmdAttribs}) {
+      next if(exists $specificVoteSettings{$pluginCmd});
+      map {$specificVoteSettings{$pluginCmd}{$_}=$r_pluginCmdAttribs->{$pluginCmd}{$_} if(exists $r_pluginCmdAttribs->{$pluginCmd}{$_})} @specificVoteSettingNames;
+    }
+  }
+
+  return {global => \%globalVoteSettings,
+          specific => \%specificVoteSettings};
+}
+
 sub hList {
   my ($source,$user,$p_params,$checkOnly)=@_;
 
@@ -9913,29 +9938,17 @@ sub hList {
     }
     return 1 if($checkOnly);
     my @settingsData;
-    foreach my $vSetting (qw'autoSetVoteMode awayVoteDelay majorityVoteMargin minVoteParticipation reCallVoteDelay voteTime') {
-      push(@settingsData,{"$C{5}Setting$C{1}" => $vSetting, "$C{5}Value$C{1}" => $conf{$vSetting}});
-    }
+    my $r_voteSettings=getVoteSettings();
+    map {push(@settingsData,{"$C{5}Setting$C{1}" => $_, "$C{5}Value$C{1}" => $r_voteSettings->{global}{$_}})} (sort keys %{$r_voteSettings->{global}});
     sayPrivate($user,'.');
     my $p_resultLines=formatArray(["$C{5}Setting$C{1}","$C{5}Value$C{1}"],\@settingsData,"$C{2}Global vote settings$C{1}");
     foreach my $resultLine (@{$p_resultLines}) {
       sayPrivate($user,$resultLine);
     }
-    my %cmdVSettings;
-    foreach my $spadsCmd (keys %{$spads->{commandsAttributes}}) {
-      map {$cmdVSettings{$spadsCmd}{$_}=$spads->{commandsAttributes}{$spadsCmd}{$_} if(exists $spads->{commandsAttributes}{$spadsCmd}{$_})} (qw'awayVoteDelay majorityVoteMargin minVoteParticipation voteTime');
-    }
-    foreach my $pluginName (keys %{$spads->{pluginsConf}}) {
-      my $r_pluginCmdAttribs=$spads->{pluginsConf}{$pluginName}{commandsAttributes};
-      foreach my $pluginCmd (keys %{$r_pluginCmdAttribs}) {
-        next if(exists $cmdVSettings{$pluginCmd});
-        map {$cmdVSettings{$pluginCmd}{$_}=$r_pluginCmdAttribs->{$pluginCmd}{$_} if(exists $r_pluginCmdAttribs->{$pluginCmd}{$_})} (qw'awayVoteDelay majorityVoteMargin minVoteParticipation voteTime');
-      }
-    }
-    if(%cmdVSettings) {
+    if(%{$r_voteSettings->{specific}}) {
       @settingsData=();
-      foreach my $cmd (sort keys %cmdVSettings) {
-        map {push(@settingsData,{"$C{5}Command$C{1}" => $cmd, "$C{5}Setting$C{1}" => $_, "$C{5}Value$C{1}" => $cmdVSettings{$cmd}{$_}})} (sort keys %{$cmdVSettings{$cmd}});
+      foreach my $cmd (sort keys %{$r_voteSettings->{specific}}) {
+        map {push(@settingsData,{"$C{5}Command$C{1}" => $cmd, "$C{5}Setting$C{1}" => $_, "$C{5}Value$C{1}" => $r_voteSettings->{specific}{$cmd}{$_}})} (sort keys %{$r_voteSettings->{specific}{$cmd}});
       }
       sayPrivate($user,'.');
       $p_resultLines=formatArray(["$C{5}Command$C{1}","$C{5}Setting$C{1}","$C{5}Value$C{1}"],\@settingsData,"$C{2}Specific vote settings$C{1}");
@@ -13335,6 +13348,27 @@ sub hApiGetSettings {
   }
   if(@invalidSettings) {
     return (undef,{code => 'INVALID_PARAMS', data => 'Invalid setting'.(@invalidSettings>1?'s':'').' : '.join(', ',@invalidSettings)});
+  }
+  return (\%result,undef);
+}
+
+sub hApiGetVoteSettings {
+  my ($r_origin,$r_params)=@_;
+  
+  return (undef,'INVALID_PARAMS') unless(ref $r_params eq 'ARRAY' && @{$r_params} && (all {defined $_ && ref $_ eq ''} @{$r_params}));
+
+  my $r_voteSettings=getVoteSettings();
+  return ($r_voteSettings,undef) if(@{$r_params} == 1 && $r_params->[0] eq '*');
+
+  my @invalidSettings = grep {! exists $r_voteSettings->{global}{$_}} @{$r_params};
+  if(@invalidSettings) {
+    return (undef,{code => 'INVALID_PARAMS', data => 'Invalid vote setting'.(@invalidSettings>1?'s':'').' : '.join(', ',@invalidSettings)});
+  }
+
+  my %result=(global => {}, specific => {});
+  map {$result{global}{$_}=$r_voteSettings->{global}{$_}} @{$r_params};
+  foreach my $cmd (keys %{$r_voteSettings->{specific}}) {
+    map {$result{specific}{$cmd}{$_}=$r_voteSettings->{specific}{$cmd}{$_} if(exists $r_voteSettings->{specific}{$cmd}{$_})} @{$r_params};
   }
   return (\%result,undef);
 }
