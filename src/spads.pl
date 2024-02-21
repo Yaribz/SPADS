@@ -97,7 +97,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.26';
+our $SPADS_VERSION='0.13.27';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -522,6 +522,7 @@ my %unitsyncOptFuncs;
 my %unitsyncHostHashes;
 my $lobbyReconnectDelay;
 my $useTls;
+my %hostingParams;
 
 my $lobbySimpleLog=SimpleLog->new(logFiles => [$conf{logDir}."/spads.log",''],
                                   logLevels => [$conf{lobbyInterfaceLogLevel},3],
@@ -2295,6 +2296,14 @@ sub openBattle {
     slog("Unable to retrieve hashcode of mod \"$targetMod\"",1);
     closeBattleAfterGame("unable to retrieve mod hashcode");
     return 0;
+  }
+  if(! %hostingParams || $hostingParams{game} ne $targetMod || $hostingParams{engineVersion} ne $fullSpringVersion) {
+    %hostingParams=(
+      game => $targetMod,
+      engine => 'spring',
+      engineVersion => $fullSpringVersion,
+        );
+    slog("Hosting game \"$targetMod\" using engine version \"$fullSpringVersion\"",3);
   }
   $lobbyState=5;
   queueLobbyCommand(['OPENBATTLE',

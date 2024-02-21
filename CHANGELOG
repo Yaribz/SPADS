@@ -1010,6 +1010,7 @@ spads.pl:
 0.13.24: escape command line tokens containing '(' character on Windows (fix engine not starting when path contains '(' ) [Windows]
 0.13.25: new SPADS client API function: "getPreferences"
 0.13.26: new SPADS client API function: "getVoteSettings"
+0.13.27: add log message containing current hosting information (game name and engine version)
 
 SpadsConf.pm:
 ============
