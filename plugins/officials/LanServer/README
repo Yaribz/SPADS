@@ -1,0 +1,14 @@
+This plugin implements a SpringRTS lobby server operating in LAN mode (no
+account registration required). It makes it possible to run SPADS autonomously,
+without having to connect to an external lobby server.
+
+The AnyEvent Perl module is required for this plugin, it can be installed
+easily as follows:
+  - for Windows:
+      cpanm -n AnyEvent
+  - for Debian/Ubuntu based Linux distributions:
+      sudo apt-get install libanyevent-perl
+  - for RedHat/Fedora/CentOS based Linux distributions:
+      sudo dnf install perl-AnyEvent
+  - for Linux distributions without precompiled package for AnyEvent module:
+      sudo cpan AnyEvent
