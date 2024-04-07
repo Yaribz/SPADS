@@ -1383,6 +1383,7 @@ SpadsPluginApi.pm:
 0.35: update documentation regarding the data structure returned by the getBattle() method of the SpringLobbyInterface module ("disabledUnits" array --> "restrictedUnits" hash)
 0.36: allow plugins to set SPADS exit code when calling "quit" function from SPADS plugin API
 0.37: new customization callback for plugins: "delayShutdown" (plugins can now delay SPADS shutdown operation)
+0.38: new plugin API accessor "getUserPref"
 
 SpadsUpdater.pm:
 ===============

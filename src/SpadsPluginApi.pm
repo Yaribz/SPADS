@@ -1,6 +1,6 @@
 # SpadsPluginApi: SPADS plugin API
 #
-# Copyright (C) 2013-2023  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2013-2024  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -22,9 +22,9 @@ use File::Spec::Functions qw'catdir';
 use List::Util qw'any none';
 
 use Exporter 'import';
-@EXPORT=qw/$spadsVersion $spadsDir loadPythonPlugin get_flag fix_string getLobbyState getSpringPid getSpringServerType getTimestamps getBosses getRunningBattle getConfMacros getCurrentVote getPlugin getPluginList addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess forkCall removeProcessCallback createDetachedProcess addTimer removeTimer addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog updateSetting secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives/;
+@EXPORT=qw/$spadsVersion $spadsDir loadPythonPlugin get_flag fix_string getBosses getLobbyState getSpringPid getSpringServerType getTimestamps getUserPref getRunningBattle getConfMacros getCurrentVote getPlugin getPluginList addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess forkCall removeProcessCallback createDetachedProcess addTimer removeTimer addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog updateSetting secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives/;
 
-my $apiVersion='0.37';
+my $apiVersion='0.38';
 
 our $spadsVersion=$::SPADS_VERSION;
 our $spadsDir=$::CWD;
@@ -143,6 +143,10 @@ sub fix_string { map {utf8::upgrade($_)} @_; return @_ }
 # Accessors
 ################################
 
+sub getBosses {
+  return \%::bosses;
+}
+
 sub getConfMacros {
   return \%::confMacros;
 }
@@ -187,9 +191,7 @@ sub getTimestamps {
   return \%::timestamps;
 }
 
-sub getBosses {
-  return \%::bosses;
-}
+sub getUserPref { ::getUserPref(@_) }
 
 ################################
 # Plugin management
@@ -1361,6 +1363,11 @@ plugins (directly from Perl plugins, or via C<spads.[...]> from Python plugins).
 
 =over 2
 
+=item C<getBosses()>
+
+This accessor returns a reference to the hash containing the names of the bosses
+in the battle lobby (if the hash is empty, the boss mode is disabled).
+
 =item C<getConfMacros()>
 
 This accessor returns a reference to the hash containing the configuration
@@ -1400,7 +1407,9 @@ format
 
 =item * C<awayVoteTime>: the time when the automatic votes for away users (see
 L<voteMode|http://planetspads.free.fr/spads/doc/spadsDoc_Preferences.html#pset:voteMode>
-preference) will be taken into account, in UNIX timestamp format
+preference) will be taken into account, in UNIX timestamp format. This field is
+reset to zero when the corresponding time is reached and votes for away users
+are triggered.
 
 =item * C<source>: the source of the message which started the vote (either
 C<"pv">, C<"chan">, C<"game"> or C<"battle">)
@@ -1686,7 +1695,9 @@ hosted by SPADS are included in the hash.
 
 =item C<getTimestamps()>
 
-=item C<getBosses()>
+=item C<getUserPref($userName,$prefName)>
+
+This accessor returns the current value of a user's preference.
 
 =back
 

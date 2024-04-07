@@ -687,6 +687,12 @@
 
 <dl>
 
+<dt id="getBosses"><code>getBosses()</code></dt>
+<dd>
+
+<p>This accessor returns a reference to the hash containing the names of the bosses in the battle lobby (if the hash is empty, the boss mode is disabled).</p>
+
+</dd>
 <dt id="getConfMacros"><code>getConfMacros()</code></dt>
 <dd>
 
@@ -722,7 +728,7 @@
 <li><p><code>expireTime</code>: the time when the vote will timeout, in UNIX timestamp format</p>
 
 </li>
-<li><p><code>awayVoteTime</code>: the time when the automatic votes for away users (see <a href="http://planetspads.free.fr/spads/doc/spadsDoc_Preferences.html#pset:voteMode">voteMode</a> preference) will be taken into account, in UNIX timestamp format</p>
+<li><p><code>awayVoteTime</code>: the time when the automatic votes for away users (see <a href="http://planetspads.free.fr/spads/doc/spadsDoc_Preferences.html#pset:voteMode">voteMode</a> preference) will be taken into account, in UNIX timestamp format. This field is reset to zero when the corresponding time is reached and votes for away users are triggered.</p>
 
 </li>
 <li><p><code>source</code>: the source of the message which started the vote (either <code>&quot;pv&quot;</code>, <code>&quot;chan&quot;</code>, <code>&quot;game&quot;</code> or <code>&quot;battle&quot;</code>)</p>
@@ -996,8 +1002,10 @@
 <dd>
 
 </dd>
-<dt id="getBosses"><code>getBosses()</code></dt>
+<dt id="getUserPref-userName-prefName"><code>getUserPref($userName,$prefName)</code></dt>
 <dd>
+
+<p>This accessor returns the current value of a user&#39;s preference.</p>
 
 </dd>
 </dl>
