@@ -8,8 +8,8 @@ use SpadsPluginApi;
 
 no warnings 'redefine';
 
-my $pluginVersion='0.2';
-my $requiredSpadsVersion='0.11.5';
+my $pluginVersion='0.3';
+my $requiredSpadsVersion='0.11.10';
 
 sub getVersion { return $pluginVersion; }
 sub getRequiredSpadsVersion { return $requiredSpadsVersion; }
@@ -17,19 +17,11 @@ sub getRequiredSpadsVersion { return $requiredSpadsVersion; }
 my @dynamicMapRotationFields=(['targetNbTeams','targetTeamSize','targetMinTeamSize','nbPlayers','currentNbTeams','currentTeamSize','startPosType'],['rotationMapList']);
 
 sub new {
-  my $class=shift;
-  my $self = { rules => {},
-               previousContext => { targetNbTeams => 0,
-                                    targetTeamSize => 0,
-                                    targetMinTeamSize => 0,
-                                    nbPlayers => 0,
-                                    currentNbTeams => 0,
-                                    currentTeamSize => 0,
-                                    startPosType => 0 },
-               previousRotationType => undef };
+  my ($class,$context)=@_;
+  my $self = { rules => {} };
   bless($self,$class);
   return undef unless($self->onReloadConf());
-  slog("Plugin loaded (version $pluginVersion)",3);
+  slog("Plugin loaded (version $pluginVersion) [$context]",3);
   return $self;
 }
 
@@ -51,17 +43,41 @@ sub onReloadConf {
 }
 
 sub onUnload {
-  slog("Plugin unloaded",3);
+  my ($self,$reason)=@_;
+  slog("Plugin unloaded [$reason]",3);
 }
 
-sub eventLoop {
+sub filterRotationMaps {
+  my ($self,$r_rotationMaps)=@_;
+
+  my $dynamicRotationMapList=$self->getCurrentDynamicRotationMapList();
+  return $r_rotationMaps unless(defined $dynamicRotationMapList);
+  
+  my @filteredMaps;
+  my $r_mapFilters=getSpadsConfFull()->{mapLists}{$dynamicRotationMapList};
+  foreach my $mapName (@{$r_rotationMaps}) {
+    for my $i (0..$#{$r_mapFilters}) {
+      my $mapFilter=$r_mapFilters->[$i];
+      if($mapFilter =~ /^!(.*)$/) {
+        my $realMapFilter=$1;
+        last if($mapName =~ /^$realMapFilter$/);
+      }elsif($mapName =~ /^$mapFilter$/) {
+        $filteredMaps[$i]//=[];
+        push(@{$filteredMaps[$i]},$mapName);
+        last;
+      }
+    }
+  }
+
+  return SpadsConf::mergeMapArrays(\@filteredMaps);
+}
+
+sub getCurrentDynamicRotationMapList {
   my $self=shift;
   my $lobby=getLobbyInterface();
   return unless(getLobbyState() > 5 && %{$lobby->{battle}});
 
   my $p_spadsConf=getSpadsConf();
-  return unless($p_spadsConf->{rotationType} =~ /^map(;.+)?$/);
-
   my $spads=getSpadsConfFull();
   
   my ($nbHumanPlayers,$nbAiBots)=getCurrentNumberOfPlayers();
@@ -73,26 +89,10 @@ sub eventLoop {
                            currentNbTeams => $currentNbTeams,
                            currentTeamSize => $currentTeamSize,
                            startPosType => $spads->{bSettings}{startpostype} };
-  my $needNewCheck=0;
-  foreach my $contextData (keys %{$p_currentContext}) {
-    if($p_currentContext->{$contextData} != $self->{previousContext}{$contextData}) {
-      $needNewCheck=1;
-      last;
-    }
-  }
-  $needNewCheck=1 unless(defined $self->{previousRotationType} && $p_spadsConf->{rotationType} eq $self->{previousRotationType});
-  return unless($needNewCheck);
-  $self->{previousContext}=$p_currentContext;
   my $p_mapLists=SpadsConf::findMatchingData($p_currentContext,$self->{rules});
-  if(@{$p_mapLists}) {
-    $p_spadsConf->{rotationType}="map;$p_mapLists->[0]->{rotationMapList}";
-  }else{
-    $p_spadsConf->{rotationType}='map';
-  }
-  $spads->{conf}{rotationType}=$p_spadsConf->{rotationType};
-  $self->{previousRotationType}=$p_spadsConf->{rotationType};
+  return $p_mapLists->[0]->{rotationMapList} if(@{$p_mapLists});
+  return;
 }
-
 
 sub getCurrentNumberOfPlayers {
   my ($nbHumanPlayers,$nbAiBots)=(0,0);
