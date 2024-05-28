@@ -97,7 +97,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.27';
+our $SPADS_VERSION='0.13.28';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -5485,7 +5485,7 @@ sub launchGame {
   $checkBypassLevel//=0;
 
   if($timestamps{usLockRequestForGameStart}) {
-    answer('Game start is already in progress (waiting for exclusive acess to archives cache)') unless($automatic);
+    answer('Game start is already in progress (waiting for exclusive access to archives cache)') unless($automatic);
     return 0;
   }
   
@@ -9642,7 +9642,7 @@ sub hList {
       if($preset eq $conf{preset}) {
         $presetString="[*] $C{12}";
       }elsif(any {$preset eq $_} @{$spads->{values}->{preset}}) {
-        $presetString="[ ] ";
+        $presetString = (exists $spads->{presetsAttributes}{$preset} && $spads->{presetsAttributes}{$preset}{transparent}) ? ' o  ' : '[ ] ';
       }
       $presetString.=$B if($preset eq $conf{defaultPreset});
       $presetString.=$preset;
@@ -9664,7 +9664,7 @@ sub hList {
       if($bPreset eq $conf{battlePreset}) {
         $presetString="[*] $C{12}";
       }elsif(any {$bPreset eq $_} @{$spads->{values}->{battlePreset}}) {
-        $presetString="[ ] ";
+        $presetString = (exists $spads->{bPresetsAttributes}{$bPreset} && $spads->{bPresetsAttributes}{$bPreset}{transparent}) ? ' o  ' : '[ ] ';
       }
       $presetString.=$bPreset;
       $presetString.=" ($spads->{bPresets}->{$bPreset}->{description}->[0])" if(exists $spads->{bPresets}->{$bPreset}->{description});
@@ -9684,7 +9684,7 @@ sub hList {
       if($hPreset eq $conf{hostingPreset}) {
         $presetString="[*] $C{12}";
       }elsif(any {$hPreset eq $_} @{$spads->{values}->{hostingPreset}}) {
-        $presetString="[ ] ";
+        $presetString = (exists $spads->{hPresetsAttributes}{$hPreset} && $spads->{hPresetsAttributes}{$hPreset}{transparent}) ? ' o  ' : '[ ] ';
       }
       $presetString.=$hPreset;
       $presetString.=" ($spads->{hPresets}->{$hPreset}->{description}->[0])" if(exists $spads->{hPresets}->{$hPreset}->{description});

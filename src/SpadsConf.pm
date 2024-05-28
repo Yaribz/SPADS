@@ -39,7 +39,7 @@ use SimpleLog;
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.13.6';
+my $moduleVersion='0.13.7';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -394,10 +394,19 @@ sub new {
   $p_previousInstance//=0;
   my $class = ref($objectOrClass) || $objectOrClass;
 
-  my $p_conf = loadSettingsFile($sLog,$confFile,\%globalParameters,\%spadsSectionParameters,$p_macros,undef,'set');
+  my ($p_conf,$r_presetAttribs) = loadSettingsFile($sLog,$confFile,\%globalParameters,\%spadsSectionParameters,$p_macros,undef,'set');
   my (%sharedDataTs,%sharedDataFiles);
   if(! checkSpadsConfig($sLog,$p_conf,\%sharedDataTs,\%sharedDataFiles)) {
     $sLog->log('Unable to load main configuration parameters',1);
+    return 0;
+  }
+  if(! processPresetAttribs($sLog,'global preset',$r_presetAttribs)) {
+    $sLog->log("Unable to process global presets attributes",1);
+    return 0;
+  }
+  my @invalidTransparentPresets = grep {defined $p_conf->{$_}{preset} && $r_presetAttribs->{$_}{transparent}} (keys %{$r_presetAttribs});
+  if(@invalidTransparentPresets) {
+    $sLog->log('Invalid transparent preset'.(@invalidTransparentPresets>1?'s':'').': '.join(', ',@invalidTransparentPresets).' (transparent presets cannot contain "preset" setting definition)',1);
     return 0;
   }
 
@@ -407,15 +416,23 @@ sub new {
                        useTimestamps => [1,-t STDOUT ? 0 : 1],
                        prefix => '[SPADS] ');
 
-  my $p_hConf =  loadSettingsFile($sLog,$p_conf->{''}{etcDir}.'/hostingPresets.conf',{},\%hostingParameters,$p_macros,undef,'hSet');
+  my ($p_hConf,$r_hPresetAttribs) =  loadSettingsFile($sLog,$p_conf->{''}{etcDir}.'/hostingPresets.conf',{},\%hostingParameters,$p_macros,undef,'hSet');
   if(! checkHConfig($sLog,$p_conf,$p_hConf)) {
     $sLog->log('Unable to load hosting presets',1);
     return 0;
   }
+  if(! processPresetAttribs($sLog,'hosting preset',$r_hPresetAttribs)) {
+    $sLog->log("Unable to process hosting presets attributes",1);
+    return 0;
+  }
 
-  my $p_bConf =  loadSettingsFile($sLog,$p_conf->{''}{etcDir}.'/battlePresets.conf',{},\%battleParameters,$p_macros,1);
+  my ($p_bConf,$r_bPresetAttribs) =  loadSettingsFile($sLog,$p_conf->{''}{etcDir}.'/battlePresets.conf',{},\%battleParameters,$p_macros,1);
   if(! checkBConfig($sLog,$p_conf,$p_bConf)) {
     $sLog->log('Unable to load battle presets',1);
+    return 0;
+  }
+  if(! processPresetAttribs($sLog,'battle preset',$r_bPresetAttribs)) {
+    $sLog->log("Unable to process battle presets attributes",1);
     return 0;
   }
 
@@ -568,8 +585,11 @@ sub new {
 
   my $self = {
     presets => $p_conf,
+    presetsAttributes => $r_presetAttribs,
     hPresets => $p_hConf,
+    hPresetsAttributes => $r_hPresetAttribs,
     bPresets => $p_bConf,
+    bPresetsAttributes => $r_bPresetAttribs,
     banLists => $p_banLists,
     mapLists => $p_mapLists,
     commands => $p_commands,
@@ -882,13 +902,17 @@ sub loadSettingsFile {
   my @confData;
   return {} unless(preProcessConfFile($sLog,\@confData,$cFile,$p_macros,{}));
 
+  my %attribs;
+  my $attribRegexCnt=wantarray()?'?':'{0}';
+  
   my @invalidGlobalParams;
   my @invalidSectionParams;
   while(local $_ = shift(@confData)) {
     next if(/^\s*(\#.*)?$/);
-    if(/^\s*\[([^\]]+)\]\s*$/) {
+    if(/^\s*\[([^\]]+)\](?:\s*\((.*)\))$attribRegexCnt\s*$/) {
       $currentSection=$1;
       $newConf{$currentSection}={} unless(exists $newConf{$currentSection});
+      $attribs{$currentSection}=$2 if(defined $2);
       next;
     }elsif(/^([^:]+):\s*((?:.*[^\s])?)\s*$/) {
       my ($param,$value)=($1,$2);
@@ -956,7 +980,8 @@ sub loadSettingsFile {
     }
     my @inheritedSectionsList=split(',',$inheritedSectionsString);
     $inheritedSections{$sectionName}=\@inheritedSectionsList;
-    $newConf{$sectionName}=delete $newConf{$section};
+    $newConf{$sectionName} = delete $newConf{$section};
+    $attribs{$sectionName} = delete $attribs{$section} if(exists $attribs{$section});
   }
 
   foreach my $section (keys %inheritedSections) {
@@ -979,7 +1004,7 @@ sub loadSettingsFile {
   }
 
   
-  return \%newConf;
+  return return wantarray() ? (\%newConf,\%attribs) : \%newConf;
 }
 
 sub flattenSectionInheritance {
@@ -1733,33 +1758,64 @@ sub pruneExpiredBans {
   return $nbPrunedBans;
 }
 
-sub processCmdAttribs {
-  my ($sLog,$r_cmdAttribs)=@_;
-  foreach my $cmd (keys %{$r_cmdAttribs}) {
+sub processAttribs {
+  my ($sLog,$type,$r_attribs)=@_;
+  foreach my $section (keys %{$r_attribs}) {
     my %attrs;
-    my @attrDefs=split(',',$r_cmdAttribs->{$cmd});
+    my @attrDefs=split(',',$r_attribs->{$section});
     foreach my $attrDef (@attrDefs) {
+      $attrDef.=':1' if(index($attrDef,':') == -1);
       if($attrDef =~ /^\s*([^:]+):\s*((?:.*[^\s])?)\s*$/) {
         my ($attr,$val)=($1,$2);
         if(exists $attrs{$attr}) {
-          $sLog->log("Duplicate command attribute definition (attribute \"$attr\" for command \"$cmd\")",1);
-          return 0;
-        }
-        if(none {$attr eq $_} (qw'voteTime minVoteParticipation majorityVoteMargin awayVoteDelay')) {
-          $sLog->log("Invalid command attribute \"$attr\" declared for command \"$cmd\"",1);
-          return 0;
-        }
-        if(! checkValue($val,$globalParameters{$attr})) {
-          $sLog->log("Invalid value \"$val\" for attribute \"$attr\" declared for command \"$cmd\"",1);
+          $sLog->log("Duplicate $type attribute definition (attribute \"$attr\" for $type \"$section\")",1);
           return 0;
         }
         $attrs{$attr}=$val;
       }else{
-        $sLog->log("Invalid syntax for command attribute declaration: \"$attrDef\" (command \"$cmd\")",1);
+        $sLog->log("Invalid syntax for $type attribute declaration: \"$attrDef\" ($type \"$section\")",1);
         return 0;
       }
     }
-    $r_cmdAttribs->{$cmd}=\%attrs;
+    $r_attribs->{$section}=\%attrs;
+  }
+  return 1;
+}
+
+sub processCmdAttribs {
+  my ($sLog,$r_cmdAttribs)=@_;
+  return 0 unless(processAttribs($sLog,'command',$r_cmdAttribs));
+  foreach my $cmd (keys %{$r_cmdAttribs}) {
+    foreach my $attr (keys %{$r_cmdAttribs->{$cmd}}) {
+      if(none {$attr eq $_} (qw'voteTime minVoteParticipation majorityVoteMargin awayVoteDelay')) {
+        $sLog->log("Invalid command attribute \"$attr\" declared for command \"$cmd\"",1);
+        return 0;
+      }
+      my $val=$r_cmdAttribs->{$cmd}{$attr};
+      if(! checkValue($val,$globalParameters{$attr})) {
+        $sLog->log("Invalid value \"$val\" for attribute \"$attr\" declared for command \"$cmd\"",1);
+        return 0;
+      }
+    }
+  }
+  return 1;
+}
+
+sub processPresetAttribs {
+  my ($sLog,$type,$r_presetAttribs)=@_;
+  return 0 unless(processAttribs($sLog,$type,$r_presetAttribs));
+  foreach my $preset (keys %{$r_presetAttribs}) {
+    foreach my $attr (keys %{$r_presetAttribs->{$preset}}) {
+      if($attr ne 'transparent') {
+        $sLog->log("Invalid $type attribute \"$attr\" declared for $type \"$preset\"",1);
+        return 0;
+      }
+      my $val=$r_presetAttribs->{$preset}{$attr};
+      if($val ne '0' && $val ne '1') {
+        $sLog->log("Invalid value \"$val\" for attribute \"$attr\" declared for $type \"$preset\"",1);
+        return 0;
+      }
+    }
   }
   return 1;
 }
@@ -2443,8 +2499,8 @@ sub applyPreset {
     $self->{conf}{$param}=$settings{$param}[0];
     $self->{values}{$param}=$settings{$param};
   }
-  $self->{conf}{preset}=$preset;
-  if(! $commandsAlreadyLoaded) {
+  $self->{conf}{preset}=$preset unless(exists $self->{presetsAttributes}{$preset} && $self->{presetsAttributes}{$preset}{transparent});
+  if(! $commandsAlreadyLoaded && exists $settings{commandsFile}) {
     my ($p_commands,$r_cmdAttribs)=loadTableFile($self->{log},$self->{conf}{etcDir}.'/'.$self->{conf}{commandsFile},\@commandsFields,$self->{macros},1);
     if(%{$p_commands}) {
       if(processCmdAttribs($self->{log},$r_cmdAttribs)) {
@@ -2457,8 +2513,8 @@ sub applyPreset {
       $self->{log}->log("Unable to load commands file \"$self->{conf}{commandsFile}\"",1);
     }
   }
-  $self->applyHPreset($self->{conf}{hostingPreset});
-  $self->applyBPreset($self->{conf}{battlePreset});
+  $self->applyHPreset($self->{conf}{hostingPreset}) if(exists $settings{hostingPreset});
+  $self->applyBPreset($self->{conf}{battlePreset}) if(exists $settings{battlePreset});
   foreach my $pluginName (keys %{$self->{pluginsConf}}) {
     $self->applyPluginPreset($pluginName,$preset);
   }
@@ -2481,7 +2537,7 @@ sub applyHPreset {
     $self->{hSettings}{$param}=$settings{$param}[0];
     $self->{hValues}{$param}=$settings{$param};
   }
-  $self->{conf}{hostingPreset}=$preset;
+  $self->{conf}{hostingPreset}=$preset unless(exists $self->{hPresetsAttributes}{$preset} && $self->{hPresetsAttributes}{$preset}{transparent});
 }
 
 sub applyBPreset {
@@ -2518,7 +2574,7 @@ sub applyBPreset {
       $self->{bValues}{$param}=$settings{$param};
     }
   }
-  $self->{conf}{battlePreset}=$preset;
+  $self->{conf}{battlePreset}=$preset unless(exists $self->{bPresetsAttributes}{$preset} && $self->{bPresetsAttributes}{$preset}{transparent});
 }
 
 sub applyMapList {
