@@ -1013,6 +1013,10 @@ spads.pl:
 0.13.27: add log message containing current hosting information (game name and engine version)
 0.13.28: show transparent partial presets differently than normal partial presets in !list command output
          fix typo (unitsync exclusive access message)
+0.13.29: "!plugin ... reloadConf" command: automatically restore previous plugin configuration when "onReloadConf" plugin callback returns a (defined) false value
+         "!reloadConf" command: reload plugins configurations instead of just copying previous configurations for manually loaded plugins and plugins removed from "autoLoadPlugins" list
+         "!reloadConf" command: do not call "onReloadConf" plugin callback for plugins that have been newly loaded during configuration reload (due to addition in "autoLoadPlugins" list, with "keepSettings" mode disabled)
+         fix typos
 
 SpadsConf.pm:
 ============
@@ -1207,6 +1211,12 @@ SpadsConf.pm:
         add support for "transparent" presets (i.e. partial presets which don't update current preset name when applied)
         when loading partial presets, only reload "commands.conf" file when needed 
         when loading partial presets, only reload hosting and battle presets when needed
+0.13.8: when configuration is reloaded in "keepSettings" mode:
+          re-apply current preset if distinct from default preset (allowed values for preset settings are more likely to be correct, even though the full history of intermediate partial presets that might have been used is not restored)
+          use previous value of "autoLoadPlugins" to select plugins for which configuration is reloaded (i.e. conf is still reloaded for plugins removed from "autoLoadPlugins", and no longer reloaded for plugins added to "autoLoadPlugins")
+          configurations of manually unloaded plugins are no longer automatically reloaded (even when listed in "autoLoadPlugins")
+          stop auto-importing previous configuration for manually loaded plugins (now handled by spads.pl) and plugins removed from "autoLoadPlugins" list (their configuration is auto-reloaded, as previous value of "autoLoadPlugins" is now used)
+        allow plugins to use custom setting value checking functions (instead of predefined type identifiers)
 
 spadsInstaller.pl:
 =================

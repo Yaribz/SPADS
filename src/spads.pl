@@ -97,7 +97,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.28';
+our $SPADS_VERSION='0.13.29';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -10476,24 +10476,30 @@ sub hPlugin {
     return 1;
   }
   if($action eq 'reloadConf') {
-    if(defined $param && lc($param) ne 'keepsettings') {
-      invalidSyntax($user,'plugin');
-      return 0;
+    my $keepSettings;
+    if(defined $param) {
+      if(lc($param) ne 'keepsettings') {
+        invalidSyntax($user,'plugin');
+        return 0;
+      }
+      $keepSettings=1;
+    }else{
+      $keepSettings=0;
     }
     return 1 if($checkOnly);
-    my $p_previousConf;
-    $p_previousConf=$spads->{pluginsConf}->{$pluginName}->{conf} if(exists $spads->{pluginsConf}->{$pluginName} && defined $param);
+    my $p_previousPluginConf=$spads->{pluginsConf}{$pluginName};
     if(! $spads->loadPluginConf($pluginName)) {
       answer("Failed to reload $pluginName plugin configuration.");
       return 0;
     }
     $spads->applyPluginPreset($pluginName,$conf{defaultPreset});
     $spads->applyPluginPreset($pluginName,$conf{preset}) unless($conf{preset} eq $conf{defaultPreset});
-    $spads->{pluginsConf}->{$pluginName}->{conf}=$p_previousConf if(exists $spads->{pluginsConf}->{$pluginName} && defined $p_previousConf);
+    $spads->{pluginsConf}{$pluginName}{conf}=$p_previousPluginConf->{conf} if(exists $spads->{pluginsConf}{$pluginName} && $keepSettings && defined $p_previousPluginConf);
     if($plugins{$pluginName}->can('onReloadConf')) {
-      my $reloadConfRes=$plugins{$pluginName}->onReloadConf(defined $param);
+      my $reloadConfRes=$plugins{$pluginName}->onReloadConf($keepSettings);
       if(defined $reloadConfRes && ! $reloadConfRes) {
         answer("Failed to reload $pluginName plugin configuration.");
+        $spads->{pluginsConf}{$pluginName}=$p_previousPluginConf if(exists $spads->{pluginsConf}{$pluginName} && defined $p_previousPluginConf);
         return 0;
       }
     }
@@ -10912,8 +10918,16 @@ sub hReloadConf {
     return 0;
   }
 
+  my ($defaultPreset,$currentPreset)=@{$newSpads->{conf}}{'defaultPreset','preset'};
   foreach my $pluginName (keys %{$spads->{pluginsConf}}) {
-    $newSpads->{pluginsConf}->{$pluginName}=$spads->{pluginsConf}->{$pluginName} unless(exists $newSpads->{pluginsConf}->{$pluginName});
+    next if(exists $newSpads->{pluginsConf}{$pluginName});
+    if(! $newSpads->loadPluginConf($pluginName)) {
+      answer("Unable to reload SPADS configuration (failed to reload $pluginName plugin configuration)");
+      return 0;
+    }
+    $newSpads->applyPluginPreset($pluginName,$defaultPreset);
+    $newSpads->applyPluginPreset($pluginName,$currentPreset) unless($currentPreset eq $defaultPreset);
+    $newSpads->{pluginsConf}{$pluginName}{conf}=$spads->{pluginsConf}{$pluginName}{conf} if($keepSettings);
   }
 
   $spads=$newSpads;
@@ -10933,10 +10947,13 @@ sub hReloadConf {
     $sLog->setLevels([$conf{spadsLogLevel},3]);
     $simpleEventSimpleLog->setLevels([$conf{spadsLogLevel},3]);
 
+    my %newlyInstantiatedPlugins;
     if($conf{autoLoadPlugins} ne '') {
       my @pluginNames=split(/;/,$conf{autoLoadPlugins});
       foreach my $pluginName (@pluginNames) {
-        instantiatePlugin($pluginName,'autoload') unless(exists $plugins{$pluginName});
+        next if(exists $plugins{$pluginName});
+        instantiatePlugin($pluginName,'autoload');
+        $newlyInstantiatedPlugins{$pluginName}=1;
       }
     }
 
@@ -10947,22 +10964,23 @@ sub hReloadConf {
         quitAfterGame('Unable to reload Spring archives') unless($nbArchives);
         setDefaultMapOfMaplist() if($spads->{conf}->{map} eq '');
         applyAllSettings();
-        postReloadConfActions($r_asyncAnswerFunction,$keepSettings);
+        postReloadConfActions($r_asyncAnswerFunction,$keepSettings,\%newlyInstantiatedPlugins);
       } );
   }
 }
 
 sub postReloadConfActions {
-  my ($r_answerFunction,$keepSettings)=@_;
-
+  my ($r_answerFunction,$keepSettings,$r_newlyInstantiatedPlugins)=@_;
+  $r_newlyInstantiatedPlugins//={};
+  
   foreach my $pluginName (@pluginsOrder) {
-    if($plugins{$pluginName}->can('onReloadConf')) {
+    if($plugins{$pluginName}->can('onReloadConf') && ! $r_newlyInstantiatedPlugins->{$pluginName}) {
       my $reloadConfRes=$plugins{$pluginName}->onReloadConf($keepSettings);
       $r_answerFunction->("Unable to reload $pluginName plugin configuration.") if(defined $reloadConfRes && ! $reloadConfRes);
     }
   }
 
-  my $msg="Spads configuration reloaded";
+  my $msg="SPADS configuration reloaded";
   $msg.=" (some pending settings need rehosting to be applied)" if(needRehost());
   $r_answerFunction->($msg);
 }
@@ -12607,33 +12625,33 @@ sub hUnban {
     return 1 if($checkOnly);
     $spads->unban($p_filters);
   }else{
-    my %instanciatedFilters=%{$p_filters};
-    my $nameOrAccountId=delete $instanciatedFilters{nameOrAccountId};
-    $instanciatedFilters{name}=$nameOrAccountId;
+    my %instantiatedFilters=%{$p_filters};
+    my $nameOrAccountId=delete $instantiatedFilters{nameOrAccountId};
+    $instantiatedFilters{name}=$nameOrAccountId;
     my $banExists=0;
-    if($spads->banExists(\%instanciatedFilters)) {
+    if($spads->banExists(\%instantiatedFilters)) {
       return 1 if($checkOnly);
       $banExists=1;
-      $spads->unban(\%instanciatedFilters);
+      $spads->unban(\%instantiatedFilters);
     }
     if(exists $p_filters->{name}) {
-      $instanciatedFilters{name}=$p_filters->{name};
+      $instantiatedFilters{name}=$p_filters->{name};
     }else{
-      delete $instanciatedFilters{name};
+      delete $instantiatedFilters{name};
     }
-    $instanciatedFilters{accountId}="($nameOrAccountId)";
-    if($spads->banExists(\%instanciatedFilters)) {
+    $instantiatedFilters{accountId}="($nameOrAccountId)";
+    if($spads->banExists(\%instantiatedFilters)) {
       return 1 if($checkOnly);
       $banExists=1;
-      $spads->unban(\%instanciatedFilters);
+      $spads->unban(\%instantiatedFilters);
     }
     my $accountId=getLatestUserAccountId($nameOrAccountId);
     if($accountId) {
-      $instanciatedFilters{accountId}=$accountId;
-      if($spads->banExists(\%instanciatedFilters)) {
+      $instantiatedFilters{accountId}=$accountId;
+      if($spads->banExists(\%instantiatedFilters)) {
         return 1 if($checkOnly);
         $banExists=1;
-        $spads->unban(\%instanciatedFilters);
+        $spads->unban(\%instantiatedFilters);
       }
     }
     if(! $banExists) {
@@ -15095,7 +15113,7 @@ sub loadPlugin {
   $spads->loadPluginModuleAndConf($pluginName)
       or return 0;
   $spads->applyPluginPreset($pluginName,$conf{defaultPreset});
-  $spads->applyPluginPreset($pluginName,$conf{preset}) if($conf{preset} ne $conf{defaultPreset});
+  $spads->applyPluginPreset($pluginName,$conf{preset}) unless($conf{preset} eq $conf{defaultPreset});
   return instantiatePlugin($pluginName,$reason);
 }
 

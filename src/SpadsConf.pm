@@ -39,7 +39,7 @@ use SimpleLog;
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.13.7';
+my $moduleVersion='0.13.8';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -391,7 +391,6 @@ my %shareableData = ( savedBoxes => { type => 'fastTable',
 
 sub new {
   my ($objectOrClass,$confFile,$sLog,$p_macros,$p_previousInstance) = @_;
-  $p_previousInstance//=0;
   my $class = ref($objectOrClass) || $objectOrClass;
 
   my ($p_conf,$r_presetAttribs) = loadSettingsFile($sLog,$confFile,\%globalParameters,\%spadsSectionParameters,$p_macros,undef,'set');
@@ -631,17 +630,22 @@ sub new {
   $self->removeExpiredBans();
 
   unshift(@INC,$self->{conf}{pluginsDir}) unless(any {$self->{conf}{pluginsDir} eq $_} @INC);
-  if($self->{conf}{autoLoadPlugins} ne '') {
-    my @pluginNames=split(/;/,$self->{conf}{autoLoadPlugins});
-    foreach my $pluginName (@pluginNames) {
-      $self->loadPluginModuleIfNeededAndConf($pluginName)
-          or return 0;
-    }
+  my @pluginNames=split(/;/,($p_previousInstance // $self)->{conf}{autoLoadPlugins});
+  foreach my $pluginName (@pluginNames) {
+
+    # When $p_previousInstance is defined ("keepSettings" mode), all autoLoadPlugins modules have already been loaded at start.
+    # If no configuration is present for a given plugin in previous conf, it means this plugin is not configurable or it has been manually unloaded.
+    next if(defined $p_previousInstance && ! exists $p_previousInstance->{pluginsConf}{$pluginName});
+    
+    $self->loadPluginModuleIfNeededAndConf($pluginName)
+        or return 0;
   }
 
   $self->applyPreset($self->{conf}{defaultPreset},1);
-
-  if($p_previousInstance) {
+  
+  if(defined $p_previousInstance) {
+    my $previousPreset=$p_previousInstance->{conf}{preset};
+    $self->applyPreset($previousPreset,1) if(exists $self->{presets}{$previousPreset} && $previousPreset ne $self->{conf}{defaultPreset});
     $self->{conf}=$p_previousInstance->{conf};
     $self->{hSettings}=$p_previousInstance->{hSettings};
     $self->{bSettings}=$p_previousInstance->{bSettings};
@@ -649,10 +653,7 @@ sub new {
     $self->{orderedMaps}=$p_previousInstance->{orderedMaps};
     $self->{ghostMaps}=$p_previousInstance->{ghostMaps};
     $self->{orderedGhostMaps}=$p_previousInstance->{orderedGhostMaps};
-    foreach my $pluginName (keys %{$p_previousInstance->{pluginsConf}}) {
-      $self->{pluginsConf}{$pluginName}=$p_previousInstance->{pluginsConf}{$pluginName} unless(exists $self->{pluginsConf}{$pluginName});
-      $self->{pluginsConf}{$pluginName}{conf}=$p_previousInstance->{pluginsConf}{$pluginName}{conf};
-    }
+    $self->{pluginsConf}{$_}{conf}=$p_previousInstance->{pluginsConf}{$_}{conf} foreach(keys %{$self->{pluginsConf}});
   }
 
   return $self;
@@ -735,10 +736,15 @@ sub checkValue {
   my ($value,$p_types,$isFirstVal)=@_;
   return 1 unless(@{$p_types});
   foreach my $type (@{$p_types}) {
-    next if($isFirstVal && (any {$type eq $_} (qw'integerRange nonNullIntegerRange')));
-    my $checkFunction=$paramTypes{$type};
+    my $checkFunction;
+    if(ref $type eq 'CODE') {
+      $checkFunction=$type;
+    }else{
+      next if($isFirstVal && (any {$type eq $_} (qw'integerRange nonNullIntegerRange')));
+      $checkFunction=$paramTypes{$type};
+    }
     if(ref($checkFunction)) {
-      return 1 if(&{$checkFunction}($value));
+      return 1 if(&{$checkFunction}($value,$isFirstVal));
     }else{
       return 1 if($value =~ /^$checkFunction$/);
     }
@@ -1464,7 +1470,7 @@ sub loadPluginConf {
       return 0;
     }
   }
-  $self->{log}->log("Reloading configuration of plugin \"$pluginName\"",4) if(exists $self->{pluginsConf}{$pluginName});
+  $self->{log}->log("Reloaded configuration of plugin \"$pluginName\"",4) if(exists $self->{pluginsConf}{$pluginName});
   $self->{pluginsConf}{$pluginName}={ presets => $p_pluginPresets,
                                       commands => $p_commands,
                                       commandsAttributes => $r_cmdAttribs,
