@@ -1,0 +1,7 @@
+This plugin makes SPADS auto-reloads its configuration when it receives a
+configurable POSIX signal (one of "USR1", "USR2" and "HUP"). The USR1 signal is
+used by default. SPADS configuration is reloaded in "keepSettings" mode:
+current settings values are kept as they are to not disrupt active battle
+rooms (configuration reload is transparent for users). Only the lists of
+allowed values are updated, as well as all other configuration structures (ban
+lists, map lists, map boxes etc.)
