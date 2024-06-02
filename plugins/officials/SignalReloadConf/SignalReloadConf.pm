@@ -2,15 +2,20 @@ package SignalReloadConf;
 
 use strict;
 
+use File::Spec::Functions 'catfile';
+
 use SpadsPluginApi;
 
-my $pluginVersion='0.1';
+my $pluginVersion='0.2';
 my $requiredSpadsVersion='0.13.29';
 
 my %VALID_SIGNALS = map {$_ => 1} (qw'USR1 USR2 HUP');
 
 my %globalPluginParams = ( signal => [sub {$VALID_SIGNALS{uc($_[0])}}] );
 my %presetPluginParams;
+
+my $SPADS_PID;
+my $PID_FILE;
 
 sub getVersion { return $pluginVersion; }
 sub getRequiredSpadsVersion { return $requiredSpadsVersion; }
@@ -22,6 +27,7 @@ sub new {
     slog('This plugin is not supported on Windows systems',1);
     return undef;
   }
+  $SPADS_PID=$$;
   my $self = { signal => undef };
   bless($self,$class);
   return undef unless($self->onReloadConf());
@@ -32,16 +38,30 @@ sub new {
 
 sub onReloadConf {
   my $self=shift;
+  
   my $signal=uc(getPluginConf()->{signal});
   if(defined $self->{signal}) {
     return 1 if($self->{signal} eq $signal);
+    unlink($PID_FILE);
     SimpleEvent::unregisterSignal($self->{signal});
+    undef $self->{signal};
   }
-  $self->{signal}=$signal;
-  if(! SimpleEvent::registerSignal($self->{signal},\&reloadConfKeepSettings)) {
-    slog("Failed to register signal \"$self->{signal}\"",1);
+  
+  if(! SimpleEvent::registerSignal($signal,\&reloadConfKeepSettings)) {
+    slog("Failed to register signal \"$signal\"",1);
     return 0;
   }
+  
+  $self->{signal}=$signal;
+  $PID_FILE=catfile(getSpadsConf()->{instanceDir},'SignalReloadConf.pid');
+  
+  if(open(my $pidFh,'>',$PID_FILE)) {
+    print $pidFh $SPADS_PID;
+    close($pidFh);
+  }else{
+    slog("Unable to write PID file \"$PID_FILE\" ($!)",1);
+  }
+  
   return 1;
 }
 
@@ -73,9 +93,16 @@ sub reloadConfKeepSettings {
 
 sub onUnload {
   my ($self,$reason)=@_;
-  SimpleEvent::unregisterSignal($self->{signal})
-      if(defined $self->{signal});
+
+  if(defined $self->{signal}) {
+    unlink($PID_FILE);
+    SimpleEvent::unregisterSignal($self->{signal});
+  }
+  
   slog("Plugin unloaded [$reason]",3);
 }
+
+# END block is executed in all forked processes...
+END { unlink($PID_FILE) if($$ == $SPADS_PID && defined $PID_FILE) }
 
 1;
