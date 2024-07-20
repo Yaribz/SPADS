@@ -39,7 +39,7 @@ use SimpleLog;
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.13.8';
+my $moduleVersion='0.13.9';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -2502,7 +2502,10 @@ sub applyPreset {
   $commandsAlreadyLoaded//=0;
   my %settings=%{$self->{presets}{$preset}};
   foreach my $param (keys %settings) {
-    $self->{conf}{$param}=$settings{$param}[0];
+    my $val=$settings{$param}[0];
+    next if($param eq 'battlePreset' && defined $self->{conf}{battlePreset} && exists $self->{bPresetsAttributes}{$val} && $self->{bPresetsAttributes}{$val}{transparent});
+    next if($param eq 'hostingPreset' && defined $self->{conf}{hostingPreset} && exists $self->{hPresetsAttributes}{$val} && $self->{hPresetsAttributes}{$val}{transparent});
+    $self->{conf}{$param}=$val;
     $self->{values}{$param}=$settings{$param};
   }
   $self->{conf}{preset}=$preset unless(exists $self->{presetsAttributes}{$preset} && $self->{presetsAttributes}{$preset}{transparent});
@@ -2519,8 +2522,8 @@ sub applyPreset {
       $self->{log}->log("Unable to load commands file \"$self->{conf}{commandsFile}\"",1);
     }
   }
-  $self->applyHPreset($self->{conf}{hostingPreset}) if(exists $settings{hostingPreset});
-  $self->applyBPreset($self->{conf}{battlePreset}) if(exists $settings{battlePreset});
+  $self->applyHPreset($settings{hostingPreset}[0]) if(exists $settings{hostingPreset});
+  $self->applyBPreset($settings{battlePreset}[0]) if(exists $settings{battlePreset});
   foreach my $pluginName (keys %{$self->{pluginsConf}}) {
     $self->applyPluginPreset($pluginName,$preset);
   }

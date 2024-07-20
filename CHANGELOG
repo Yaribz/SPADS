@@ -1017,6 +1017,7 @@ spads.pl:
          "!reloadConf" command: reload plugins configurations instead of just copying previous configurations for manually loaded plugins and plugins removed from "autoLoadPlugins" list
          "!reloadConf" command: do not call "onReloadConf" plugin callback for plugins that have been newly loaded during configuration reload (due to addition in "autoLoadPlugins" list, with "keepSettings" mode disabled)
          fix typos
+0.13.30: workaround for lobby clients removing leading spaces from messages (presets lists)
 
 SpadsConf.pm:
 ============
@@ -1217,6 +1218,7 @@ SpadsConf.pm:
           configurations of manually unloaded plugins are no longer automatically reloaded (even when listed in "autoLoadPlugins")
           stop auto-importing previous configuration for manually loaded plugins (now handled by spads.pl) and plugins removed from "autoLoadPlugins" list (their configuration is auto-reloaded, as previous value of "autoLoadPlugins" is now used)
         allow plugins to use custom setting value checking functions (instead of predefined type identifiers)
+0.13.9: correctly honour the "transparent" attribute of battle presets and hosting presets even when they are loaded indirectly by a global preset
 
 spadsInstaller.pl:
 =================

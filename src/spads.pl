@@ -97,7 +97,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.29';
+our $SPADS_VERSION='0.13.30';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -9648,7 +9648,7 @@ sub hList {
       $presetString.=$preset;
       $presetString.=" ($spads->{presets}->{$preset}->{description}->[0])" if(exists $spads->{presets}->{$preset}->{description});
       $presetString.=" $B*** DEFAULT ***" if($preset eq $conf{defaultPreset});
-      sayPrivate($user,$presetString);
+      sayPrivate($user,'| '.$presetString);
     }
     sayPrivate($user,"  --> Use \"$C{3}!preset <presetName>$C{1}\" to change current global preset.");
   }elsif($lcData eq 'bpresets') {
@@ -9668,7 +9668,7 @@ sub hList {
       }
       $presetString.=$bPreset;
       $presetString.=" ($spads->{bPresets}->{$bPreset}->{description}->[0])" if(exists $spads->{bPresets}->{$bPreset}->{description});
-      sayPrivate($user,$presetString);
+      sayPrivate($user,'| '.$presetString);
     }
     sayPrivate($user,"  --> Use \"$C{3}!bPreset <presetName>$C{1}\" to change current battle preset.");
   }elsif($lcData eq 'hpresets') {
@@ -9688,7 +9688,7 @@ sub hList {
       }
       $presetString.=$hPreset;
       $presetString.=" ($spads->{hPresets}->{$hPreset}->{description}->[0])" if(exists $spads->{hPresets}->{$hPreset}->{description});
-      sayPrivate($user,$presetString);
+      sayPrivate($user,'| '.$presetString);
     }
     sayPrivate($user,"  --> Use \"$C{3}!hPreset <presetName>$C{1}\" to change current hosting preset.");
   }elsif($lcData eq 'plugins') {
