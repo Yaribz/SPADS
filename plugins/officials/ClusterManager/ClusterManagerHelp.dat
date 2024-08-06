@@ -20,6 +20,8 @@
 "!listInstances teamFfa" lists all the instances currently running in the teamFfa cluster
 
 [privateHost]
-!privateHost [<clusterName>] - creates a new private (password protected) SPADS instance in the <clusterName> cluster (or default cluster if <clusterName> is not provided)
-"!privateHost" creates a new private SPADS instance in default cluster
-"!privateHost ffa" creates a new private SPADS instance in the ffa cluster
+!privateHost [<clusterName> [<password>]] - creates a new private (password protected) SPADS instance in the <clusterName> cluster (or default cluster if <clusterName> is not provided)
+"!privateHost" creates a new private SPADS instance in the default cluster, using random password
+"!privateHost ffa" creates a new private SPADS instance in "ffa" cluster, using random password
+"!privateHost team secret" creates a new private SPADS instance in "team" cluster, using password "secret"
+"!privateHost * azerty" creates a new private SPADS instance in the default cluster, using password "azerty"

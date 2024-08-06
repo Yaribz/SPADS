@@ -19,7 +19,7 @@ use constant {
   EXIT_SOFTWARE => 33,     # software failure
 };
 
-my $pluginVersion='0.7';
+my $pluginVersion='0.8';
 my $requiredSpadsVersion='0.13.0';
 
 my %globalPluginParams = ( commandsFile => ['notNull'],
@@ -1012,7 +1012,7 @@ sub checkSlaveInstance {
 }
 
 sub c_startInstance {
-  my ($self,$preset,$owner)=@_;
+  my ($self,$preset,$owner,$passwd)=@_;
   my ($instNb,$clustInstNb)=(0,0);
   while(exists $self->{instData}{$instNb}) {
     $instNb++;
@@ -1149,8 +1149,8 @@ sub c_startInstance {
   $instanceMacros{'set:autoHostPort'}=$r_pluginConf->{baseAutoHostPort}+$instNb;
   $instanceMacros{'set:instanceDir'}=catdir('ClusterManager',$instName);
   $instanceMacros{'set:logDir'}='log';
-  if($owner) {
-    my $passwd=::generatePassword(4,'abcdefghjkmnpqrstuvwxyz123456789');
+  if(defined $owner) {
+    $passwd//=::generatePassword(4,'abcdefghjkmnpqrstuvwxyz123456789');
     $instanceMacros{'hSet:password'}=$passwd;
     $instanceData{password}=$passwd;
   }
@@ -1239,15 +1239,22 @@ sub onPrivateMsg {
 sub hPrivateHost {
   my ($source,$user,$p_params,$checkOnly)=@_;
 
-  if($#{$p_params} > 0) {
+  if($#{$p_params} > 1) {
     invalidSyntax($user,'privateHost');
     return 0;
   }
+  my ($clustPreset,$instPasswd)=@{$p_params};
   
   my @clusterPresets=_getConfiguredClusterList();
-  my $clustPreset=$p_params->[0]//$clusterPresets[0];
+  $clustPreset=$clusterPresets[0]
+      unless(defined $clustPreset && $clustPreset ne '*');
   if(none {$clustPreset eq $_} @clusterPresets) {
     answer("Invalid cluster \"$clustPreset\" (use !listClusters to list available clusters)");
+    return 0;
+  }
+
+  if(defined $instPasswd && $instPasswd !~ /^[a-zA-Z\d]{1,20}$/) {
+    sayPrivate($user,"Invalid password \"$instPasswd\" (alphanumeric characters only, maximum length 20)");
     return 0;
   }
 
@@ -1286,7 +1293,7 @@ sub hPrivateHost {
     return 0;
   }
   
-  my $r_instData=c_startInstance($self,$clustPreset,$user);
+  my $r_instData=c_startInstance($self,$clustPreset,$user,$instPasswd);
   if(defined $r_instData) {
     my $instNb=$r_instData->{instNb};
     $self->{instData}{$instNb}={instName => $r_instData->{instName},
