@@ -30,12 +30,12 @@ use Net::SSLeay;
 
 use Scalar::Util 'weaken';
 
-use SpringLobbyProtocol 'marshallClientStatus';
+use SpringLobbyProtocol qw'marshallClientStatus marshallPasswd';
 use SpringLobbyServer;
 
 use SpadsPluginApi;
 
-my $pluginVersion='0.10';
+my $pluginVersion='0.11';
 my $requiredSpadsVersion='0.13.16';
 
 my %globalPluginParams = (
@@ -221,7 +221,7 @@ sub springLobbyServerAuthenticationSvc {
   my ($r_connInfo,$userName,$password,$r_userInfo)=@_;
   my $r_spadsConf=getSpadsConf();
   if($userName eq $r_spadsConf->{lobbyLogin}) {
-    return 'invalid password' unless($password eq getLobbyInterface()->marshallPasswd($r_spadsConf->{lobbyPassword}));
+    return 'invalid password' unless($password eq marshallPasswd($r_spadsConf->{lobbyPassword}));
     $r_userInfo->{status}{bot}=1;
     $r_userInfo->{accessLevel}=200;
   }else{
