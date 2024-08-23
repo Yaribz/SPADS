@@ -97,7 +97,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.30';
+our $SPADS_VERSION='0.13.31';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -11228,7 +11228,7 @@ sub hRing {
     return "ring $rungUser" if($checkOnly);
     sayBattleAndGame("Ringing $rungUser (by $user)");
     $lastRungUsers{$rungUser}=time;
-    queueLobbyCommand(["RING",$rungUser]);
+    queueLobbyCommand(["RING",$rungUser,$lobby->{protocolExtensions}{'ring:originator'} ? $user : ()]);
     return "ring $rungUser";
   }
 
@@ -11303,7 +11303,7 @@ sub hRing {
     sayBattleAndGame("$ringMsg (by $user)");
     foreach my $rungUser (@rungUsers) {
       $lastRungUsers{$rungUser}=time;
-      queueLobbyCommand(["RING",$rungUser]);
+      queueLobbyCommand(["RING",$rungUser,$lobby->{protocolExtensions}{'ring:originator'} ? $user : ()]);
     }
   }else{
     my $alreadyRungMsg="";

@@ -54,7 +54,7 @@ replay_upload.py:replay_upload_0.7.py
 sequentialSpadsUnitsyncProcess.pl:sequentialSpadsUnitsyncProcess_0.1.pl
 SimpleEvent.pm:SimpleEvent_0.16.pm
 SimpleLog.pm:SimpleLog_0.8.pm
-spads.pl:spads_0.13.30.pl
+spads.pl:spads_0.13.31.pl
 SpadsConf.pm:SpadsConf_0.13.9.pm
 spadsInstaller.pl:spadsInstaller_0.40.pl
 SpadsPluginApi.pm:SpadsPluginApi_0.38.pm
@@ -76,7 +76,7 @@ replay_upload.py:replay_upload_0.7.py
 sequentialSpadsUnitsyncProcess.pl:sequentialSpadsUnitsyncProcess_0.1.pl
 SimpleEvent.pm:SimpleEvent_0.16.pm
 SimpleLog.pm:SimpleLog_0.8.pm
-spads.pl:spads_0.13.30.pl
+spads.pl:spads_0.13.31.pl
 SpadsConf.pm:SpadsConf_0.13.9.pm
 spadsInstaller.pl:spadsInstaller_0.40.pl
 SpadsPluginApi.pm:SpadsPluginApi_0.38.pm
