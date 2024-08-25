@@ -1018,7 +1018,7 @@ spads.pl:
          "!reloadConf" command: do not call "onReloadConf" plugin callback for plugins that have been newly loaded during configuration reload (due to addition in "autoLoadPlugins" list, with "keepSettings" mode disabled)
          fix typos
 0.13.30: workaround for lobby clients removing leading spaces from messages (presets lists)
-0.13.31: add support for ping originator (lobby protocol extension)
+0.13.31: add support for ring originator (lobby protocol extension)
 
 SpadsConf.pm:
 ============
