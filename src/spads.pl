@@ -45,7 +45,9 @@ use SimpleLog;
 use SpadsConf;
 use SpadsUpdater;
 use SpringAutoHostInterface;
-use SpringLobbyInterface;
+
+my $SLI_LOADING_ERROR;
+BEGIN { eval {require SpringLobbyInterface; 1} or do { $SLI_LOADING_ERROR=$@;chomp($SLI_LOADING_ERROR) } }
 
 use constant {
 
@@ -97,7 +99,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.32';
+our $SPADS_VERSION='0.13.33';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -548,11 +550,13 @@ my $simpleEventSimpleLog=SimpleLog->new(logFiles => [$conf{logDir}.'/spads.log',
                                         useTimestamps => [1,-t STDOUT ? 0 : 1],
                                         prefix => "[SimpleEvent] ");
 
-our $lobby = SpringLobbyInterface->new(serverHost => $conf{lobbyHost},
-                                       serverPort => $conf{lobbyPort},
-                                       simpleLog => $lobbySimpleLog,
-                                       warnForUnhandledMessages => 0,
-                                       inconsistencyHandler => sub { $lobbyBrokenConnection=1; } );
+our $lobby;
+$lobby = SpringLobbyInterface->new(serverHost => $conf{lobbyHost},
+                                   serverPort => $conf{lobbyPort},
+                                   simpleLog => $lobbySimpleLog,
+                                   warnForUnhandledMessages => 0,
+                                   inconsistencyHandler => sub { $lobbyBrokenConnection=1; } )
+    unless($SLI_LOADING_ERROR);
 
 our $autohost = SpringAutoHostInterface->new(autoHostPort => $conf{autoHostPort},
                                              simpleLog => $autohostSimpleLog,
@@ -15548,6 +15552,8 @@ if($conf{autoUpdateRelease} ne "") {
 
 if(! $abortSpadsStartForAutoUpdate) {
 
+  fatalError($SLI_LOADING_ERROR) if($SLI_LOADING_ERROR);
+  
 # Concurrent instances check ###########
 
   my $lockFile="$conf{instanceDir}/spads.lock";

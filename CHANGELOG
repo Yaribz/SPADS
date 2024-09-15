@@ -1020,6 +1020,7 @@ spads.pl:
 0.13.30: workaround for lobby clients removing leading spaces from messages (presets lists)
 0.13.31: add support for ring originator (lobby protocol extension)
 0.13.32: add SpringLobbyProtocol to the list of auto-updated packages (new dependency of SpringLobbyInterface)
+0.13.33: allow SPADS auto-update process to work even if the SpringLobbyInterface module could not be loaded (this happens during normal update procedure when the new SpringLobbyProtocol module hasn't been downloaded yet)
 
 SpadsConf.pm:
 ============
