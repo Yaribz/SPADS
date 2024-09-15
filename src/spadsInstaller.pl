@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.41 (2024/09/10)
+# Version 0.42 (2024/09/14)
 
 use strict;
 
@@ -38,8 +38,10 @@ use List::Util qw'any all none notall';
 use POSIX 'ceil';
 
 use constant {
+  MSWIN32 => $^O eq 'MSWin32',
   MAX_PROGRESS_BAR_SIZE => 40,
   REPORT_SEPARATOR => -t STDOUT ? "\r" : "\n",
+  BAR_LAUNCHER_CONFIG_URL => 'https://launcher-config.beyondallreason.dev/config.json',
 };
 
 use lib $FindBin::Bin;
@@ -47,20 +49,19 @@ use lib $FindBin::Bin;
 use SimpleLog;
 use SpadsUpdater;
 
-my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 
-my $dynLibSuffix=$win?'dll':($macOs?'dylib':'so');
-my $unitsyncLibName=($win?'':'lib')."unitsync.$dynLibSuffix";
-my $PRD_BIN='pr-downloader'.($win?'.exe':'');
+my $dynLibSuffix=MSWIN32?'dll':($macOs?'dylib':'so');
+my $unitsyncLibName=(MSWIN32?'':'lib')."unitsync.$dynLibSuffix";
+my $PRD_BIN='pr-downloader'.(MSWIN32?'.exe':'');
 
 my $URL_SPADS='http://planetspads.free.fr/spads';
 my $URL_TEMPLATES="$URL_SPADS/installer/auto/";
-my @packages=(qw'getDefaultModOptions.pl help.dat helpSettings.dat PerlUnitSync.pm springLobbyCertificates.dat SpringAutoHostInterface.pm SpringLobbyProtocol.pm SpringLobbyInterface.pm SimpleEvent.pm SimpleLog.pm spads.pl SpadsConf.pm spadsInstaller.pl SpadsUpdater.pm SpadsPluginApi.pm update.pl argparse.py replay_upload.py sequentialSpadsUnitsyncProcess.pl',$win?'7za.exe':'7za');
+my @packages=(qw'getDefaultModOptions.pl help.dat helpSettings.dat PerlUnitSync.pm springLobbyCertificates.dat SpringAutoHostInterface.pm SpringLobbyProtocol.pm SpringLobbyInterface.pm SimpleEvent.pm SimpleLog.pm spads.pl SpadsConf.pm spadsInstaller.pl SpadsUpdater.pm SpadsPluginApi.pm update.pl argparse.py replay_upload.py sequentialSpadsUnitsyncProcess.pl',MSWIN32?'7za.exe':'7za');
 
 my $nbSteps=$macOs?14:15;
 my $isInteractive=-t STDIN;
-my $pathSep=$win?';':':';
+my $pathSep=MSWIN32?';':':';
 my @pathes=splitPaths($ENV{PATH});
 my %conf=(installDir => canonpath($FindBin::Bin));
 my %lastRun;
@@ -84,7 +85,13 @@ my @MAP_RESOLVERS=(
   'https://files-cdn.beyondallreason.dev/find?category=map&springname=',
     );
 
-if($win) {
+my %DEFAULT_BAR_PRD_ENV_VARS=(
+  PRD_HTTP_SEARCH_URL	=> 'https://files-cdn.beyondallreason.dev/find',
+  PRD_RAPID_USE_STREAMER => 'false',
+  PRD_RAPID_REPO_MASTER	=> 'https://repos-cdn.beyondallreason.dev/repos.gz',
+    );
+
+if(MSWIN32) {
   eval { require Win32; 1; }
     or die "$@Missing dependency: Win32 Perl module\n";
   eval { require Win32::API; 1; }
@@ -251,7 +258,7 @@ sub splitPaths { return split(/$pathSep/,shift//''); }
 sub isAbsolutePath {
   my $fileName=shift;
   my $fileSpecRes=file_name_is_absolute($fileName);
-  return $fileSpecRes == 2 if($win);
+  return $fileSpecRes == 2 if(MSWIN32);
   return $fileSpecRes;
 }
 
@@ -549,14 +556,14 @@ sub escapeWin32Parameter {
 sub portableExec {
   my ($program,@params)=@_;
   my @args=($program,@params);
-  @args=map {escapeWin32Parameter($_)} @args if($win);
+  @args=map {escapeWin32Parameter($_)} @args if(MSWIN32);
   return exec {$program} @args;
 }
 
 sub portableSystem {
   my ($program,@params)=@_;
   my @args=($program,@params);
-  @args=map {escapeWin32Parameter($_)} @args if($win);
+  @args=map {escapeWin32Parameter($_)} @args if(MSWIN32);
   system {$program} @args;
   if($? == -1) {
     return (undef,"Failed to execute: $!");
@@ -649,7 +656,7 @@ sub promptString {
 
 sub areSamePaths {
   my ($p1,$p2)=map {canonpath($_)} @_;
-  ($p1,$p2)=map {lc($_)} ($p1,$p2) if($win);
+  ($p1,$p2)=map {lc($_)} ($p1,$p2) if(MSWIN32);
   return $p1 eq $p2;
 }
 
@@ -688,7 +695,7 @@ sub configureUnitsyncDir {
     return;
   }
   my @potentialUnitsyncDirs;
-  if($win) {
+  if(MSWIN32) {
     @potentialUnitsyncDirs=(@pathes,catdir(Win32::GetFolderPath(Win32::CSIDL_PROGRAM_FILES()),'Spring'));
   }elsif($macOs) {
     @potentialUnitsyncDirs=sort {-M $a <=> -M $b} (grep {-d $_} </Applications/Spring*.app/Contents/MacOS>);
@@ -702,7 +709,7 @@ sub configureUnitsyncDir {
       last;
     }
   }
-  my $unitsync=promptExistingFile("[$currentStep/$nbSteps] Please enter the absolute path of the unitsync library".($win?', usually located in the Spring installation directory on Windows systems':''),$unitsyncLibName,$defaultUnitsync,$autoInstallData{unitsyncPath});
+  my $unitsync=promptExistingFile("[$currentStep/$nbSteps] Please enter the absolute path of the unitsync library".(MSWIN32?', usually located in the Spring installation directory on Windows systems':''),$unitsyncLibName,$defaultUnitsync,$autoInstallData{unitsyncPath});
   setLastRun('unitsyncPath',$unitsync);
   $conf{unitsyncDir}=canonpath((fileparse($unitsync))[1]);
   $currentStep++;
@@ -733,7 +740,7 @@ sub configureSpringDataDir {
     $baseDataDir=$conf{autoInstalledSpringDir};
   }else{
     my @potentialBaseDataDirs=($unitsyncDir);
-    if(! $win) {
+    if(! MSWIN32) {
       my $parentUnitsyncDir=naiveParentDir($unitsyncDir);
       push(@potentialBaseDataDirs,canonpath("$parentUnitsyncDir/share/games/spring"));
       push(@potentialBaseDataDirs,'/usr/share/games/spring') unless($macOs);
@@ -745,7 +752,7 @@ sub configureSpringDataDir {
         last;
       }
     }
-    $baseDataDir=promptExistingDir("[$currentStep/$nbSteps] Please enter the absolute path of the main Spring data directory, containing Spring base content".($win?' (usually the Spring installation directory on Windows systems)':''),
+    $baseDataDir=promptExistingDir("[$currentStep/$nbSteps] Please enter the absolute path of the main Spring data directory, containing Spring base content".(MSWIN32?' (usually the Spring installation directory on Windows systems)':''),
                                    $defaultBaseDataDir,
                                    undef,
                                    sub {my $dir=shift; return -d "$dir/base";},
@@ -755,7 +762,9 @@ sub configureSpringDataDir {
   }
 
   my @potentialMapModDataDirs;
-  if($win) {
+  if(MSWIN32) {
+    fatalError('Unable to import _putenv from msvcrt.dll ('.Win32::FormatMessage(Win32::GetLastError()).')')
+        unless(Win32::API->Import('msvcrt', 'int __cdecl _putenv (char* envstring)'));
     my $win32PersonalDir=Win32::GetFolderPath(Win32::CSIDL_PERSONAL());
     my $win32CommonAppDataDir=Win32::GetFolderPath(Win32::CSIDL_COMMON_APPDATA());
     push(@potentialMapModDataDirs,
@@ -775,6 +784,7 @@ sub configureSpringDataDir {
       last;
     }
   }
+  
   if(exists $conf{autoInstalledSpringDir}) {
     $mapModDataDir=promptExistingDir("[$currentStep/$nbSteps] Please enter the absolute path of the Spring data directory containing the games and maps that will be hosted by the autohost, or ".($defaultMapModDataDir eq 'new' ? 'press enter' : 'enter "new"').' to initialize a new directory instead',
                                      $defaultMapModDataDir,
@@ -854,6 +864,10 @@ sub configureSpringDataDir {
         if(exists $gamesData{$downloadedShortName}) {
           slog("Downloading $gamesData{$downloadedShortName}{name}...",3);
           if(exists $gamesData{$downloadedShortName}{rapid}) {
+            if($downloadedShortName eq 'bar') {
+              my $r_envVars = getBarPrdEnvVars() // \%DEFAULT_BAR_PRD_ENV_VARS;
+              map {$ENV{$_}=$r_envVars->{$_}; exportWin32EnvVar($_) if(MSWIN32)} (keys %{$r_envVars});
+            }
             open(my $previousStdout,'>&',\*STDOUT);
             open(STDOUT,'>',devnull());
             my ($rc,$errMsg)=portableSystem($prdPath,'--disable-logging','--filesystem-writepath',$mapModDataDir,'--download-game',$gamesData{$downloadedShortName}{rapid});
@@ -945,7 +959,7 @@ sub configureSpringDataDir {
       $nbSteps-=2;
     }
   }else{
-    $mapModDataDir=promptExistingDir("[$currentStep/$nbSteps] Please enter the absolute path of an optional ".($win?'':'secondary ')."Spring data directory containing additional games and maps (".($defaultMapModDataDir eq 'none' ? 'press enter' : 'enter "none"').' to skip)',
+    $mapModDataDir=promptExistingDir("[$currentStep/$nbSteps] Please enter the absolute path of an optional ".(MSWIN32?'':'secondary ')."Spring data directory containing additional games and maps (".($defaultMapModDataDir eq 'none' ? 'press enter' : 'enter "none"').' to skip)',
                                      $defaultMapModDataDir,
                                      'none',
                                      undef,
@@ -964,12 +978,41 @@ sub configureSpringDataDir {
 
   setEnvVarFirstPaths('SPRING_DATADIR',@springDataDirs);
   $ENV{SPRING_WRITEDIR}=$conf{absoluteVarDir};
-  if($win) {
-    fatalError('Unable to import _putenv from msvcrt.dll ('.Win32::FormatMessage(Win32::GetLastError()).')')
-        unless(Win32::API->Import('msvcrt', 'int __cdecl _putenv (char* envstring)'));
+  if(MSWIN32) {
     exportWin32EnvVar('SPRING_DATADIR');
     exportWin32EnvVar('SPRING_WRITEDIR');
   }
+}
+
+sub getBarPrdEnvVars {
+  my $errMsgEnd=', using default BAR environment variables for pr-downloader';
+  
+  my $httpRes=HTTP::Tiny->new(timeout => 10)->get(BAR_LAUNCHER_CONFIG_URL);
+  if(! $httpRes->{success}) {
+    slog('Failed to download BAR launcher config file ('.getHttpErrMsg($httpRes).')'.$errMsgEnd,2);
+    return undef;
+  }
+  
+  my $r_barLauncherConf = eval {decode_json($httpRes->{content})};
+  if(ref $r_barLauncherConf ne 'HASH' || ref $r_barLauncherConf->{setups} ne 'ARRAY') {
+    slog('Failed to parse BAR launcher config file (invalid JSON data)'.$errMsgEnd,2);
+    return undef;
+  }
+  
+  my $launcherPackageId = 'manual-'.(MSWIN32 ? 'win' : 'linux');
+  foreach my $r_barSetup (@{$r_barLauncherConf->{setups}}) {
+    next unless(ref $r_barSetup eq 'HASH' && ref $r_barSetup->{package} eq 'HASH');
+    my $r_barPackage=$r_barSetup->{package};
+    next unless(defined $r_barPackage->{id} && ref $r_barPackage->{id} eq '' && $r_barPackage->{id} eq $launcherPackageId);
+    if(ref $r_barSetup->{env_variables} eq 'HASH' && (all {defined $r_barSetup->{env_variables}{$_} && ref $r_barSetup->{env_variables}{$_} eq ''} (keys %{$r_barSetup->{env_variables}}))) {
+      return $r_barSetup->{env_variables};
+    }else{
+      slog("Failed to find environement variable definitions for package \"$launcherPackageId\" in BAR launcher config file".$errMsgEnd,2);
+      return undef;
+    }
+  }
+  slog("Failed to find package definition for \"$launcherPackageId\" in BAR launcher config file".$errMsgEnd,2);
+  return undef;
 }
 
 sub checkUnitsync {
@@ -1021,7 +1064,7 @@ sub checkUnitsync {
 sub ghAssetTemplateToRegex {
   my $assetTmpl=shift;
   return undef if(index($assetTmpl,',') != -1);
-  my $osString = $win ? 'windows' : $macOs ? 'macos' : 'linux';
+  my $osString = MSWIN32 ? 'windows' : $macOs ? 'macos' : 'linux';
   my $bitnessString = $Config{ptrsize} > 4 ? 64 : 32;
   $assetTmpl=~s/\Q<os>\E/$osString/g;
   $assetTmpl=~s/\Q<bitness>\E/$bitnessString/g;
@@ -1067,7 +1110,7 @@ if($updaterRc > 0) {
                                           && defined $autoInstallData{release}
                                           && ($autoInstallData{release} eq $conf{release} || $autoInstallData{release} eq ''));
   push(@restartCmd,'--auto',$templateName//$templateUrl) if(defined $templateUrl);
-  if($win) {
+  if(MSWIN32) {
     @restartCmd=map {escapeWin32Parameter($_)} @restartCmd;
     print "\nSPADS installer has been updated, it must now be restarted as follows:\n  perl ".join(' ',@restartCmd)."\n";
     exit 0;
@@ -1413,10 +1456,10 @@ $currentStep++;
 if(exists $conf{autoInstalledSpringDir}) {
   $conf{springServer}='';
 }else{
-  my $springServerName=$win?"spring-$springServerType.exe":"spring-$springServerType";
+  my $springServerName=MSWIN32?"spring-$springServerType.exe":"spring-$springServerType";
 
   my @potentialSpringServerDirs=($unitsyncDir);
-  if(! $win) {
+  if(! MSWIN32) {
     my $parentUnitsyncDir=naiveParentDir($unitsyncDir);
     push(@potentialSpringServerDirs,canonpath("$parentUnitsyncDir/bin"));
     push(@potentialSpringServerDirs,'/usr/games') unless($macOs);

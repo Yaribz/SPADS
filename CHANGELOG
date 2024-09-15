@@ -1330,6 +1330,7 @@ spadsInstaller.pl:
       SPADS plugins can now be auto-installed by installation templates (new special auto-install setting: "autoInstallPlugins")
       SPADS configuration files can now be auto-patched during installation using special syntax in installation templates
 0.41: add SpringLobbyProtocol to the list of auto-updated packages (new dependency of SpringLobbyInterface)
+0.42: use BAR specific Rapid repository when auto-downloading BAR (use pr-downloader environment variables defined in BAR launcher config file)
 
 SpadsPluginApi.pm:
 =================
