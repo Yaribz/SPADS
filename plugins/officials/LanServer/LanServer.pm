@@ -35,8 +35,8 @@ use SpringLobbyServer;
 
 use SpadsPluginApi;
 
-my $pluginVersion='0.11';
-my $requiredSpadsVersion='0.13.16';
+my $pluginVersion='0.12';
+my $requiredSpadsVersion='0.13.32';
 
 my %globalPluginParams = (
   listenAddress => ['ipAddr','null'],
@@ -64,6 +64,7 @@ sub new {
     logger => \&slog,
     onNewClientConnection => \&springLobbyServerOnNewClientConnection,
     authenticationSvc => \&springLobbyServerAuthenticationSvc,
+    motd => [@{$SpringLobbyServer::DEFAULT_PARAMS{motd}},"The server is running SPADS v$::SPADS_VERSION with plugin LanServer v$pluginVersion."],
       );
   $springLobbyServerConf{listenAddress}=$r_pluginConf->{listenAddress}
     unless($r_pluginConf->{listenAddress} eq '');
