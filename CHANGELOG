@@ -1019,6 +1019,7 @@ spads.pl:
          fix typos
 0.13.30: workaround for lobby clients removing leading spaces from messages (presets lists)
 0.13.31: add support for ring originator (lobby protocol extension)
+0.13.32: add SpringLobbyProtocol to the list of auto-updated packages (new dependency of SpringLobbyInterface)
 
 SpadsConf.pm:
 ============
@@ -1327,6 +1328,7 @@ spadsInstaller.pl:
 0.40: alternate configuration file download URLs can now be provided by installation templates
       SPADS plugins can now be auto-installed by installation templates (new special auto-install setting: "autoInstallPlugins")
       SPADS configuration files can now be auto-patched during installation using special syntax in installation templates
+0.41: add SpringLobbyProtocol to the list of auto-updated packages (new dependency of SpringLobbyInterface)
 
 SpadsPluginApi.pm:
 =================
@@ -1500,3 +1502,4 @@ update.pl:
 0.13: replace the basic list functions any/all/none/notall with those provided by the List::Util Perl module (requires Perl >= 5.19.5)
 0.14: package PerlUnitSync.pm is now downloaded for all systems (new unitsync interface using FFI::Platypus)
 0.15: add sequentialSpadsUnitsyncProcess.pl component
+0.16: add SpringLobbyProtocol to the list of auto-updated packages (new dependency of SpringLobbyInterface)

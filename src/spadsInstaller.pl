@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.40 (2024/01/19)
+# Version 0.41 (2024/09/10)
 
 use strict;
 
@@ -56,7 +56,7 @@ my $PRD_BIN='pr-downloader'.($win?'.exe':'');
 
 my $URL_SPADS='http://planetspads.free.fr/spads';
 my $URL_TEMPLATES="$URL_SPADS/installer/auto/";
-my @packages=(qw'getDefaultModOptions.pl help.dat helpSettings.dat PerlUnitSync.pm springLobbyCertificates.dat SpringAutoHostInterface.pm SpringLobbyInterface.pm SimpleEvent.pm SimpleLog.pm spads.pl SpadsConf.pm spadsInstaller.pl SpadsUpdater.pm SpadsPluginApi.pm update.pl argparse.py replay_upload.py sequentialSpadsUnitsyncProcess.pl',$win?'7za.exe':'7za');
+my @packages=(qw'getDefaultModOptions.pl help.dat helpSettings.dat PerlUnitSync.pm springLobbyCertificates.dat SpringAutoHostInterface.pm SpringLobbyProtocol.pm SpringLobbyInterface.pm SimpleEvent.pm SimpleLog.pm spads.pl SpadsConf.pm spadsInstaller.pl SpadsUpdater.pm SpadsPluginApi.pm update.pl argparse.py replay_upload.py sequentialSpadsUnitsyncProcess.pl',$win?'7za.exe':'7za');
 
 my $nbSteps=$macOs?14:15;
 my $isInteractive=-t STDIN;
