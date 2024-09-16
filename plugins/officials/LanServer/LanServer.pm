@@ -35,7 +35,7 @@ use SpringLobbyServer;
 
 use SpadsPluginApi;
 
-my $pluginVersion='0.12';
+my $pluginVersion='0.13';
 my $requiredSpadsVersion='0.13.32';
 
 my %globalPluginParams = (
@@ -43,6 +43,7 @@ my %globalPluginParams = (
   listenPort => ['port'],
   wanAddress => ['ipAddr','star','null'],
   countryCode => [],
+  use8bitTeamNb => ['bool'],
     );
 
 sub getVersion { return $pluginVersion; }
@@ -82,6 +83,8 @@ sub new {
       return undef;
     }
   }
+  $springLobbyServerConf{protocolExtensions}{'battleStatus:teams-8bit'}=1
+      if($r_pluginConf->{use8bitTeamNb});
   
   $self->{lobbySrv} = SpringLobbyServer->new(%springLobbyServerConf);
   bless($self,$class);
