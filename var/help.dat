@@ -308,8 +308,9 @@
 "!send /cheat" sends "/cheat" on AutoHost interface
 
 [sendLobby]
-!sendLobby <command> - sends command <command> to lobby server
-"!sendLobby SAYBATTLE Hi there!" sends "SAYBATTLE Hi there!" to lobby server
+!sendLobby <command> - sends command <command> to lobby server (use quotes or backslash if you need to put spaces in lobby command parameters, similar to shell)
+"!sendLobby SAYPRIVATE joe Hi\ there!" sends "SAYPRIVATE joe Hi there!" to lobby server
+"!sendLobby SAYBATTLE 'this is my message containing spaces'" sends "SAYBATTLE this is my message containing spaces" to lobby server
 
 [set]
 !set <spadsSetting> <newValue> - changes a SPADS setting manually (use "!list settings" to list available settings)

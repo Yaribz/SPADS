@@ -99,7 +99,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.33';
+our $SPADS_VERSION='0.13.34';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -3094,7 +3094,7 @@ sub handleRequest {
   }
 
   if($lcCmd eq 'sendlobby') {
-    @cmd=($1,$2) if($command =~ /^(\w+) +(.+)$/);
+    @cmd=($1,$2) if($command =~ /^(\w+) +([^ ].*)$/);
   }
   
   slog("Start of \"$lcCmd\" command processing",5);
@@ -11594,9 +11594,30 @@ sub hSendLobby {
     return 0;
   }
 
+  my @lobbyCmd;
+  if($#{$p_params} == 0) {
+    @lobbyCmd=parse_line(' ',0,$p_params->[0]);
+    if(! @lobbyCmd) {
+      answer('Unable to parse lobby command (syntax error)');
+      return 0;
+    }
+    $lobbyCmd[-1]//='';
+  }else{
+    # case where !sendLobby is triggered by a command alias
+    @lobbyCmd=@{$p_params};
+  }
+  
+  # SpringLobbyProtocol is assumed to be loaded by SpringLobbyInterface
+  # (it can't be loaded by SPADS core as it would block auto-update from SPADS < 0.13.32)
+  if(! defined eval { SpringLobbyProtocol::marshallClientCommand(\@lobbyCmd) } ) {
+    chomp($@);
+    answer("Unable to send command to lobby server ($@)");
+    return 0;
+  }
+
   return 1 if($checkOnly);
 
-  sendLobbyCommand([$p_params]);
+  sendLobbyCommand([\@lobbyCmd]);
 
   return 1;
 }
