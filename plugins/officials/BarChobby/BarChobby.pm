@@ -25,15 +25,17 @@ package BarChobby;
 
 use strict;
 
-use JSON::PP 'encode_json';
-use List::Util qw'all none';
+use JSON::PP qw'encode_json decode_json';
+use List::Util qw'all none any';
 
 use SpadsPluginApi;
 
-my $pluginVersion='0.10';
+my $pluginVersion='0.11';
 my $requiredSpadsVersion='0.11.5';
 
-my %globalPluginParams = ( sayBattleMulticastFallback => ['notNull'] );
+my %globalPluginParams = ( commandsFile => ['notNull'],
+                           helpFile => ['notNull'],
+                           sayBattleMulticastFallback => ['notNull'] );
 
 sub getVersion { return $pluginVersion; }
 sub getRequiredSpadsVersion { return $requiredSpadsVersion; }
@@ -52,9 +54,11 @@ sub new {
   }
   my $self = {
     sentState => {},
+    aiProfiles => {},
   };
   bless($self,$class);
   onReloadConf($self);
+  addSpadsCommandHandler({aiProfile => \&hSpadsAiProfile});
   onLobbyConnected($self,$lobby) if(getLobbyState() > 3);
   addTimer('CheckBattleState',0.5,0.5,\&checkBattleState);
   slog("Plugin loaded (version $pluginVersion)",3);
@@ -73,6 +77,7 @@ sub onReloadConf {
 
 sub onLobbyConnected {
   my ($self,$lobby)=@_;
+  addLobbyCommandHandler({REMOVEBOT => \&hLobbyRemoveBot});
   return if($lobby->{protocolExtensions}{'sayBattlePrivate:multicast'});
   my $sayBattleMulticastFallback=getPluginConf()->{sayBattleMulticastFallback};
   slog('Lobby server does NOT support multicast for SAYBATTLEPRIVATE commands, battleroom protocol extensions for Chobby will '.
@@ -120,7 +125,63 @@ sub onJoinedBattle {
   queueLobbyCommand(['SAYBATTLEPRIVATEEX',$user,CHOBBY_MSG_PREFIX.encode_json({BattleStateChanged => $self->{sentState}})]);
 }
 
+sub addStartScriptTags {
+  my ($self,$r_addStartData)=@_;
+  $r_addStartData->{aiData}{$_}{options}=$self->{aiProfiles}{$_} foreach(keys %{$self->{aiProfiles}});
+}
+
+sub hSpadsAiProfile {
+  my ($source,$user,$r_params,$checkOnly)=@_;
+
+  my @params=@{$r_params};
+  if(@params < 2) {
+    invalidSyntax($user,'aiprofile');
+    return 0;
+  }
+
+  if(getLobbyState() < 6) {
+    answer('Cannot configure AI bot when battle lobby is closed');
+    return 0;
+  }
+
+  my $botName=shift(@params);
+  my $r_battle=getLobbyInterface()->getBattle();
+  if(! exists $r_battle->{bots}{$botName}) {
+    answer("Cannot configure AI bot \"$botName\": AI bot not found");
+    return 0;
+  }
+
+  my $botOwner=$r_battle->{bots}{$botName}{owner};
+  if($user ne $botOwner) {
+    answer("$user is not allowed to configure AI bot \"$botName\" (owner is $botOwner)");
+    return 0;
+  }
+
+  my $r_aiProfile = eval { decode_json(join(' ',@params)) };
+  if(ref $r_aiProfile ne 'HASH'
+     || ! %{$r_aiProfile}
+     || keys %{$r_aiProfile} > 20
+     || (any {$_ !~ /^\w{1,20}$/
+              || ! defined $r_aiProfile->{$_}
+              || ref $r_aiProfile->{$_} ne ''
+              || $r_aiProfile->{$_} !~ /^[^\;\"\'\cm\cJ]{0,100}$/} (keys %{$r_aiProfile}))) {
+    answer("Failed to configure AI bot \"$botName\": invalid JSON data");
+    return 0;
+  }
+
+  return 1 if($checkOnly);
+
+  getPlugin()->{aiProfiles}{$botName}=$r_aiProfile;
+  sayBattle("AI $botName options are set to ".join(', ',map {"$_: \"$r_aiProfile->{$_}\""} (sort keys %{$r_aiProfile})));
+}
+
+sub hLobbyRemoveBot {delete getPlugin()->{aiProfiles}{$_[2]} }
+sub onBattleOpened { $_[0]{aiProfiles}={} }
+sub onBattleClosed { $_[0]{aiProfiles}={} }
+
 sub onUnload {
+  removeSpadsCommandHandler(['aiProfile']);
+  removeLobbyCommandHandler(['REMOVEBOT']);
   removeTimer('CheckBattleState');
   slog('Plugin unloaded',3);
 }
