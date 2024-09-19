@@ -8,7 +8,7 @@ use SpadsPluginApi;
 
 no warnings 'redefine';
 
-my $pluginVersion='0.4';
+my $pluginVersion='0.5';
 my $requiredSpadsVersion='0.11.5';
 
 my %globalPluginParams = ( commandsFile => ['notNull'],
@@ -197,6 +197,7 @@ sub hSpadsMute {
   answer("In-game mute added for $mutedPlayer (type: $type, duration: $muteDuration)") if($source eq 'pv');
   broadcastMsg("In-game mute added for $mutedPlayer by $user (type: $type, duration: $muteDuration)");
   $autohost->sendChatMessage("/mute $mutedPlayer $chatMute $drawMute") if($isInGame);
+  return 1;
 }
 
 sub hSpadsMutes {
@@ -243,6 +244,7 @@ sub hSpadsMutes {
   foreach my $muteLine (@{$p_muteLines}) {
     sayPrivate($user,$muteLine);
   }
+  return 1;
 }
 
 sub hSpadsUnmute {
@@ -279,6 +281,7 @@ sub hSpadsUnmute {
   answer("In-game mute removed for $unmutedPlayer") if($source eq 'pv');
   broadcastMsg("In-game mute removed for $unmutedPlayer by $user");
   applyUnmuteInGame($removedFilter);
+  return 1;
 }
 
 sub applyUnmuteInGame {
