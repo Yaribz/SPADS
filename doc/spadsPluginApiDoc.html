@@ -1183,37 +1183,63 @@
 <dt id="answer-message"><code>answer($message)</code></dt>
 <dd>
 
+<p>This function must only be called from a SPADS command handler. It sends a message to the user who issued the command, using the same communication channel that has been used to send the command to SPADS: a private message, a message in battle lobby, a message in game or a message in a lobby chat channel.</p>
+
 </dd>
 <dt id="broadcastMsg-message"><code>broadcastMsg($message)</code></dt>
 <dd>
 
+<p>This function sends a message simultaneously in the battle lobby (if open), in the game (if running) and in the broadcast channels (as configured by the <code>broadcastChannels</code> global setting).</p>
+
 </dd>
-<dt id="invalidSyntax-user-lowerCaseCommand-cause"><code>invalidSyntax($user,$lowerCaseCommand,$cause=&#39;&#39;)</code></dt>
+<dt id="invalidSyntax-user-commandName-cause"><code>invalidSyntax($user,$commandName,$cause=&#39;&#39;)</code></dt>
 <dd>
+
+<p>This function must only be called from a SPADS command handler. It triggers the default SPADS behavior when a user calls a command using invalid syntax, as detailed below:</p>
+
+<p>It answers to the user (using the same communication channel as the one used to call the command) with a message indicating that the command usage is invalid. This message includes a detailed reason if provided as <code>$cause</code> parameter. If the user is not in game, it also automatically sends the corresponding command help in a private message.</p>
+
+<p><code>$user</code> is the user who called the SPADS command</p>
+
+<p><code>$commandName</code> is the name of the SPADS command which was called with invalid syntax</p>
+
+<p><code>$cause</code> is the detailed reason explaining why the command usage is invalid (optional)</p>
 
 </dd>
 <dt id="sayBattle-message"><code>sayBattle($message)</code></dt>
 <dd>
 
+<p>This functions sends a message in the battle lobby (if open).</p>
+
 </dd>
 <dt id="sayBattleAndGame-message"><code>sayBattleAndGame($message)</code></dt>
 <dd>
+
+<p>This function sends a message simultaneously in the battle lobby (if open) and in the game (if running).</p>
 
 </dd>
 <dt id="sayBattleUser-user-message"><code>sayBattleUser($user,$message)</code></dt>
 <dd>
 
+<p>This function sends a message in the battle lobby (if open) to a specific user: only this user will receive the message, but for this user the message will appear in the battle lobby instead of being a private chat message.</p>
+
 </dd>
 <dt id="sayChan-channel-message"><code>sayChan($channel,$message)</code></dt>
 <dd>
+
+<p>This functions sends a message in a specific lobby chat channel (if already joined by SPADS).</p>
 
 </dd>
 <dt id="sayGame-message"><code>sayGame($message)</code></dt>
 <dd>
 
+<p>This functions sends a message in the game (if running).</p>
+
 </dd>
 <dt id="sayPrivate-user-message"><code>sayPrivate($user,$message)</code></dt>
 <dd>
+
+<p>This function sends a private message to a user.</p>
 
 </dd>
 </dl>

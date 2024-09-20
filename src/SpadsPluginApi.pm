@@ -24,7 +24,7 @@ use List::Util qw'any none';
 use Exporter 'import';
 @EXPORT=qw/$spadsVersion $spadsDir loadPythonPlugin get_flag fix_string getBosses getLobbyState getSpringPid getSpringServerType getTimestamps getUserPref getRunningBattle getConfMacros getCurrentVote getPlugin getPluginList addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess forkCall removeProcessCallback createDetachedProcess addTimer removeTimer addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog updateSetting secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives/;
 
-my $apiVersion='0.38';
+my $apiVersion='0.39';
 
 our $spadsVersion=$::SPADS_VERSION;
 our $spadsDir=$::CWD;
@@ -1914,21 +1914,64 @@ C<$value> is the new value of the setting
 
 =item C<answer($message)>
 
+This function must only be called from a SPADS command handler. It sends a
+message to the user who issued the command, using the same communication channel
+that has been used to send the command to SPADS: a private message, a message in
+battle lobby, a message in game or a message in a lobby chat channel.
+
 =item C<broadcastMsg($message)>
 
-=item C<invalidSyntax($user,$lowerCaseCommand,$cause='')>
+This function sends a message simultaneously in the battle lobby (if open), in
+the game (if running) and in the broadcast channels (as configured by the
+C<broadcastChannels> global setting).
+
+=item C<invalidSyntax($user,$commandName,$cause='')>
+
+This function must only be called from a SPADS command handler. It triggers
+the default SPADS behavior when a user calls a command using invalid syntax, as
+detailed below:
+
+It answers to the user (using the same communication channel as the one used to
+call the command) with a message indicating that the command usage is invalid.
+This message includes a detailed reason if provided as C<$cause> parameter. If
+the user is not in game, it also automatically sends the corresponding command
+help in a private message.
+
+C<$user> is the user who called the SPADS command
+
+C<$commandName> is the name of the SPADS command which was called with invalid
+syntax
+
+C<$cause> is the detailed reason explaining why the command usage is invalid
+(optional)
 
 =item C<sayBattle($message)>
 
+This functions sends a message in the battle lobby (if open).
+
 =item C<sayBattleAndGame($message)>
+
+This function sends a message simultaneously in the battle lobby (if open) and
+in the game (if running).
 
 =item C<sayBattleUser($user,$message)>
 
+This function sends a message in the battle lobby (if open) to a specific user:
+only this user will receive the message, but for this user the message will
+appear in the battle lobby instead of being a private chat message.
+
 =item C<sayChan($channel,$message)>
+
+This functions sends a message in a specific lobby chat channel (if already
+joined by SPADS).
 
 =item C<sayGame($message)>
 
+This functions sends a message in the game (if running).
+
 =item C<sayPrivate($user,$message)>
+
+This function sends a private message to a user.
 
 =back
 
