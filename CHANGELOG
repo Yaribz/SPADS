@@ -1026,6 +1026,7 @@ spads.pl:
 0.13.35: add new "onLobbyLoggedIn" plugin API event-based callback
          rename "onLobbyConnected" plugin API event-based callback to "onLobbySynchronized"
          add lobby state constants to ease lobby state management
+0.13.36: remove superfluous dereference operators
 
 SpadsConf.pm:
 ============

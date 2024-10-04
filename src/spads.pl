@@ -106,7 +106,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.35';
+our $SPADS_VERSION='0.13.36';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -395,7 +395,7 @@ $sLog=$spads->{log};
 #     our $spads;
 #
 
-my $masterChannel=$spads->{conf}->{masterChannel};
+my $masterChannel=$spads->{conf}{masterChannel};
 $masterChannel=$1 if($masterChannel =~ /^([^\s]+)\s/);
 
 my $spadsDir=File::Spec->canonpath($FindBin::Bin);
@@ -1138,8 +1138,8 @@ sub formatArray {
         $rows[1].=('-' x $length);
       }elsif($j==$#rows) {
         $rows[$j].=('=' x $length);
-      }elsif(exists $entries[$j-2]->{$field} && defined $entries[$j-2]->{$field}) {
-        $rows[$j].=rightPadString($entries[$j-2]->{$field},$length);
+      }elsif(exists $entries[$j-2]{$field} && defined $entries[$j-2]{$field}) {
+        $rows[$j].=rightPadString($entries[$j-2]{$field},$length);
       }else{
         $rows[$j].=(' ' x $length);
       }
@@ -1618,7 +1618,7 @@ sub loadArchivesBlocking {
         }
       }
       $newCachedMaps{$mapName}{nbStartPos}=$#{$newCachedMaps{$mapName}{startPos}}+1;
-      $unitsync->AddAllArchives($newAvailableMaps[$mapNb]->{archive});
+      $unitsync->AddAllArchives($newAvailableMaps[$mapNb]{archive});
       my $nbMapOptions = $unitsync->GetMapOptionCount($mapName);
       for my $optionIdx (0..($nbMapOptions-1)) {
         my %option=(name => $unitsync->GetOptionName($optionIdx),
@@ -1652,10 +1652,10 @@ sub loadArchivesBlocking {
                       description => $unitsync->GetOptionListItemDesc($optionIdx,$listIdx),
                       key => $unitsync->GetOptionListItemKey($optionIdx,$listIdx));
             $item{description}=~s/\n/ /g;
-            $option{list}->{$item{key}}=\%item;
+            $option{list}{$item{key}}=\%item;
           }
         }
-        $newCachedMaps{$mapName}->{options}->{$option{key}}=\%option;
+        $newCachedMaps{$mapName}{options}{$option{key}}=\%option;
       }
       $unitsync->RemoveAllArchives();
     }
@@ -1703,7 +1703,7 @@ sub loadArchivesBlocking {
     }
     $newAvailableMods[$modNb]{hash}=$modChecksum;
     $newAvailableMods[$modNb]{archive}=$unitsync->GetPrimaryModArchive($modNb);
-    $unitsync->AddAllArchives($newAvailableMods[$modNb]->{archive});
+    $unitsync->AddAllArchives($newAvailableMods[$modNb]{archive});
     my $nbModOptions = $unitsync->GetModOptionCount();
     fetchAndLogUnitsyncErrors() if($nbModOptions < 0);
     for my $optionIdx (0..($nbModOptions-1)) {
@@ -1738,15 +1738,15 @@ sub loadArchivesBlocking {
                     description => $unitsync->GetOptionListItemDesc($optionIdx,$listIdx),
                     key => $unitsync->GetOptionListItemKey($optionIdx,$listIdx));
           $item{description}=~s/\n/ /g;
-          $option{list}->{$item{key}}=\%item;
+          $option{list}{$item{key}}=\%item;
         }
       }
-      $newAvailableMods[$modNb]->{options}->{$option{key}}=\%option;
+      $newAvailableMods[$modNb]{options}{$option{key}}=\%option;
     }
     my $nbModSides = $unitsync->GetSideCount();
     for my $sideIdx (0..($nbModSides-1)) {
       my $sideName = $unitsync->GetSideName($sideIdx);
-      $newAvailableMods[$modNb]->{sides}->[$sideIdx]=$sideName;
+      $newAvailableMods[$modNb]{sides}[$sideIdx]=$sideName;
     }
     $unitsync->RemoveAllArchives();
   }
@@ -1784,12 +1784,12 @@ sub loadArchivesPostActions {
   @availableMaps=@{$r_availableMaps};
   %availableMapsNameToNb=();
   for my $mapNb (0..$#availableMaps) {
-    $availableMapsNameToNb{$availableMaps[$mapNb]->{name}}=$mapNb unless(exists $availableMapsNameToNb{$availableMaps[$mapNb]->{name}});
+    $availableMapsNameToNb{$availableMaps[$mapNb]{name}}=$mapNb unless(exists $availableMapsNameToNb{$availableMaps[$mapNb]{name}});
   }
   @availableMods=@{$r_availableMods};
   %availableModsNameToNb=();
   for my $modNb (0..$#availableMods) {
-    $availableModsNameToNb{$availableMods[$modNb]->{name}}=$modNb unless(exists $availableModsNameToNb{$availableMods[$modNb]->{name}});
+    $availableModsNameToNb{$availableMods[$modNb]{name}}=$modNb unless(exists $availableModsNameToNb{$availableMods[$modNb]{name}});
   }
 
   if($spads->{sharedDataTs}{mapInfoCache}) {
@@ -1832,7 +1832,7 @@ sub loadArchives {
 sub setDefaultMapOfMaplist {
   my $p_maps=$spads->applySubMapList();
   if(@{$p_maps}) {
-    $spads->{conf}->{map}=$p_maps->[0];
+    $spads->{conf}{map}=$p_maps->[0];
     $conf{map}=$p_maps->[0];
   }
 }
@@ -2245,7 +2245,7 @@ sub checkLastSentMessages {
 
 sub queueLobbyCommand {
   my @params=@_;
-  if($params[0]->[0] =~ /SAYPRIVATE/) {
+  if($params[0][0] =~ /SAYPRIVATE/) {
     push(@lowPriorityMessageQueue,\@params);
   }elsif(@messageQueue) {
     push(@messageQueue,\@params);
@@ -2276,7 +2276,7 @@ sub checkQueuedLobbyCommands {
   return unless($lobbyState > LOBBY_STATE_CONNECTING && (@messageQueue || @lowPriorityMessageQueue));
   my $alreadySent=checkLastSentMessages();
   while(@messageQueue) {
-    my $toBeSent=computeMessageSize($messageQueue[0]->[0]);
+    my $toBeSent=computeMessageSize($messageQueue[0][0]);
     last if($alreadySent+$toBeSent+5 >= $conf{maxBytesSent});
     my $p_command=shift(@messageQueue);
     sendLobbyCommand($p_command,$toBeSent);
@@ -2284,7 +2284,7 @@ sub checkQueuedLobbyCommands {
   }
   my $nbMsgSentInLoop=0;
   while(@lowPriorityMessageQueue && $nbMsgSentInLoop < 100) {
-    my $toBeSent=computeMessageSize($lowPriorityMessageQueue[0]->[0]);
+    my $toBeSent=computeMessageSize($lowPriorityMessageQueue[0][0]);
     last if($alreadySent+$toBeSent+5 >= $conf{maxLowPrioBytesSent});
     my $p_command=shift(@lowPriorityMessageQueue);
     sendLobbyCommand($p_command,$toBeSent);
@@ -2363,10 +2363,10 @@ sub closeBattle {
 
 sub applyMapBoxes {
   return unless(%{$lobby->{battle}});
-  foreach my $teamNb (keys %{$lobby->{battle}->{startRects}}) {
+  foreach my $teamNb (keys %{$lobby->{battle}{startRects}}) {
     queueLobbyCommand(["REMOVESTARTRECT",$teamNb]);
   }
-  return unless($spads->{bSettings}->{startpostype} == 2);
+  return unless($spads->{bSettings}{startpostype} == 2);
   my $smfMapName=$conf{map};
   $smfMapName.='.smf' unless($smfMapName =~ /\.smf$/);
   my $p_boxes=$spads->getMapBoxes($smfMapName,$conf{nbTeams},$conf{extraBox});
@@ -2451,16 +2451,16 @@ sub applyMapBox {
 sub sendBattleSetting {
   my $bSetting=shift;
   my %bSettings=%{$spads->{bSettings}};
-  my $currentModName=$lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod};
+  my $currentModName=$lobby->{battles}{$lobby->{battle}{battleId}}{mod};
   my $p_modOptions=getModOptions($currentModName);
   my $p_mapOptions=getMapOptions($currentMap);
   my $bValue;
   if(exists $bSettings{$bSetting}) {
     $bValue=$bSettings{$bSetting};
   }elsif(exists $p_modOptions->{$bSetting}) {
-    $bValue=$p_modOptions->{$bSetting}->{default};
+    $bValue=$p_modOptions->{$bSetting}{default};
   }elsif(exists $p_mapOptions->{$bSetting}) {
-    $bValue=$p_mapOptions->{$bSetting}->{default};
+    $bValue=$p_mapOptions->{$bSetting}{default};
   }else{
     slog("Unable to send battle setting \"$bSetting\" (unknown setting)\"",2);
     return;
@@ -2482,9 +2482,9 @@ sub sendBattleSetting {
 }
 
 sub sendBattleMapOptions {
-  if(exists $lobby->{battle}->{scriptTags}) {
+  if(exists $lobby->{battle}{scriptTags}) {
     my @scriptTagsToDelete;
-    foreach my $scriptTag (keys %{$lobby->{battle}->{scriptTags}}) {
+    foreach my $scriptTag (keys %{$lobby->{battle}{scriptTags}}) {
       push(@scriptTagsToDelete,$scriptTag) if($scriptTag =~ /^game\/mapoptions\//i);
     }
     my $p_scriptTagsToDeleteLines=limitLineSize(\@scriptTagsToDelete,900);
@@ -2500,7 +2500,7 @@ sub sendBattleMapOptions {
     if(exists $bSettings{$scriptTagsSetting}) {
       $bValue=$bSettings{$scriptTagsSetting};
     }else{
-      $bValue=$p_mapOptions->{$scriptTagsSetting}->{default};
+      $bValue=$p_mapOptions->{$scriptTagsSetting}{default};
     }
     push(@scriptTagsSettings,"game/mapoptions/$scriptTagsSetting=$bValue");
   }
@@ -2512,7 +2512,7 @@ sub sendBattleMapOptions {
 
 sub sendBattleSettings {
   my %bSettings=%{$spads->{bSettings}};
-  my $currentModName=$lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod};
+  my $currentModName=$lobby->{battles}{$lobby->{battle}{battleId}}{mod};
   my $p_modOptions=getModOptions($currentModName);
   my @scriptTagsSettings=("game/startpostype=$bSettings{startpostype}",'game/hosttype=SPADS');
   foreach my $scriptTagsSetting (keys %{$p_modOptions}) {
@@ -2520,7 +2520,7 @@ sub sendBattleSettings {
     if(exists $bSettings{$scriptTagsSetting}) {
       $bValue=$bSettings{$scriptTagsSetting};
     }else{
-      $bValue=$p_modOptions->{$scriptTagsSetting}->{default};
+      $bValue=$p_modOptions->{$scriptTagsSetting}{default};
     }
     push(@scriptTagsSettings,"game/modoptions/$scriptTagsSetting=$bValue");
   }
@@ -2530,7 +2530,7 @@ sub sendBattleSettings {
     if(exists $bSettings{$scriptTagsSetting}) {
       $bValue=$bSettings{$scriptTagsSetting};
     }else{
-      $bValue=$p_mapOptions->{$scriptTagsSetting}->{default};
+      $bValue=$p_mapOptions->{$scriptTagsSetting}{default};
     }
     push(@scriptTagsSettings,"game/mapoptions/$scriptTagsSetting=$bValue");
   }
@@ -2560,9 +2560,9 @@ sub updateBattleInfo {
 
 sub getNbSpec {
   my $nbSpec=0;
-  my %battleUsers=%{$lobby->{battle}->{users}};
+  my %battleUsers=%{$lobby->{battle}{users}};
   foreach my $user (keys %battleUsers) {
-    $nbSpec++ if(defined $battleUsers{$user}->{battleStatus} && (! $battleUsers{$user}->{battleStatus}->{mode}));
+    $nbSpec++ if(defined $battleUsers{$user}{battleStatus} && (! $battleUsers{$user}{battleStatus}{mode}));
   }
   return $nbSpec;
 }
@@ -2578,9 +2578,9 @@ sub getNbHumanPlayersInBattle {
 
 sub getNbNonPlayer {
   my $nbNonPlayer=0;
-  my %battleUsers=%{$lobby->{battle}->{users}};
+  my %battleUsers=%{$lobby->{battle}{users}};
   foreach my $user (keys %battleUsers) {
-    $nbNonPlayer++ unless(defined $battleUsers{$user}->{battleStatus} && $battleUsers{$user}->{battleStatus}->{mode});
+    $nbNonPlayer++ unless(defined $battleUsers{$user}{battleStatus} && $battleUsers{$user}{battleStatus}{mode});
   }
   return $nbNonPlayer;
 }
@@ -2593,19 +2593,19 @@ sub getTargetBattleInfo {
     }
   }
   my $nbNonPlayer=getNbNonPlayer();
-  my @clients=keys %{$lobby->{battle}->{users}};
+  my @clients=keys %{$lobby->{battle}{users}};
   $manualLockedStatus=0 if($#clients+1-$nbNonPlayer < $conf{minPlayers});
   my $targetLockedStatus=$manualLockedStatus;
   my $targetNbPlayers=$conf{nbPlayerById}*$conf{teamSize}*$conf{nbTeams};
   my $nbPlayers=$#clients+1-$nbNonPlayer;
-  my @bots=keys %{$lobby->{battle}->{bots}};
+  my @bots=keys %{$lobby->{battle}{bots}};
   if($conf{nbTeams} != 1) {
     my $nbAutoAddedLocalBots=keys %autoAddedLocalBots;
     $nbPlayers+=$#bots+1-$nbAutoAddedLocalBots;
   }
   if($conf{autoLock} eq 'off') {
     if($conf{maxSpecs} ne '' && $nbNonPlayer > $conf{maxSpecs}) {
-      $targetLockedStatus=1 if($nbPlayers >= $spads->{hSettings}->{maxPlayers} || ($conf{autoSpecExtraPlayers} && $nbPlayers >= $targetNbPlayers));
+      $targetLockedStatus=1 if($nbPlayers >= $spads->{hSettings}{maxPlayers} || ($conf{autoSpecExtraPlayers} && $nbPlayers >= $targetNbPlayers));
     }
   }else{
     $targetLockedStatus=0;
@@ -2616,8 +2616,8 @@ sub getTargetBattleInfo {
         $targetLockedStatus=1 unless($nbPlayers % $conf{teamSize});
       }
     }
-    $targetLockedStatus=0 if($nbPlayers >= $lobby->{battles}->{$lobby->{battle}->{battleId}}->{maxPlayers} && ! @bots);
-    $targetLockedStatus=1 if($conf{maxSpecs} ne '' && $nbNonPlayer > $conf{maxSpecs} && $nbPlayers >= $spads->{hSettings}->{maxPlayers});
+    $targetLockedStatus=0 if($nbPlayers >= $lobby->{battles}{$lobby->{battle}{battleId}}{maxPlayers} && ! @bots);
+    $targetLockedStatus=1 if($conf{maxSpecs} ne '' && $nbNonPlayer > $conf{maxSpecs} && $nbPlayers >= $spads->{hSettings}{maxPlayers});
   }
   if($targetLockedStatus) {
     foreach my $pendingUser (keys %pendingSpecJoin) {
@@ -2628,7 +2628,7 @@ sub getTargetBattleInfo {
     }
   }
   $targetLockedStatus=1 if($conf{autoLockClients} && $#clients >= $conf{autoLockClients});
-  $targetLockedStatus=1 if($conf{autoLockRunningBattle} && $lobby->{users}->{$conf{lobbyLogin}}->{status}->{inGame});
+  $targetLockedStatus=1 if($conf{autoLockRunningBattle} && $lobby->{users}{$conf{lobbyLogin}}{status}{inGame});
   return ($nbNonPlayer,$targetLockedStatus);
 }
 
@@ -2723,8 +2723,8 @@ sub addAlert {
   my $alert=shift;
   if(exists $ALERTS{$alert}) {
     $pendingAlerts{$alert}={occurrences => 0} unless(exists $pendingAlerts{$alert});
-    $pendingAlerts{$alert}->{occurrences}++;
-    $pendingAlerts{$alert}->{latest}=time;
+    $pendingAlerts{$alert}{occurrences}++;
+    $pendingAlerts{$alert}{latest}=time;
     foreach my $alertedUser (keys %alertedUsers) {
       alertUser($alertedUser) if(time-$alertedUsers{$alertedUser} > $conf{alertDelay}*3600);
     }
@@ -2737,8 +2737,8 @@ sub alertUser {
   my $user=shift;
   my ($p_C,$B)=initUserIrcColors($user);
   my %C=%{$p_C};
-  foreach my $alert (sort {$pendingAlerts{$a}->{latest} <=> $pendingAlerts{$b}->{latest}} (keys %pendingAlerts)) {
-    my $latestOccurrenceDelay=time-$pendingAlerts{$alert}->{latest};
+  foreach my $alert (sort {$pendingAlerts{$a}{latest} <=> $pendingAlerts{$b}{latest}} (keys %pendingAlerts)) {
+    my $latestOccurrenceDelay=time-$pendingAlerts{$alert}{latest};
     if($latestOccurrenceDelay > $conf{alertDuration}*3600) {
       delete $pendingAlerts{$alert};
       next;
@@ -2746,8 +2746,8 @@ sub alertUser {
     my $alertMsg="[$B$C{4}ALERT$C{1}$B] - $C{12}$alert$C{1} - $ALERTS{$alert}";
     my $latestOccurrenceDelayString="";
     $latestOccurrenceDelayString=secToTime($latestOccurrenceDelay) if($latestOccurrenceDelay > 0);
-    if($pendingAlerts{$alert}->{occurrences} > 1) {
-      $alertMsg.=" (x$pendingAlerts{$alert}->{occurrences}";
+    if($pendingAlerts{$alert}{occurrences} > 1) {
+      $alertMsg.=" (x$pendingAlerts{$alert}{occurrences}";
       $alertMsg.=", latest: $latestOccurrenceDelayString ago" if($latestOccurrenceDelayString);
       $alertMsg.=")";
     }else{
@@ -2789,7 +2789,7 @@ sub sayBattleUser {
 sub sayChan {
   my ($chan,$msg)=@_;
   $chan//=$masterChannel;
-  return unless($lobbyState >= LOBBY_STATE_SYNCHRONIZED && (exists $lobby->{channels}->{$chan}));
+  return unless($lobbyState >= LOBBY_STATE_SYNCHRONIZED && (exists $lobby->{channels}{$chan}));
   my $p_messages=splitMsg($msg,$conf{maxChatMessageLength}-9-length($chan));
   foreach my $mes (@{$p_messages}) {
     queueLobbyCommand(["SAYEX",$chan,"* $mes"]);
@@ -2819,8 +2819,8 @@ sub getCommandLevels {
   }
 
   my $status="outside";
-  if($gameState eq "running" && exists $p_runningBattle->{users}->{$user} && %{$autohost->getPlayer($user)}) {
-    if(defined $p_runningBattle->{users}->{$user}->{battleStatus} && $p_runningBattle->{users}->{$user}->{battleStatus}->{mode}) {
+  if($gameState eq "running" && exists $p_runningBattle->{users}{$user} && %{$autohost->getPlayer($user)}) {
+    if(defined $p_runningBattle->{users}{$user}{battleStatus} && $p_runningBattle->{users}{$user}{battleStatus}{mode}) {
       my $p_ahPlayer=$autohost->getPlayer($user);
       if($p_ahPlayer->{disconnectCause} == -1 && $p_ahPlayer->{lost} == 0) {
         $status="playing";
@@ -2830,8 +2830,8 @@ sub getCommandLevels {
     }else{
       $status="spec";
     }
-  }elsif(%{$lobby->{battle}} && exists $lobby->{battle}->{users}->{$user}) {
-    if(defined $lobby->{battle}->{users}->{$user}->{battleStatus} && $lobby->{battle}->{users}->{$user}->{battleStatus}->{mode}) {
+  }elsif(%{$lobby->{battle}} && exists $lobby->{battle}{users}{$user}) {
+    if(defined $lobby->{battle}{users}{$user}{battleStatus} && $lobby->{battle}{users}{$user}{battleStatus}{mode}) {
       $status="player";
     }else{
       $status="spec";
@@ -2846,11 +2846,11 @@ sub getUserAccessLevel {
   my $user=shift;
   return $user->{accessLevel} if(ref $user);
   my $p_userData;
-  if(! exists $lobby->{users}->{$user}) {
-    return 0 unless(exists $p_runningBattle->{users} && exists $p_runningBattle->{users}->{$user});
-    $p_userData=$p_runningBattle->{users}->{$user};
+  if(! exists $lobby->{users}{$user}) {
+    return 0 unless(exists $p_runningBattle->{users} && exists $p_runningBattle->{users}{$user});
+    $p_userData=$p_runningBattle->{users}{$user};
   }else{
-    $p_userData=$lobby->{users}->{$user};
+    $p_userData=$lobby->{users}{$user};
   }
   my $isAuthenticated=isUserAuthenticated($user);
   my $coreUserAccessLevel=$spads->getUserAccessLevel($user,$p_userData,$isAuthenticated);
@@ -2863,7 +2863,7 @@ sub getUserAccessLevel {
 
 sub deprecatedMsg {
   my ($user,$cmd,$action)=@_;
-  if($conf{springieEmulation} eq "warn" && exists $lobby->{users}->{$user} && (! $lobby->{users}->{$user}->{status}->{inGame})) {
+  if($conf{springieEmulation} eq "warn" && exists $lobby->{users}{$user} && (! $lobby->{users}{$user}{status}{inGame})) {
     sayPrivate($user,getDeprecatedMsg($cmd,$action));
   }
 }
@@ -3026,7 +3026,7 @@ sub processAliases {
         return (\@cmd,0);
       }else{
         my $modName=$targetMod;
-        $modName=$lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod} if($lobbyState >= LOBBY_STATE_BATTLE_OPENED);
+        $modName=$lobby->{battles}{$lobby->{battle}{battleId}}{mod} if($lobbyState >= LOBBY_STATE_BATTLE_OPENED);
         my $p_modOptions=getModOptions($modName);
         my $p_mapOptions=getMapOptions($currentMap);
         if($lcCmd eq "startpostype" || exists $p_modOptions->{$lcCmd} || exists $p_mapOptions->{$lcCmd}) {
@@ -3106,10 +3106,10 @@ sub handleRequest {
   
   slog("Start of \"$lcCmd\" command processing",5);
   my $commandExists=0;
-  $commandExists=1 if(exists $spads->{commands}->{$lcCmd});
+  $commandExists=1 if(exists $spads->{commands}{$lcCmd});
   if(! $commandExists) {
     foreach my $pluginName (keys %{$spads->{pluginsConf}}) {
-      if(exists $spads->{pluginsConf}->{$pluginName}->{commands}->{$lcCmd}) {
+      if(exists $spads->{pluginsConf}{$pluginName}{commands}{$lcCmd}) {
         $commandExists=1;
         last;
       }
@@ -3183,7 +3183,7 @@ sub handleRequest {
       if(%currentVote && exists $currentVote{command} && $#{$currentVote{command}} == $#realCmd) {
         my $isSameCmd=1;
         for my $i (0..$#realCmd) {
-          if(lc($realCmd[$i]) ne lc($currentVote{command}->[$i])) {
+          if(lc($realCmd[$i]) ne lc($currentVote{command}[$i])) {
             $isSameCmd=0;
             last;
           }
@@ -3211,7 +3211,7 @@ sub handleRequest {
       }
     }
 
-    if($warnMes && $conf{springieEmulation} eq "warn" && exists $lobby->{users}->{$user} && (! $lobby->{users}->{$user}->{status}->{inGame})) {
+    if($warnMes && $conf{springieEmulation} eq "warn" && exists $lobby->{users}{$user} && (! $lobby->{users}{$user}{status}{inGame})) {
       sayPrivate($user,"********************");
       sayPrivate($user,$warnMes);
     }
@@ -3460,8 +3460,8 @@ sub invalidSyntax {
   my ($user,$cmd,$reason)=@_;
   $reason//='';
   $reason=" (".$reason.")" if($reason);
-  if(exists $lobby->{users}->{$user}) {
-    if($lobby->{users}->{$user}->{status}->{inGame}) {
+  if(exists $lobby->{users}{$user}) {
+    if($lobby->{users}{$user}{status}{inGame}) {
       answer("Invalid $cmd command usage$reason.");
     }else{
       answer("Invalid $cmd command usage$reason. $user, please refer to help sent in private message.");
@@ -3522,8 +3522,8 @@ sub handleVote {
         my $voteMode=getUserPref($remainingVoter,"voteMode");
         if($voteMode eq "away") {
           $currentVote{blankCount}++;
-          $currentVote{awayVoters}->{$remainingVoter}=1;
-          delete $currentVote{remainingVoters}->{$remainingVoter};
+          $currentVote{awayVoters}{$remainingVoter}=1;
+          delete $currentVote{remainingVoters}{$remainingVoter};
           push(@awayVoters,$remainingVoter);
         }
       }
@@ -3627,16 +3627,16 @@ sub handleVote {
       }
     }else{
       foreach my $remainingVoter (keys %{$currentVote{remainingVoters}}) {
-        if($currentVote{remainingVoters}->{$remainingVoter}->{ringTime} && time >= $currentVote{remainingVoters}->{$remainingVoter}->{ringTime}) {
-          $currentVote{remainingVoters}->{$remainingVoter}->{ringTime}=0;
+        if($currentVote{remainingVoters}{$remainingVoter}{ringTime} && time >= $currentVote{remainingVoters}{$remainingVoter}{ringTime}) {
+          $currentVote{remainingVoters}{$remainingVoter}{ringTime}=0;
           if(! exists $lastRungUsers{$remainingVoter} || time - $lastRungUsers{$remainingVoter} > getUserPref($remainingVoter,"minRingDelay")) {
             $lastRungUsers{$remainingVoter}=time;
             queueLobbyCommand(["RING",$remainingVoter]);
           }
         }
-        if($currentVote{remainingVoters}->{$remainingVoter}->{notifyTime} && time >= $currentVote{remainingVoters}->{$remainingVoter}->{notifyTime}) {
-          $currentVote{remainingVoters}->{$remainingVoter}->{notifyTime}=0;
-          if(exists $lobby->{users}->{$remainingVoter} && (! $lobby->{users}->{$remainingVoter}->{status}->{inGame})) {
+        if($currentVote{remainingVoters}{$remainingVoter}{notifyTime} && time >= $currentVote{remainingVoters}{$remainingVoter}{notifyTime}) {
+          $currentVote{remainingVoters}{$remainingVoter}{notifyTime}=0;
+          if(exists $lobby->{users}{$remainingVoter} && (! $lobby->{users}{$remainingVoter}{status}{inGame})) {
             my ($p_C,$B)=initUserIrcColors($remainingVoter);
             my %C=%{$p_C};
             sayPrivate($remainingVoter,"Your vote is awaited for following poll: \"$C{12}".join(" ",@{$currentVote{command}})."$C{1}\" [$C{3}!vote y$C{1}, $C{4}!vote n$C{1}, $C{14}!vote b$C{1}]");
@@ -3789,7 +3789,7 @@ sub checkAutoForceStart {
     $timestamps{autoForcePossible}=-2;
     my $alreadyBroadcasted=0;
     if(%currentVote && exists $currentVote{command} && @{$currentVote{command}}) {
-      my $command=lc($currentVote{command}->[0]);
+      my $command=lc($currentVote{command}[0]);
       if($command eq "forcestart") {
         foreach my $pluginName (@pluginsOrder) {
           $plugins{$pluginName}->onVoteStop(0) if($plugins{$pluginName}->can('onVoteStop'));
@@ -3842,19 +3842,19 @@ sub checkAntiFloodDataPurge {
     my @autoBanData=split(/;/,$conf{kickFloodAutoBan});
     foreach my $u (keys %lastBattleMsg) {
       foreach my $t (keys %{$lastBattleMsg{$u}}) {
-        delete $lastBattleMsg{$u}->{$t} if(time - $t > $msgAutoKickData[1]);
+        delete $lastBattleMsg{$u}{$t} if(time - $t > $msgAutoKickData[1]);
       }
       delete $lastBattleMsg{$u} unless(%{$lastBattleMsg{$u}});
     }
     foreach my $u (keys %lastBattleStatus) {
       foreach my $t (keys %{$lastBattleStatus{$u}}) {
-        delete $lastBattleStatus{$u}->{$t} if(time - $t > $statusAutoKickData[1]);
+        delete $lastBattleStatus{$u}{$t} if(time - $t > $statusAutoKickData[1]);
       }
       delete $lastBattleStatus{$u} unless(%{$lastBattleStatus{$u}});
     }
     foreach my $u (keys %lastFloodKicks) {
       foreach my $t (keys %{$lastFloodKicks{$u}}) {
-        delete $lastFloodKicks{$u}->{$t} if(time - $t > $autoBanData[1]);
+        delete $lastFloodKicks{$u}{$t} if(time - $t > $autoBanData[1]);
       }
       delete $lastFloodKicks{$u} unless(%{$lastFloodKicks{$u}});
     }
@@ -3870,9 +3870,9 @@ sub checkAntiFloodDataPurge {
 sub checkAdvertMsg {
   if($conf{advertDelay} && $conf{advertMsg} ne '' && $lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}}) {
     if(time - $timestamps{advert} > $conf{advertDelay} * 60) {
-      my @battleUsers=keys %{$lobby->{battle}->{users}};
+      my @battleUsers=keys %{$lobby->{battle}{users}};
       if($#battleUsers > 0 && ! $autohost->getState()) {
-        my @advertMsgs=@{$spads->{values}->{advertMsg}};
+        my @advertMsgs=@{$spads->{values}{advertMsg}};
         foreach my $advertMsg (@advertMsgs) {
           sayBattle($advertMsg) if($advertMsg);
         }
@@ -3893,17 +3893,17 @@ sub checkPendingGetSkills {
   foreach my $accountId (keys %pendingGetSkills) {
     if(time - $pendingGetSkills{$accountId} > 5) {
       delete($pendingGetSkills{$accountId});
-      next if($lobbyState < LOBBY_STATE_SYNCHRONIZED || ! exists $lobby->{accounts}->{$accountId});
-      my $player=$lobby->{accounts}->{$accountId};
+      next if($lobbyState < LOBBY_STATE_SYNCHRONIZED || ! exists $lobby->{accounts}{$accountId});
+      my $player=$lobby->{accounts}{$accountId};
       next unless(exists $battleSkills{$player});
       my $skillPref=getUserPref($player,'skillMode');
       slog("Timeout for getSkill on player $player (account $accountId)",2) if($skillPref eq 'TrueSkill');
-      my $previousPlayerSkill=$battleSkills{$player}->{skill};
+      my $previousPlayerSkill=$battleSkills{$player}{skill};
       pluginsUpdateSkill($battleSkills{$player},$accountId);
       sendPlayerSkill($player);
       checkBattleBansForPlayer($player);
-      $needRebalance=1 if($previousPlayerSkill != $battleSkills{$player}->{skill} && $lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}} && exists $lobby->{battle}->{users}->{$player}
-                          && defined $lobby->{battle}->{users}->{$player}->{battleStatus} && $lobby->{battle}->{users}->{$player}->{battleStatus}->{mode});
+      $needRebalance=1 if($previousPlayerSkill != $battleSkills{$player}{skill} && $lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}} && exists $lobby->{battle}{users}{$player}
+                          && defined $lobby->{battle}{users}{$player}{battleStatus} && $lobby->{battle}{users}{$player}{battleStatus}{mode});
     }
   }
   if($needRebalance) {
@@ -4017,12 +4017,12 @@ sub rotatePreset {
   return unless(%{$lobby->{battle}});
 
   my $nbPlayers=0;
-  my %battleUsers=%{$lobby->{battle}->{users}};
+  my %battleUsers=%{$lobby->{battle}{users}};
   foreach my $user (keys %battleUsers) {
-    $nbPlayers++ if(defined $battleUsers{$user}->{battleStatus} && $battleUsers{$user}->{battleStatus}->{mode});
+    $nbPlayers++ if(defined $battleUsers{$user}{battleStatus} && $battleUsers{$user}{battleStatus}{mode});
   }
 
-  my @allowedPresets=@{$spads->{values}->{preset}};
+  my @allowedPresets=@{$spads->{values}{preset}};
   my %presetsBs;
   foreach my $allowedPreset (@allowedPresets) {
     my ($nbTeams,$teamSize,$nbPlayerById)=getPresetBattleStructure($allowedPreset,$nbPlayers);
@@ -4072,12 +4072,12 @@ sub rotatePreset {
     $rotationMsg="Automatic preset rotation: next preset is \"$preset\"";
   }
   $spads->applyPreset($preset);
-  $spads->{conf}->{nbTeams}=$presetsBs{$preset}->[0];
-  $spads->{conf}->{teamSize}=$presetsBs{$preset}->[1];
-  $spads->{conf}->{nbPlayerById}=$presetsBs{$preset}->[2];
+  $spads->{conf}{nbTeams}=$presetsBs{$preset}[0];
+  $spads->{conf}{teamSize}=$presetsBs{$preset}[1];
+  $spads->{conf}{nbPlayerById}=$presetsBs{$preset}[2];
   $timestamps{mapLearned}=0;
   $spads->applyMapList(\@availableMaps,$syncedSpringVersion);
-  setDefaultMapOfMaplist() if($spads->{conf}->{map} eq '');
+  setDefaultMapOfMaplist() if($spads->{conf}{map} eq '');
   %conf=%{$spads->{conf}};
   applyAllSettings();
   updateTargetMod();
@@ -4092,9 +4092,9 @@ sub rotateMap {
   return unless(%{$lobby->{battle}});
 
   my $nbPlayers=0;
-  my %battleUsers=%{$lobby->{battle}->{users}};
+  my %battleUsers=%{$lobby->{battle}{users}};
   foreach my $user (keys %battleUsers) {
-    $nbPlayers++ if(defined $battleUsers{$user}->{battleStatus} && $battleUsers{$user}->{battleStatus}->{mode});
+    $nbPlayers++ if(defined $battleUsers{$user}{battleStatus} && $battleUsers{$user}{battleStatus}{mode});
   }
 
   my $p_maps;
@@ -4113,9 +4113,9 @@ sub rotateMap {
       my $smfMapName=$mapName;
       $smfMapName.='.smf' unless($smfMapName =~ /\.smf$/);
       my $mapPreset;
-      if(exists $spads->{presets}->{$smfMapName}) {
+      if(exists $spads->{presets}{$smfMapName}) {
         $mapPreset=$smfMapName;
-      }elsif(exists $spads->{presets}->{"_DEFAULT_.smf"}) {
+      }elsif(exists $spads->{presets}{"_DEFAULT_.smf"}) {
         $mapPreset="_DEFAULT_.smf";
       }
       if(defined $mapPreset) {
@@ -4161,7 +4161,7 @@ sub rotateMap {
         $mapIndex=int(rand($#{$p_filteredMaps}+1));
       }
     }
-    $spads->{conf}->{map}=$p_filteredMaps->[$mapIndex];
+    $spads->{conf}{map}=$p_filteredMaps->[$mapIndex];
     %conf=%{$spads->{conf}};
     applySettingChange("map");
     sayBattleAndGame("Automatic random map rotation: next map is \"$conf{map}\"") if($verbose);
@@ -4178,7 +4178,7 @@ sub rotateMap {
       slog("Unable to find current map for map rotation, using first map",3);
       $nextMapIndex=0;
     }
-    $spads->{conf}->{map}=$p_filteredMaps->[$nextMapIndex];
+    $spads->{conf}{map}=$p_filteredMaps->[$nextMapIndex];
     %conf=%{$spads->{conf}};
     applySettingChange("map");
     sayBattleAndGame("Automatic map rotation: next map is \"$conf{map}\"") if($verbose);
@@ -4187,20 +4187,20 @@ sub rotateMap {
     my $smfMapName=$conf{map};
     $smfMapName.='.smf' unless($smfMapName =~ /\.smf$/);
     my $mapPreset;
-    if(exists $spads->{presets}->{$smfMapName}) {
+    if(exists $spads->{presets}{$smfMapName}) {
       $mapPreset=$smfMapName;
-    }elsif(exists $spads->{presets}->{"_DEFAULT_.smf"}) {
+    }elsif(exists $spads->{presets}{"_DEFAULT_.smf"}) {
       $mapPreset="_DEFAULT_.smf";
     }
     if(defined $mapPreset) {
       my $oldPreset=$conf{preset};
       $spads->applyPreset($mapPreset);
-      $spads->{conf}->{nbTeams}=$mapsBs{$mapPreset}->[0];
-      $spads->{conf}->{teamSize}=$mapsBs{$mapPreset}->[1];
-      $spads->{conf}->{nbPlayerById}=$mapsBs{$mapPreset}->[2];
+      $spads->{conf}{nbTeams}=$mapsBs{$mapPreset}[0];
+      $spads->{conf}{teamSize}=$mapsBs{$mapPreset}[1];
+      $spads->{conf}{nbPlayerById}=$mapsBs{$mapPreset}[2];
       $timestamps{mapLearned}=0;
       $spads->applyMapList(\@availableMaps,$syncedSpringVersion);
-      setDefaultMapOfMaplist() if($spads->{conf}->{map} eq '');
+      setDefaultMapOfMaplist() if($spads->{conf}{map} eq '');
       %conf=%{$spads->{conf}};
       applyAllSettings();
       updateTargetMod();
@@ -4212,7 +4212,7 @@ sub rotateMap {
 sub setAsOutOfGame {
   %springPrematureEndData=();
   if($lobbyState > LOBBY_STATE_LOGGED_IN) {
-    my %clientStatus = %{$lobby->{users}->{$conf{lobbyLogin}}->{status}};
+    my %clientStatus = %{$lobby->{users}{$conf{lobbyLogin}}{status}};
     $clientStatus{inGame}=0;
     queueLobbyCommand(["MYSTATUS",$lobby->marshallClientStatus(\%clientStatus)]);
     queueLobbyCommand(["GETUSERINFO"]);
@@ -4242,7 +4242,7 @@ sub setAsOutOfGame {
     }
   }
   foreach my $notifiedUser (keys %pendingNotifications) {
-    sayPrivate($notifiedUser,"***** End-game notification *****") if($lobbyState > LOBBY_STATE_LOGGED_IN && exists $lobby->{users}->{$notifiedUser});
+    sayPrivate($notifiedUser,"***** End-game notification *****") if($lobbyState > LOBBY_STATE_LOGGED_IN && exists $lobby->{users}{$notifiedUser});
     delete($pendingNotifications{$notifiedUser});
   }
   $balRandSeed=intRand();
@@ -4257,8 +4257,8 @@ sub isBalanceTargetApplied {
   my $p_bots=$p_battle->{bots};
 
   foreach my $player (keys %{$p_players}) {
-    return 0 unless(defined $p_players->{$player}->{battleStatus});
-    delete($p_players->{$player}) unless($p_players->{$player}->{battleStatus}->{mode});
+    return 0 unless(defined $p_players->{$player}{battleStatus});
+    delete($p_players->{$player}) unless($p_players->{$player}{battleStatus}{mode});
   }
 
   my $p_balancedPlayers=$balanceTarget{players};
@@ -4274,14 +4274,14 @@ sub isBalanceTargetApplied {
 
   foreach my $player (@players) {
     return 0 unless(exists $p_balancedPlayers->{$player});
-    return 0 unless($p_players->{$player}->{battleStatus}->{team} == $p_balancedPlayers->{$player}->{battleStatus}->{team});
-    return 0 unless($p_players->{$player}->{battleStatus}->{id} == $p_balancedPlayers->{$player}->{battleStatus}->{id});
+    return 0 unless($p_players->{$player}{battleStatus}{team} == $p_balancedPlayers->{$player}{battleStatus}{team});
+    return 0 unless($p_players->{$player}{battleStatus}{id} == $p_balancedPlayers->{$player}{battleStatus}{id});
   }
 
   foreach my $bot (@bots) {
     return 0 unless(exists $p_balancedBots->{$bot});
-    return 0 unless($p_bots->{$bot}->{battleStatus}->{team} == $p_balancedBots->{$bot}->{battleStatus}->{team});
-    return 0 unless($p_bots->{$bot}->{battleStatus}->{id} == $p_balancedBots->{$bot}->{battleStatus}->{id});
+    return 0 unless($p_bots->{$bot}{battleStatus}{team} == $p_balancedBots->{$bot}{battleStatus}{team});
+    return 0 unless($p_bots->{$bot}{battleStatus}{id} == $p_balancedBots->{$bot}{battleStatus}{id});
   }
 
   return 1;
@@ -4294,16 +4294,16 @@ sub areColorsApplied {
   my $p_bots=$p_battle->{bots};
 
   foreach my $player (keys %{$p_players}) {
-    return 0 unless(defined $p_players->{$player}->{battleStatus});
-    next unless($p_players->{$player}->{battleStatus}->{mode});
-    my $colorId=$p_players->{$player}->{battleStatus}->{id};
+    return 0 unless(defined $p_players->{$player}{battleStatus});
+    next unless($p_players->{$player}{battleStatus}{mode});
+    my $colorId=$p_players->{$player}{battleStatus}{id};
     return 0 unless exists($colorsTarget{$colorId});
-    return 0 unless(colorDistance($colorsTarget{$colorId},$p_players->{$player}->{color}) == 0);
+    return 0 unless(colorDistance($colorsTarget{$colorId},$p_players->{$player}{color}) == 0);
   }
   foreach my $bot (keys %{$p_bots}) {
-    my $colorId=$p_bots->{$bot}->{battleStatus}->{id};
+    my $colorId=$p_bots->{$bot}{battleStatus}{id};
     return 0 unless exists($colorsTarget{$colorId});
-    return 0 unless(colorDistance($colorsTarget{$colorId},$p_bots->{$bot}->{color}) == 0);
+    return 0 unless(colorDistance($colorsTarget{$colorId},$p_bots->{$bot}{color}) == 0);
   }
 
   return 1;
@@ -4320,29 +4320,29 @@ sub applyBalanceTarget {
 
   my $newBalanceState=1;
   foreach my $player (keys %{$p_balancedPlayers}) {
-    if($p_players->{$player}->{battleStatus}->{team} != $p_balancedPlayers->{$player}->{battleStatus}->{team}) {
+    if($p_players->{$player}{battleStatus}{team} != $p_balancedPlayers->{$player}{battleStatus}{team}) {
       $newBalanceState=0;
-      queueLobbyCommand(["FORCEALLYNO",$player,$p_balancedPlayers->{$player}->{battleStatus}->{team}]);
+      queueLobbyCommand(["FORCEALLYNO",$player,$p_balancedPlayers->{$player}{battleStatus}{team}]);
     }
-    if($p_players->{$player}->{battleStatus}->{id} != $p_balancedPlayers->{$player}->{battleStatus}->{id}) {
+    if($p_players->{$player}{battleStatus}{id} != $p_balancedPlayers->{$player}{battleStatus}{id}) {
       $newBalanceState=0;
-      queueLobbyCommand(["FORCETEAMNO",$player,$p_balancedPlayers->{$player}->{battleStatus}->{id}]);
+      queueLobbyCommand(["FORCETEAMNO",$player,$p_balancedPlayers->{$player}{battleStatus}{id}]);
     }
   }
 
   foreach my $bot (keys %{$p_balancedBots}) {
     my $updateNeeded=0;
-    if($p_bots->{$bot}->{battleStatus}->{team} != $p_balancedBots->{$bot}->{battleStatus}->{team}) {
+    if($p_bots->{$bot}{battleStatus}{team} != $p_balancedBots->{$bot}{battleStatus}{team}) {
       $updateNeeded=1;
       $newBalanceState=0;
-      $p_bots->{$bot}->{battleStatus}->{team}=$p_balancedBots->{$bot}->{battleStatus}->{team};
+      $p_bots->{$bot}{battleStatus}{team}=$p_balancedBots->{$bot}{battleStatus}{team};
     }
-    if($p_bots->{$bot}->{battleStatus}->{id} != $p_balancedBots->{$bot}->{battleStatus}->{id}) {
+    if($p_bots->{$bot}{battleStatus}{id} != $p_balancedBots->{$bot}{battleStatus}{id}) {
       $updateNeeded=1;
       $newBalanceState=0;
-      $p_bots->{$bot}->{battleStatus}->{id} = $p_balancedBots->{$bot}->{battleStatus}->{id};
+      $p_bots->{$bot}{battleStatus}{id} = $p_balancedBots->{$bot}{battleStatus}{id};
     }
-    queueLobbyCommand(["UPDATEBOT",$bot,$lobby->marshallBattleStatus($p_bots->{$bot}->{battleStatus}),$lobby->marshallColor($p_bots->{$bot}->{color})]) if($updateNeeded);
+    queueLobbyCommand(["UPDATEBOT",$bot,$lobby->marshallBattleStatus($p_bots->{$bot}{battleStatus}),$lobby->marshallColor($p_bots->{$bot}{color})]) if($updateNeeded);
   }
   
   $timestamps{balance}=time unless($newBalanceState);
@@ -4370,24 +4370,24 @@ sub applyColorsTarget {
   
   my $newColorsState=1;
   foreach my $player (keys %{$p_players}) {
-    if(! defined $p_players->{$player}->{battleStatus}) {
+    if(! defined $p_players->{$player}{battleStatus}) {
       $newColorsState=0;
       next;
     }
-    next unless($p_players->{$player}->{battleStatus}->{mode});
-    my $colorId=$p_targetPlayers->{$player}->{battleStatus}->{id};
-    if(colorDistance($colorsTarget{$colorId},$p_players->{$player}->{color}) != 0) {
+    next unless($p_players->{$player}{battleStatus}{mode});
+    my $colorId=$p_targetPlayers->{$player}{battleStatus}{id};
+    if(colorDistance($colorsTarget{$colorId},$p_players->{$player}{color}) != 0) {
       $newColorsState=0;
       queueLobbyCommand(["FORCETEAMCOLOR",$player,$lobby->marshallColor($colorsTarget{$colorId})]);
     }
   }
   foreach my $bot (keys %{$p_bots}) {
-    my $colorId=$p_targetBots->{$bot}->{battleStatus}->{id};
-    if(colorDistance($colorsTarget{$colorId},$p_bots->{$bot}->{color}) != 0) {
+    my $colorId=$p_targetBots->{$bot}{battleStatus}{id};
+    if(colorDistance($colorsTarget{$colorId},$p_bots->{$bot}{color}) != 0) {
       $newColorsState=0;
       queueLobbyCommand(["UPDATEBOT",
                          $bot,
-                         $lobby->marshallBattleStatus($p_targetBots->{$bot}->{battleStatus}),
+                         $lobby->marshallBattleStatus($p_targetBots->{$bot}{battleStatus}),
                          $lobby->marshallColor($colorsTarget{$colorId})]);
     }
   }
@@ -4414,11 +4414,11 @@ sub balance {
     ($nbSmurfs)=balanceBattle($p_players,{},$conf{clanMode});
     my $maxId=0;
     foreach my $p (keys %{$p_players}) {
-      $maxId=$p_players->{$p}->{battleStatus}->{id} if($p_players->{$p}->{battleStatus}->{id} > $maxId);
+      $maxId=$p_players->{$p}{battleStatus}{id} if($p_players->{$p}{battleStatus}{id} > $maxId);
     }
     foreach my $b (keys %{$p_bots}) {
-      $p_bots->{$b}->{battleStatus}->{team}=1;
-      $p_bots->{$b}->{battleStatus}->{id}=++$maxId;
+      $p_bots->{$b}{battleStatus}{team}=1;
+      $p_bots->{$b}{battleStatus}{id}=++$maxId;
     }
   }elsif($conf{balanceMode} eq 'clan;skill' && $conf{clanMode} =~ /\(\d+\)/) {
     slog("Balance mode is set to \"clan;skill\" and clan mode \"$conf{clanMode}\" contains unbalance threshold(s)",5);
@@ -4511,9 +4511,9 @@ sub getUserIps {
 
 sub getLatestUserIp {
   my $user=shift;
-  return $lobby->{users}->{$user}->{ip} if($lobbyState > LOBBY_STATE_LOGGED_IN && exists $lobby->{users}->{$user} && defined $lobby->{users}->{$user}->{ip});
+  return $lobby->{users}{$user}{ip} if($lobbyState > LOBBY_STATE_LOGGED_IN && exists $lobby->{users}{$user} && defined $lobby->{users}{$user}{ip});
   if($lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}}) {
-    return $lobby->{battle}->{users}->{$user}->{ip} if(exists $lobby->{battle}->{users}->{$user} && defined $lobby->{battle}->{users}->{$user}->{ip});
+    return $lobby->{battle}{users}{$user}{ip} if(exists $lobby->{battle}{users}{$user} && defined $lobby->{battle}{users}{$user}{ip});
   }
   my $accountId=getLatestUserAccountId($user);
   return $spads->getLatestAccountIp($accountId) if($accountId ne '');
@@ -4523,8 +4523,8 @@ sub getLatestUserIp {
 sub getLatestUserAccountId {
   my $user=shift;
   return '' if($lanMode);
-  if(exists $lobby->{users}->{$user}) {
-    my $id=$lobby->{users}->{$user}->{accountId};
+  if(exists $lobby->{users}{$user}) {
+    my $id=$lobby->{users}{$user}{accountId};
     $id.="($user)" unless($id);
     return $id;
   }
@@ -4552,13 +4552,13 @@ sub getPlayerSkillForBanCheck {
   my ($playerSkill,$playerSigma)=('_UNKNOWN_','_UNKNOWN_');
   return ($playerSkill,$playerSigma) unless(exists $battleSkills{$player});
   return ($playerSkill,$playerSigma) if(getUserPref($player,'skillMode') eq 'TrueSkill'
-                                        && $battleSkills{$player}->{skillOrigin} ne 'TrueSkill'
-                                        && $battleSkills{$player}->{skillOrigin} ne 'Plugin');
-  $playerSkill=$battleSkills{$player}->{skill};
-  $playerSigma=$battleSkills{$player}->{sigma} if(exists $battleSkills{$player}->{sigma} && defined $battleSkills{$player}->{sigma});
-  if($battleSkills{$player}->{skillOrigin} eq 'TrueSkill') {
+                                        && $battleSkills{$player}{skillOrigin} ne 'TrueSkill'
+                                        && $battleSkills{$player}{skillOrigin} ne 'Plugin');
+  $playerSkill=$battleSkills{$player}{skill};
+  $playerSigma=$battleSkills{$player}{sigma} if(exists $battleSkills{$player}{sigma} && defined $battleSkills{$player}{sigma});
+  if($battleSkills{$player}{skillOrigin} eq 'TrueSkill') {
     my $gameType=getGameTypeForBanCheck();
-    ($playerSkill,$playerSigma)=($battleSkillsCache{$player}->{$gameType}->{skill},$battleSkillsCache{$player}->{$gameType}->{sigma});
+    ($playerSkill,$playerSigma)=($battleSkillsCache{$player}{$gameType}{skill},$battleSkillsCache{$player}{$gameType}{sigma});
   }
   return ($playerSkill,$playerSigma);
 }
@@ -4619,7 +4619,7 @@ sub balanceBattle {
   my ($p_players,$p_bots,$clanMode)=@_;
 
   foreach my $player (keys %{$p_players}) {
-    delete($p_players->{$player}) if(! (defined $p_players->{$player}->{battleStatus}) || $p_players->{$player}->{battleStatus}->{mode} == 0);
+    delete($p_players->{$player}) if(! (defined $p_players->{$player}{battleStatus}) || $p_players->{$player}{battleStatus}{mode} == 0);
   }
 
   my $nbPlayers=0;
@@ -4635,22 +4635,22 @@ sub balanceBattle {
   foreach my $player (sort keys %{$p_players}) {
     if($conf{balanceMode} =~ /skill$/) {
       if(exists $battleSkills{$player}) {
-        $p_players->{$player}->{skill}=$battleSkills{$player}->{skill};
-        $p_players->{$player}->{sigma}=$battleSkills{$player}->{sigma} if(exists $battleSkills{$player}->{sigma});
-        $nbSmurfs++ if($battleSkills{$player}->{rank} > $lobby->{users}->{$player}->{status}->{rank});
+        $p_players->{$player}{skill}=$battleSkills{$player}{skill};
+        $p_players->{$player}{sigma}=$battleSkills{$player}{sigma} if(exists $battleSkills{$player}{sigma});
+        $nbSmurfs++ if($battleSkills{$player}{rank} > $lobby->{users}{$player}{status}{rank});
       }else{
         slog("Undefined skill for player $player, using direct lobbyRank/skill mapping as a workaround for balancing!",1);
-        $p_players->{$player}->{skill}=$RANK_SKILL{$lobby->{users}->{$player}->{status}->{rank}};
+        $p_players->{$player}{skill}=$RANK_SKILL{$lobby->{users}{$player}{status}{rank}};
       }
     }else{
-      $p_players->{$player}->{skill}=int(rand(39));
+      $p_players->{$player}{skill}=int(rand(39));
     }
   }
   foreach my $bot (sort keys %{$p_bots}) {
     if($conf{balanceMode} =~ /skill$/) {
-      $p_bots->{$bot}->{skill}=$RANK_SKILL{$conf{botsRank}};
+      $p_bots->{$bot}{skill}=$RANK_SKILL{$conf{botsRank}};
     }else{
-      $p_bots->{$bot}->{skill}=int(rand(39));
+      $p_bots->{$bot}{skill}=int(rand(39));
     }
   }
 
@@ -4682,10 +4682,10 @@ sub balanceBattle {
   my @ids;
   if($conf{idShareMode} eq 'auto' || $conf{idShareMode} eq 'off') {
     for my $teamNb (0..$#{$p_teams}) {
-      if($p_teams->[$teamNb]->{freeSlots} < $teamSize) {
-        $ids[$teamNb]=createGroups(1,$p_teams->[$teamNb]->{freeSlots},0);
+      if($p_teams->[$teamNb]{freeSlots} < $teamSize) {
+        $ids[$teamNb]=createGroups(1,$p_teams->[$teamNb]{freeSlots},0);
       }else{
-        $ids[$teamNb]=createGroups(int($p_teams->[$teamNb]->{freeSlots}/$teamSize),$teamSize,$p_teams->[$teamNb]->{freeSlots} % $teamSize);
+        $ids[$teamNb]=createGroups(int($p_teams->[$teamNb]{freeSlots}/$teamSize),$teamSize,$p_teams->[$teamNb]{freeSlots} % $teamSize);
       }
     }
   }
@@ -4694,13 +4694,13 @@ sub balanceBattle {
   for my $teamNb (0..($#{$p_teams})) {
     my %manualSharedIds;
     if($conf{idShareMode} eq 'auto' || $conf{idShareMode} eq 'off') {
-      balanceGroups($p_teams->[$teamNb]->{players},$p_teams->[$teamNb]->{bots},$ids[$teamNb],$clanMode);
+      balanceGroups($p_teams->[$teamNb]{players},$p_teams->[$teamNb]{bots},$ids[$teamNb],$clanMode);
     }
-    my $p_sortedPlayers=randomRevSort(sub {return $_[0]->{skill}},$p_teams->[$teamNb]->{players});
+    my $p_sortedPlayers=randomRevSort(sub {return $_[0]{skill}},$p_teams->[$teamNb]{players});
     foreach my $player (@{$p_sortedPlayers}) {
-      $p_players->{$player}->{battleStatus}->{team}=$teamNb;
+      $p_players->{$player}{battleStatus}{team}=$teamNb;
       if($conf{idShareMode} eq 'all') {
-        $p_players->{$player}->{battleStatus}->{id}=$teamNb;
+        $p_players->{$player}{battleStatus}{id}=$teamNb;
       }elsif($conf{idShareMode} ne 'auto' && $conf{idShareMode} ne 'off') {
         my $userShareId=getUserPref($player,'shareId');
         if($userShareId eq '' && $conf{idShareMode} eq 'clan' && $player =~ /^\[([^\]]+)\]/) {
@@ -4708,27 +4708,27 @@ sub balanceBattle {
         }
         if($userShareId ne '') {
           $manualSharedIds{$userShareId}=$idNb++ unless(exists $manualSharedIds{$userShareId});
-          $p_players->{$player}->{battleStatus}->{id}=$manualSharedIds{$userShareId};
+          $p_players->{$player}{battleStatus}{id}=$manualSharedIds{$userShareId};
         }else{
-          $p_players->{$player}->{battleStatus}->{id}=$idNb++;
+          $p_players->{$player}{battleStatus}{id}=$idNb++;
         }
       }
     }
-    foreach my $bot (sort keys %{$p_teams->[$teamNb]->{bots}}) {
-      $p_bots->{$bot}->{battleStatus}->{team}=$teamNb;
+    foreach my $bot (sort keys %{$p_teams->[$teamNb]{bots}}) {
+      $p_bots->{$bot}{battleStatus}{team}=$teamNb;
       if($conf{idShareMode} eq 'all') {
-        $p_bots->{$bot}->{battleStatus}->{id}=$teamNb;
+        $p_bots->{$bot}{battleStatus}{id}=$teamNb;
       }elsif($conf{idShareMode} ne 'auto' && $conf{idShareMode} ne 'off') {
-        $p_bots->{$bot}->{battleStatus}->{id}=$idNb++;
+        $p_bots->{$bot}{battleStatus}{id}=$idNb++;
       }
     }
     if($conf{idShareMode} eq 'auto' || $conf{idShareMode} eq 'off') {
       for my $subIdNb (0..($#{$ids[$teamNb]})) {
-        foreach my $player (keys %{$ids[$teamNb]->[$subIdNb]->{players}}) {
-          $p_players->{$player}->{battleStatus}->{id}=$idNb;
+        foreach my $player (keys %{$ids[$teamNb][$subIdNb]{players}}) {
+          $p_players->{$player}{battleStatus}{id}=$idNb;
         }
-        foreach my $bot (keys %{$ids[$teamNb]->[$subIdNb]->{bots}}) {
-          $p_bots->{$bot}->{battleStatus}->{id}=$idNb;
+        foreach my $bot (keys %{$ids[$teamNb][$subIdNb]{bots}}) {
+          $p_bots->{$bot}{battleStatus}{id}=$idNb;
         }
         $idNb++;
       }
@@ -4744,11 +4744,11 @@ sub balanceGroups {
   my $totalSkill=0;
   my @players=keys %{$p_players};
   foreach my $player (@players) {
-    $totalSkill+=$p_players->{$player}->{skill};
+    $totalSkill+=$p_players->{$player}{skill};
   }
   my @bots=keys %{$p_bots};
   foreach my $bot (@bots) {
-    $totalSkill+=$p_bots->{$bot}->{skill};
+    $totalSkill+=$p_bots->{$bot}{skill};
   }
   if($conf{balanceMode} =~ /^clan/) {
     if($conf{balanceMode} eq "clan;skill") {
@@ -4770,8 +4770,8 @@ sub balanceGroups {
   my ($unbalanceIndicator,$squareDeviations)=(0,0);
   if($conf{balanceMode} =~ /skill$/) {
     for my $groupNb (0..$#{$p_groups}) {
-      $squareDeviations+=($p_groups->[$groupNb]->{skill}-$avgGroupSkill)**2;
-      slog("Skill of group $groupNb is $p_groups->[$groupNb]->{skill} => squareDeviations=$squareDeviations",5);
+      $squareDeviations+=($p_groups->[$groupNb]{skill}-$avgGroupSkill)**2;
+      slog("Skill of group $groupNb is $p_groups->[$groupNb]{skill} => squareDeviations=$squareDeviations",5);
     }
   }
   $unbalanceIndicator=sqrt($squareDeviations/($#{$p_groups}+1))*100/$avgGroupSkill if($avgGroupSkill);
@@ -4795,16 +4795,16 @@ sub getNextClanGroup {
   my @groups=@{$p_groups};
   my $clanGroup=0;
   for my $groupNb (1..$#groups) {
-    $clanGroup=$groupNb if($groups[$groupNb]->{freeSlots} > $groups[$clanGroup]->{freeSlots});
+    $clanGroup=$groupNb if($groups[$groupNb]{freeSlots} > $groups[$clanGroup]{freeSlots});
   }
   return $clanGroup unless(defined $clanSize);
   for my $groupNb (0..$#groups) {
-    if($groups[$groupNb]->{skill} < $groups[$clanGroup]->{skill}
-       && ($groups[$groupNb]->{freeSlots} >= $clanSize || $groups[$groupNb]->{freeSlots} == $groups[$clanGroup]->{freeSlots})) {
+    if($groups[$groupNb]{skill} < $groups[$clanGroup]{skill}
+       && ($groups[$groupNb]{freeSlots} >= $clanSize || $groups[$groupNb]{freeSlots} == $groups[$clanGroup]{freeSlots})) {
       $clanGroup=$groupNb;
-    }elsif($groups[$groupNb]->{skill} == $groups[$clanGroup]->{skill}
-           && $groups[$groupNb]->{freeSlots} >= $clanSize
-           && $groups[$groupNb]->{freeSlots} < $groups[$clanGroup]->{freeSlots}) {
+    }elsif($groups[$groupNb]{skill} == $groups[$clanGroup]{skill}
+           && $groups[$groupNb]{freeSlots} >= $clanSize
+           && $groups[$groupNb]{freeSlots} < $groups[$clanGroup]{freeSlots}) {
       $clanGroup=$groupNb;
     }
   }
@@ -4825,16 +4825,16 @@ sub splitClan {
 
 sub assignPlayer {
   my ($player,$groupNb,$p_players,$p_groups)=@_;
-  $p_groups->[$groupNb]->{freeSlots}--;
-  $p_groups->[$groupNb]->{skill}+=$p_players->{$player}->{skill};
-  $p_groups->[$groupNb]->{players}->{$player}=$p_players->{$player};
+  $p_groups->[$groupNb]{freeSlots}--;
+  $p_groups->[$groupNb]{skill}+=$p_players->{$player}{skill};
+  $p_groups->[$groupNb]{players}{$player}=$p_players->{$player};
 }
 
 sub assignBot {
   my ($bot,$groupNb,$p_bots,$p_groups)=@_;
-  $p_groups->[$groupNb]->{freeSlots}--;
-  $p_groups->[$groupNb]->{skill}+=$p_bots->{$bot}->{skill};
-  $p_groups->[$groupNb]->{bots}->{$bot}=$p_bots->{$bot};
+  $p_groups->[$groupNb]{freeSlots}--;
+  $p_groups->[$groupNb]{skill}+=$p_bots->{$bot}{skill};
+  $p_groups->[$groupNb]{bots}{$bot}=$p_bots->{$bot};
 }
 
 sub randomRevSort {
@@ -4892,7 +4892,7 @@ sub balanceClans {
     if(defined $avgSkill) {
       my $clanSkill=0;
       for my $clanPlayer (@clan) {
-        $clanSkill+=$p_players->{$clanPlayer}->{skill};
+        $clanSkill+=$p_players->{$clanPlayer}{skill};
       }
       my $clanAvgSkill=$clanSkill/($#clan+1);
       if($clanAvgSkill>$avgSkill) {
@@ -4903,7 +4903,7 @@ sub balanceClans {
     }else{
       $groupNb=getNextClanGroup($p_groups);
     }
-    my $groupSpace=$p_groups->[$groupNb]->{freeSlots};
+    my $groupSpace=$p_groups->[$groupNb]{freeSlots};
     return if($groupSpace < 2);
     if($groupSpace <= $#clan) {
       my ($p_clan1,$p_clan2)=splitClan(\@clan,$groupSpace);
@@ -4925,15 +4925,15 @@ sub getNextPlayerGroup {
   my $maxAvgMissingSkill;
   my $playerGroup;
   for my $groupNb (0..$#groups) {
-    if($groups[$groupNb]->{freeSlots} > 0) {
-      $maxAvgMissingSkill=($avgGroupSkill-$groups[$groupNb]->{skill})/$groups[$groupNb]->{freeSlots};
+    if($groups[$groupNb]{freeSlots} > 0) {
+      $maxAvgMissingSkill=($avgGroupSkill-$groups[$groupNb]{skill})/$groups[$groupNb]{freeSlots};
       $playerGroup=$groupNb;
       last;
     }
   }
   for my $groupNb (1..$#groups) {
-    if($groups[$groupNb]->{freeSlots} > 0) {
-      my $groupAvgMissingSkil=($avgGroupSkill-$groups[$groupNb]->{skill})/$groups[$groupNb]->{freeSlots};
+    if($groups[$groupNb]{freeSlots} > 0) {
+      my $groupAvgMissingSkil=($avgGroupSkill-$groups[$groupNb]{skill})/$groups[$groupNb]{freeSlots};
       if($groupAvgMissingSkil > $maxAvgMissingSkill) {
         $maxAvgMissingSkill=$groupAvgMissingSkil;
         $playerGroup=$groupNb;
@@ -4950,22 +4950,22 @@ sub balancePlayers {
       && (all {$_->{freeSlots} == 3 && ! %{$_->{players}} && ! %{$_->{bots}}} @{$p_groups})
       && (scalar keys %{$p_players}) + (scalar keys %{$p_bots}) == 6;
 
-  my $p_sortedPlayers=randomRevSort(sub {return $_[0]->{skill}},$p_players);
-  my $p_sortedBots=randomRevSort(sub {return $_[0]->{skill}},$p_bots);
+  my $p_sortedPlayers=randomRevSort(sub {return $_[0]{skill}},$p_players);
+  my $p_sortedBots=randomRevSort(sub {return $_[0]{skill}},$p_bots);
   my @sortedPlayers=@{$p_sortedPlayers};
   my @sortedBots=@{$p_sortedBots};
   while(@sortedPlayers || @sortedBots) {
     my $groupNb=getNextPlayerGroup($p_groups,$avgGroupSkill);
     my ($playerSkill,$botSkill);
-    $playerSkill=$p_players->{$sortedPlayers[0]}->{skill} if(@sortedPlayers);
-    $botSkill=$p_bots->{$sortedBots[0]}->{skill} if(@sortedBots);
+    $playerSkill=$p_players->{$sortedPlayers[0]}{skill} if(@sortedPlayers);
+    $botSkill=$p_bots->{$sortedBots[0]}{skill} if(@sortedBots);
     my $clanEdgeCaseIdealSkill;
     $clanEdgeCaseIdealSkill=$avgGroupSkill-$p_groups->[$groupNb]{skill} if(@{$p_groups} == 2 && $p_groups->[$groupNb]{freeSlots} == 1 && $p_groups->[1-$groupNb]{freeSlots} > 1);
     if(defined $playerSkill && (! defined $botSkill || $playerSkill > $botSkill)) {
       my $player=shift(@sortedPlayers);
       if(defined $clanEdgeCaseIdealSkill) {
         my $nextSkill;
-        $nextSkill=$p_players->{$sortedPlayers[0]}->{skill} if(@sortedPlayers);
+        $nextSkill=$p_players->{$sortedPlayers[0]}{skill} if(@sortedPlayers);
         $nextSkill=$botSkill if(defined $botSkill && (! defined $nextSkill || $botSkill > $nextSkill));
         $groupNb=1-$groupNb if(abs($nextSkill-$clanEdgeCaseIdealSkill) < abs($playerSkill-$clanEdgeCaseIdealSkill));
       }
@@ -4974,15 +4974,15 @@ sub balancePlayers {
       my $bot=shift(@sortedBots);
       if(defined $clanEdgeCaseIdealSkill) {
         my $nextSkill;
-        $nextSkill=$p_bots->{$sortedBots[0]}->{skill} if(@sortedBots);
+        $nextSkill=$p_bots->{$sortedBots[0]}{skill} if(@sortedBots);
         $nextSkill=$playerSkill if(defined $playerSkill && (! defined $nextSkill || $playerSkill > $nextSkill));
         $groupNb=1-$groupNb if(abs($nextSkill-$clanEdgeCaseIdealSkill) < abs($botSkill-$clanEdgeCaseIdealSkill));
       }
       assignBot($bot,$groupNb,$p_bots,$p_groups);
     }
     if($optim3v3 && $p_groups->[$groupNb]{freeSlots} == 2) {
-      my $nextBestPlayerSkill=$p_players->{$sortedPlayers[0]}->{skill} if(@sortedPlayers);
-      my $nextBestBotSkill=$p_bots->{$sortedBots[0]}->{skill} if(@sortedBots);
+      my $nextBestPlayerSkill=$p_players->{$sortedPlayers[0]}{skill} if(@sortedPlayers);
+      my $nextBestBotSkill=$p_bots->{$sortedBots[0]}{skill} if(@sortedBots);
       my $nextEntityIsPlayer;
       if(defined $nextBestPlayerSkill) {
         if(defined $nextBestBotSkill) {
@@ -4994,8 +4994,8 @@ sub balancePlayers {
         $nextEntityIsPlayer=0;
       }
       my $nextBestSkill=$nextEntityIsPlayer?$nextBestPlayerSkill:$nextBestBotSkill;
-      my $nextWorstPlayerSkill=$p_players->{$sortedPlayers[-1]}->{skill} if(@sortedPlayers);
-      my $nextWorstBotSkill=$p_bots->{$sortedBots[-1]}->{skill} if(@sortedBots);
+      my $nextWorstPlayerSkill=$p_players->{$sortedPlayers[-1]}{skill} if(@sortedPlayers);
+      my $nextWorstBotSkill=$p_bots->{$sortedBots[-1]}{skill} if(@sortedBots);
       my $nextWorstSkill;
       if(defined $nextWorstPlayerSkill) {
         if(defined $nextWorstBotSkill) {
@@ -5403,23 +5403,23 @@ sub getBattleState {
   my %teamCount;
   my %ids;
   my $nbIds; #  to determine the number of required start pos on map when startPosType != 2
-  my $p_bUsers=$lobby->{battle}->{users};
+  my $p_bUsers=$lobby->{battle}{users};
   my @bUsers=keys %{$p_bUsers};
   return { battleState => -4 } if($#bUsers > 250);
 
   my @players;
   foreach my $bUser (@bUsers) {
-    if(! defined $p_bUsers->{$bUser}->{battleStatus}) {
+    if(! defined $p_bUsers->{$bUser}{battleStatus}) {
       push(@unsyncedPlayers,$bUser);
-    }elsif($p_bUsers->{$bUser}->{battleStatus}->{mode}) {
+    }elsif($p_bUsers->{$bUser}{battleStatus}{mode}) {
       push(@players,$bUser);
-      if($p_bUsers->{$bUser}->{battleStatus}->{sync} != 1) {
+      if($p_bUsers->{$bUser}{battleStatus}{sync} != 1) {
         push(@unsyncedPlayers,$bUser);
-      }elsif($lobby->{users}->{$bUser}->{status}->{inGame}) {
+      }elsif($lobby->{users}{$bUser}{status}{inGame}) {
         push(@inGamePlayers,$bUser);
       }else{
         $nbPlayers++;
-        push(@unreadyPlayers,$bUser) unless($p_bUsers->{$bUser}->{battleStatus}->{ready});
+        push(@unreadyPlayers,$bUser) unless($p_bUsers->{$bUser}{battleStatus}{ready});
         my ($id,$team)=@{$p_bUsers->{$bUser}{battleStatus}}{'id','team'};
         if(exists $ids{$id}) {
           return { battleState => -5 } unless($ids{$id} == $team);
@@ -5440,7 +5440,7 @@ sub getBattleState {
   return { battleState => -2, inGamePlayers => \@inGamePlayers } if(@inGamePlayers);
   return { battleState => -1, unreadyPlayers => \@unreadyPlayers } if(@unreadyPlayers);
 
-  my $p_bBots=$lobby->{battle}->{bots};
+  my $p_bBots=$lobby->{battle}{bots};
   foreach my $bBot (keys %{$p_bBots}) {
     $nbPlayers++;
     my ($id,$team)=@{$p_bBots->{$bBot}{battleStatus}}{'id','team'};
@@ -5601,7 +5601,7 @@ sub launchGame {
   return 1 if($checkOnly);
 
   if($conf{autoSaveBoxes}) {
-    my $p_startRects=$lobby->{battle}->{startRects};
+    my $p_startRects=$lobby->{battle}{startRects};
     if(%{$p_startRects}) {
       my $smfMapName=$conf{map};
       $smfMapName.='.smf' unless($smfMapName =~ /\.smf$/);
@@ -5765,7 +5765,7 @@ sub startGameServer {
   }
   %gdrIPs=();
   %teamStats=();
-  if($lobbyState > LOBBY_STATE_LOGGED_IN && exists $lobby->{users}->{$gdrLobbyBot}) {
+  if($lobbyState > LOBBY_STATE_LOGGED_IN && exists $lobby->{users}{$gdrLobbyBot}) {
     $gdrEnabled=1;
   }else{
     $gdrEnabled=0;
@@ -5841,7 +5841,7 @@ sub startGameServer {
   %defeatTimes=();
   %inGameAddedUsers=();
   %inGameAddedPlayers=();
-  my %clientStatus = %{$lobby->{users}->{$conf{lobbyLogin}}->{status}};
+  my %clientStatus = %{$lobby->{users}{$conf{lobbyLogin}}{status}};
   $clientStatus{inGame}=1;
   queueLobbyCommand(["MYSTATUS",$lobby->marshallClientStatus(\%clientStatus)]);
   foreach my $pluginName (@pluginsOrder) {
@@ -5907,8 +5907,8 @@ sub checkUserMsgFlood {
 
   my $timestamp=time;
   $lastBattleMsg{$user}={} unless(exists $lastBattleMsg{$user});
-  $lastBattleMsg{$user}->{$timestamp}=0 unless(exists $lastBattleMsg{$user}->{$timestamp});
-  $lastBattleMsg{$user}->{$timestamp}++;
+  $lastBattleMsg{$user}{$timestamp}=0 unless(exists $lastBattleMsg{$user}{$timestamp});
+  $lastBattleMsg{$user}{$timestamp}++;
 
   return 0 if($user eq $conf{lobbyLogin});
   return 0 if(getUserAccessLevel($user) >= $conf{floodImmuneLevel});
@@ -5919,9 +5919,9 @@ sub checkUserMsgFlood {
   my $received=0;
   foreach my $timestamp (keys %{$lastBattleMsg{$user}}) {
     if(time - $timestamp > $autoKickData[1]) {
-      delete $lastBattleMsg{$user}->{$timestamp};
+      delete $lastBattleMsg{$user}{$timestamp};
     }else{
-      $received+=$lastBattleMsg{$user}->{$timestamp};
+      $received+=$lastBattleMsg{$user}{$timestamp};
     }
   }
 
@@ -5941,8 +5941,8 @@ sub checkUserStatusFlood {
 
   my $timestamp=time;
   $lastBattleStatus{$user}={} unless(exists $lastBattleStatus{$user});
-  $lastBattleStatus{$user}->{$timestamp}=0 unless(exists $lastBattleStatus{$user}->{$timestamp});
-  $lastBattleStatus{$user}->{$timestamp}++;
+  $lastBattleStatus{$user}{$timestamp}=0 unless(exists $lastBattleStatus{$user}{$timestamp});
+  $lastBattleStatus{$user}{$timestamp}++;
 
   return 0 if($user eq $conf{lobbyLogin});
   return 0 if(getUserAccessLevel($user) >= $conf{floodImmuneLevel});
@@ -5953,9 +5953,9 @@ sub checkUserStatusFlood {
   my $received=0;
   foreach my $timestamp (keys %{$lastBattleStatus{$user}}) {
     if(time - $timestamp > $autoKickData[1]) {
-      delete $lastBattleStatus{$user}->{$timestamp};
+      delete $lastBattleStatus{$user}{$timestamp};
     }else{
-      $received+=$lastBattleStatus{$user}->{$timestamp};
+      $received+=$lastBattleStatus{$user}{$timestamp};
     }
   }
 
@@ -5975,23 +5975,23 @@ sub checkKickFlood {
 
   my $timestamp=time;
   $lastFloodKicks{$user}={} unless(exists $lastFloodKicks{$user});
-  $lastFloodKicks{$user}->{$timestamp}=0 unless(exists $lastFloodKicks{$user}->{$timestamp});
-  $lastFloodKicks{$user}->{$timestamp}++;
+  $lastFloodKicks{$user}{$timestamp}=0 unless(exists $lastFloodKicks{$user}{$timestamp});
+  $lastFloodKicks{$user}{$timestamp}++;
   
   my @autoBanData=split(/;/,$conf{kickFloodAutoBan});
 
   my $nbKick=0;
   foreach my $timestamp (keys %{$lastFloodKicks{$user}}) {
     if(time - $timestamp > $autoBanData[1]) {
-      delete $lastFloodKicks{$user}->{$timestamp};
+      delete $lastFloodKicks{$user}{$timestamp};
     }else{
-      $nbKick+=$lastFloodKicks{$user}->{$timestamp};
+      $nbKick+=$lastFloodKicks{$user}{$timestamp};
     }
   }
 
   if($autoBanData[0] && $nbKick >= $autoBanData[0]) {
       my $p_user;
-      my $accountId=$lobby->{users}->{$user}->{accountId};
+      my $accountId=$lobby->{users}{$user}{accountId};
       if($accountId) {
         $p_user={accountId => "$accountId($user)"};
       }else{
@@ -6016,8 +6016,8 @@ sub checkCmdFlood {
 
   my $timestamp=time;
   $lastCmds{$user}={} unless(exists $lastCmds{$user});
-  $lastCmds{$user}->{$timestamp}=0 unless(exists $lastCmds{$user}->{$timestamp});
-  $lastCmds{$user}->{$timestamp}++;
+  $lastCmds{$user}{$timestamp}=0 unless(exists $lastCmds{$user}{$timestamp});
+  $lastCmds{$user}{$timestamp}++;
   
   if(exists $ignoredUsers{$user}) {
     if(time > $ignoredUsers{$user}) {
@@ -6032,9 +6032,9 @@ sub checkCmdFlood {
   my $received=0;
   foreach my $timestamp (keys %{$lastCmds{$user}}) {
     if(time - $timestamp > $autoIgnoreData[1]) {
-      delete $lastCmds{$user}->{$timestamp};
+      delete $lastCmds{$user}{$timestamp};
     }else{
-      $received+=$lastCmds{$user}->{$timestamp};
+      $received+=$lastCmds{$user}{$timestamp};
     }
   }
 
@@ -6119,17 +6119,17 @@ sub needRehost {
                 && ($spads->{hSettings}{maxPlayers} < 9 || $lobby->{battles}{$lobby->{battle}{battleId}}{maxPlayers} != 8));
   }
   foreach my $p (keys %params) {
-    return 1 if($spads->{hSettings}->{$p} ne $lobby->{battles}->{$lobby->{battle}->{battleId}}->{$params{$p}});
+    return 1 if($spads->{hSettings}{$p} ne $lobby->{battles}{$lobby->{battle}{battleId}}{$params{$p}});
   }
-  return 1 if($targetMod ne $lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod});
-  return 1 if($spads->{hSettings}->{password} ne $lobby->{battle}->{password});
+  return 1 if($targetMod ne $lobby->{battles}{$lobby->{battle}{battleId}}{mod});
+  return 1 if($spads->{hSettings}{password} ne $lobby->{battle}{password});
   return 0;
 }
 
 sub specExtraPlayers {
   return unless($lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}});
 
-  my @bots=@{$lobby->{battle}->{botList}};
+  my @bots=@{$lobby->{battle}{botList}};
   my @players=sort {$currentPlayers{$a} <=> $currentPlayers{$b}} (keys %currentPlayers);
   my $nbPlayersToSpec=$#players+1-($conf{nbPlayerById}*$conf{teamSize}*$conf{nbTeams});
   if($conf{nbTeams} != 1) {
@@ -6188,7 +6188,7 @@ sub enforceMaxBots {
   return unless($lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}});
 
   
-  my @bots=@{$lobby->{battle}->{botList}};
+  my @bots=@{$lobby->{battle}{botList}};
   my @localBots;
   my @remoteBots;
 
@@ -6197,7 +6197,7 @@ sub enforceMaxBots {
   my $nbRemoteBots=0;
 
   foreach my $botName (@bots) {
-    if($lobby->{battle}->{bots}->{$botName}->{owner} eq $conf{lobbyLogin}) {
+    if($lobby->{battle}{bots}{$botName}{owner} eq $conf{lobbyLogin}) {
       push(@localBots,$botName);
       $nbLocalBots++;
     }else{
@@ -6247,15 +6247,15 @@ sub enforceMaxBots {
 
 sub updateCurrentGameType {
   my $nbPlayers=0;
-  $nbPlayers=(keys %{$lobby->{battle}->{users}}) - getNbNonPlayer() + (keys %{$lobby->{battle}->{bots}}) if($lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}});
+  $nbPlayers=(keys %{$lobby->{battle}{users}}) - getNbNonPlayer() + (keys %{$lobby->{battle}{bots}}) if($lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}});
   my $newGameType=(getTargetBattleStructure($nbPlayers))[2];
   return if($newGameType eq $currentGameType);
   $currentGameType=$newGameType;
   return unless($lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}});
   my $needRebalance=0;
   foreach my $user (keys %battleSkills) {
-    my $accountId=$lobby->{users}->{$user}->{accountId};
-    my $previousUserSkill=$battleSkills{$user}->{skill};
+    my $accountId=$lobby->{users}{$user}{accountId};
+    my $previousUserSkill=$battleSkills{$user}{skill};
     my $userSkillPref=getUserPref($user,'skillMode');
     if($userSkillPref eq 'TrueSkill') {
       next if(exists $pendingGetSkills{$accountId});
@@ -6263,16 +6263,16 @@ sub updateCurrentGameType {
         slog("Unable to update battle skill of player $user for new game type, no cached skill available!",2)
             if($battleSkills{$user}{skillOrigin} eq 'TrueSkill');
       }else{
-        $battleSkills{$user}->{skill}=$battleSkillsCache{$user}->{$currentGameType}->{skill};
-        $battleSkills{$user}->{sigma}=$battleSkillsCache{$user}->{$currentGameType}->{sigma};
-        $battleSkills{$user}->{class}=$battleSkillsCache{$user}->{$currentGameType}->{class};
-        $battleSkills{$user}->{skillOrigin}='TrueSkill';
+        $battleSkills{$user}{skill}=$battleSkillsCache{$user}{$currentGameType}{skill};
+        $battleSkills{$user}{sigma}=$battleSkillsCache{$user}{$currentGameType}{sigma};
+        $battleSkills{$user}{class}=$battleSkillsCache{$user}{$currentGameType}{class};
+        $battleSkills{$user}{skillOrigin}='TrueSkill';
       }
     }
     pluginsUpdateSkill($battleSkills{$user},$accountId);
     sendPlayerSkill($user);
-    $needRebalance=1 if($previousUserSkill != $battleSkills{$user}->{skill} && exists $lobby->{battle}->{users}->{$user}
-                        && defined $lobby->{battle}->{users}->{$user}->{battleStatus} && $lobby->{battle}->{users}->{$user}->{battleStatus}->{mode});
+    $needRebalance=1 if($previousUserSkill != $battleSkills{$user}{skill} && exists $lobby->{battle}{users}{$user}
+                        && defined $lobby->{battle}{users}{$user}{battleStatus} && $lobby->{battle}{users}{$user}{battleStatus}{mode});
   }
   if($needRebalance) {
     $balanceState=0;
@@ -6282,7 +6282,7 @@ sub updateCurrentGameType {
 
 sub updateBattleSkillsForNewSkillAndRankModes {
   return unless($lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}});
-  foreach my $user (keys %{$lobby->{battle}->{users}}) {
+  foreach my $user (keys %{$lobby->{battle}{users}}) {
     updateBattleSkillForNewSkillAndRankModes($user);
   }
 }
@@ -6294,44 +6294,44 @@ sub updateBattleSkillForNewSkillAndRankModes {
     slog("Unable to update battle skill for user $user, no battle skill available!",2);
     return;
   }
-  my $accountId=$lobby->{users}->{$user}->{accountId};
-  my $userLobbyRank=$lobby->{users}->{$user}->{status}->{rank};
+  my $accountId=$lobby->{users}{$user}{accountId};
+  my $userLobbyRank=$lobby->{users}{$user}{status}{rank};
   my $userRankPref=getUserPref($user,'rankMode');
   my $userIp=getLatestUserIp($user);
   if($userRankPref eq 'account') {
-    $battleSkills{$user}->{rank}=$userLobbyRank;
-    $battleSkills{$user}->{rankOrigin}='account';
+    $battleSkills{$user}{rank}=$userLobbyRank;
+    $battleSkills{$user}{rankOrigin}='account';
   }elsif($userRankPref eq 'ip') {
     if($userIp) {
       my ($ipRank,$chRanked)=getIpRank($userIp);
-      $battleSkills{$user}->{rank}=$ipRank;
+      $battleSkills{$user}{rank}=$ipRank;
       if($chRanked) {
-        $battleSkills{$user}->{rankOrigin}='ipManual';
+        $battleSkills{$user}{rankOrigin}='ipManual';
       }else{
-        $battleSkills{$user}->{rankOrigin}='ip';
+        $battleSkills{$user}{rankOrigin}='ip';
       }
     }else{
-      $battleSkills{$user}->{rank}=$userLobbyRank;
-      $battleSkills{$user}->{rankOrigin}='account';
+      $battleSkills{$user}{rank}=$userLobbyRank;
+      $battleSkills{$user}{rankOrigin}='account';
     }
   }else{
-    $battleSkills{$user}->{rank}=$userRankPref;
-    $battleSkills{$user}->{rankOrigin}='manual';
+    $battleSkills{$user}{rank}=$userRankPref;
+    $battleSkills{$user}{rankOrigin}='manual';
   }
   my $userSkillPref=getUserPref($user,'skillMode');
   if($userSkillPref eq 'TrueSkill') {
-    $battleSkills{$user}->{skillOrigin}='TrueSkillDegraded';
-    $battleSkills{$user}->{skill}=$RANK_TRUESKILL{$battleSkills{$user}->{rank}};
+    $battleSkills{$user}{skillOrigin}='TrueSkillDegraded';
+    $battleSkills{$user}{skill}=$RANK_TRUESKILL{$battleSkills{$user}{rank}};
     if(exists $battleSkillsCache{$user}) {
-      $battleSkills{$user}->{skill}=$battleSkillsCache{$user}->{$currentGameType}->{skill};
-      $battleSkills{$user}->{sigma}=$battleSkillsCache{$user}->{$currentGameType}->{sigma};
-      $battleSkills{$user}->{class}=$battleSkillsCache{$user}->{$currentGameType}->{class};
-      $battleSkills{$user}->{skillOrigin}='TrueSkill';
+      $battleSkills{$user}{skill}=$battleSkillsCache{$user}{$currentGameType}{skill};
+      $battleSkills{$user}{sigma}=$battleSkillsCache{$user}{$currentGameType}{sigma};
+      $battleSkills{$user}{class}=$battleSkillsCache{$user}{$currentGameType}{class};
+      $battleSkills{$user}{skillOrigin}='TrueSkill';
       pluginsUpdateSkill($battleSkills{$user},$accountId);
       sendPlayerSkill($user);
       checkBattleBansForPlayer($user);
     }elsif(! exists $pendingGetSkills{$accountId}) {
-      if(exists $lobby->{users}->{$sldbLobbyBot} && $accountId) {
+      if(exists $lobby->{users}{$sldbLobbyBot} && $accountId) {
         my $getSkillParam=$accountId;
         $getSkillParam.="|$userIp" if($userIp);
         sayPrivate($sldbLobbyBot,"!#getSkill 3 $getSkillParam");
@@ -6343,8 +6343,8 @@ sub updateBattleSkillForNewSkillAndRankModes {
       }
     }
   }else{
-    $battleSkills{$user}->{skillOrigin}='rank';
-    $battleSkills{$user}->{skill}=$RANK_SKILL{$battleSkills{$user}->{rank}};
+    $battleSkills{$user}{skillOrigin}='rank';
+    $battleSkills{$user}{skill}=$RANK_SKILL{$battleSkills{$user}{rank}};
     delete $battleSkills{$user}{sigma};
     pluginsUpdateSkill($battleSkills{$user},$accountId);
     sendPlayerSkill($user);
@@ -6356,7 +6356,7 @@ sub sendPlayerSkill {
   return unless($lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}});
   
   my $player=shift;
-  if(! exists $lobby->{battle}->{users}->{$player}) {
+  if(! exists $lobby->{battle}{users}{$player}) {
     slog("Unable to send skill of player $player to battle lobby, player is not in battle!",2);
     return;
   }
@@ -6365,36 +6365,36 @@ sub sendPlayerSkill {
   
   my $skill;
   if($skillOrigin eq 'rank') {
-    $skill="($battleSkills{$player}->{skill})";
+    $skill="($battleSkills{$player}{skill})";
   }elsif($skillOrigin eq 'TrueSkill') {
-    if(exists $battleSkills{$player}->{skillPrivacy} && $battleSkills{$player}->{skillPrivacy} == 0) {
-      $skill=$battleSkills{$player}->{skill};
+    if(exists $battleSkills{$player}{skillPrivacy} && $battleSkills{$player}{skillPrivacy} == 0) {
+      $skill=$battleSkills{$player}{skill};
     }else{
-      $skill=getRoundedSkill($battleSkills{$player}->{skill});
+      $skill=getRoundedSkill($battleSkills{$player}{skill});
       $skill="~$skill";
     }
   }elsif($skillOrigin eq 'TrueSkillDegraded') {
-    $skill="\#$battleSkills{$player}->{skill}\#";
+    $skill="\#$battleSkills{$player}{skill}\#";
   }elsif($skillOrigin eq 'Plugin') {
-    $skill="\[$battleSkills{$player}->{skill}\]";
+    $skill="\[$battleSkills{$player}{skill}\]";
   }elsif($skillOrigin eq 'PluginDegraded') {
-    $skill="\[\#$battleSkills{$player}->{skill}\#\]";
+    $skill="\[\#$battleSkills{$player}{skill}\#\]";
   }else{
-    $skill="?$battleSkills{$player}->{skill}?";
+    $skill="?$battleSkills{$player}{skill}?";
   }
   my $lcPlayer=lc($player);
   queueLobbyCommand(["SETSCRIPTTAGS","game/players/$lcPlayer/skill=$skill"]);
   $sentPlayersScriptTags{$lcPlayer}{skill}=1;
   
   if(($skillOrigin eq 'TrueSkill' || $skillOrigin eq 'Plugin')
-     && exists $battleSkills{$player}->{sigma}) {
+     && exists $battleSkills{$player}{sigma}) {
     my $skillSigma;
     if($skillOrigin eq 'TrueSkill') {
-      if($battleSkills{$player}->{sigma} > 3) {
+      if($battleSkills{$player}{sigma} > 3) {
         $skillSigma=3;
-      }elsif($battleSkills{$player}->{sigma} > 2) {
+      }elsif($battleSkills{$player}{sigma} > 2) {
         $skillSigma=2;
-      }elsif($battleSkills{$player}->{sigma} > 1.5) {
+      }elsif($battleSkills{$player}{sigma} > 1.5) {
         $skillSigma=1;
       }else{
         $skillSigma=0;
@@ -6412,7 +6412,7 @@ sub sendPlayerSkill {
 
 sub getBattleSkills {
   return unless($lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}});
-  foreach my $user (keys %{$lobby->{battle}->{users}}) {
+  foreach my $user (keys %{$lobby->{battle}{users}}) {
     getBattleSkill($user);
   }
   $balanceState=0;
@@ -6422,9 +6422,9 @@ sub getBattleSkills {
 sub getBattleSkill {
   my $user=shift;
   return if($user eq $conf{lobbyLogin});
-  my $accountId=$lobby->{users}->{$user}->{accountId};
+  my $accountId=$lobby->{users}{$user}{accountId};
   my %userSkill;
-  my $userLobbyRank=$lobby->{users}->{$user}->{status}->{rank};
+  my $userLobbyRank=$lobby->{users}{$user}{status}{rank};
   my $userRankPref=getUserPref($user,'rankMode');
   my $userIp=getLatestUserIp($user);
   if($userRankPref eq 'account') {
@@ -6455,7 +6455,7 @@ sub getBattleSkill {
     $userSkill{skillOrigin}='rank';
     $userSkill{skill}=$RANK_SKILL{$userSkill{rank}};
   }
-  if($userSkillPref eq 'TrueSkill' && exists $lobby->{users}->{$sldbLobbyBot} && $accountId) {
+  if($userSkillPref eq 'TrueSkill' && exists $lobby->{users}{$sldbLobbyBot} && $accountId) {
     my $getSkillParam=$accountId;
     $getSkillParam.="|$userIp" if($userIp);
     sayPrivate($sldbLobbyBot,"!#getSkill 3 $getSkillParam");
@@ -6515,7 +6515,7 @@ sub applySettingChange {
 
 sub applyBattleBans {
   return unless($lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}});
-  foreach my $user (keys %{$lobby->{battle}->{users}}) {
+  foreach my $user (keys %{$lobby->{battle}{users}}) {
     checkBattleBansForPlayer($user);
   }
 }
@@ -6523,11 +6523,11 @@ sub applyBattleBans {
 sub checkBattleBansForPlayer {
   my $user=shift;
   return unless($lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}});
-  my $p_ban=$spads->getUserBan($user,$lobby->{users}->{$user},isUserAuthenticated($user),undef,getPlayerSkillForBanCheck($user));
+  my $p_ban=$spads->getUserBan($user,$lobby->{users}{$user},isUserAuthenticated($user),undef,getPlayerSkillForBanCheck($user));
   if($p_ban->{banType} < 2) {
     queueLobbyCommand(["KICKFROMBATTLE",$user]);
   }elsif($p_ban->{banType} == 2) {
-    if(defined $lobby->{battle}->{users}->{$user}->{battleStatus} && $lobby->{battle}->{users}->{$user}->{battleStatus}->{mode}) {
+    if(defined $lobby->{battle}{users}{$user}{battleStatus} && $lobby->{battle}{users}{$user}{battleStatus}{mode}) {
       queueLobbyCommand(["FORCESPECTATORMODE",$user]);
       if(! exists $forceSpecTimestamps{$user} || time - $forceSpecTimestamps{$user} > 60) {
         $forceSpecTimestamps{$user}=time;
@@ -6552,7 +6552,7 @@ sub applyPreset {
   $spads->applyPreset($preset);
   $timestamps{mapLearned}=0;
   $spads->applyMapList(\@availableMaps,$syncedSpringVersion);
-  setDefaultMapOfMaplist() if($spads->{conf}->{map} eq '');
+  setDefaultMapOfMaplist() if($spads->{conf}{map} eq '');
   %conf=%{$spads->{conf}};
   applyAllSettings();
   updateTargetMod();
@@ -6565,8 +6565,8 @@ sub autoManageBattle {
   return unless(%{$lobby->{battle}});
 
   my $nbNonPlayer=getNbNonPlayer();
-  my @clients=keys %{$lobby->{battle}->{users}};
-  my @bots=keys %{$lobby->{battle}->{bots}};
+  my @clients=keys %{$lobby->{battle}{users}};
+  my @bots=keys %{$lobby->{battle}{bots}};
   my $nbBots=$#bots+1;
   my $nbPlayers=$#clients+1-$nbNonPlayer;
   $nbPlayers+=$nbBots if($conf{nbTeams} != 1);
@@ -6579,7 +6579,7 @@ sub autoManageBattle {
 
     my $nbLocalBots=0;
     foreach my $existingBot (@bots) {
-      $nbLocalBots++ if($lobby->{battle}->{bots}->{$existingBot}->{owner} eq $conf{lobbyLogin});
+      $nbLocalBots++ if($lobby->{battle}{bots}{$existingBot}{owner} eq $conf{lobbyLogin});
     }
 
     my $deltaLocalBots=0;
@@ -6680,7 +6680,7 @@ sub autoManageBattle {
   return if($autoBalanceInProgress);
   
   if($conf{autoStart} ne 'off') {
-    return if(%{$lobby->{battle}->{bots}});
+    return if(%{$lobby->{battle}{bots}});
     return if($conf{autoStart} eq 'on' && $battleState < 2);
     return if($timestamps{usLockRequestForGameStart});
     launchGame(0,0,1);
@@ -6830,18 +6830,18 @@ sub getDefaultAndMaxAllowedValues {
   my ($preset,$setting)=@_;
   my @allowedValues;
   if($preset ne "") {
-    if(! exists $spads->{presets}->{$preset}) {
+    if(! exists $spads->{presets}{$preset}) {
       slog("Unable to find allowed values for setting \"$setting\", preset \"$preset\" does not exist",1);
       return (0,0);
     }
-    return ("undefined","undefined") if(! exists $spads->{presets}->{$preset}->{$setting});
-    @allowedValues=@{$spads->{presets}->{$preset}->{$setting}};
+    return ("undefined","undefined") if(! exists $spads->{presets}{$preset}{$setting});
+    @allowedValues=@{$spads->{presets}{$preset}{$setting}};
   }else{
-    if(! exists $spads->{values}->{$setting}) {
+    if(! exists $spads->{values}{$setting}) {
       slog("Unable to find allowed values for setting \"$setting\" in current preset ($conf{preset})",1);
       return (0,0);
     }
-    @allowedValues=@{$spads->{values}->{$setting}};
+    @allowedValues=@{$spads->{values}{$setting}};
   }
   my $defaultValue=$allowedValues[0];
   my $maxAllowedValue=$defaultValue;
@@ -6859,7 +6859,7 @@ sub getDefaultAndMaxAllowedValues {
 
 sub getPresetBattleStructure {
   my ($preset,$nbPlayers)=@_;
-  if(! exists $spads->{presets}->{$preset}) {
+  if(! exists $spads->{presets}{$preset}) {
     slog("Unable to test \"$preset\" compatibility with current number of players, it does not exist",1);
     return (0,0,0);
   }
@@ -6892,8 +6892,8 @@ sub getBSettingAllowedValues {
   my ($bSetting,$p_options,$allowExternalValues)=@_;
   my @allowedValues=();
   
-  if(exists $spads->{bValues}->{$bSetting}) {
-    @allowedValues=@{$spads->{bValues}->{$bSetting}};
+  if(exists $spads->{bValues}{$bSetting}) {
+    @allowedValues=@{$spads->{bValues}{$bSetting}};
   }elsif($allowExternalValues) {
     my $p_option=$p_options->{$bSetting};
     my $optionType=$p_option->{type};
@@ -6966,9 +6966,9 @@ sub getSmurfsData {
         $confidence=100 if($smurf eq $smurfId);
         my $online;
         if($id) {
-          $online=exists $lobby->{accounts}->{$smurf} ? "$C{3}Yes$C{1}" : "$C{4}No$C{1}";
+          $online=exists $lobby->{accounts}{$smurf} ? "$C{3}Yes$C{1}" : "$C{4}No$C{1}";
         }else{
-          $online=exists $lobby->{users}->{$smurfName} ? "$C{3}Yes$C{1}" : "$C{4}No$C{1}";
+          $online=exists $lobby->{users}{$smurfName} ? "$C{3}Yes$C{1}" : "$C{4}No$C{1}";
         }
         push(@smurfsData,{"$C{5}ID$C{1}" => $id,
                           "$C{5}Name(s)$C{1}" => $names,
@@ -6998,9 +6998,9 @@ sub getSmurfsData {
           my $ips=formatList(\@idIps,40);
           my $online;
           if($id) {
-            $online=exists $lobby->{accounts}->{$smurf} ? "$C{3}Yes$C{1}" : "$C{4}No$C{1}";
+            $online=exists $lobby->{accounts}{$smurf} ? "$C{3}Yes$C{1}" : "$C{4}No$C{1}";
           }else{
-            $online=exists $lobby->{users}->{$smurfName} ? "$C{3}Yes$C{1}" : "$C{4}No$C{1}";
+            $online=exists $lobby->{users}{$smurfName} ? "$C{3}Yes$C{1}" : "$C{4}No$C{1}";
           }
           push(@smurfsData,{"$C{5}ID$C{1}" => $id,
                             "$C{5}Name(s)$C{1}" => $names,
@@ -7032,9 +7032,9 @@ sub getSmurfsData {
             my $ips=formatList(\@idIps,40);
             my $online;
             if($id) {
-              $online=exists $lobby->{accounts}->{$smurf} ? "$C{3}Yes$C{1}" : "$C{4}No$C{1}";
+              $online=exists $lobby->{accounts}{$smurf} ? "$C{3}Yes$C{1}" : "$C{4}No$C{1}";
             }else{
-              $online=exists $lobby->{users}->{$smurfName} ? "$C{3}Yes$C{1}" : "$C{4}No$C{1}";
+              $online=exists $lobby->{users}{$smurfName} ? "$C{3}Yes$C{1}" : "$C{4}No$C{1}";
             }
             push(@smurfsData,{"$C{5}ID$C{1}" => $id,
                               "$C{5}Name(s)$C{1}" => $names,
@@ -7059,17 +7059,17 @@ sub checkAutoStop {
   return unless(($conf{autoStop} =~ /^noOpponent/ || $conf{autoStop} =~ /^onlySpec/) && $springPid && $autohost->getState() == 2 && $timestamps{autoStop} == 0);
   my %aliveTeams;
   foreach my $player (keys %{$p_runningBattle->{users}}) {
-    next unless(defined $p_runningBattle->{users}->{$player}->{battleStatus} && $p_runningBattle->{users}->{$player}->{battleStatus}->{mode});
-    my $playerTeam=$p_runningBattle->{users}->{$player}->{battleStatus}->{team};
+    next unless(defined $p_runningBattle->{users}{$player}{battleStatus} && $p_runningBattle->{users}{$player}{battleStatus}{mode});
+    my $playerTeam=$p_runningBattle->{users}{$player}{battleStatus}{team};
     next if(exists $aliveTeams{$playerTeam});
     my $p_ahPlayer=$autohost->getPlayer($player);
     next unless(%{$p_ahPlayer} && $p_ahPlayer->{disconnectCause} == -1 && $p_ahPlayer->{lost} == 0);
     $aliveTeams{$playerTeam}=1;
   }
   foreach my $bot (keys %{$p_runningBattle->{bots}}) {
-    my $botTeam=$p_runningBattle->{bots}->{$bot}->{battleStatus}->{team};
+    my $botTeam=$p_runningBattle->{bots}{$bot}{battleStatus}{team};
     next if(exists $aliveTeams{$botTeam});
-    my $p_ahPlayer=$autohost->getPlayer($p_runningBattle->{bots}->{$bot}->{owner});
+    my $p_ahPlayer=$autohost->getPlayer($p_runningBattle->{bots}{$bot}{owner});
     next unless(%{$p_ahPlayer} && $p_ahPlayer->{disconnectCause} == -1);
     $aliveTeams{$botTeam}=1;
   }
@@ -7106,12 +7106,12 @@ sub getNextLocalBot {
   return {} unless(@{$p_localBotsNames});
   for my $i ('',2..99) {
     for my $lBotName (@{$p_localBotsNames}) {
-      if(length($lBotName.$i) < 21 && ! exists $lobby->{battle}->{bots}->{$lBotName.$i}
+      if(length($lBotName.$i) < 21 && ! exists $lobby->{battle}{bots}{$lBotName.$i}
          && ! exists $pendingLocalBotManual{$lBotName.$i} && ! exists $pendingLocalBotAuto{$lBotName.$i}) {
         %nextLocalBot=(name => $lBotName.$i,
-                       side => $p_localBots->{$lBotName}->{side},
-                       ai => $p_localBots->{$lBotName}->{ai},
-                       color => $p_localBots->{$lBotName}->{color});
+                       side => $p_localBots->{$lBotName}{side},
+                       ai => $p_localBots->{$lBotName}{ai},
+                       color => $p_localBots->{$lBotName}{color});
         last;
       }
     }
@@ -7123,7 +7123,7 @@ sub getNextLocalBot {
 sub translateSideIfNeeded {
   my $side=shift;
   if($side !~ /^\d+$/) {
-    my $p_modSides=getModSides($lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod});
+    my $p_modSides=getModSides($lobby->{battles}{$lobby->{battle}{battleId}}{mod});
     for my $i (0..$#{$p_modSides}) {
       if(index(lc($p_modSides->[$i]),lc($side)) == 0) {
         $side=$i;
@@ -7180,7 +7180,7 @@ sub queueGDR {
     }
   }
   %gdr=();
-  return if($lobbyState < LOBBY_STATE_SYNCHRONIZED || ! exists $lobby->{users}->{$gdrLobbyBot});
+  return if($lobbyState < LOBBY_STATE_SYNCHRONIZED || ! exists $lobby->{users}{$gdrLobbyBot});
   while(@gdrQueue) {
     my $serializedGdr=shift(@gdrQueue);
     my $timestamp=time;
@@ -7284,7 +7284,7 @@ sub endGameProcessing {
          $nbEndGameCommandRunning--;
          my $executionTime=secToTime(time-$endGameCommandData{startTime});
          if($conf{endGameCommandMsg} ne '' && $lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}}) {
-           my @endGameMsgs=@{$spads->{values}->{endGameCommandMsg}};
+           my @endGameMsgs=@{$spads->{values}{endGameCommandMsg}};
            foreach my $endGameMsg (@endGameMsgs) {
              if($endGameMsg =~ /^\((\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*)\)(.+)$/) {
                $endGameMsg=$2;
@@ -7359,10 +7359,10 @@ sub hAddBot {
     return 0;
   }
 
-  my @bots=keys %{$lobby->{battle}->{bots}};
+  my @bots=keys %{$lobby->{battle}{bots}};
   my $nbLocalBots=0;
   foreach my $existingBot (@bots) {
-    $nbLocalBots++ if($lobby->{battle}->{bots}->{$existingBot}->{owner} eq $conf{lobbyLogin});
+    $nbLocalBots++ if($lobby->{battle}{bots}{$existingBot}{owner} eq $conf{lobbyLogin});
   }
   if($conf{maxBots} ne '' && $#bots+1 >= $conf{maxBots}) {
     answer("Unable to add bot [maxBots=$conf{maxBots}]");
@@ -7397,7 +7397,7 @@ sub hAddBot {
     }
     if(! defined $botSide) {
       if(exists $p_localBots->{$botName}) {
-        $botSide=$p_localBots->{$botName}->{side};
+        $botSide=$p_localBots->{$botName}{side};
       }else{
         answer("Unable to add bot: bot side is missing and bot name is unknown in \"localBots\" preset setting");
         return 0;
@@ -7405,7 +7405,7 @@ sub hAddBot {
     }
     if(! defined $botAi) {
       if(exists $p_localBots->{$botName}) {
-        $botAi=$p_localBots->{$botName}->{ai};
+        $botAi=$p_localBots->{$botName}{ai};
       }else{
         answer("Unable to add bot: bot AI is missing and bot name is unknown in \"localBots\" preset setting");
         return 0;
@@ -7414,7 +7414,7 @@ sub hAddBot {
   }
   if(! defined $p_botColor) {
     if(exists $p_localBots->{$botName}) {
-      $p_botColor=$p_localBots->{$botName}->{color};
+      $p_botColor=$p_localBots->{$botName}{color};
     }else{
       $p_botColor={red => 255, green => 0, blue => 0};
     }
@@ -7424,7 +7424,7 @@ sub hAddBot {
     answer("Unable to add bot: invalid bot name \"$botName\"");
     return 0;
   }
-  if(exists $lobby->{battle}->{bots}->{$botName} || exists $pendingLocalBotManual{$botName} || exists $pendingLocalBotAuto{$botName}) {
+  if(exists $lobby->{battle}{bots}{$botName} || exists $pendingLocalBotManual{$botName} || exists $pendingLocalBotAuto{$botName}) {
     answer("Unable to add bot: $botName has already been added");
     return 0;
   }
@@ -7464,7 +7464,7 @@ sub hAddBox {
     invalidSyntax($user,"addbox");
     return 0;
   }
-  if($spads->{bSettings}->{startpostype} != 2) {
+  if($spads->{bSettings}{startpostype} != 2) {
     answer("Unable to add start box, start position type must be set to \"Choose in game\" (\"!bSet startPosType 2\")");
     return 0;
   }
@@ -7488,10 +7488,10 @@ sub hAddBox {
       return 0;
     }
     $teamNb-=1;
-    queueLobbyCommand(["REMOVESTARTRECT",$teamNb]) if(exists $lobby->{battle}->{startRects}->{$teamNb});
+    queueLobbyCommand(["REMOVESTARTRECT",$teamNb]) if(exists $lobby->{battle}{startRects}{$teamNb});
   }else{
     for my $i (0..250) {
-      if(! exists $lobby->{battle}->{startRects}->{$i}) {
+      if(! exists $lobby->{battle}{startRects}{$i}) {
         $teamNb=$i;
         last;
       }
@@ -7515,7 +7515,7 @@ sub hAdvert {
   my $newAdvertMsg='';
   $newAdvertMsg=join(' ',@{$p_params}) if(@{$p_params});
   my @newAdvertMsgs=split(/\|/,$newAdvertMsg);
-  $spads->{values}->{advertMsg}=\@newAdvertMsgs;
+  $spads->{values}{advertMsg}=\@newAdvertMsgs;
   $conf{advertMsg}=$newAdvertMsgs[0];
   answer("Advert message updated.");
   return 1;
@@ -7707,15 +7707,15 @@ sub hBan {
   }
   answer($banMsg);
   
-  if($banMode eq 'account' && exists $lobby->{accounts}->{$id}) {
+  if($banMode eq 'account' && exists $lobby->{accounts}{$id}) {
     $banMode='user';
-    $bannedUser=$lobby->{accounts}->{$id};
+    $bannedUser=$lobby->{accounts}{$id};
   }
-  if($banMode eq 'user' && $lobbyState >= LOBBY_STATE_BATTLE_OPENED && exists $lobby->{battle}->{users}->{$bannedUser}) {
+  if($banMode eq 'user' && $lobbyState >= LOBBY_STATE_BATTLE_OPENED && exists $lobby->{battle}{users}{$bannedUser}) {
     if($p_ban->{banType} < 2) {
       queueLobbyCommand(["KICKFROMBATTLE",$bannedUser]);
     }else{
-      if(defined $lobby->{battle}->{users}->{$bannedUser}->{battleStatus} && $lobby->{battle}->{users}->{$bannedUser}->{battleStatus}->{mode}) {
+      if(defined $lobby->{battle}{users}{$bannedUser}{battleStatus} && $lobby->{battle}{users}{$bannedUser}{battleStatus}{mode}) {
         my $forceMsg="Forcing spectator mode for $bannedUser [auto-spec mode]";
         $forceMsg.=" (reason: $p_ban->{reason})" if(exists $p_ban->{reason} && defined $p_ban->{reason} && $p_ban->{reason} ne "");
         queueLobbyCommand(["FORCESPECTATORMODE",$bannedUser]);
@@ -7818,15 +7818,15 @@ sub hBanIp {
   }
   answer($banMsg);
   
-  if($banMode eq 'account' && exists $lobby->{accounts}->{$id}) {
+  if($banMode eq 'account' && exists $lobby->{accounts}{$id}) {
     $banMode='user';
-    $bannedUser=$lobby->{accounts}->{$id};
+    $bannedUser=$lobby->{accounts}{$id};
   }
-  if($banMode eq 'user' && $lobbyState >= LOBBY_STATE_BATTLE_OPENED && exists $lobby->{battle}->{users}->{$bannedUser}) {
+  if($banMode eq 'user' && $lobbyState >= LOBBY_STATE_BATTLE_OPENED && exists $lobby->{battle}{users}{$bannedUser}) {
     if($p_ban->{banType} < 2) {
       queueLobbyCommand(["KICKFROMBATTLE",$bannedUser]);
     }else{
-      if(defined $lobby->{battle}->{users}->{$bannedUser}->{battleStatus} && $lobby->{battle}->{users}->{$bannedUser}->{battleStatus}->{mode}) {
+      if(defined $lobby->{battle}{users}{$bannedUser}{battleStatus} && $lobby->{battle}{users}{$bannedUser}{battleStatus}{mode}) {
         my $forceMsg="Forcing spectator mode for $bannedUser [auto-spec mode]";
         $forceMsg.=" (reason: $p_ban->{reason})" if(exists $p_ban->{reason} && defined $p_ban->{reason} && $p_ban->{reason} ne "");
         queueLobbyCommand(["FORCESPECTATORMODE",$bannedUser]);
@@ -7935,15 +7935,15 @@ sub hBanIps {
   }
   answer($banMsg);
   
-  if($banMode eq 'account' && exists $lobby->{accounts}->{$id}) {
+  if($banMode eq 'account' && exists $lobby->{accounts}{$id}) {
     $banMode='user';
-    $bannedUser=$lobby->{accounts}->{$id};
+    $bannedUser=$lobby->{accounts}{$id};
   }
-  if($banMode eq 'user' && $lobbyState >= LOBBY_STATE_BATTLE_OPENED && exists $lobby->{battle}->{users}->{$bannedUser}) {
+  if($banMode eq 'user' && $lobbyState >= LOBBY_STATE_BATTLE_OPENED && exists $lobby->{battle}{users}{$bannedUser}) {
     if($p_ban->{banType} < 2) {
       queueLobbyCommand(["KICKFROMBATTLE",$bannedUser]);
     }else{
-      if(defined $lobby->{battle}->{users}->{$bannedUser}->{battleStatus} && $lobby->{battle}->{users}->{$bannedUser}->{battleStatus}->{mode}) {
+      if(defined $lobby->{battle}{users}{$bannedUser}{battleStatus} && $lobby->{battle}{users}{$bannedUser}{battleStatus}{mode}) {
         my $forceMsg="Forcing spectator mode for $bannedUser [auto-spec mode]";
         $forceMsg.=" (reason: $p_ban->{reason})" if(exists $p_ban->{reason} && defined $p_ban->{reason} && $p_ban->{reason} ne "");
         queueLobbyCommand(["FORCESPECTATORMODE",$bannedUser]);
@@ -7967,7 +7967,7 @@ sub hBKick {
     return 0;
   }
 
-  my @players=keys(%{$lobby->{battle}->{users}});
+  my @players=keys(%{$lobby->{battle}{users}});
   my $p_kickedUsers=cleverSearch($p_params->[0],\@players);
   if(! @{$p_kickedUsers}) {
     answer("Unable to find matching player for \"$p_params->[0]\" in battle lobby");
@@ -8015,7 +8015,7 @@ sub hBoss {
     }
   }
 
-  my @players=keys(%{$lobby->{battle}->{users}});
+  my @players=keys(%{$lobby->{battle}{users}});
   my $p_bossUsers=cleverSearch($p_params->[0],\@players);
   if(! @{$p_bossUsers}) {
     answer("Unable to find matching player for \"$p_params->[0]\" in battle lobby");
@@ -8054,12 +8054,12 @@ sub hBPreset {
 
   my ($bPreset)=@{$p_params};
 
-  if(! exists $spads->{bPresets}->{$bPreset}) {
+  if(! exists $spads->{bPresets}{$bPreset}) {
     answer("\"$bPreset\" is not a valid battle preset (use \"!list bPresets\" to list available battle presets)");
     return 0;
   }
 
-  if(none {$bPreset eq $_} @{$spads->{values}->{battlePreset}}) {
+  if(none {$bPreset eq $_} @{$spads->{values}{battlePreset}}) {
     answer("Switching to battle preset \"$bPreset\" is not allowed from current global preset");
     return 0;
   }
@@ -8070,7 +8070,7 @@ sub hBPreset {
   $spads->applyBPreset($bPreset);
   %conf=%{$spads->{conf}};
   sendBattleSettings() if($lobbyState >= LOBBY_STATE_BATTLE_OPENED);
-  sayBattleAndGame("Battle preset \"$bPreset\" ($spads->{bSettings}->{description}) applied by $user");
+  sayBattleAndGame("Battle preset \"$bPreset\" ($spads->{bSettings}{description}) applied by $user");
   return 1;
 }
 
@@ -8087,7 +8087,7 @@ sub hBSet {
   $bSetting=lc($bSetting);
 
   my $modName=$targetMod;
-  $modName=$lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod} if($lobbyState >= LOBBY_STATE_BATTLE_OPENED);
+  $modName=$lobby->{battles}{$lobby->{battle}{battleId}}{mod} if($lobbyState >= LOBBY_STATE_BATTLE_OPENED);
   my $p_modOptions=getModOptions($modName);
   my $p_mapOptions=getMapOptions($currentMap);
 
@@ -8132,17 +8132,17 @@ sub hBSet {
     last if($allowed);
   }
   if($allowed) {
-    if(exists $spads->{bSettings}->{$bSetting}) {
-      if($spads->{bSettings}->{$bSetting} eq $val) {
+    if(exists $spads->{bSettings}{$bSetting}) {
+      if($spads->{bSettings}{$bSetting} eq $val) {
         answer("Battle setting \"$bSetting\" is already set to value \"$val\"");
         return 0;
       }
-    }elsif($val eq $p_options->{$bSetting}->{default}) {
+    }elsif($val eq $p_options->{$bSetting}{default}) {
       answer("Battle setting \"$bSetting\" is already set to value \"$val\"");
       return 0;
     }
     return 1 if($checkOnly);
-    $spads->{bSettings}->{$bSetting}=$val;
+    $spads->{bSettings}{$bSetting}=$val;
     sendBattleSetting($bSetting) if($lobbyState >= LOBBY_STATE_BATTLE_OPENED);
     $timestamps{autoRestore}=time;
     sayBattleAndGame("Battle setting changed by $user ($bSetting=$val)");
@@ -8199,7 +8199,7 @@ sub hCallVote {
   my ($p_cmd,$warnMes)=processAliases($user,$p_params);
   $p_params=$p_cmd if($p_cmd);
 
-  sayPrivate($user,$warnMes) if($warnMes && $conf{springieEmulation} eq "warn" && exists $lobby->{users}->{$user} && (! $lobby->{users}->{$user}->{status}->{inGame}));
+  sayPrivate($user,$warnMes) if($warnMes && $conf{springieEmulation} eq "warn" && exists $lobby->{users}{$user} && (! $lobby->{users}{$user}{status}{inGame}));
 
   my $checkValue=executeCommand($source,$user,$p_params,1);
   return 0 unless($checkValue);
@@ -8231,10 +8231,10 @@ sub hCallVote {
 
   if(%currentVote) {
     if(exists $currentVote{command}) {
-      if((exists $currentVote{remainingVoters}->{$user} || exists $currentVote{awayVoters}->{$user}) && $#{$currentVote{command}} == $#{$p_params}) {
+      if((exists $currentVote{remainingVoters}{$user} || exists $currentVote{awayVoters}{$user}) && $#{$currentVote{command}} == $#{$p_params}) {
         my $isSameCmd=1;
         for my $i (0..$#{$p_params}) {
-          if(lc($p_params->[$i]) ne lc($currentVote{command}->[$i])) {
+          if(lc($p_params->[$i]) ne lc($currentVote{command}[$i])) {
             $isSameCmd=0;
             last;
           }
@@ -8250,8 +8250,8 @@ sub hCallVote {
   }
 
   my %remainingVoters;
-  if(exists $lobby->{battle}->{users}) {
-    foreach my $bUser (keys %{$lobby->{battle}->{users}}) {
+  if(exists $lobby->{battle}{users}) {
+    foreach my $bUser (keys %{$lobby->{battle}{users}}) {
       next if($bUser eq $user || $bUser eq $conf{lobbyLogin});
       my $p_levels=getCommandLevels($source,$bUser,lc($p_params->[0]));
       my $level=getUserAccessLevel($bUser);
@@ -8260,15 +8260,15 @@ sub hCallVote {
         my ($voteRingDelay,$votePvMsgDelay)=(getUserPref($bUser,'voteRingDelay'),getUserPref($bUser,'votePvMsgDelay'));
         $remainingVoters{$bUser} = { ringTime => 0,
                                      notifyTime => 0};
-        $remainingVoters{$bUser}->{ringTime} = time+$voteRingDelay if($voteRingDelay);
-        $remainingVoters{$bUser}->{notifyTime} = time+$votePvMsgDelay if($votePvMsgDelay);
+        $remainingVoters{$bUser}{ringTime} = time+$voteRingDelay if($voteRingDelay);
+        $remainingVoters{$bUser}{notifyTime} = time+$votePvMsgDelay if($votePvMsgDelay);
       }
     }
   }
   if($autohost->getState()) {
     foreach my $gUserNb (keys %{$autohost->{players}}) {
-      next if($autohost->{players}->{$gUserNb}->{disconnectCause} != -1);
-      my $gUser=$autohost->{players}->{$gUserNb}->{name};
+      next if($autohost->{players}{$gUserNb}{disconnectCause} != -1);
+      my $gUser=$autohost->{players}{$gUserNb}{name};
       next if($gUser eq $user || $gUser eq $conf{lobbyLogin} || exists $remainingVoters{$gUser});
       my $p_levels=getCommandLevels($source,$gUser,lc($p_params->[0]));
       my $level=getUserAccessLevel($gUser);
@@ -8277,8 +8277,8 @@ sub hCallVote {
         my ($voteRingDelay,$votePvMsgDelay)=(getUserPref($gUser,'voteRingDelay'),getUserPref($gUser,'votePvMsgDelay'));
         $remainingVoters{$gUser} = { ringTime => 0,
                                      notifyTime => 0};
-        $remainingVoters{$gUser}->{ringTime} = time+$voteRingDelay if($voteRingDelay);
-        $remainingVoters{$gUser}->{notifyTime} = time+$votePvMsgDelay if($votePvMsgDelay);
+        $remainingVoters{$gUser}{ringTime} = time+$voteRingDelay if($voteRingDelay);
+        $remainingVoters{$gUser}{notifyTime} = time+$votePvMsgDelay if($votePvMsgDelay);
       }
     }
     if(lc($p_params->[0]) eq 'resign') {
@@ -8395,7 +8395,7 @@ sub hChpasswd {
   }
   return 1 if($checkOnly);
   my $oldLevel=0;
-  $oldLevel=getUserAccessLevel($passwdUser) if($lobbyState > LOBBY_STATE_LOGGED_IN && exists $lobby->{users}->{$passwdUser});
+  $oldLevel=getUserAccessLevel($passwdUser) if($lobbyState > LOBBY_STATE_LOGGED_IN && exists $lobby->{users}{$passwdUser});
   if($#{$p_params} == 0) {
     setAccountUserPref($aId,$passwdUser,'password','');
     answer("Password removed for user $passwdUser");
@@ -8403,7 +8403,7 @@ sub hChpasswd {
     setAccountUserPref($aId,$passwdUser,'password',md5_base64($p_params->[1]));
     answer("Password set to \"$p_params->[1]\" for user $passwdUser");
   }
-  if($user ne $passwdUser && $lobbyState > LOBBY_STATE_LOGGED_IN && exists $lobby->{users}->{$passwdUser}) {
+  if($user ne $passwdUser && $lobbyState > LOBBY_STATE_LOGGED_IN && exists $lobby->{users}{$passwdUser}) {
     sayPrivate($passwdUser,"Your AutoHost password has been modified by $user");
   }
   return 1;
@@ -8440,9 +8440,9 @@ sub hChrank {
     setAccountUserPref($aId,$modifiedUser,"rankMode",$val);
     answer("RankMode set to \"$val\" for user $modifiedUser");
   }
-  if($lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}} && exists $lobby->{battle}->{users}->{$modifiedUser}) {
+  if($lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}} && exists $lobby->{battle}{users}{$modifiedUser}) {
     updateBattleSkillForNewSkillAndRankModes($modifiedUser);
-    if(defined $lobby->{battle}->{users}->{$modifiedUser}->{battleStatus} && $lobby->{battle}->{users}->{$modifiedUser}->{battleStatus}->{mode}) {
+    if(defined $lobby->{battle}{users}{$modifiedUser}{battleStatus} && $lobby->{battle}{users}{$modifiedUser}{battleStatus}{mode}) {
       $balanceState=0;
       %balanceTarget=();
     }
@@ -8481,9 +8481,9 @@ sub hChskill {
     setAccountUserPref($aId,$modifiedUser,'skillMode',$val);
     answer("SkillMode set to \"$val\" for user $modifiedUser");
   }
-  if($lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}} && exists $lobby->{battle}->{users}->{$modifiedUser}) {
+  if($lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}} && exists $lobby->{battle}{users}{$modifiedUser}) {
     updateBattleSkillForNewSkillAndRankModes($modifiedUser);
-    if(defined $lobby->{battle}->{users}->{$modifiedUser}->{battleStatus} && $lobby->{battle}->{users}->{$modifiedUser}->{battleStatus}->{mode}) {
+    if(defined $lobby->{battle}{users}{$modifiedUser}{battleStatus} && $lobby->{battle}{users}{$modifiedUser}{battleStatus}{mode}) {
       $balanceState=0;
       %balanceTarget=();
     }
@@ -8499,7 +8499,7 @@ sub hCKick {
     return 0;
   }
   
-  if($lobbyState < LOBBY_STATE_SYNCHRONIZED || ! exists $lobby->{channels}->{$masterChannel} ) {
+  if($lobbyState < LOBBY_STATE_SYNCHRONIZED || ! exists $lobby->{channels}{$masterChannel} ) {
     answer("Unable to kick from channel \#$masterChannel (outside of channel)");
     return 0;
   }
@@ -8509,7 +8509,7 @@ sub hCKick {
     return 0;
   }
 
-  my @players=keys(%{$lobby->{channels}->{$masterChannel}{users}});
+  my @players=keys(%{$lobby->{channels}{$masterChannel}{users}});
   my $p_kickedUsers=cleverSearch($p_params->[0],\@players);
   if(! @{$p_kickedUsers}) {
     answer("Unable to find matching user for \"$p_params->[0]\" in channel");
@@ -8559,13 +8559,13 @@ sub hClearBox {
     }else{
       return 1 if($checkOnly);
       $teamNb-=1;
-      queueLobbyCommand(["REMOVESTARTRECT",$teamNb]) if(exists $lobby->{battle}->{startRects}->{$teamNb});
+      queueLobbyCommand(["REMOVESTARTRECT",$teamNb]) if(exists $lobby->{battle}{startRects}{$teamNb});
       return 1;
     }
   }
 
   return 1 if($checkOnly);
-  foreach $teamNb (keys %{$lobby->{battle}->{startRects}}) {
+  foreach $teamNb (keys %{$lobby->{battle}{startRects}}) {
     next if($teamNb < $minNb);
     queueLobbyCommand(["REMOVESTARTRECT",$teamNb]);
   }
@@ -8731,7 +8731,7 @@ sub hForce {
     if($player =~ /^\%(.+)$/) {
       $player=$1;
     }else{
-      my @players=keys(%{$lobby->{battle}->{users}});
+      my @players=keys(%{$lobby->{battle}{users}});
       my $p_forcedUsers=cleverSearch($player,\@players);
       @forcedUsers=grep {$_ ne $conf{lobbyLogin}} @{$p_forcedUsers};
       if($#forcedUsers > 0) {
@@ -8742,7 +8742,7 @@ sub hForce {
     if(@forcedUsers) {
       push(@fixedForceOrders,[$forcedUsers[0],$type,$nb]);
     }else{
-      my @bots=keys(%{$lobby->{battle}->{bots}});
+      my @bots=keys(%{$lobby->{battle}{bots}});
       my $p_forcedBots=cleverSearch($player,\@bots);
       if(! @{$p_forcedBots}) {
         answer("Unable to find matching player for \"$player\" in battle lobby");
@@ -8797,7 +8797,7 @@ sub hForce {
     my ($player,$type,$nb)=@{$p_forceOrder};
     if($player =~ /^\%(.+)$/) {
       $player=$1;
-      my $p_battleStatus=$p_battle->{bots}->{$player}->{battleStatus};
+      my $p_battleStatus=$p_battle->{bots}{$player}{battleStatus};
       if($type eq 'team') {
         $p_battleStatus->{team}=$nb-1;
       }elsif($type eq 'id') {
@@ -8809,7 +8809,7 @@ sub hForce {
         slog("Unable to process manual balance command (invalid type: $type)",1);
         return 0;
       }
-      my $p_color=$p_battle->{bots}->{$player}->{color};
+      my $p_color=$p_battle->{bots}{$player}{color};
       queueLobbyCommand(['UPDATEBOT',$player,$lobby->marshallBattleStatus($p_battleStatus),$lobby->marshallColor($p_color)]);
     }else{
       if($type eq 'spec') {
@@ -8841,7 +8841,7 @@ sub hForcePreset {
 
   my ($preset)=@{$p_params};
 
-  if(! exists $spads->{presets}->{$preset}) {
+  if(! exists $spads->{presets}{$preset}) {
     answer("\"$preset\" is not a valid preset (use \"!list presets\" to list available presets)");
     return 0;
   }
@@ -8908,7 +8908,7 @@ sub hGKick {
   }
 
   my $p_ahPlayers=$autohost->getPlayersByNames();
-  my @players=grep {%{$p_ahPlayers->{$_}} && $p_ahPlayers->{$_}->{disconnectCause} == -1} (keys %{$p_ahPlayers});
+  my @players=grep {%{$p_ahPlayers->{$_}} && $p_ahPlayers->{$_}{disconnectCause} == -1} (keys %{$p_ahPlayers});
   my $p_kickedUsers=cleverSearch($p_params->[0],\@players);
   if(! @{$p_kickedUsers}) {
     answer("Unable to find matching player for \"$p_params->[0]\" in game");
@@ -8926,8 +8926,8 @@ sub hGKick {
 
   return "gKick $kickedUser" if($checkOnly);
 
-  $autohost->sendChatMessage("/kickbynum $p_ahPlayers->{$kickedUser}->{playerNb}");
-  logMsg("game","> /kickbynum $p_ahPlayers->{$kickedUser}->{playerNb}") if($conf{logGameChat});
+  $autohost->sendChatMessage("/kickbynum $p_ahPlayers->{$kickedUser}{playerNb}");
+  logMsg("game","> /kickbynum $p_ahPlayers->{$kickedUser}{playerNb}") if($conf{logGameChat});
 
   return "gKick $kickedUser";
   
@@ -8961,24 +8961,24 @@ sub hHelp {
     }
 
     my $modName=$targetMod;
-    $modName=$lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod} if($lobbyState >= LOBBY_STATE_BATTLE_OPENED);
+    $modName=$lobby->{battles}{$lobby->{battle}{battleId}}{mod} if($lobbyState >= LOBBY_STATE_BATTLE_OPENED);
     my $p_modOptions=getModOptions($modName);
     my $p_mapOptions=getMapOptions($currentMap);
 
-    if(! exists $spads->{help}->{$helpCommand} && $conf{allowSettingsShortcut} && none {$helpCommand eq $_} @READ_ONLY_SETTINGS) {
-      if(exists $spads->{helpSettings}->{global}->{$helpCommand}) {
+    if(! exists $spads->{help}{$helpCommand} && $conf{allowSettingsShortcut} && none {$helpCommand eq $_} @READ_ONLY_SETTINGS) {
+      if(exists $spads->{helpSettings}{global}{$helpCommand}) {
         $setting=$helpCommand;
         $helpCommand="global";
-      }elsif(exists $spads->{helpSettings}->{set}->{$helpCommand}) {
+      }elsif(exists $spads->{helpSettings}{set}{$helpCommand}) {
         $setting=$helpCommand;
         $helpCommand="set";
-      }elsif(exists $spads->{helpSettings}->{hset}->{$helpCommand}) {
+      }elsif(exists $spads->{helpSettings}{hset}{$helpCommand}) {
         $setting=$helpCommand;
         $helpCommand="hset";
-      }elsif(exists $spads->{helpSettings}->{bset}->{$helpCommand} || exists $p_modOptions->{$helpCommand} || exists $p_mapOptions->{$helpCommand}) {
+      }elsif(exists $spads->{helpSettings}{bset}{$helpCommand} || exists $p_modOptions->{$helpCommand} || exists $p_mapOptions->{$helpCommand}) {
         $setting=$helpCommand;
         $helpCommand="bset";
-      }elsif(exists $spads->{helpSettings}->{pset}->{$helpCommand}) {
+      }elsif(exists $spads->{helpSettings}{pset}{$helpCommand}) {
         $setting=$helpCommand;
         $helpCommand="pset";
       }
@@ -9017,7 +9017,7 @@ sub hHelp {
         }elsif($p_option->{type} eq "list") {
           my %listItems=%{$p_option->{list}};
           foreach my $itemKey (sort keys %listItems) {
-            sayPrivate($user,"  $itemKey: $listItems{$itemKey}->{name} ($listItems{$itemKey}->{description})");
+            sayPrivate($user,"  $itemKey: $listItems{$itemKey}{name} ($listItems{$itemKey}{description})");
           }
         }elsif($p_option->{type} eq "number") {
           my $allowedRangeString="  $p_option->{numberMin} .. $p_option->{numberMax}";
@@ -9032,8 +9032,8 @@ sub hHelp {
         }
         sayPrivate($user,"$B$C{10}Default value:");
         sayPrivate($user,"  $p_option->{default}");
-      }elsif(exists $spads->{helpSettings}->{$helpCommand}->{$setting}) {
-        my $settingHelp=$spads->{helpSettings}->{$helpCommand}->{$setting};
+      }elsif(exists $spads->{helpSettings}{$helpCommand}{$setting}) {
+        my $settingHelp=$spads->{helpSettings}{$helpCommand}{$setting};
         sayPrivate($user,"$B********** Help for $settingTypes{$helpCommand} \"$C{12}$settingHelp->{name}$C{1}\" **********");
         sayPrivate($user,"$B$C{10}Explicit name:");
         sayPrivateArray($user,$settingHelp->{explicitName});
@@ -9059,13 +9059,13 @@ sub hHelp {
     }else {
       my $p_help;
       my $moduleString;
-      if(exists $spads->{help}->{$helpCommand}) {
-        $p_help=$spads->{help}->{$helpCommand};
+      if(exists $spads->{help}{$helpCommand}) {
+        $p_help=$spads->{help}{$helpCommand};
         $moduleString='';
       }else{
         foreach my $pluginName (keys %{$spads->{pluginsConf}}) {
-          if(exists $spads->{pluginsConf}->{$pluginName}->{help}->{$helpCommand}) {
-            $p_help=$spads->{pluginsConf}->{$pluginName}->{help}->{$helpCommand};
+          if(exists $spads->{pluginsConf}{$pluginName}{help}{$helpCommand}) {
+            $p_help=$spads->{pluginsConf}{$pluginName}{help}{$helpCommand};
             $moduleString=" (plugin $pluginName)";
             last;
           }
@@ -9094,14 +9094,14 @@ sub hHelp {
 
     sayPrivate($user,"$B********** Available commands for your access level **********");
     foreach my $i (0..$#{$p_helpForUser->{direct}}) {
-      $p_helpForUser->{direct}->[$i]="$C{3}$1$C{5}$2$C{1}$3" if($p_helpForUser->{direct}->[$i] =~ /^(!\w+)(.*)( - .*)$/);
-      sayPrivate($user,$p_helpForUser->{direct}->[$i]);
+      $p_helpForUser->{direct}[$i]="$C{3}$1$C{5}$2$C{1}$3" if($p_helpForUser->{direct}[$i] =~ /^(!\w+)(.*)( - .*)$/);
+      sayPrivate($user,$p_helpForUser->{direct}[$i]);
     }
     if(@{$p_helpForUser->{vote}}) {
       sayPrivate($user,"$B********** Additional commands available by vote for your access level **********");
       foreach my $i (0..$#{$p_helpForUser->{vote}}) {
-        $p_helpForUser->{vote}->[$i]="$C{10}$1$C{5}$2$C{14}$3" if($p_helpForUser->{vote}->[$i] =~ /^(!\w+)(.*)( - .*)$/);
-        sayPrivate($user,$p_helpForUser->{vote}->[$i]);
+        $p_helpForUser->{vote}[$i]="$C{10}$1$C{5}$2$C{14}$3" if($p_helpForUser->{vote}[$i] =~ /^(!\w+)(.*)( - .*)$/);
+        sayPrivate($user,$p_helpForUser->{vote}[$i]);
       }
     }
     sayPrivate($user,"  --> Use \"$C{3}!list aliases$C{1}\" to list available command aliases.");
@@ -9134,18 +9134,18 @@ sub hHelpAll {
   sayPrivate($user,"$B********** SPADS commands **********");
   for my $command (sort (keys %{$p_help})) {
     next unless($command);
-    my $helpLine=$p_help->{$command}->[0];
+    my $helpLine=$p_help->{$command}[0];
     $helpLine="$C{3}$1$C{5}$2$C{1}$3" if($helpLine =~ /^(!\w+)(.*)( - .*)$/);
     sayPrivate($user,$helpLine);
   }
 
   foreach my $pluginName (keys %{$spads->{pluginsConf}}) {
-    if(%{$spads->{pluginsConf}->{$pluginName}->{help}}) {
-      $p_help=$spads->{pluginsConf}->{$pluginName}->{help};
+    if(%{$spads->{pluginsConf}{$pluginName}{help}}) {
+      $p_help=$spads->{pluginsConf}{$pluginName}{help};
       sayPrivate($user,"$B********** $pluginName plugin commands **********");
       for my $command (sort (keys %{$p_help})) {
         next unless($command);
-        my $helpLine=$p_help->{$command}->[0];
+        my $helpLine=$p_help->{$command}[0];
         $helpLine="$C{3}$1$C{5}$2$C{1}$3" if($helpLine =~ /^(!\w+)(.*)( - .*)$/);
         sayPrivate($user,$helpLine);
       }
@@ -9218,12 +9218,12 @@ sub hHPreset {
 
   my ($hPreset)=@{$p_params};
 
-  if(! exists $spads->{hPresets}->{$hPreset}) {
+  if(! exists $spads->{hPresets}{$hPreset}) {
     answer("\"$hPreset\" is not a valid hosting preset (use \"!list hPresets\" to list available hosting presets)");
     return 0;
   }
 
-  if(none {$hPreset eq $_} @{$spads->{values}->{hostingPreset}}) {
+  if(none {$hPreset eq $_} @{$spads->{values}{hostingPreset}}) {
     answer("Switching to hosting preset \"$hPreset\" is not allowed from current global preset");
     return 0;
   }
@@ -9234,7 +9234,7 @@ sub hHPreset {
   $spads->applyHPreset($hPreset);
   %conf=%{$spads->{conf}};
   updateTargetMod();
-  my $msg="Hosting preset \"$hPreset\" ($spads->{hSettings}->{description}) applied by $user";
+  my $msg="Hosting preset \"$hPreset\" ($spads->{hSettings}{description}) applied by $user";
   $msg.=" (some pending settings need rehosting to be applied)" if(needRehost());
   sayBattleAndGame($msg);
   return 1;
@@ -9256,7 +9256,7 @@ sub hHSet {
     next if(any {$hParam eq $_} qw'description battleName');
     if($hSetting eq lc($hParam)) {
       my $allowed=0;
-      foreach my $allowedValue (@{$spads->{hValues}->{$hParam}}) {
+      foreach my $allowedValue (@{$spads->{hValues}{$hParam}}) {
         if(isRange($allowedValue)) {
           $allowed=1 if(matchRange($allowedValue,$val));
         }elsif($val eq $allowedValue) {
@@ -9265,12 +9265,12 @@ sub hHSet {
         last if($allowed);
       }
       if($allowed) {
-        if($spads->{hSettings}->{$hParam} eq $val) {
+        if($spads->{hSettings}{$hParam} eq $val) {
           answer("Hosting setting \"$hParam\" is already set to value \"$val\"");
           return 0;
         }
         return 1 if($checkOnly);
-        $spads->{hSettings}->{$hParam}=$val;
+        $spads->{hSettings}{$hParam}=$val;
         updateTargetMod() if($hParam eq "modName");
         $timestamps{autoRestore}=time;
         sayBattleAndGame("Hosting setting changed by $user ($hParam=$val), use !rehost to apply new value.");
@@ -9307,7 +9307,7 @@ sub hJoinAs {
   my ($joinedEntity,$joiningPlayer)=($p_params->[0],$user);
   $joiningPlayer=$p_params->[1] if($#{$p_params} == 1);
 
-  my @battlePlayers=keys(%{$lobby->{battle}->{users}});
+  my @battlePlayers=keys(%{$lobby->{battle}{users}});
   my $p_joiningPlayers=cleverSearch($joiningPlayer,\@battlePlayers);
   if(! @{$p_joiningPlayers}) {
     answer("Unable to find player \"$joiningPlayer\" in battle lobby");
@@ -9318,11 +9318,11 @@ sub hJoinAs {
     return 0;
   }
   $joiningPlayer=$p_joiningPlayers->[0];
-  if(exists $p_runningBattle->{users}->{$joiningPlayer}) {
+  if(exists $p_runningBattle->{users}{$joiningPlayer}) {
     answer("Player \"$joiningPlayer\" has already been added at start");
     return 0;
   }
-  if(! defined $lobby->{battle}->{users}->{$joiningPlayer}->{scriptPass}) {
+  if(! defined $lobby->{battle}{users}{$joiningPlayer}{scriptPass}) {
     answer("Unable to add in-game player \"$joiningPlayer\", player didn't send script password");
     return 0;
   }
@@ -9333,7 +9333,7 @@ sub hJoinAs {
 
   if($joinedEntity eq 'spec') {
     return "joinAs spec $joiningPlayer" if($checkOnly);
-    $inGameAddedUsers{$joiningPlayer}=$lobby->{battle}->{users}->{$joiningPlayer}->{scriptPass};
+    $inGameAddedUsers{$joiningPlayer}=$lobby->{battle}{users}{$joiningPlayer}{scriptPass};
     my $joinMsg="Adding user $joiningPlayer as spectator";
     $joinMsg.= " (by $user)" if($user ne $joiningPlayer);
     sayBattle($joinMsg);
@@ -9341,13 +9341,13 @@ sub hJoinAs {
     return "joinAs spec $joiningPlayer";
   }elsif($joinedEntity =~ /^\#(\d+)$/) {
     my $joinedId=$1;
-    if(! exists $runningBattleReversedMapping{teams}->{$joinedId}) {
+    if(! exists $runningBattleReversedMapping{teams}{$joinedId}) {
       answer("Unable to add in-game player in ID $joinedId (invalid in-game ID, use !status to check in-game IDs)");
       return 0;
     }
     return "joinAs $joinedEntity $joiningPlayer" if($checkOnly);
     $inGameAddedPlayers{$joiningPlayer}=$joinedId;
-    $inGameAddedUsers{$joiningPlayer}=$lobby->{battle}->{users}->{$joiningPlayer}->{scriptPass};
+    $inGameAddedUsers{$joiningPlayer}=$lobby->{battle}{users}{$joiningPlayer}{scriptPass};
     my $joinMsg="Adding player $joiningPlayer in ID $joinedId";
     $joinMsg.=" (by $user)" if($user ne $joiningPlayer);
     sayBattleAndGame($joinMsg);
@@ -9373,11 +9373,11 @@ sub hJoinAs {
     $joinedEntity=$p_joinedPlayers->[0];
     my $joinedId;
     if($isBot) {
-      $joinedId=$runningBattleMapping{teams}->{$p_runningBattle->{bots}->{$joinedEntity}->{battleStatus}->{id}};
+      $joinedId=$runningBattleMapping{teams}{$p_runningBattle->{bots}{$joinedEntity}{battleStatus}{id}};
     }else{
-      if(exists $p_runningBattle->{users}->{$joinedEntity}) {
-        if(defined $p_runningBattle->{users}->{$joinedEntity}->{battleStatus} && $p_runningBattle->{users}->{$joinedEntity}->{battleStatus}->{mode}) {
-          $joinedId=$runningBattleMapping{teams}->{$p_runningBattle->{users}->{$joinedEntity}->{battleStatus}->{id}};
+      if(exists $p_runningBattle->{users}{$joinedEntity}) {
+        if(defined $p_runningBattle->{users}{$joinedEntity}{battleStatus} && $p_runningBattle->{users}{$joinedEntity}{battleStatus}{mode}) {
+          $joinedId=$runningBattleMapping{teams}{$p_runningBattle->{users}{$joinedEntity}{battleStatus}{id}};
         }else{
           answer("Player \"$joinedEntity\" is a spectator, use \"!joinAs spec\" if you want to add in-game spectators");
           return 0;
@@ -9388,7 +9388,7 @@ sub hJoinAs {
     }
     return "joinAs $joinedEntity $joiningPlayer" if($checkOnly);
     $inGameAddedPlayers{$joiningPlayer}=$joinedId;
-    $inGameAddedUsers{$joiningPlayer}=$lobby->{battle}->{users}->{$joiningPlayer}->{scriptPass};
+    $inGameAddedUsers{$joiningPlayer}=$lobby->{battle}{users}{$joiningPlayer}{scriptPass};
     my $joinMsg="Adding player $joiningPlayer in ID $joinedId";
     $joinMsg.=" (by $user)" if($user ne $joiningPlayer);
     sayBattleAndGame($joinMsg);
@@ -9431,7 +9431,7 @@ sub hKickBan {
     }
   }
   if(! @{$p_kickBannedUsers} && $lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}}) {
-    my @players=keys(%{$lobby->{battle}->{users}});
+    my @players=keys(%{$lobby->{battle}{users}});
     $p_kickBannedUsers=cleverSearch($p_params->[0],\@players);
     if($#{$p_kickBannedUsers} > 0) {
       answer("Ambiguous command, multiple matches found for player \"$p_params->[0]\" in battle lobby");
@@ -9467,13 +9467,13 @@ sub hKickBan {
 
   if($autohost->getState()) {
     my $p_ahPlayers=$autohost->getPlayersByNames();
-    if(exists $p_ahPlayers->{$bannedUser} && %{$p_ahPlayers->{$bannedUser}} && $p_ahPlayers->{$bannedUser}->{disconnectCause} == -1) {
-      $autohost->sendChatMessage("/kickbynum $p_ahPlayers->{$bannedUser}->{playerNb}");
+    if(exists $p_ahPlayers->{$bannedUser} && %{$p_ahPlayers->{$bannedUser}} && $p_ahPlayers->{$bannedUser}{disconnectCause} == -1) {
+      $autohost->sendChatMessage("/kickbynum $p_ahPlayers->{$bannedUser}{playerNb}");
     }
   }
 
   if($lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}}) {
-    if(exists $lobby->{battle}->{users}->{$bannedUser}) {
+    if(exists $lobby->{battle}{users}{$bannedUser}) {
       queueLobbyCommand(["KICKFROMBATTLE",$bannedUser]);
     }
   }
@@ -9520,21 +9520,21 @@ sub hLearnMaps {
 
   my %seenMaps;
   foreach my $bId (keys %{$lobby->{battles}}) {
-    my $founder=$lobby->{battles}->{$bId}->{founder};
-    my $map=$lobby->{battles}->{$bId}->{map};
+    my $founder=$lobby->{battles}{$bId}{founder};
+    my $map=$lobby->{battles}{$bId}{map};
     if(($mapFilter eq '' || index(lc($map),lc($mapFilter)) > -1)
        && ($hostFilter eq '' || index(lc($founder),lc($hostFilter)) > -1)
-       && $founder ne $conf{lobbyLogin} && $lobby->{battles}->{$bId}->{mapHash} != 0) {
-      my ($engineName,$engineVersion)=($lobby->{battles}->{$bId}->{engineName},$lobby->{battles}->{$bId}->{engineVersion});
+       && $founder ne $conf{lobbyLogin} && $lobby->{battles}{$bId}{mapHash} != 0) {
+      my ($engineName,$engineVersion)=($lobby->{battles}{$bId}{engineName},$lobby->{battles}{$bId}{engineVersion});
       my $quotedVer=quotemeta($syncedSpringVersion);
       if($engineName !~ /^spring$/i || $engineVersion !~ /^$quotedVer(\..*)?$/) {
         slog("Ignoring battle $bId for learnMaps (different game engine: \"$engineName $engineVersion\")",5);
         next;
       }
-      if(exists $seenMaps{$map} && $seenMaps{$map} ne $lobby->{battles}->{$bId}->{mapHash}) {
-        slog("Map \"$map\" has been seen with different hashes ($seenMaps{$map} and $lobby->{battles}->{$bId}->{mapHash}) during map hash learning",2);
+      if(exists $seenMaps{$map} && $seenMaps{$map} ne $lobby->{battles}{$bId}{mapHash}) {
+        slog("Map \"$map\" has been seen with different hashes ($seenMaps{$map} and $lobby->{battles}{$bId}{mapHash}) during map hash learning",2);
       }else{
-        $seenMaps{$map}=$lobby->{battles}->{$bId}->{mapHash};
+        $seenMaps{$map}=$lobby->{battles}{$bId}{mapHash};
       }
     }
   }
@@ -9652,12 +9652,12 @@ sub hList {
       my $presetString="    $C{14}";
       if($preset eq $conf{preset}) {
         $presetString="[*] $C{12}";
-      }elsif(any {$preset eq $_} @{$spads->{values}->{preset}}) {
+      }elsif(any {$preset eq $_} @{$spads->{values}{preset}}) {
         $presetString = (exists $spads->{presetsAttributes}{$preset} && $spads->{presetsAttributes}{$preset}{transparent}) ? ' o  ' : '[ ] ';
       }
       $presetString.=$B if($preset eq $conf{defaultPreset});
       $presetString.=$preset;
-      $presetString.=" ($spads->{presets}->{$preset}->{description}->[0])" if(exists $spads->{presets}->{$preset}->{description});
+      $presetString.=" ($spads->{presets}{$preset}{description}[0])" if(exists $spads->{presets}{$preset}{description});
       $presetString.=" $B*** DEFAULT ***" if($preset eq $conf{defaultPreset});
       sayPrivate($user,'| '.$presetString);
     }
@@ -9674,11 +9674,11 @@ sub hList {
       my $presetString="    $C{14}";
       if($bPreset eq $conf{battlePreset}) {
         $presetString="[*] $C{12}";
-      }elsif(any {$bPreset eq $_} @{$spads->{values}->{battlePreset}}) {
+      }elsif(any {$bPreset eq $_} @{$spads->{values}{battlePreset}}) {
         $presetString = (exists $spads->{bPresetsAttributes}{$bPreset} && $spads->{bPresetsAttributes}{$bPreset}{transparent}) ? ' o  ' : '[ ] ';
       }
       $presetString.=$bPreset;
-      $presetString.=" ($spads->{bPresets}->{$bPreset}->{description}->[0])" if(exists $spads->{bPresets}->{$bPreset}->{description});
+      $presetString.=" ($spads->{bPresets}{$bPreset}{description}[0])" if(exists $spads->{bPresets}{$bPreset}{description});
       sayPrivate($user,'| '.$presetString);
     }
     sayPrivate($user,"  --> Use \"$C{3}!bPreset <presetName>$C{1}\" to change current battle preset.");
@@ -9694,11 +9694,11 @@ sub hList {
       my $presetString="    $C{14}";
       if($hPreset eq $conf{hostingPreset}) {
         $presetString="[*] $C{12}";
-      }elsif(any {$hPreset eq $_} @{$spads->{values}->{hostingPreset}}) {
+      }elsif(any {$hPreset eq $_} @{$spads->{values}{hostingPreset}}) {
         $presetString = (exists $spads->{hPresetsAttributes}{$hPreset} && $spads->{hPresetsAttributes}{$hPreset}{transparent}) ? ' o  ' : '[ ] ';
       }
       $presetString.=$hPreset;
-      $presetString.=" ($spads->{hPresets}->{$hPreset}->{description}->[0])" if(exists $spads->{hPresets}->{$hPreset}->{description});
+      $presetString.=" ($spads->{hPresets}{$hPreset}{description}[0])" if(exists $spads->{hPresets}{$hPreset}{description});
       sayPrivate($user,'| '.$presetString);
     }
     sayPrivate($user,"  --> Use \"$C{3}!hPreset <presetName>$C{1}\" to change current hosting preset.");
@@ -9726,18 +9726,18 @@ sub hList {
     }
     my @settingsData;
     foreach my $pluginName (sort keys %{$spads->{pluginsConf}}) {
-      my $p_values=$spads->{pluginsConf}->{$pluginName}->{values};
+      my $p_values=$spads->{pluginsConf}{$pluginName}{values};
       foreach my $setting (sort keys %{$p_values}) {
         next if(any {$setting eq $_} qw'commandsFile helpFile');
         next if($filterUnmodifiableSettings && $#{$p_values->{$setting}} < 1);
         next unless(all {index(lc("$pluginName $setting"),lc($_)) > -1} @filters);
         my $allowedValues=join(" | ",@{$p_values->{$setting}});
-        my $currentVal=$spads->{pluginsConf}->{$pluginName}->{conf}->{$setting};
+        my $currentVal=$spads->{pluginsConf}{$pluginName}{conf}{$setting};
         my ($coloredSetting,$coloredValue)=($setting,$currentVal);
         if($#{$p_values->{$setting}} < 1) {
           $coloredSetting=$C{14}.$setting;
         }else{
-          if($currentVal ne $p_values->{$setting}->[0]) {
+          if($currentVal ne $p_values->{$setting}[0]) {
             $coloredValue=$C{4}.$currentVal.$C{1};
           }else{
             $coloredValue=$C{12}.$currentVal.$C{1};
@@ -9777,14 +9777,14 @@ sub hList {
     my @settingsData;
     foreach my $setting (sort keys %{$spads->{values}}) {
       next if(any {$setting eq $_} qw'description commandsFile battlePreset hostingPreset welcomeMsg welcomeMsgInGame preset mapLink ghostMapLink advertMsg endGameCommand endGameCommandEnv endGameCommandMsg');
-      next if($filterUnmodifiableSettings && $#{$spads->{values}->{$setting}} < 1 && $setting ne 'map');
+      next if($filterUnmodifiableSettings && $#{$spads->{values}{$setting}} < 1 && $setting ne 'map');
       next unless(all {index(lc($setting),lc($_)) > -1} @filters);
-      my $allowedValues=join(" | ",@{$spads->{values}->{$setting}});
+      my $allowedValues=join(" | ",@{$spads->{values}{$setting}});
       my ($coloredSetting,$coloredValue)=($setting,$conf{$setting});
-      if($#{$spads->{values}->{$setting}} < 1 && $setting ne 'map') {
+      if($#{$spads->{values}{$setting}} < 1 && $setting ne 'map') {
         $coloredSetting=$C{14}.$setting;
       }else{
-        if($conf{$setting} ne $spads->{values}->{$setting}->[0]) {
+        if($conf{$setting} ne $spads->{values}{$setting}[0]) {
           $coloredValue=$C{4}.$conf{$setting}.$C{1};
         }else{
           $coloredValue=$C{12}.$conf{$setting}.$C{1};
@@ -9838,7 +9838,7 @@ sub hList {
       @filters=() if($#filters == 0 && lc($filters[0]) eq 'all');
     }
     my $modName=$targetMod;
-    $modName=$lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod} if($lobbyState >= LOBBY_STATE_BATTLE_OPENED);
+    $modName=$lobby->{battles}{$lobby->{battle}{battleId}}{mod} if($lobbyState >= LOBBY_STATE_BATTLE_OPENED);
     my $p_modOptions=getModOptions($modName);
     my $p_mapOptions=getMapOptions($currentMap);
     my @bSettings;
@@ -9863,10 +9863,10 @@ sub hList {
       my @allowedValues=getBSettingAllowedValues($setting,$p_options,$allowExternalValues);
       next if($filterUnmodifiableSettings && (! @allowedValues || ($#allowedValues == 0 && ! isRange($allowedValues[0]))));
       my $currentValue;
-      if(exists $spads->{bSettings}->{$setting}) {
-        $currentValue=$spads->{bSettings}->{$setting};
+      if(exists $spads->{bSettings}{$setting}) {
+        $currentValue=$spads->{bSettings}{$setting};
       }else{
-        $currentValue=$p_options->{$setting}->{default};
+        $currentValue=$p_options->{$setting}{default};
       }
       my ($coloredName,$coloredValue)=($setting,$currentValue);
       if(! @allowedValues || ($#allowedValues == 0 && ! isRange($allowedValues[0]))) {
@@ -9907,21 +9907,21 @@ sub hList {
     my @settingsData;
     foreach my $setting (sort keys %{$spads->{hValues}}) {
       next if(any {$setting eq $_} qw'description battleName');
-      next if($filterUnmodifiableSettings && $#{$spads->{hValues}->{$setting}} < 1);
+      next if($filterUnmodifiableSettings && $#{$spads->{hValues}{$setting}} < 1);
       next unless(all {index(lc($setting),lc($_)) > -1} @filters);
       if($setting eq 'password') {
-        push(@settingsData,{"$C{5}Name$C{1}" => ($#{$spads->{hValues}->{password}} < 1 ? $C{14} : '').'password',
+        push(@settingsData,{"$C{5}Name$C{1}" => ($#{$spads->{hValues}{password}} < 1 ? $C{14} : '').'password',
                             "$C{5}Current value$C{1}" => '<hidden>',
                             "$C{5}Allowed values$C{1}" => '<hidden>'});
       }else{
-        my $settingValue=$spads->{hSettings}->{$setting};
+        my $settingValue=$spads->{hSettings}{$setting};
         $settingValue=$targetMod if($setting eq 'modName');
-        my $allowedValues=join(" | ",@{$spads->{hValues}->{$setting}});
+        my $allowedValues=join(" | ",@{$spads->{hValues}{$setting}});
         my ($coloredSetting,$coloredValue)=($setting,$settingValue);
-        if($#{$spads->{hValues}->{$setting}} < 1) {
+        if($#{$spads->{hValues}{$setting}} < 1) {
           $coloredSetting=$C{14}.$setting;
         }else{
-          if($settingValue ne $spads->{hValues}->{$setting}->[0] && $setting ne 'modName') {
+          if($settingValue ne $spads->{hValues}{$setting}[0] && $setting ne 'modName') {
             $coloredValue=$C{4}.$settingValue.$C{1};
           }else{
             $coloredValue=$C{12}.$settingValue.$C{1};
@@ -9993,9 +9993,9 @@ sub hList {
       return 0;
     }
     return 1 if($checkOnly);
-    my $p_globalBans=$spads->{banLists}->{""};
+    my $p_globalBans=$spads->{banLists}{""};
     my $p_specificBans=[];
-    $p_specificBans=$spads->{banLists}->{$conf{banList}} if($conf{banList});
+    $p_specificBans=$spads->{banLists}{$conf{banList}} if($conf{banList});
     my $p_autoHandledBans=$spads->getDynamicBans();
     if(! @{$p_globalBans} && ! @{$p_specificBans} && ! @{$p_autoHandledBans}) {
       sayPrivate($user,"There is no ban entry currently");
@@ -10089,7 +10089,7 @@ sub hList {
     push(@results,"$B********** Available maps for current map list$filterString **********");
     my $outputHasLocalMap=0;
     foreach my $mapNb (sort {$a <=> $b} keys %{$spads->{maps}}) {
-      my $mapName=$spads->{maps}->{$mapNb};
+      my $mapName=$spads->{maps}{$mapNb};
       next unless(all {index(lc($mapName),lc($_)) > -1} @filters);
       $mapName=$1 if($mapName =~ /^(.*)\.smf$/);
       if(! $outputHasLocalMap) {        
@@ -10189,7 +10189,7 @@ sub hLoadBoxes {
     answer("Unable to load start boxes, battle lobby is closed");
     return 0;
   }
-  if($spads->{bSettings}->{startpostype} != 2) {
+  if($spads->{bSettings}{startpostype} != 2) {
     answer("Unable to load start boxes, start position type must be set to \"Choose in game\" (\"!bSet startPosType 2\")");
     return 0;
   }
@@ -10278,7 +10278,7 @@ sub hLoadBoxes {
 
   return 1 if($checkOnly);
 
-  foreach my $teamNb (keys %{$lobby->{battle}->{startRects}}) {
+  foreach my $teamNb (keys %{$lobby->{battle}{startRects}}) {
     queueLobbyCommand(["REMOVESTARTRECT",$teamNb]);
   }
 
@@ -10310,7 +10310,7 @@ sub hLock {
     answer("Cannot lock battle, it is already locked");
     return 0;
   }
-  my @clients=keys %{$lobby->{battle}->{users}};
+  my @clients=keys %{$lobby->{battle}{users}};
   my $nbPlayers=$#clients+1-$currentNbNonPlayer;
   if($nbPlayers < $conf{minPlayers}) {
     answer("Cannot lock battle (minPlayers=$conf{minPlayers})");
@@ -10523,11 +10523,11 @@ sub hPlugin {
       invalidSyntax($user,'plugin');
       return 0;
     }
-    if(! exists $spads->{pluginsConf}->{$pluginName}) {
+    if(! exists $spads->{pluginsConf}{$pluginName}) {
       answer("Plugin $pluginName has no modifiable configuration parameters.");
       return 0;
     }
-    my $p_pluginConf=$spads->{pluginsConf}->{$pluginName};
+    my $p_pluginConf=$spads->{pluginsConf}{$pluginName};
 
     my $setting;
     foreach my $pluginSetting (keys %{$p_pluginConf->{values}}) {
@@ -10546,7 +10546,7 @@ sub hPlugin {
     $val=join(' ',@vals) if(@vals);
 
     my $allowed=0;
-    foreach my $allowedValue (@{$p_pluginConf->{values}->{$setting}}) {
+    foreach my $allowedValue (@{$p_pluginConf->{values}{$setting}}) {
       if(isRange($allowedValue)) {
         $allowed=1 if(matchRange($allowedValue,$val));
       }elsif($val eq $allowedValue) {
@@ -10555,13 +10555,13 @@ sub hPlugin {
       last if($allowed);
     }
     if($allowed) {
-      if($p_pluginConf->{conf}->{$setting} eq $val) {
+      if($p_pluginConf->{conf}{$setting} eq $val) {
         answer("$pluginName plugin setting \"$setting\" is already set to value \"$val\".");
         return 0;
       }
       return 1 if($checkOnly);
-      my $oldValue=$p_pluginConf->{conf}->{$setting};
-      $p_pluginConf->{conf}->{$setting}=$val;
+      my $oldValue=$p_pluginConf->{conf}{$setting};
+      $p_pluginConf->{conf}{$setting}=$val;
       $timestamps{autoRestore}=time;
       sayBattleAndGame("$pluginName plugin setting changed by $user ($param=$val)");
       answer("$pluginName plugin setting changed ($setting=$val)") if($source eq "pv");
@@ -10584,12 +10584,12 @@ sub hPreset {
 
   my ($preset)=@{$p_params};
 
-  if(! exists $spads->{presets}->{$preset}) {
+  if(! exists $spads->{presets}{$preset}) {
     answer("\"$preset\" is not a valid preset (use \"!list presets\" to list available presets)");
     return 0;
   }
 
-  if(none {$preset eq $_} @{$spads->{values}->{preset}}) {
+  if(none {$preset eq $_} @{$spads->{values}{preset}}) {
     answer("Switching to preset \"$preset\" is not allowed currently (use \"!forcePreset $preset\" to bypass)");
     return 0;
   }
@@ -10653,10 +10653,10 @@ sub hPromote {
   my $neededPlayer="";
   if($conf{autoLock} ne "off" || $conf{autoSpecExtraPlayers} || $conf{autoStart} ne "off") {
     my $nbPlayers=0;
-    foreach my $player (keys %{$lobby->{battle}->{users}}) {
-      $nbPlayers++ if(defined $lobby->{battle}->{users}->{$player}->{battleStatus} && $lobby->{battle}->{users}->{$player}->{battleStatus}->{mode});
+    foreach my $player (keys %{$lobby->{battle}{users}}) {
+      $nbPlayers++ if(defined $lobby->{battle}{users}{$player}{battleStatus} && $lobby->{battle}{users}{$player}{battleStatus}{mode});
     }
-    my @bots=keys %{$lobby->{battle}->{bots}};
+    my @bots=keys %{$lobby->{battle}{bots}};
     $nbPlayers+=$#bots+1 if($conf{nbTeams} != 1);
     $neededPlayer=($targetNbPlayers-$nbPlayers)." " if($targetNbPlayers > $nbPlayers);
   }
@@ -10742,8 +10742,8 @@ sub hPSet {
         $coopMsg.=" (this has no effect currently because the \"$C{3}idShareMode$C{1}\" setting is set to \"$C{7}$conf{idShareMode}$C{1}\")";
       }else{
         $coopMsg.=" (other players who enter \"$C{3}!coop $val$C{1}\" will coop with you if they are in the same team)" if($val ne "");
-        if($lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}} && exists $lobby->{battle}->{users}->{$user}
-           && defined $lobby->{battle}->{users}->{$user}->{battleStatus} && $lobby->{battle}->{users}->{$user}->{battleStatus}->{mode}) {
+        if($lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}} && exists $lobby->{battle}{users}{$user}
+           && defined $lobby->{battle}{users}{$user}{battleStatus} && $lobby->{battle}{users}{$user}{battleStatus}{mode}) {
           $balanceState=0;
           %balanceTarget=();
         }
@@ -10761,8 +10761,8 @@ sub hPSet {
       }elsif($conf{clanMode} !~ /pref/) {
         $coopMsg.=" (this has no effect currently because the \"$C{3}clanMode$C{1}\" setting is set to \"$C{7}$conf{clanMode}$C{1}\", which disables clan preference management)";
       }else{
-        if($lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}} && exists $lobby->{battle}->{users}->{$user}
-           && defined $lobby->{battle}->{users}->{$user}->{battleStatus} && $lobby->{battle}->{users}->{$user}->{battleStatus}->{mode}) {
+        if($lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}} && exists $lobby->{battle}{users}{$user}
+           && defined $lobby->{battle}{users}{$user}{battleStatus} && $lobby->{battle}{users}{$user}{battleStatus}{mode}) {
           $balanceState=0;
           %balanceTarget=();
         }
@@ -10973,7 +10973,7 @@ sub hReloadConf {
       sub {
         my $nbArchives=shift;
         quitAfterGame('Unable to reload Spring archives') unless($nbArchives);
-        setDefaultMapOfMaplist() if($spads->{conf}->{map} eq '');
+        setDefaultMapOfMaplist() if($spads->{conf}{map} eq '');
         applyAllSettings();
         postReloadConfActions($r_asyncAnswerFunction,$keepSettings,\%newlyInstantiatedPlugins);
       } );
@@ -11135,9 +11135,9 @@ sub hRemoveBot {
   }
 
   my @localBots;
-  my @bots=keys %{$lobby->{battle}->{bots}};
+  my @bots=keys %{$lobby->{battle}{bots}};
   foreach my $bot (@bots) {
-    push(@localBots,$bot) if($lobby->{battle}->{bots}->{$bot}->{owner} eq $conf{lobbyLogin});
+    push(@localBots,$bot) if($lobby->{battle}{bots}{$bot}{owner} eq $conf{lobbyLogin});
   }
 
   my $p_removedBots=cleverSearch($p_params->[0],\@localBots);
@@ -11221,7 +11221,7 @@ sub hRing {
     return 0;
   }
 
-  my @players=keys(%{$lobby->{battle}->{users}});
+  my @players=keys(%{$lobby->{battle}{users}});
   if($#{$p_params} == 0) {
     my $p_rungUsers=cleverSearch($p_params->[0],\@players);
     if(! @{$p_rungUsers}) {
@@ -11247,14 +11247,14 @@ sub hRing {
   my @alreadyRungUsers;
   my $ringType='unready/unsynced player';
 
-  my $p_bUsers=$lobby->{battle}->{users};
+  my $p_bUsers=$lobby->{battle}{users};
   if($autohost->getState() == 1) {
     foreach my $gUserNb (keys %{$autohost->{players}}) {
-      my $player=$autohost->{players}->{$gUserNb}->{name};
+      my $player=$autohost->{players}{$gUserNb}{name};
       my $minRingDelay=getUserPref($player,"minRingDelay");
       if(exists $currentVote{command}) {
         $ringType='remaining voter';
-        if(exists $currentVote{remainingVoters}->{$player}) {
+        if(exists $currentVote{remainingVoters}{$player}) {
           if(exists $lastRungUsers{$player} && time - $lastRungUsers{$player} < $minRingDelay) {
             push(@alreadyRungUsers,$player);
           }else{
@@ -11263,11 +11263,11 @@ sub hRing {
         }
       }else{
         $ringType='unready player';
-        if($autohost->{players}->{$gUserNb}->{ready} < 1
+        if($autohost->{players}{$gUserNb}{ready} < 1
            && exists $p_bUsers->{$player}
-           && exists $p_runningBattle->{users}->{$player}
-           && (! defined $p_runningBattle->{users}->{$player}->{battleStatus} 
-               || $p_runningBattle->{users}->{$player}->{battleStatus}->{mode})) {
+           && exists $p_runningBattle->{users}{$player}
+           && (! defined $p_runningBattle->{users}{$player}{battleStatus} 
+               || $p_runningBattle->{users}{$player}{battleStatus}{mode})) {
           if(exists $lastRungUsers{$player} && time - $lastRungUsers{$player} < $minRingDelay) {
             push(@alreadyRungUsers,$player);
           }else{
@@ -11281,7 +11281,7 @@ sub hRing {
       my $minRingDelay=getUserPref($bUser,"minRingDelay");
       if(exists $currentVote{command}) {
         $ringType='remaining voter';
-        if(exists $currentVote{remainingVoters}->{$bUser}) {
+        if(exists $currentVote{remainingVoters}{$bUser}) {
           if(exists $lastRungUsers{$bUser} && time - $lastRungUsers{$bUser} < $minRingDelay) {
             push(@alreadyRungUsers,$bUser);
           }else{
@@ -11289,9 +11289,9 @@ sub hRing {
           }
         }
       }else{
-        if(! defined $p_bUsers->{$bUser}->{battleStatus}
-           || ($p_bUsers->{$bUser}->{battleStatus}->{mode}
-               && (! $p_bUsers->{$bUser}->{battleStatus}->{ready} || $p_bUsers->{$bUser}->{battleStatus}->{sync} != 1))) {
+        if(! defined $p_bUsers->{$bUser}{battleStatus}
+           || ($p_bUsers->{$bUser}{battleStatus}{mode}
+               && (! $p_bUsers->{$bUser}{battleStatus}{ready} || $p_bUsers->{$bUser}{battleStatus}{sync} != 1))) {
           if(exists $lastRungUsers{$bUser} && time - $lastRungUsers{$bUser} < $minRingDelay) {
             push(@alreadyRungUsers,$bUser);
           }else{
@@ -11342,7 +11342,7 @@ sub hSaveBoxes {
     return 0;
   }
 
-  my $p_startRects=$lobby->{battle}->{startRects};
+  my $p_startRects=$lobby->{battle}{startRects};
   if(! %{$p_startRects}) {
     answer("No start box to save");
     return 0;
@@ -11438,9 +11438,9 @@ sub hSearchUser {
         ($idOnly,$idName)=(0,$1) if($id =~ /^0\(([^\)]+)\)$/);
         my $online;
         if($idOnly) {
-          $online=exists $lobby->{accounts}->{$idOnly} ? "$C{3}Yes" : "$C{4}No";
+          $online=exists $lobby->{accounts}{$idOnly} ? "$C{3}Yes" : "$C{4}No";
         }else{
-          $online=exists $lobby->{users}->{$idName} ? "$C{3}Yes" : "$C{4}No";
+          $online=exists $lobby->{users}{$idName} ? "$C{3}Yes" : "$C{4}No";
         }
         push(@matchingAccounts,{"$C{5}ID$C{1}" => $D.$idOnly,
                                 "$C{5}Name(s)$C{1}" => $names,
@@ -11459,12 +11459,12 @@ sub hSearchUser {
         sayPrivate($user,"Too many results, please use a filter more specific than \"\@$search\"");
         return 0;
       }
-      my @sortedMatches=sort {$p_matchingIds->{$b}->{timestamp} <=> $p_matchingIds->{$a}->{timestamp}} (keys %{$p_matchingIds});
+      my @sortedMatches=sort {$p_matchingIds->{$b}{timestamp} <=> $p_matchingIds->{$a}{timestamp}} (keys %{$p_matchingIds});
       foreach my $id (@sortedMatches) {
         my $p_accountMainData=$spads->getAccountMainData($id);
         my $p_accountNames=$spads->getAccountNamesTs($id);
         my $D = time-$p_accountMainData->{timestamp} > 1209600 ? $C{14} : $C{1};
-        my @idIps=sort {$p_matchingIds->{$id}->{ips}->{$b} <=> $p_matchingIds->{$id}->{ips}->{$a}} (keys %{$p_matchingIds->{$id}->{ips}});
+        my @idIps=sort {$p_matchingIds->{$id}{ips}{$b} <=> $p_matchingIds->{$id}{ips}{$a}} (keys %{$p_matchingIds->{$id}{ips}});
         my $ips=formatList(\@idIps,40);
         my @idNames=sort {$p_accountNames->{$b} <=> $p_accountNames->{$a}} (keys %{$p_accountNames});
         my $names=formatList(\@idNames,40);
@@ -11472,9 +11472,9 @@ sub hSearchUser {
         ($idOnly,$idName)=(0,$1) if($id =~ /^0\(([^\)]+)\)$/);
         my $online;
         if($idOnly) {
-          $online=exists $lobby->{accounts}->{$idOnly} ? "$C{3}Yes" : "$C{4}No";
+          $online=exists $lobby->{accounts}{$idOnly} ? "$C{3}Yes" : "$C{4}No";
         }else{
-          $online=exists $lobby->{users}->{$idName} ? "$C{3}Yes" : "$C{4}No";
+          $online=exists $lobby->{users}{$idName} ? "$C{3}Yes" : "$C{4}No";
         }
         push(@matchingAccounts,{"$C{5}ID$C{1}" => $D.$idOnly,
                                 "$C{5}Name(s)$C{1}" => $names,
@@ -11492,12 +11492,12 @@ sub hSearchUser {
     ($p_matchingIds,$nbMatchingId)=$spads->searchUserIds($search);
     if($spads->isStoredUser($search)) {
       my $p_userIds=$spads->getUserIds($search);
-      my @sortedMatches=sort {$p_matchingIds->{$b}->{names}->{$search} <=> $p_matchingIds->{$a}->{names}->{$search}} (@{$p_userIds});
+      my @sortedMatches=sort {$p_matchingIds->{$b}{names}{$search} <=> $p_matchingIds->{$a}{names}{$search}} (@{$p_userIds});
       foreach my $id (@sortedMatches) {
         my $p_accountMainData=$spads->getAccountMainData($id);
         my $p_accountIps=$spads->getAccountIpsTs($id);
         my $D = time-$p_accountMainData->{timestamp} > 1209600 ? $C{14} : $C{1};
-        my @idNames=sort {$p_matchingIds->{$id}->{names}->{$b} <=> $p_matchingIds->{$id}->{names}->{$a}} (keys %{$p_matchingIds->{$id}->{names}});
+        my @idNames=sort {$p_matchingIds->{$id}{names}{$b} <=> $p_matchingIds->{$id}{names}{$a}} (keys %{$p_matchingIds->{$id}{names}});
         my $names=formatList(\@idNames,40);
         my @idIps=sort {$p_accountIps->{$b} <=> $p_accountIps->{$a}} (keys %{$p_accountIps});
         my $ips=formatList(\@idIps,40);
@@ -11505,9 +11505,9 @@ sub hSearchUser {
         ($idOnly,$idName)=(0,$1) if($id =~ /^0\(([^\)]+)\)$/);
         my $online;
         if($idOnly) {
-          $online=exists $lobby->{accounts}->{$idOnly} ? "$C{3}Yes" : "$C{4}No";
+          $online=exists $lobby->{accounts}{$idOnly} ? "$C{3}Yes" : "$C{4}No";
         }else{
-          $online=exists $lobby->{users}->{$idName} ? "$C{3}Yes" : "$C{4}No";
+          $online=exists $lobby->{users}{$idName} ? "$C{3}Yes" : "$C{4}No";
         }
         push(@matchingAccounts,{"$C{5}ID$C{1}" => $D.$idOnly,
                                 "$C{5}Matching name(s)$C{1}" => $names,
@@ -11525,12 +11525,12 @@ sub hSearchUser {
       return 0;
     }
     if($nbMatchingId < 41) {
-      my @sortedMatches=sort {$p_matchingIds->{$b}->{timestamp} <=> $p_matchingIds->{$a}->{timestamp}} (keys %{$p_matchingIds});
+      my @sortedMatches=sort {$p_matchingIds->{$b}{timestamp} <=> $p_matchingIds->{$a}{timestamp}} (keys %{$p_matchingIds});
       foreach my $id (@sortedMatches) {
         my $p_accountMainData=$spads->getAccountMainData($id);
         my $p_accountIps=$spads->getAccountIpsTs($id);
         my $D = time-$p_accountMainData->{timestamp} > 1209600 ? $C{14} : $C{1};
-        my @idNames=sort {$p_matchingIds->{$id}->{names}->{$b} <=> $p_matchingIds->{$id}->{names}->{$a}} (keys %{$p_matchingIds->{$id}->{names}});
+        my @idNames=sort {$p_matchingIds->{$id}{names}{$b} <=> $p_matchingIds->{$id}{names}{$a}} (keys %{$p_matchingIds->{$id}{names}});
         my $names=formatList(\@idNames,40);
         my @idIps=sort {$p_accountIps->{$b} <=> $p_accountIps->{$a}} (keys %{$p_accountIps});
         my $ips=formatList(\@idIps,40);
@@ -11538,9 +11538,9 @@ sub hSearchUser {
         ($idOnly,$idName)=(0,$1) if($id =~ /^0\(([^\)]+)\)$/);
         my $online;
         if($idOnly) {
-          $online=exists $lobby->{accounts}->{$idOnly} ? "$C{3}Yes" : "$C{4}No";
+          $online=exists $lobby->{accounts}{$idOnly} ? "$C{3}Yes" : "$C{4}No";
         }else{
-          $online=exists $lobby->{users}->{$idName} ? "$C{3}Yes" : "$C{4}No";
+          $online=exists $lobby->{users}{$idName} ? "$C{3}Yes" : "$C{4}No";
         }
         push(@matchingAccounts,{"$C{5}ID$C{1}" => $D.$idOnly,
                                 "$C{5}Matching name(s)$C{1}" => $names,
@@ -11661,7 +11661,7 @@ sub hSet {
       return 0;
     }
     return "set map $realVal" if($checkOnly);
-    $spads->{conf}->{map}=$realVal;
+    $spads->{conf}{map}=$realVal;
     %conf=%{$spads->{conf}};
     $timestamps{autoRestore}=time;
     applySettingChange("map");
@@ -11669,10 +11669,10 @@ sub hSet {
     if($conf{autoLoadMapPreset}) {
       my $smfMapName=$conf{map};
       $smfMapName.='.smf' unless($smfMapName =~ /\.smf$/);
-      if(exists $spads->{presets}->{$smfMapName}) {
+      if(exists $spads->{presets}{$smfMapName}) {
         applyPreset($smfMapName);
         $msg.=" (some pending settings need rehosting to be applied)" if(needRehost());
-      }elsif(exists $spads->{presets}->{"_DEFAULT_.smf"}) {
+      }elsif(exists $spads->{presets}{"_DEFAULT_.smf"}) {
         applyPreset("_DEFAULT_.smf");
         $msg.=" (some pending settings need rehosting to be applied)" if(needRehost());
       }
@@ -11686,7 +11686,7 @@ sub hSet {
     next if(any {$param eq $_} qw'description commandsFile battlePreset hostingPreset welcomeMsg welcomeMsgInGame mapLink ghostMapLink preset advertMsg endGameCommand endGameCommandEnv endGameCommandMsg');
     if($setting eq lc($param)) {
       my $allowed=0;
-      foreach my $allowedValue (@{$spads->{values}->{$param}}) {
+      foreach my $allowedValue (@{$spads->{values}{$param}}) {
         if(isRange($allowedValue)) {
           $allowed=1 if(matchRange($allowedValue,$val));
         }elsif($val eq $allowedValue) {
@@ -11700,7 +11700,7 @@ sub hSet {
           return 0;
         }
         return 1 if($checkOnly);
-        $spads->{conf}->{$param}=$val;
+        $spads->{conf}{$param}=$val;
         %conf=%{$spads->{conf}};
         $timestamps{autoRestore}=time;
         applySettingChange($setting);
@@ -11780,7 +11780,7 @@ sub hSmurfs {
       answer("Unable to perform smurf detection in battle, battle lobby is closed");
       return 0;
     }
-    my @smurfUsers=keys(%{$lobby->{battle}->{users}});
+    my @smurfUsers=keys(%{$lobby->{battle}{users}});
     if($#smurfUsers < 1) {
       answer("Unable to perform smurf detection in battle, battle lobby is empty");
       return 0;
@@ -11830,7 +11830,7 @@ sub hSplit {
     answer("Unable to split map, battle lobby is closed");
     return 0;
   }
-  if($spads->{bSettings}->{startpostype} != 2) {
+  if($spads->{bSettings}{startpostype} != 2) {
     answer("Unable to split map, start position type must be set to \"Choose in game\" (\"!bSet startPosType 2\")");
     return 0;
   }
@@ -11870,7 +11870,7 @@ sub hSplit {
   }
 
   
-  foreach my $teamNb (keys %{$lobby->{battle}->{startRects}}) {
+  foreach my $teamNb (keys %{$lobby->{battle}{startRects}}) {
     queueLobbyCommand(["REMOVESTARTRECT",$teamNb]);
   }
 
@@ -11899,12 +11899,12 @@ sub hSpecAfk {
   }
 
   my @unreadyAfkPlayers;
-  my $p_bUsers=$lobby->{battle}->{users};
+  my $p_bUsers=$lobby->{battle}{users};
   foreach my $bUser (keys %{$p_bUsers}) {
-    next unless(defined $p_bUsers->{$bUser}->{battleStatus});
-    push(@unreadyAfkPlayers,$bUser) if($p_bUsers->{$bUser}->{battleStatus}->{mode}
-                                       && $lobby->{users}->{$bUser}->{status}->{away}
-                                       && ! $p_bUsers->{$bUser}->{battleStatus}->{ready});
+    next unless(defined $p_bUsers->{$bUser}{battleStatus});
+    push(@unreadyAfkPlayers,$bUser) if($p_bUsers->{$bUser}{battleStatus}{mode}
+                                       && $lobby->{users}{$bUser}{status}{away}
+                                       && ! $p_bUsers->{$bUser}{battleStatus}{ready});
   }
 
   if(! @unreadyAfkPlayers) {
@@ -11960,17 +11960,17 @@ sub hStats {
 
   return 1 if($checkOnly);
 
-  my @sortedNames=sort {$teamStats{$b}->{damageDealt} <=> $teamStats{$a}->{damageDealt}} (keys %teamStats);
+  my @sortedNames=sort {$teamStats{$b}{damageDealt} <=> $teamStats{$a}{damageDealt}} (keys %teamStats);
   my ($totalDamageDealt,$totalDamageReceived,$totalUnitsProduced,$totalUnitsKilled,$totalMetalProduced,$totalMetalUsed,$totalEnergyProduced,$totalEnergyUsed)=(0,0,0,0,0,0,0,0);
   foreach my $name (@sortedNames) {
-    $totalDamageDealt+=$teamStats{$name}->{damageDealt};
-    $totalDamageReceived+=$teamStats{$name}->{damageReceived};
-    $totalUnitsProduced+=$teamStats{$name}->{unitsProduced};
-    $totalUnitsKilled+=$teamStats{$name}->{unitsKilled};
-    $totalMetalProduced+=$teamStats{$name}->{metalProduced};
-    $totalMetalUsed+=$teamStats{$name}->{metalUsed};
-    $totalEnergyProduced+=$teamStats{$name}->{energyProduced};
-    $totalEnergyUsed+=$teamStats{$name}->{energyUsed};
+    $totalDamageDealt+=$teamStats{$name}{damageDealt};
+    $totalDamageReceived+=$teamStats{$name}{damageReceived};
+    $totalUnitsProduced+=$teamStats{$name}{unitsProduced};
+    $totalUnitsKilled+=$teamStats{$name}{unitsKilled};
+    $totalMetalProduced+=$teamStats{$name}{metalProduced};
+    $totalMetalUsed+=$teamStats{$name}{metalUsed};
+    $totalEnergyProduced+=$teamStats{$name}{energyProduced};
+    $totalEnergyUsed+=$teamStats{$name}{energyUsed};
   }
   $totalDamageDealt=1 unless($totalDamageDealt);
   $totalDamageReceived=1 unless($totalDamageReceived);
@@ -11987,15 +11987,15 @@ sub hStats {
   my @stats;
   foreach my $name (@sortedNames) {
     push(@stats,{"$C{5}Name$C{1}" => $name,
-                 "$C{5}Team$C{1}" => $teamStats{$name}->{allyTeam},
-                 "$C{5}DamageDealt$C{1}" => formatInteger(int($teamStats{$name}->{damageDealt})).' ('.int($teamStats{$name}->{damageDealt}/$totalDamageDealt*100+0.5).'%)',
-                 "$C{5}DamageRec.$C{1}" => formatInteger(int($teamStats{$name}->{damageReceived})).' ('.int($teamStats{$name}->{damageReceived}/$totalDamageReceived*100+0.5).'%)',
-                 "$C{5}UnitsProd.$C{1}" => formatInteger(int($teamStats{$name}->{unitsProduced})).' ('.int($teamStats{$name}->{unitsProduced}/$totalUnitsProduced*100+0.5).'%)',
-                 "$C{5}UnitsKilled$C{1}" => formatInteger(int($teamStats{$name}->{unitsKilled})).' ('.int($teamStats{$name}->{unitsKilled}/$totalUnitsKilled*100+0.5).'%)',
-                 "$C{5}MetalProd.$C{1}" => formatInteger(int($teamStats{$name}->{metalProduced})).' ('.int($teamStats{$name}->{metalProduced}/$totalMetalProduced*100+0.5).'%)',
-                 "$C{5}MetalUsed$C{1}" => formatInteger(int($teamStats{$name}->{metalUsed})).' ('.int($teamStats{$name}->{metalUsed}/$totalMetalUsed*100+0.5).'%)',
-                 "$C{5}EnergyProd.$C{1}" => formatInteger(int($teamStats{$name}->{energyProduced})).' ('.int($teamStats{$name}->{energyProduced}/$totalEnergyProduced*100+0.5).'%)',
-                 "$C{5}EnergyUsed$C{1}" => formatInteger(int($teamStats{$name}->{energyUsed})).' ('.int($teamStats{$name}->{energyUsed}/$totalEnergyUsed*100+0.5).'%)'});
+                 "$C{5}Team$C{1}" => $teamStats{$name}{allyTeam},
+                 "$C{5}DamageDealt$C{1}" => formatInteger(int($teamStats{$name}{damageDealt})).' ('.int($teamStats{$name}{damageDealt}/$totalDamageDealt*100+0.5).'%)',
+                 "$C{5}DamageRec.$C{1}" => formatInteger(int($teamStats{$name}{damageReceived})).' ('.int($teamStats{$name}{damageReceived}/$totalDamageReceived*100+0.5).'%)',
+                 "$C{5}UnitsProd.$C{1}" => formatInteger(int($teamStats{$name}{unitsProduced})).' ('.int($teamStats{$name}{unitsProduced}/$totalUnitsProduced*100+0.5).'%)',
+                 "$C{5}UnitsKilled$C{1}" => formatInteger(int($teamStats{$name}{unitsKilled})).' ('.int($teamStats{$name}{unitsKilled}/$totalUnitsKilled*100+0.5).'%)',
+                 "$C{5}MetalProd.$C{1}" => formatInteger(int($teamStats{$name}{metalProduced})).' ('.int($teamStats{$name}{metalProduced}/$totalMetalProduced*100+0.5).'%)',
+                 "$C{5}MetalUsed$C{1}" => formatInteger(int($teamStats{$name}{metalUsed})).' ('.int($teamStats{$name}{metalUsed}/$totalMetalUsed*100+0.5).'%)',
+                 "$C{5}EnergyProd.$C{1}" => formatInteger(int($teamStats{$name}{energyProduced})).' ('.int($teamStats{$name}{energyProduced}/$totalEnergyProduced*100+0.5).'%)',
+                 "$C{5}EnergyUsed$C{1}" => formatInteger(int($teamStats{$name}{energyUsed})).' ('.int($teamStats{$name}{energyUsed}/$totalEnergyUsed*100+0.5).'%)'});
   }
   
   my $p_statsLines=formatArray(["$C{5}Name$C{1}","$C{5}Team$C{1}","$C{5}DamageDealt$C{1}","$C{5}DamageRec.$C{1}","$C{5}UnitsProd.$C{1}","$C{5}UnitsKilled$C{1}","$C{5}MetalProd.$C{1}","$C{5}MetalUsed$C{1}","$C{5}EnergyProd.$C{1}","$C{5}EnergyUsed$C{1}"],\@stats,"$C{2}Game statistics$C{1}");
@@ -12034,25 +12034,25 @@ sub getGameStatus {
     my %battleStructure;
     my @spectators;
     foreach my $player (keys %{$p_runningBattle->{users}}) {
-      if(defined $p_runningBattle->{users}->{$player}->{battleStatus} && $p_runningBattle->{users}->{$player}->{battleStatus}->{mode}) {
-        my $playerTeam=$p_runningBattle->{users}->{$player}->{battleStatus}->{team};
-        my $playerId=$p_runningBattle->{users}->{$player}->{battleStatus}->{id};
+      if(defined $p_runningBattle->{users}{$player}{battleStatus} && $p_runningBattle->{users}{$player}{battleStatus}{mode}) {
+        my $playerTeam=$p_runningBattle->{users}{$player}{battleStatus}{team};
+        my $playerId=$p_runningBattle->{users}{$player}{battleStatus}{id};
         $battleStructure{$playerTeam}={} unless(exists $battleStructure{$playerTeam});
-        $battleStructure{$playerTeam}->{$playerId}=[] unless(exists $battleStructure{$playerTeam}->{$playerId});
-        push(@{$battleStructure{$playerTeam}->{$playerId}},$player);
+        $battleStructure{$playerTeam}{$playerId}=[] unless(exists $battleStructure{$playerTeam}{$playerId});
+        push(@{$battleStructure{$playerTeam}{$playerId}},$player);
       }else{
         push(@spectators,$player) unless($springServerType eq 'dedicated' && $player eq $conf{lobbyLogin});
       }
     }
     foreach my $bot (keys %{$p_runningBattle->{bots}}) {
-      my $botTeam=$p_runningBattle->{bots}->{$bot}->{battleStatus}->{team};
-      my $botId=$p_runningBattle->{bots}->{$bot}->{battleStatus}->{id};
+      my $botTeam=$p_runningBattle->{bots}{$bot}{battleStatus}{team};
+      my $botId=$p_runningBattle->{bots}{$bot}{battleStatus}{id};
       $battleStructure{$botTeam}={} unless(exists $battleStructure{$botTeam});
-      $battleStructure{$botTeam}->{$botId}=[] unless(exists $battleStructure{$botTeam}->{$botId});
-      push(@{$battleStructure{$botTeam}->{$botId}},$bot." (bot)");
+      $battleStructure{$botTeam}{$botId}=[] unless(exists $battleStructure{$botTeam}{$botId});
+      push(@{$battleStructure{$botTeam}{$botId}},$bot." (bot)");
     }
     my $p_ahPlayers=$autohost->getPlayersByNames();
-    my @midGamePlayers=grep {! exists $p_runningBattle->{users}->{$_} && exists $inGameAddedPlayers{$_}} (keys %{$p_ahPlayers});
+    my @midGamePlayers=grep {! exists $p_runningBattle->{users}{$_} && exists $inGameAddedPlayers{$_}} (keys %{$p_ahPlayers});
     my %midGamePlayersById;
     foreach my $midGamePlayer (@midGamePlayers) {
       $midGamePlayersById{$inGameAddedPlayers{$midGamePlayer}}=[] unless(exists $midGamePlayersById{$inGameAddedPlayers{$midGamePlayer}});
@@ -12060,18 +12060,18 @@ sub getGameStatus {
     }
     foreach my $teamNb (sort {$a <=> $b} keys %battleStructure) {
       foreach my $idNb (sort {$a <=> $b} keys %{$battleStructure{$teamNb}}) {
-        my $internalIdNb=$runningBattleMapping{teams}->{$idNb};
+        my $internalIdNb=$runningBattleMapping{teams}{$idNb};
         my @midGameIdPlayers;
         @midGameIdPlayers=@{$midGamePlayersById{$internalIdNb}} if(exists $midGamePlayersById{$internalIdNb});
-        foreach my $player (sort (@{$battleStructure{$teamNb}->{$idNb}},@midGameIdPlayers)) {
+        foreach my $player (sort (@{$battleStructure{$teamNb}{$idNb}},@midGameIdPlayers)) {
           my %clientStatus=(Name => $player,
-                            Team => $runningBattleMapping{allyTeams}->{$teamNb},
+                            Team => $runningBattleMapping{allyTeams}{$teamNb},
                             Id => $internalIdNb);
           if($player =~ /^(.+) \(bot\)$/) {
             my $botName=$1;
-            $clientStatus{Version}="$p_runningBattle->{bots}->{$botName}->{aiDll} ($p_runningBattle->{bots}->{$botName}->{owner})";
+            $clientStatus{Version}="$p_runningBattle->{bots}{$botName}{aiDll} ($p_runningBattle->{bots}{$botName}{owner})";
           }else{
-            $clientStatus{Name}="+ $player" unless(exists $p_runningBattle->{users}->{$player});
+            $clientStatus{Name}="+ $player" unless(exists $p_runningBattle->{users}{$player});
             $clientStatus{Status}="Not connected";
           }
           my $p_ahPlayer=$autohost->getPlayer($player);
@@ -12135,11 +12135,11 @@ sub getGameStatus {
         }
       }
     }
-    my @midGameSpecs=grep {! exists $p_runningBattle->{users}->{$_} && ! exists $inGameAddedPlayers{$_}} (keys %{$p_ahPlayers});
+    my @midGameSpecs=grep {! exists $p_runningBattle->{users}{$_} && ! exists $inGameAddedPlayers{$_}} (keys %{$p_ahPlayers});
     foreach my $spec (sort (@spectators,@midGameSpecs)) {
       my %clientStatus=(Name => $spec,
                         Status => "Not connected");
-      $clientStatus{Name}="+ $spec" unless(exists $p_runningBattle->{users}->{$spec});
+      $clientStatus{Name}="+ $spec" unless(exists $p_runningBattle->{users}{$spec});
       my $p_ahPlayer=$autohost->getPlayer($spec);
       if(%{$p_ahPlayer}) {
         if($p_ahPlayer->{disconnectCause} == -2) {
@@ -12182,7 +12182,7 @@ sub getGameStatus {
           $coloredStatus{"$C{5}$k$C{1}"}=$clientStatus{$k};
         }
       }
-      push(@clientsStatus,\%coloredStatus) if(exists $p_runningBattle->{users}->{$spec} || (%{$p_ahPlayer} && $p_ahPlayer->{disconnectCause} < 0));
+      push(@clientsStatus,\%coloredStatus) if(exists $p_runningBattle->{users}{$spec} || (%{$p_ahPlayer} && $p_ahPlayer->{disconnectCause} < 0));
     }
   }
   my %globalStatus = ("$B$C{10}Game status$B$C{1}" => $ahState == 1 ? 'waiting for ready in game (since '.secToTime(time-$timestamps{lastGameStart}).')' : 'running since '.secToTime(time-$timestamps{lastGameStartPlaying}),
@@ -12227,19 +12227,19 @@ sub getBattleLobbyStatus {
   {
     my %battleStructure;
     my @spectators;
-    my $p_bUsers=$lobby->{battle}->{users};
-    my $p_bBots=$lobby->{battle}->{bots};
+    my $p_bUsers=$lobby->{battle}{users};
+    my $p_bBots=$lobby->{battle}{bots};
     my %clansId=('' => '');
     my $userClanPref = ref $user ? '' : getUserPref($user,'clan');
     $clansId{$userClanPref}=$userClanPref if($userClanPref ne '');
     my $nextClanId=1;
     foreach my $player (keys %{$p_bUsers}) {
-      if(defined $p_bUsers->{$player}->{battleStatus} && $p_bUsers->{$player}->{battleStatus}->{mode}) {
-        my $playerTeam=$p_bUsers->{$player}->{battleStatus}->{team};
-        my $playerId=$p_bUsers->{$player}->{battleStatus}->{id};
+      if(defined $p_bUsers->{$player}{battleStatus} && $p_bUsers->{$player}{battleStatus}{mode}) {
+        my $playerTeam=$p_bUsers->{$player}{battleStatus}{team};
+        my $playerId=$p_bUsers->{$player}{battleStatus}{id};
         $battleStructure{$playerTeam}={} unless(exists $battleStructure{$playerTeam});
-        $battleStructure{$playerTeam}->{$playerId}=[] unless(exists $battleStructure{$playerTeam}->{$playerId});
-        push(@{$battleStructure{$playerTeam}->{$playerId}},$player);
+        $battleStructure{$playerTeam}{$playerId}=[] unless(exists $battleStructure{$playerTeam}{$playerId});
+        push(@{$battleStructure{$playerTeam}{$playerId}},$player);
       }else{
         push(@spectators,$player) unless($springServerType eq 'dedicated' && $player eq $conf{lobbyLogin});
       }
@@ -12248,15 +12248,15 @@ sub getBattleLobbyStatus {
     }
     return (\@clientsStatus,\%statusDataFromPlugin,\%globalStatus) unless(%battleStructure || @spectators);
     foreach my $bot (keys %{$p_bBots}) {
-      my $botTeam=$p_bBots->{$bot}->{battleStatus}->{team};
-      my $botId=$p_bBots->{$bot}->{battleStatus}->{id};
+      my $botTeam=$p_bBots->{$bot}{battleStatus}{team};
+      my $botId=$p_bBots->{$bot}{battleStatus}{id};
       $battleStructure{$botTeam}={} unless(exists $battleStructure{$botTeam});
-      $battleStructure{$botTeam}->{$botId}=[] unless(exists $battleStructure{$botTeam}->{$botId});
-      push(@{$battleStructure{$botTeam}->{$botId}},$bot." (bot)");
+      $battleStructure{$botTeam}{$botId}=[] unless(exists $battleStructure{$botTeam}{$botId});
+      push(@{$battleStructure{$botTeam}{$botId}},$bot." (bot)");
     }
     foreach my $teamNb (sort {$a <=> $b} keys %battleStructure) {
       foreach my $idNb (sort {$a <=> $b} keys %{$battleStructure{$teamNb}}) {
-        foreach my $player (sort @{$battleStructure{$teamNb}->{$idNb}}) {
+        foreach my $player (sort @{$battleStructure{$teamNb}{$idNb}}) {
           my %clientStatus=(Name => $player,
                             Team => $teamNb+1,
                             Id => $idNb+1);
@@ -12264,28 +12264,28 @@ sub getBattleLobbyStatus {
             my $botName=$1;
             $clientStatus{Rank}=$conf{botsRank};
             $clientStatus{Skill}="($RANK_SKILL{$conf{botsRank}})";
-            $clientStatus{ID}="$p_bBots->{$botName}->{aiDll} ($p_bBots->{$botName}->{owner})";
+            $clientStatus{ID}="$p_bBots->{$botName}{aiDll} ($p_bBots->{$botName}{owner})";
           }else{
             $clientStatus{Ready}="$C{4}No$C{1}";
-            $clientStatus{Ready}="$C{3}Yes$C{1}" if($p_bUsers->{$player}->{battleStatus}->{ready});
+            $clientStatus{Ready}="$C{3}Yes$C{1}" if($p_bUsers->{$player}{battleStatus}{ready});
             if($userLevel >= $conf{privacyTrustLevel}) {
-              if(defined $lobby->{users}->{$player}->{ip}) {
-                $clientStatus{IP}=$lobby->{users}->{$player}->{ip};
-              }elsif(defined $p_bUsers->{$player}->{ip}) {
-                $clientStatus{IP}=$p_bUsers->{$player}->{ip};
+              if(defined $lobby->{users}{$player}{ip}) {
+                $clientStatus{IP}=$lobby->{users}{$player}{ip};
+              }elsif(defined $p_bUsers->{$player}{ip}) {
+                $clientStatus{IP}=$p_bUsers->{$player}{ip};
               }
             }
-            my $rank=$lobby->{users}->{$player}->{status}->{rank};
+            my $rank=$lobby->{users}{$player}{status}{rank};
             my $skill="$C{13}!$RANK_SKILL{$rank}!$C{1}";
             if(exists $battleSkills{$player}) {
-              if($rank != $battleSkills{$player}->{rank}) {
-                my $diffRank=$battleSkills{$player}->{rank}-$rank;
+              if($rank != $battleSkills{$player}{rank}) {
+                my $diffRank=$battleSkills{$player}{rank}-$rank;
                 $diffRank="+$diffRank" if($diffRank > 0);
-                if($battleSkills{$player}->{rankOrigin} eq 'ip') {
+                if($battleSkills{$player}{rankOrigin} eq 'ip') {
                   $diffRank="[$diffRank]";
-                }elsif($battleSkills{$player}->{rankOrigin} eq 'manual') {
+                }elsif($battleSkills{$player}{rankOrigin} eq 'manual') {
                   $diffRank="($diffRank)";
-                }elsif($battleSkills{$player}->{rankOrigin} eq 'ipManual') {
+                }elsif($battleSkills{$player}{rankOrigin} eq 'ipManual') {
                   $diffRank="{$diffRank}";
                 }else{
                   $diffRank="<$diffRank>";
@@ -12305,26 +12305,26 @@ sub getBattleLobbyStatus {
                 }
               }
               if($skillOrigin eq 'rank') {
-                $skill="($battleSkills{$player}->{skill})";
+                $skill="($battleSkills{$player}{skill})";
               }elsif($skillOrigin eq 'TrueSkill') {
-                if(exists $battleSkills{$player}->{skillPrivacy}
-                   && ($battleSkills{$player}->{skillPrivacy} == 0
-                       || ($battleSkills{$player}->{skillPrivacy} == 1 && $userLevel >= $conf{privacyTrustLevel}))) {
-                  $skill=$battleSkills{$player}->{skill};
+                if(exists $battleSkills{$player}{skillPrivacy}
+                   && ($battleSkills{$player}{skillPrivacy} == 0
+                       || ($battleSkills{$player}{skillPrivacy} == 1 && $userLevel >= $conf{privacyTrustLevel}))) {
+                  $skill=$battleSkills{$player}{skill};
                 }else{
-                  $skill=getRoundedSkill($battleSkills{$player}->{skill});
+                  $skill=getRoundedSkill($battleSkills{$player}{skill});
                   $skill="~$skill";
                 }
                 $skill="$C{6}$skill$skillSigma$C{1}";
               }elsif($skillOrigin eq 'TrueSkillDegraded') {
-                $skill="$C{4}\#$battleSkills{$player}->{skill}\#$C{1}";
+                $skill="$C{4}\#$battleSkills{$player}{skill}\#$C{1}";
               }elsif($skillOrigin eq 'Plugin') {
-                $skill=$battleSkills{$player}->{skill};
+                $skill=$battleSkills{$player}{skill};
                 $skill="$C{10}\[$skill$skillSigma\]$C{1}";
               }elsif($skillOrigin eq 'PluginDegraded') {
-                $skill="$C{4}\[\#$battleSkills{$player}->{skill}\#\]$C{1}";
+                $skill="$C{4}\[\#$battleSkills{$player}{skill}\#\]$C{1}";
               }else{
-                $skill="$C{13}?$battleSkills{$player}->{skill}?$C{1}";
+                $skill="$C{13}?$battleSkills{$player}{skill}?$C{1}";
               }
             }elsif($player eq $conf{lobbyLogin}) {
               $skill='';
@@ -12333,14 +12333,14 @@ sub getBattleLobbyStatus {
             }
             $clientStatus{Rank}=$rank;
             $clientStatus{Skill}=$skill;
-            $clientStatus{ID}=$lobby->{users}->{$player}->{accountId};
+            $clientStatus{ID}=$lobby->{users}{$player}{accountId};
             my $clanPref=getUserPref($player,'clan');
             $clientStatus{Clan}=$clansId{$clanPref} if($clanPref ne '');
             foreach my $pluginName (@pluginsOrder) {
               if($plugins{$pluginName}->can('updateStatusInfo')) {
                 my $p_pluginColumns=$plugins{$pluginName}->updateStatusInfo(\%clientStatus,
-                                                                            $lobby->{users}->{$player}->{accountId},
-                                                                            $lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod},
+                                                                            $lobby->{users}{$player}{accountId},
+                                                                            $lobby->{battles}{$lobby->{battle}{battleId}}{mod},
                                                                             $currentGameType,
                                                                             $userLevel);
                 if(ref($p_pluginColumns) eq 'HASH') {
@@ -12369,23 +12369,23 @@ sub getBattleLobbyStatus {
     foreach my $spec (sort @spectators) {
       my %clientStatus=(Name => $spec);
       if($userLevel >= $conf{privacyTrustLevel}) {
-        if(defined $lobby->{users}->{$spec}->{ip}) {
-          $clientStatus{IP}=$lobby->{users}->{$spec}->{ip};
-        }elsif(defined $p_bUsers->{$spec}->{ip}) {
-          $clientStatus{IP}=$p_bUsers->{$spec}->{ip};
+        if(defined $lobby->{users}{$spec}{ip}) {
+          $clientStatus{IP}=$lobby->{users}{$spec}{ip};
+        }elsif(defined $p_bUsers->{$spec}{ip}) {
+          $clientStatus{IP}=$p_bUsers->{$spec}{ip};
         }
       }
-      my $rank=$lobby->{users}->{$spec}->{status}->{rank};
+      my $rank=$lobby->{users}{$spec}{status}{rank};
       my $skill="$C{13}!$RANK_SKILL{$rank}!$C{1}";
       if(exists $battleSkills{$spec}) {
-        if($rank != $battleSkills{$spec}->{rank}) {
-          my $diffRank=$battleSkills{$spec}->{rank}-$rank;
+        if($rank != $battleSkills{$spec}{rank}) {
+          my $diffRank=$battleSkills{$spec}{rank}-$rank;
           $diffRank="+$diffRank" if($diffRank > 0);
-          if($battleSkills{$spec}->{rankOrigin} eq 'ip') {
+          if($battleSkills{$spec}{rankOrigin} eq 'ip') {
             $diffRank="[$diffRank]";
-          }elsif($battleSkills{$spec}->{rankOrigin} eq 'manual') {
+          }elsif($battleSkills{$spec}{rankOrigin} eq 'manual') {
             $diffRank="($diffRank)";
-          }elsif($battleSkills{$spec}->{rankOrigin} eq 'ipManual') {
+          }elsif($battleSkills{$spec}{rankOrigin} eq 'ipManual') {
             $diffRank="{$diffRank}";
           }else{
             $diffRank="<$diffRank>";
@@ -12405,26 +12405,26 @@ sub getBattleLobbyStatus {
           }
         }
         if($skillOrigin eq 'rank') {
-          $skill="($RANK_SKILL{$battleSkills{$spec}->{rank}})";
+          $skill="($RANK_SKILL{$battleSkills{$spec}{rank}})";
         }elsif($skillOrigin eq 'TrueSkill') {
-          if(exists $battleSkills{$spec}->{skillPrivacy}
-             && ($battleSkills{$spec}->{skillPrivacy} == 0
-                 || ($battleSkills{$spec}->{skillPrivacy} == 1 && $userLevel >= $conf{privacyTrustLevel}))) {
-            $skill=$battleSkills{$spec}->{skill};
+          if(exists $battleSkills{$spec}{skillPrivacy}
+             && ($battleSkills{$spec}{skillPrivacy} == 0
+                 || ($battleSkills{$spec}{skillPrivacy} == 1 && $userLevel >= $conf{privacyTrustLevel}))) {
+            $skill=$battleSkills{$spec}{skill};
           }else{
-            $skill=getRoundedSkill($battleSkills{$spec}->{skill});
+            $skill=getRoundedSkill($battleSkills{$spec}{skill});
             $skill="~$skill";
           }
           $skill="$C{6}$skill$skillSigma$C{1}";
         }elsif($skillOrigin eq 'TrueSkillDegraded') {
-          $skill="$C{4}\#$battleSkills{$spec}->{skill}\#$C{1}";
+          $skill="$C{4}\#$battleSkills{$spec}{skill}\#$C{1}";
         }elsif($skillOrigin eq 'Plugin') {
-          $skill=$battleSkills{$spec}->{skill};
+          $skill=$battleSkills{$spec}{skill};
           $skill="$C{10}\[$skill$skillSigma\]$C{1}";
         }elsif($skillOrigin eq 'PluginDegraded') {
-          $skill="$C{4}\[\#$battleSkills{$spec}->{skill}\#\]$C{1}";
+          $skill="$C{4}\[\#$battleSkills{$spec}{skill}\#\]$C{1}";
         }else{
-          $skill="$C{13}?$battleSkills{$spec}->{skill}?$C{1}";
+          $skill="$C{13}?$battleSkills{$spec}{skill}?$C{1}";
         }
       }elsif($spec eq $conf{lobbyLogin}) {
         $skill='';
@@ -12433,14 +12433,14 @@ sub getBattleLobbyStatus {
       }
       $clientStatus{Rank}=$rank;
       $clientStatus{Skill}=$skill;
-      $clientStatus{ID}=$lobby->{users}->{$spec}->{accountId};
+      $clientStatus{ID}=$lobby->{users}{$spec}{accountId};
       my $clanPref=getUserPref($spec,'clan');
       $clientStatus{Clan}=$clansId{$clanPref} if($clanPref ne '');
       foreach my $pluginName (@pluginsOrder) {
         if($plugins{$pluginName}->can('updateStatusInfo')) {
           my $p_pluginColumns=$plugins{$pluginName}->updateStatusInfo(\%clientStatus,
-                                                                      $lobby->{users}->{$spec}->{accountId},
-                                                                      $lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod},
+                                                                      $lobby->{users}{$spec}{accountId},
+                                                                      $lobby->{battles}{$lobby->{battle}{battleId}}{mod},
                                                                       $currentGameType,
                                                                       $userLevel);
           if(ref($p_pluginColumns) eq 'HASH') {
@@ -12816,23 +12816,23 @@ sub hUnlock {
 
   if(! $manualLockedStatus) {
     my $reason='it is not locked manually';
-    my @clients=keys %{$lobby->{battle}->{users}};
+    my @clients=keys %{$lobby->{battle}{users}};
     if($conf{autoLockClients} && $#clients >= $conf{autoLockClients}) {
       $reason="maximum number of clients ($conf{autoLockClients}) reached";
-    }elsif($conf{autoLockRunningBattle} && $lobby->{users}->{$conf{lobbyLogin}}->{status}->{inGame}) {
+    }elsif($conf{autoLockRunningBattle} && $lobby->{users}{$conf{lobbyLogin}}{status}{inGame}) {
       $reason='battle is running and autoLockRunningBattle is enabled';
     }elsif($conf{autoLock} ne 'off') {
       $reason='autoLock is enabled';
     }else{
       my $targetNbPlayers=$conf{nbPlayerById}*$conf{teamSize}*$conf{nbTeams};
-      my @bots=keys %{$lobby->{battle}->{bots}};
+      my @bots=keys %{$lobby->{battle}{bots}};
       my $nbNonPlayer=getNbNonPlayer();
       my $nbPlayers=$#clients+1-$nbNonPlayer;
       if($conf{nbTeams} != 1) {
         $nbPlayers+=$#bots+1;
       }
       if($conf{maxSpecs} ne '' && $nbNonPlayer > $conf{maxSpecs}
-         && ($nbPlayers >= $spads->{hSettings}->{maxPlayers} || ($conf{autoSpecExtraPlayers} && $nbPlayers >= $targetNbPlayers))) {
+         && ($nbPlayers >= $spads->{hSettings}{maxPlayers} || ($conf{autoSpecExtraPlayers} && $nbPlayers >= $targetNbPlayers))) {
         $reason='maximum number of players and spectators reached for this autohost';
       }
     }
@@ -12858,32 +12858,32 @@ sub hUnlockSpec {
   }
   my $nbSpec=getNbSpec();
   my @unlockSpecDelay=split(/;/,$conf{unlockSpecDelay});
-  my @clients=keys %{$lobby->{battle}->{users}};
+  my @clients=keys %{$lobby->{battle}{users}};
   my $reason='';
   if($unlockSpecDelay[0] == 0) {
     $reason='this command is disabled on this autohost';
-  }elsif(exists $lobby->{battle}->{users}->{$user}) {
+  }elsif(exists $lobby->{battle}{users}{$user}) {
     $reason='you are already in the battle';
   }elsif(! $currentLockedStatus) {
     $reason='it is not locked currently';
   }elsif($conf{autoLockClients} && $#clients >= $conf{autoLockClients}) {
     $reason="maximum client number ($conf{autoLockClients}) reached for this autohost";
-  }elsif($conf{autoLockRunningBattle} && $lobby->{users}->{$conf{lobbyLogin}}->{status}->{inGame}) {
+  }elsif($conf{autoLockRunningBattle} && $lobby->{users}{$conf{lobbyLogin}}{status}{inGame}) {
     $reason='battle is running and autoLockRunningBattle is enabled';
   }elsif($manualLockedStatus) {
     $reason='it has been locked manually';
   }elsif($conf{maxSpecs} ne '' && $nbSpec > $conf{maxSpecs}
          && getUserAccessLevel($user) < $conf{maxSpecsImmuneLevel} 
          && ! ($springPid && $autohost->getState()
-               && exists $p_runningBattle->{users}->{$user} && defined $p_runningBattle->{users}->{$user}->{battleStatus} && $p_runningBattle->{users}->{$user}->{battleStatus}->{mode}
+               && exists $p_runningBattle->{users}{$user} && defined $p_runningBattle->{users}{$user}{battleStatus} && $p_runningBattle->{users}{$user}{battleStatus}{mode}
                && (! %{$autohost->getPlayer($user)} || $autohost->getPlayer($user)->{lost} == 0))) {
     $reason="maximum spectator number ($conf{maxSpecs}) reached for this autohost";
   }elsif(exists $pendingSpecJoin{$user} && time - $pendingSpecJoin{$user} < $unlockSpecDelay[1]) {
     $reason='please wait '.($pendingSpecJoin{$user} + $unlockSpecDelay[1] - time).'s before reusing this command';
-  }elsif(! exists $lobby->{users}->{$user}) {
+  }elsif(! exists $lobby->{users}{$user}) {
     $reason='you are not connected to lobby server';
   }else{
-    my $p_ban=$spads->getUserBan($user,$lobby->{users}->{$user},isUserAuthenticated($user),undef,getPlayerSkillForBanCheck($user));
+    my $p_ban=$spads->getUserBan($user,$lobby->{users}{$user},isUserAuthenticated($user),undef,getPlayerSkillForBanCheck($user));
     $reason='you are banned' if($p_ban->{banType} < 2);
   }
   if($reason) {
@@ -13086,25 +13086,25 @@ sub hVote {
     return 0;
   }
 
-  if(! (exists $currentVote{remainingVoters}->{$user} || exists $currentVote{awayVoters}->{$user} || exists $currentVote{manualVoters}->{$user})) {
+  if(! (exists $currentVote{remainingVoters}{$user} || exists $currentVote{awayVoters}{$user} || exists $currentVote{manualVoters}{$user})) {
     answer("$user, you are not allowed to vote for current vote.");
     return 0;
   }
 
-  if(exists $currentVote{remainingVoters}->{$user}) {
-    delete $currentVote{remainingVoters}->{$user};
-  }elsif(exists $currentVote{awayVoters}->{$user}) {
-    delete $currentVote{awayVoters}->{$user};
+  if(exists $currentVote{remainingVoters}{$user}) {
+    delete $currentVote{remainingVoters}{$user};
+  }elsif(exists $currentVote{awayVoters}{$user}) {
+    delete $currentVote{awayVoters}{$user};
     --$currentVote{blankCount};
-  }elsif(exists $currentVote{manualVoters}->{$user}) {
-    if($currentVote{manualVoters}->{$user} eq $vote) {
+  }elsif(exists $currentVote{manualVoters}{$user}) {
+    if($currentVote{manualVoters}{$user} eq $vote) {
       answer("$user, you have already voted for current vote.");
       return 0;
     }
-    --$currentVote{$currentVote{manualVoters}->{$user}.'Count'};
+    --$currentVote{$currentVote{manualVoters}{$user}.'Count'};
   }
 
-  $currentVote{manualVoters}->{$user}=$vote;
+  $currentVote{manualVoters}{$user}=$vote;
   ++$currentVote{$vote.'Count'};
 
   setUserPref($user,'voteMode','normal') if(getUserPref($user,'autoSetVoteMode'));
@@ -13174,9 +13174,9 @@ sub hWhois {
 
   my $online;
   if($idOnly) {
-    $online=exists $lobby->{accounts}->{$idOnly} ? "$C{3}Yes$C{1}" : "$C{4}No$C{1}";
+    $online=exists $lobby->{accounts}{$idOnly} ? "$C{3}Yes$C{1}" : "$C{4}No$C{1}";
   }else{
-    $online=exists $lobby->{users}->{$idName} ? "$C{3}Yes$C{1}" : "$C{4}No$C{1}";
+    $online=exists $lobby->{users}{$idName} ? "$C{3}Yes$C{1}" : "$C{4}No$C{1}";
   }
 
   my $rank=abs($p_accountMainData->{rank});
@@ -13292,11 +13292,11 @@ sub hSkill {
     if($skillParam =~ /^(\d+)\|(\d)(.*)$/) {
       my ($accountId,$status,$skills)=($1,$2,$3);
       delete $pendingGetSkills{$accountId};
-      if(! exists $lobby->{accounts}->{$accountId}) {
+      if(! exists $lobby->{accounts}{$accountId}) {
         slog("Ignoring skill data received for offline account ($accountId)",2);
         next;
       }
-      my $player=$lobby->{accounts}->{$accountId};
+      my $player=$lobby->{accounts}{$accountId};
       my $skillPref=getUserPref($player,'skillMode');
       if($skillPref ne 'TrueSkill') {
         slog("Ignoring skill data received for player $player with skillMode set to \"$skillPref\" ($accountId)",2);
@@ -13306,7 +13306,7 @@ sub hSkill {
         slog("Ignoring skill data received for player out of battle ($player)",2);
         next;
       }
-      my $previousPlayerSkill=$battleSkills{$player}->{skill};
+      my $previousPlayerSkill=$battleSkills{$player}{skill};
       if($status == 0) {
         if($skills =~ /^\|(\d)\|(-?\d+(?:\.\d*)?),(\d+(?:\.\d*)?),(\d)\|(-?\d+(?:\.\d*)?),(\d+(?:\.\d*)?),(\d)\|(-?\d+(?:\.\d*)?),(\d+(?:\.\d*)?),(\d)\|(-?\d+(?:\.\d*)?),(\d+(?:\.\d*)?),(\d)$/) {
           my ($privacyMode,$duelSkill,$duelSigma,$duelClass,$ffaSkill,$ffaSigma,$ffaClass,$teamSkill,$teamSigma,$teamClass,$teamFfaSkill,$teamFfaSigma,$teamFfaClass)=($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13);
@@ -13314,11 +13314,11 @@ sub hSkill {
                                        FFA => {skill => $ffaSkill, sigma => $ffaSigma, class => $ffaClass},
                                        Team => {skill => $teamSkill, sigma => $teamSigma, class => $teamClass},
                                        TeamFFA => {skill => $teamFfaSkill, sigma => $teamFfaSigma, class => $teamFfaClass}};
-          $battleSkills{$player}->{skill}=$battleSkillsCache{$player}->{$currentGameType}->{skill};
-          $battleSkills{$player}->{sigma}=$battleSkillsCache{$player}->{$currentGameType}->{sigma};
-          $battleSkills{$player}->{class}=$battleSkillsCache{$player}->{$currentGameType}->{class};
-          $battleSkills{$player}->{skillOrigin}='TrueSkill';
-          $battleSkills{$player}->{skillPrivacy}=$privacyMode;
+          $battleSkills{$player}{skill}=$battleSkillsCache{$player}{$currentGameType}{skill};
+          $battleSkills{$player}{sigma}=$battleSkillsCache{$player}{$currentGameType}{sigma};
+          $battleSkills{$player}{class}=$battleSkillsCache{$player}{$currentGameType}{class};
+          $battleSkills{$player}{skillOrigin}='TrueSkill';
+          $battleSkills{$player}{skillPrivacy}=$privacyMode;
         }else{
           slog("Ignoring invalid skill data received for player $player ($skills)",2);
         }
@@ -13326,15 +13326,15 @@ sub hSkill {
         slog("Unable to get skill of player $player \#$accountId (permission denied)",2);
       }elsif($status == 2) {
         slog("Unable to get skill of player $player \#$accountId (unrated account)",2);
-        $battleSkills{$player}->{skillOrigin}='rank';
+        $battleSkills{$player}{skillOrigin}='rank';
       }else{
         slog("Unable to get skill of player $player \#$accountId (unknown status code: $status)",2);
       }
       pluginsUpdateSkill($battleSkills{$player},$accountId);
       sendPlayerSkill($player);
       checkBattleBansForPlayer($player);
-      $needRebalance=1 if($previousPlayerSkill != $battleSkills{$player}->{skill} && $lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}} && exists $lobby->{battle}->{users}->{$player}
-                          && defined $lobby->{battle}->{users}->{$player}->{battleStatus} && $lobby->{battle}->{users}->{$player}->{battleStatus}->{mode});
+      $needRebalance=1 if($previousPlayerSkill != $battleSkills{$player}{skill} && $lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}} && exists $lobby->{battle}{users}{$player}
+                          && defined $lobby->{battle}{users}{$player}{battleStatus} && $lobby->{battle}{users}{$player}{battleStatus}{mode});
     }else{
       slog("Ignoring invalid skill parameter ($skillParam)",2);
     }
@@ -13671,12 +13671,12 @@ sub cbLoginInfoEnd {
     queueLobbyCommand(["JOIN",$chan]);
   }
   if($springPid) {
-    my %clientStatus = %{$lobby->{users}->{$conf{lobbyLogin}}->{status}};
+    my %clientStatus = %{$lobby->{users}{$conf{lobbyLogin}}{status}};
     $clientStatus{inGame}=1;
     queueLobbyCommand(["MYSTATUS",$lobby->marshallClientStatus(\%clientStatus)]);
   }
   queueLobbyCommand(["GETUSERINFO"]);
-  if(exists $lobby->{users}->{$conf{lobbyLogin}} && ! $lobby->{users}->{$conf{lobbyLogin}}->{status}->{bot}) {
+  if(exists $lobby->{users}{$conf{lobbyLogin}} && ! $lobby->{users}{$conf{lobbyLogin}}{status}{bot}) {
     slog('The lobby account currently used by SPADS is not tagged as bot. It is recommended to ask a lobby administrator for bot flag on accounts used by SPADS',2);
   }
   foreach my $pluginName (@pluginsOrder) {
@@ -13792,19 +13792,19 @@ sub cbClientStatus {
     updateBattleInfoIfNeeded();
   }
   if($conf{userDataRetention} !~ /^0;/ && ! $lanMode) {
-    if(exists $lobby->{users}->{$user}) {
+    if(exists $lobby->{users}{$user}) {
       $spads->learnAccountRank(getLatestUserAccountId($user),
-                               $lobby->{users}->{$user}->{status}->{rank},
-                               $lobby->{users}->{$user}->{status}->{bot});
+                               $lobby->{users}{$user}{status}{rank},
+                               $lobby->{users}{$user}{status}{bot});
     }else{
       slog("Unable to store data for user \"$user\" (user unknown)",2);
     }
   }
 
-  if($lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}} && exists $lobby->{battle}->{users}->{$user} && defined $lobby->{battle}->{users}->{$user}->{scriptPass}
-     && $autohost->getState() && $lobby->{users}->{$user}->{status}->{inGame} && ! exists $p_runningBattle->{users}->{$user}
+  if($lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}} && exists $lobby->{battle}{users}{$user} && defined $lobby->{battle}{users}{$user}{scriptPass}
+     && $autohost->getState() && $lobby->{users}{$user}{status}{inGame} && ! exists $p_runningBattle->{users}{$user}
      && ! exists $inGameAddedUsers{$user} && getUserAccessLevel($user) >= $conf{midGameSpecLevel}) {
-    $inGameAddedUsers{$user}=$lobby->{battle}->{users}->{$user}->{scriptPass};
+    $inGameAddedUsers{$user}=$lobby->{battle}{users}{$user}{scriptPass};
     $autohost->sendChatMessage("/adduser $user $inGameAddedUsers{$user}");
   }
 }
@@ -13812,33 +13812,33 @@ sub cbClientStatus {
 sub cbClientIpPort {
   my (undef,$user,$ip)=@_;
   seenUserIp($user,$ip);
-  my $p_ban=$spads->getUserBan($user,$lobby->{users}->{$user},isUserAuthenticated($user),$ip,getPlayerSkillForBanCheck($user));
+  my $p_ban=$spads->getUserBan($user,$lobby->{users}{$user},isUserAuthenticated($user),$ip,getPlayerSkillForBanCheck($user));
   queueLobbyCommand(["KICKFROMBATTLE",$user]) if($p_ban->{banType} < 2);
 }
 
 sub cbClientBattleStatus {
   my (undef,$user)=@_;
 
-  if($lobbyState < LOBBY_STATE_BATTLE_OPENED || ! exists $lobby->{battle}->{users}->{$user}) {
+  if($lobbyState < LOBBY_STATE_BATTLE_OPENED || ! exists $lobby->{battle}{users}{$user}) {
     slog("Ignoring CLIENTBATTLESTATUS command (client \"$user\" out of current battle)",2);
     return;
   }
 
   return if(checkUserStatusFlood($user));
 
-  my $p_battleStatus=$lobby->{battle}->{users}->{$user}->{battleStatus};
+  my $p_battleStatus=$lobby->{battle}{users}{$user}{battleStatus};
   if($p_battleStatus->{mode}) {
     my $forceReason='';
     if(! exists $currentPlayers{$user}) {
       my $nbNonPlayer=getNbNonPlayer();
-      my @clients=keys %{$lobby->{battle}->{users}};
+      my @clients=keys %{$lobby->{battle}{users}};
       my $nbPlayers=$#clients+1-$nbNonPlayer;
       if($conf{nbTeams} != 1) {
-        my @bots=keys %{$lobby->{battle}->{bots}};
+        my @bots=keys %{$lobby->{battle}{bots}};
         $nbPlayers+=$#bots+1;
       }
       my $targetNbPlayers=$conf{nbPlayerById}*$conf{teamSize}*$conf{nbTeams};
-      my $p_ban=$spads->getUserBan($user,$lobby->{users}->{$user},isUserAuthenticated($user),undef,getPlayerSkillForBanCheck($user));
+      my $p_ban=$spads->getUserBan($user,$lobby->{users}{$user},isUserAuthenticated($user),undef,getPlayerSkillForBanCheck($user));
       if($p_ban->{banType} < 2) {
         queueLobbyCommand(["KICKFROMBATTLE",$user]);
         return;
@@ -13873,10 +13873,10 @@ sub cbClientBattleStatus {
       delete $currentSpecs{$user};
       if($conf{autoBlockBalance}) {
         if($balanceState) {
-          if(! exists $balanceTarget{players}->{$user}) {
+          if(! exists $balanceTarget{players}{$user}) {
             $balanceState=0;
           }else{
-            my $p_targetBattleStatus=$balanceTarget{players}->{$user}->{battleStatus};
+            my $p_targetBattleStatus=$balanceTarget{players}{$user}{battleStatus};
             if($p_battleStatus->{team} != $p_targetBattleStatus->{team}) {
               queueLobbyCommand(["FORCEALLYNO",$user,$p_targetBattleStatus->{team}])
             }
@@ -13897,7 +13897,7 @@ sub cbClientBattleStatus {
             $colorsState=0;
           }else{
             my $p_targetColor=$colorsTarget{$colorId};
-            my $p_color=$lobby->{battle}->{users}->{$user}->{color};
+            my $p_color=$lobby->{battle}{users}{$user}{color};
             if(colorDistance($p_color,$p_targetColor) != 0) {
               queueLobbyCommand(["FORCETEAMCOLOR",$user,$lobby->marshallColor($p_targetColor)]);
             }
@@ -13918,7 +13918,7 @@ sub cbClientBattleStatus {
       if($conf{maxSpecs} ne '' && $nbSpec > $conf{maxSpecs}+1 && $user ne $conf{lobbyLogin}
          && getUserAccessLevel($user) < $conf{maxSpecsImmuneLevel}
          && ! ($springPid && $autohost->getState()
-               && exists $p_runningBattle->{users}->{$user} && defined $p_runningBattle->{users}->{$user}->{battleStatus} && $p_runningBattle->{users}->{$user}->{battleStatus}->{mode}
+               && exists $p_runningBattle->{users}{$user} && defined $p_runningBattle->{users}{$user}{battleStatus} && $p_runningBattle->{users}{$user}{battleStatus}{mode}
                && (! %{$autohost->getPlayer($user)} || $autohost->getPlayer($user)->{lost} == 0))) {
         broadcastMsg("Kicking $user from battle [maxSpecs=$conf{maxSpecs}]");
         queueLobbyCommand(["KICKFROMBATTLE",$user]);
@@ -13940,16 +13940,16 @@ sub cbUpdateBot {
   my $p_battle=$lobby->getBattle();
   my $p_bots=$p_battle->{bots};
 
-  my $p_battleStatus=$p_bots->{$bot}->{battleStatus};
-  my $p_color=$p_bots->{$bot}->{color};
+  my $p_battleStatus=$p_bots->{$bot}{battleStatus};
+  my $p_color=$p_bots->{$bot}{color};
 
   my $updateNeeded=0;
   if($conf{autoBlockBalance}) {
     if($balanceState) {
-      if(! exists $balanceTarget{bots}->{$bot}) {
+      if(! exists $balanceTarget{bots}{$bot}) {
         queueLobbyCommand(["REMOVEBOT",$bot]);
       }else{
-        my $p_targetBattleStatus=$balanceTarget{bots}->{$bot}->{battleStatus};
+        my $p_targetBattleStatus=$balanceTarget{bots}{$bot}{battleStatus};
         if($p_battleStatus->{team} != $p_targetBattleStatus->{team}) {
           $updateNeeded=1;
           $p_battleStatus->{team}=$p_targetBattleStatus->{team};
@@ -13989,7 +13989,7 @@ sub cbUpdateBot {
 sub cbJoinBattleRequest {
   my (undef,$user,$ip)=@_;
   seenUserIp($user,$ip);
-  my $p_ban=$spads->getUserBan($user,$lobby->{users}->{$user},isUserAuthenticated($user),$ip,getPlayerSkillForBanCheck($user));
+  my $p_ban=$spads->getUserBan($user,$lobby->{users}{$user},isUserAuthenticated($user),$ip,getPlayerSkillForBanCheck($user));
   if($p_ban->{banType} < 2) {
     if(exists $p_ban->{reason} && defined $p_ban->{reason}) {
       queueLobbyCommand(['JOINBATTLEDENY',$user,$p_ban->{reason}]);
@@ -14020,7 +14020,7 @@ sub cbJoinBattleRequest {
 sub cbJoinedBattle {
   my (undef,$battleId,$user)=@_;
 
-  return unless(%{$lobby->{battle}} && $battleId == $lobby->{battle}->{battleId});
+  return unless(%{$lobby->{battle}} && $battleId == $lobby->{battle}{battleId});
 
   foreach my $pluginName (@pluginsOrder) {
     $plugins{$pluginName}->onJoinedBattle($user) if($plugins{$pluginName}->can('onJoinedBattle'));
@@ -14028,7 +14028,7 @@ sub cbJoinedBattle {
   
   delete $pendingSpecJoin{$user} if(exists $pendingSpecJoin{$user});
 
-  my $p_ban=$spads->getUserBan($user,$lobby->{users}->{$user},isUserAuthenticated($user),undef,getPlayerSkillForBanCheck($user));
+  my $p_ban=$spads->getUserBan($user,$lobby->{users}{$user},isUserAuthenticated($user),undef,getPlayerSkillForBanCheck($user));
   if($p_ban->{banType} < 2) {
     queueLobbyCommand(["KICKFROMBATTLE",$user]);
     logMsg("battle","=== $user joined ===") if($conf{logBattleJoinLeave});
@@ -14064,8 +14064,8 @@ sub cbJoinedBattle {
   my $gameAge='unknown';
   $gameAge=secToTime(time-$timestamps{lastGameStart}) if($timestamps{lastGameStart});
 
-  my @welcomeMsgs=@{$spads->{values}->{welcomeMsg}};
-  @welcomeMsgs=@{$spads->{values}->{welcomeMsgInGame}} if($lobby->{users}->{$conf{lobbyLogin}}->{status}->{inGame});
+  my @welcomeMsgs=@{$spads->{values}{welcomeMsg}};
+  @welcomeMsgs=@{$spads->{values}{welcomeMsgInGame}} if($lobby->{users}{$conf{lobbyLogin}}{status}{inGame});
   foreach my $welcomeMsg (@welcomeMsgs) {
     if($welcomeMsg) {
       my %placeholders=(u => $user,
@@ -14090,13 +14090,13 @@ sub cbJoinedBattle {
     }
   }
 
-  if($autohost->getState() && defined $lobby->{battle}->{users}->{$user}->{scriptPass}) {
-    if(exists $p_runningBattle->{users}->{$user} && ! exists $inGameAddedUsers{$user}) {
-      $inGameAddedUsers{$user}=$lobby->{battle}->{users}->{$user}->{scriptPass};
+  if($autohost->getState() && defined $lobby->{battle}{users}{$user}{scriptPass}) {
+    if(exists $p_runningBattle->{users}{$user} && ! exists $inGameAddedUsers{$user}) {
+      $inGameAddedUsers{$user}=$lobby->{battle}{users}{$user}{scriptPass};
       $autohost->sendChatMessage("/adduser $user $inGameAddedUsers{$user}");
     }
-    if(exists $inGameAddedUsers{$user} && $inGameAddedUsers{$user} ne $lobby->{battle}->{users}->{$user}->{scriptPass}) {
-      $inGameAddedUsers{$user}=$lobby->{battle}->{users}->{$user}->{scriptPass};
+    if(exists $inGameAddedUsers{$user} && $inGameAddedUsers{$user} ne $lobby->{battle}{users}{$user}{scriptPass}) {
+      $inGameAddedUsers{$user}=$lobby->{battle}{users}{$user}{scriptPass};
       $autohost->sendChatMessage("/adduser $user $inGameAddedUsers{$user}");
     }
   }
@@ -14108,7 +14108,7 @@ sub cbAddBot {
   my (undef,undef,$bot)=@_;
 
   my $nbNonPlayer=getNbNonPlayer();
-  my $user=$lobby->{battle}->{bots}->{$bot}->{owner};
+  my $user=$lobby->{battle}{bots}{$bot}{owner};
 
   delete($pendingLocalBotManual{$bot}) if(exists $pendingLocalBotManual{$bot});
   if(exists $pendingLocalBotAuto{$bot}) {
@@ -14118,18 +14118,18 @@ sub cbAddBot {
 
   return if(checkUserStatusFlood($user));
 
-  my $p_ban=$spads->getUserBan($user,$lobby->{users}->{$user},isUserAuthenticated($user),undef,getPlayerSkillForBanCheck($user));
+  my $p_ban=$spads->getUserBan($user,$lobby->{users}{$user},isUserAuthenticated($user),undef,getPlayerSkillForBanCheck($user));
   if($p_ban->{banType} < 2) {
     queueLobbyCommand(["KICKFROMBATTLE",$user]);
     return;
   }
-  my @clients=keys %{$lobby->{battle}->{users}};
+  my @clients=keys %{$lobby->{battle}{users}};
   my $targetNbPlayers=$conf{nbPlayerById}*$conf{teamSize}*$conf{nbTeams};
-  my @bots=keys %{$lobby->{battle}->{bots}};
+  my @bots=keys %{$lobby->{battle}{bots}};
   my $nbPlayers=$#clients-$nbNonPlayer+$#bots+2;
   my ($nbLocalBots,$nbRemoteBots)=(0,0);
   foreach my $botName (@bots) {
-    if($lobby->{battle}->{bots}->{$botName}->{owner} eq $conf{lobbyLogin}) {
+    if($lobby->{battle}{bots}{$botName}{owner} eq $conf{lobbyLogin}) {
       $nbLocalBots++;
     }else{
       $nbRemoteBots++;
@@ -14170,7 +14170,7 @@ sub cbAddBot {
 
 sub cbLeftBattle {
   my (undef,$battleId,$user)=@_;
-  if(%{$lobby->{battle}} && $battleId == $lobby->{battle}->{battleId}) {
+  if(%{$lobby->{battle}} && $battleId == $lobby->{battle}{battleId}) {
     foreach my $pluginName (@pluginsOrder) {
       $plugins{$pluginName}->onLeftBattle($user) if($plugins{$pluginName}->can('onLeftBattle'));
     }
@@ -14413,10 +14413,10 @@ sub cbChannelTopic {
 
 sub cbBattleOpened {
   my ($bId,$type,$founder,$ip,$mapHash)=($_[1],$_[2],$_[4],$_[5],$_[10]);
-  my $mapName=$lobby->{battles}->{$bId}->{map};
+  my $mapName=$lobby->{battles}{$bId}{map};
   seenUserIp($founder,$ip,$lobby->{users}{$founder}{status}{bot});
   return if($type || ! $conf{autoLearnMaps} || getMapHash($mapName) || !$mapHash);
-  my ($engineName,$engineVersion)=($lobby->{battles}->{$bId}->{engineName},$lobby->{battles}->{$bId}->{engineVersion});
+  my ($engineName,$engineVersion)=($lobby->{battles}{$bId}{engineName},$lobby->{battles}{$bId}{engineVersion});
   my $quotedVer=quotemeta($syncedSpringVersion);
   if($engineName !~ /^spring$/i || $engineVersion !~ /^$quotedVer(\..*)?$/) {
     slog("Ignoring battle $bId for automatic map learning (different game engine: \"$engineName $engineVersion\")",5);
@@ -14429,7 +14429,7 @@ sub cbBattleOpened {
 sub cbUpdateBattleInfo {
   my ($battleId,$mapHash,$mapName)=($_[1],$_[4],$_[5]);
   return if(! $conf{autoLearnMaps} || ! defined $mapName || getMapHash($mapName) || !$mapHash);
-  my ($engineName,$engineVersion)=($lobby->{battles}->{$battleId}->{engineName},$lobby->{battles}->{$battleId}->{engineVersion});
+  my ($engineName,$engineVersion)=($lobby->{battles}{$battleId}{engineName},$lobby->{battles}{$battleId}{engineVersion});
   my $quotedVer=quotemeta($syncedSpringVersion);
   if($engineName !~ /^spring$/i || $engineVersion !~ /^$quotedVer(\..*)?$/) {
     slog("Ignoring battle $battleId for automatic map learning (different game engine: \"$engineName $engineVersion\")",5);
@@ -14444,36 +14444,36 @@ sub cbUpdateBattleInfo {
 sub cbAhPlayerJoined {
   my (undef,undef,$name)=@_;
   logMsg("game","=== $name joined ===") if($conf{logGameJoinLeave});
-  if($autohost->getState() == 1 && $timestamps{autoForcePossible} == 0 && exists($p_runningBattle->{scriptTags}->{"game/startpostype"})) {
+  if($autohost->getState() == 1 && $timestamps{autoForcePossible} == 0 && exists($p_runningBattle->{scriptTags}{"game/startpostype"})) {
     if(%{$p_runningBattle->{bots}}) {
       slog("Game is using AI bots, cancelling auto-force start check.",5);
       $timestamps{autoForcePossible}=-1;
       return;
     }
-    my $startPosType=$p_runningBattle->{scriptTags}->{"game/startpostype"};
+    my $startPosType=$p_runningBattle->{scriptTags}{"game/startpostype"};
     my $p_ahPlayers=$autohost->getPlayersByNames();
     my $p_rBUsers=$p_runningBattle->{users};
     foreach my $user (keys %{$p_rBUsers}) {
       next if($user eq $conf{lobbyLogin});
-      if(! defined $p_rBUsers->{$user}->{battleStatus}) {
+      if(! defined $p_rBUsers->{$user}{battleStatus}) {
         slog("Player \"$user\" has an undefined battleStatus in lobby, cancelling auto-force start check.",5);
         $timestamps{autoForcePossible}=-1;
         return;
       }
-      if($p_rBUsers->{$user}->{battleStatus}->{mode}) {
-        if(! exists $p_ahPlayers->{$user} || $p_ahPlayers->{$user}->{disconnectCause} == -2) {
+      if($p_rBUsers->{$user}{battleStatus}{mode}) {
+        if(! exists $p_ahPlayers->{$user} || $p_ahPlayers->{$user}{disconnectCause} == -2) {
           slog("Player \"$user\" hasn't joined yet, auto-force start isn't possible.",5);
           return;
         }
-        if($startPosType == 2 && $p_ahPlayers->{$user}->{ready} < 1) {
+        if($startPosType == 2 && $p_ahPlayers->{$user}{ready} < 1) {
           slog("Player \"$user\" isn't ready yet, auto-force start isn't possible.",5);
           return;
         }
       }else{
-        if(! exists $p_ahPlayers->{$user} || $p_ahPlayers->{$user}->{disconnectCause} == -2) {
-          if($p_rBUsers->{$user}->{battleStatus}->{sync} != 1) {
+        if(! exists $p_ahPlayers->{$user} || $p_ahPlayers->{$user}{disconnectCause} == -2) {
+          if($p_rBUsers->{$user}{battleStatus}{sync} != 1) {
             slog("Ignoring unsynced spectator \"$user\" for auto-force start check.",5);
-          }elsif($p_rBUsers->{$user}->{status}->{inGame} == 1) {
+          }elsif($p_rBUsers->{$user}{status}{inGame} == 1) {
             slog("Ignoring already in-game spectator \"$user\" for auto-force start check.",5);
           }else{
             slog("Spectator \"$user\" hasn't joined yet, auto-force start isn't possible.",5);
@@ -14488,41 +14488,41 @@ sub cbAhPlayerJoined {
 
 sub cbAhPlayerReady {
   my (undef,$playerNb,$readyState)=@_;
-  return unless(exists $autohost->{players}->{$playerNb});
-  my $name=$autohost->{players}->{$playerNb}->{name};
+  return unless(exists $autohost->{players}{$playerNb});
+  my $name=$autohost->{players}{$playerNb}{name};
   return unless($readyState > 0);
   logMsg("game","=== $name is ready ===") if($conf{logGameServerMsg});
 
-  if($autohost->getState() == 1 && $timestamps{autoForcePossible} == 0 && exists($p_runningBattle->{scriptTags}->{"game/startpostype"})) {
+  if($autohost->getState() == 1 && $timestamps{autoForcePossible} == 0 && exists($p_runningBattle->{scriptTags}{"game/startpostype"})) {
     if(%{$p_runningBattle->{bots}}) {
       slog("Game is using AI bots, cancelling auto-force start check.",5);
       $timestamps{autoForcePossible}=-1;
       return;
     }
-    my $startPosType=$p_runningBattle->{scriptTags}->{"game/startpostype"};
+    my $startPosType=$p_runningBattle->{scriptTags}{"game/startpostype"};
     my $p_ahPlayers=$autohost->getPlayersByNames();
     my $p_rBUsers=$p_runningBattle->{users};
     foreach my $user (keys %{$p_rBUsers}) {
       next if($user eq $conf{lobbyLogin});
-      if(! defined $p_rBUsers->{$user}->{battleStatus}) {
+      if(! defined $p_rBUsers->{$user}{battleStatus}) {
         slog("Player \"$user\" has an undefined battleStatus in lobby, cancelling auto-force start check.",5);
         $timestamps{autoForcePossible}=-1;
         return;
       }
-      if($p_rBUsers->{$user}->{battleStatus}->{mode}) {
-        if(! exists $p_ahPlayers->{$user} || $p_ahPlayers->{$user}->{disconnectCause} == -2) {
+      if($p_rBUsers->{$user}{battleStatus}{mode}) {
+        if(! exists $p_ahPlayers->{$user} || $p_ahPlayers->{$user}{disconnectCause} == -2) {
           slog("Player \"$user\" hasn't joined yet, auto-force start isn't possible.",5);
           return;
         }
-        if($startPosType == 2 && $p_ahPlayers->{$user}->{ready} < 1) {
+        if($startPosType == 2 && $p_ahPlayers->{$user}{ready} < 1) {
           slog("Player \"$user\" isn't ready yet, auto-force start isn't possible.",5);
           return;
         }
       }else{
-        if(! exists $p_ahPlayers->{$user} || $p_ahPlayers->{$user}->{disconnectCause} == -2) {
-          if($p_rBUsers->{$user}->{battleStatus}->{sync} != 1) {
+        if(! exists $p_ahPlayers->{$user} || $p_ahPlayers->{$user}{disconnectCause} == -2) {
+          if($p_rBUsers->{$user}{battleStatus}{sync} != 1) {
             slog("Ignoring unsynced spectator \"$user\" for auto-force start check.",5);
-          }elsif($p_rBUsers->{$user}->{status}->{inGame} == 1) {
+          }elsif($p_rBUsers->{$user}{status}{inGame} == 1) {
             slog("Ignoring already in-game spectator \"$user\" for auto-force start check.",5);
           }else{
             slog("Spectator \"$user\" hasn't joined yet, auto-force start isn't possible.",5);
@@ -14538,14 +14538,14 @@ sub cbAhPlayerReady {
 sub cbAhPlayerDefeated {
   my (undef,$playerNb)=@_;
   checkAutoStop();
-  return unless(exists $autohost->{players}->{$playerNb});
-  $defeatTimes{$autohost->{players}->{$playerNb}->{name}}=time;
+  return unless(exists $autohost->{players}{$playerNb});
+  $defeatTimes{$autohost->{players}{$playerNb}{name}}=time;
 }
 
 sub cbAhPlayerLeft {
   my (undef,$playerNb)=@_;
-  if(exists $autohost->{players}->{$playerNb}) {
-    my $name=$autohost->{players}->{$playerNb}->{name};
+  if(exists $autohost->{players}{$playerNb}) {
+    my $name=$autohost->{players}{$playerNb}{name};
     logMsg("game","=== $name left ===") if($conf{logGameJoinLeave});
     if(exists $currentVote{command} && exists $currentVote{remainingVoters}{$name}) {
       delete $currentVote{remainingVoters}{$name} unless($lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}} && exists $lobby->{battle}{users}{$name});
@@ -14563,7 +14563,7 @@ sub cbAhPlayerLeft {
 
 sub cbAhPlayerChat {
   my (undef,$playerNb,$dest,$msg)=@_;
-  my $player=$autohost->{players}->{$playerNb}->{name};
+  my $player=$autohost->{players}{$playerNb}{name};
   my $destString;
   if($dest eq '') {
     $destString=isUserAllowedToSpeakInGame($player)?'':'(to spectators, forced) '
@@ -14604,7 +14604,7 @@ sub cbAhServerStartPlayingHandler {
   slog("Game started",4);
   logMsg('game','Game started') if($conf{logGameServerMsg});
   if(%currentVote && exists $currentVote{command} && @{$currentVote{command}}) {
-    my $command=lc($currentVote{command}->[0]);
+    my $command=lc($currentVote{command}[0]);
     if($command eq "forcestart") {
       foreach my $pluginName (@pluginsOrder) {
         $plugins{$pluginName}->onVoteStop(0) if($plugins{$pluginName}->can('onVoteStop'));
@@ -14622,23 +14622,23 @@ sub cbAhGameTeamStat {
   my (undef,$teamNb,$frameNb,
       $metalUsed,$energyUsed,$metalProduced,$energyProduced,$metalExcess,$energyExcess,$metalReceived,$energyReceived,$metalSent,$energySent,
       $damageDealt,$damageReceived,$unitsProduced,$unitsDied,$unitsReceived,$unitsSent,$unitsCaptured,$unitsOutCaptured,$unitsKilled)=@_;
-  if(! exists $runningBattleReversedMapping{teams}->{$teamNb}) {
+  if(! exists $runningBattleReversedMapping{teams}{$teamNb}) {
     slog("Received a GAME_TEAMSTAT message for an invalid team ID ($teamNb)",2);
     return;
   }
-  my $lobbyTeam=$runningBattleReversedMapping{teams}->{$teamNb};
+  my $lobbyTeam=$runningBattleReversedMapping{teams}{$teamNb};
   my $lobbyAllyTeam;
   my @names;
   foreach my $player (keys %{$p_runningBattle->{users}}) {
-    if(defined $p_runningBattle->{users}->{$player}->{battleStatus} && $p_runningBattle->{users}->{$player}->{battleStatus}->{mode}
-       && $p_runningBattle->{users}->{$player}->{battleStatus}->{id} == $lobbyTeam) {
-      $lobbyAllyTeam=$p_runningBattle->{users}->{$player}->{battleStatus}->{team};
+    if(defined $p_runningBattle->{users}{$player}{battleStatus} && $p_runningBattle->{users}{$player}{battleStatus}{mode}
+       && $p_runningBattle->{users}{$player}{battleStatus}{id} == $lobbyTeam) {
+      $lobbyAllyTeam=$p_runningBattle->{users}{$player}{battleStatus}{team};
       push(@names,$player);
     }
   }
   foreach my $bot (keys %{$p_runningBattle->{bots}}) {
-    if($p_runningBattle->{bots}->{$bot}->{battleStatus}->{id} == $lobbyTeam) {
-      $lobbyAllyTeam=$p_runningBattle->{bots}->{$bot}->{battleStatus}->{team};
+    if($p_runningBattle->{bots}{$bot}{battleStatus}{id} == $lobbyTeam) {
+      $lobbyAllyTeam=$p_runningBattle->{bots}{$bot}{battleStatus}{team};
       push(@names,"$bot (bot)");
     }
   }
@@ -14673,14 +14673,14 @@ sub cbAhGameTeamStat {
 
 sub cbAhServerGameOver {
   my (undef,undef,$playerNb,@winningAllyTeams)=@_;
-  if(! exists $autohost->{players}->{$playerNb}) {
+  if(! exists $autohost->{players}{$playerNb}) {
     slog("Ignoring Game Over message from unknown player number $playerNb",2);
     return;
   }
-  $p_gameOverResults->{$autohost->{players}->{$playerNb}->{name}}=\@winningAllyTeams;
-  slog("Game over ($autohost->{players}->{$playerNb}->{name})",4);
+  $p_gameOverResults->{$autohost->{players}{$playerNb}{name}}=\@winningAllyTeams;
+  slog("Game over ($autohost->{players}{$playerNb}{name})",4);
   return if(($springServerType eq 'dedicated' && $autohost->{state} < 3)
-            || ($springServerType eq 'headless' && $autohost->{players}->{$playerNb}->{name} ne $conf{lobbyLogin}));
+            || ($springServerType eq 'headless' && $autohost->{players}{$playerNb}{name} ne $conf{lobbyLogin}));
   $timestamps{autoStop}=time + ($conf{autoStop} =~ /\((\d+)\)$/ ? $1 : 5) if($timestamps{autoStop} == 0 && $conf{autoStop} ne 'off');
   $timestamps{gameOver}=time if($timestamps{gameOver} == 0);
 }
@@ -14730,26 +14730,26 @@ sub cbAhServerQuit {
 
   my %winningTeams;
   foreach my $winningAllyTeam (@winningAllyTeams) {
-    if(! exists $runningBattleReversedMapping{allyTeams}->{$winningAllyTeam}) {
+    if(! exists $runningBattleReversedMapping{allyTeams}{$winningAllyTeam}) {
       slog("Unknown internal ally team found ($winningAllyTeam) when computing game over result",1);
       next;
     }
-    $winningTeams{$runningBattleReversedMapping{allyTeams}->{$winningAllyTeam}}=[];
+    $winningTeams{$runningBattleReversedMapping{allyTeams}{$winningAllyTeam}}=[];
   }
 
   foreach my $player (keys %{$p_runningBattle->{users}}) {
-    if(defined $p_runningBattle->{users}->{$player}->{battleStatus}
-       && $p_runningBattle->{users}->{$player}->{battleStatus}->{mode}) {
-      $cheating=1 if($p_runningBattle->{users}->{$player}->{battleStatus}->{bonus});
-      if(exists $winningTeams{$p_runningBattle->{users}->{$player}->{battleStatus}->{team}}) {
-        push(@{$winningTeams{$p_runningBattle->{users}->{$player}->{battleStatus}->{team}}},$player);
+    if(defined $p_runningBattle->{users}{$player}{battleStatus}
+       && $p_runningBattle->{users}{$player}{battleStatus}{mode}) {
+      $cheating=1 if($p_runningBattle->{users}{$player}{battleStatus}{bonus});
+      if(exists $winningTeams{$p_runningBattle->{users}{$player}{battleStatus}{team}}) {
+        push(@{$winningTeams{$p_runningBattle->{users}{$player}{battleStatus}{team}}},$player);
       }
     }
   }
   my @bots=keys %{$p_runningBattle->{bots}};
   foreach my $bot (@bots) {
-    if(exists $winningTeams{$p_runningBattle->{bots}->{$bot}->{battleStatus}->{team}}) {
-      push(@{$winningTeams{$p_runningBattle->{bots}->{$bot}->{battleStatus}->{team}}},$bot.' (bot)');
+    if(exists $winningTeams{$p_runningBattle->{bots}{$bot}{battleStatus}{team}}) {
+      push(@{$winningTeams{$p_runningBattle->{bots}{$bot}{battleStatus}{team}}},$bot.' (bot)');
     }
   }
 
@@ -14786,21 +14786,21 @@ sub cbAhServerQuit {
   if(($nbTeamStats > 2 && $conf{endGameAwards}) || ($nbTeamStats == 2 && $conf{endGameAwards} > 1)) {
     my %awardStats;
     foreach my $name (@teamStatsNames) {
-      $awardStats{$name}={damage => $teamStats{$name}->{damageDealt},
-                          eco => 50 * $teamStats{$name}->{metalProduced} + $teamStats{$name}->{energyProduced},
-                          micro => $teamStats{$name}->{damageDealt}/($teamStats{$name}->{damageReceived} ? $teamStats{$name}->{damageReceived} : 1)};
+      $awardStats{$name}={damage => $teamStats{$name}{damageDealt},
+                          eco => 50 * $teamStats{$name}{metalProduced} + $teamStats{$name}{energyProduced},
+                          micro => $teamStats{$name}{damageDealt}/($teamStats{$name}{damageReceived} ? $teamStats{$name}{damageReceived} : 1)};
     }
-    my @sortedDamages=sort {$awardStats{$b}->{damage} <=> $awardStats{$a}->{damage}} (keys %awardStats);
-    my @sortedEcos=sort {$awardStats{$b}->{eco} <=> $awardStats{$a}->{eco}} (keys %awardStats);
+    my @sortedDamages=sort {$awardStats{$b}{damage} <=> $awardStats{$a}{damage}} (keys %awardStats);
+    my @sortedEcos=sort {$awardStats{$b}{eco} <=> $awardStats{$a}{eco}} (keys %awardStats);
     my @bestDamages;
     for my $i (0..($nbTeamStats == 2 ? 1 : int($nbTeamStats/2-0.5))) {
       push(@bestDamages,$sortedDamages[$i]);
     }
-    my @sortedMicros=sort {$awardStats{$b}->{micro} <=> $awardStats{$a}->{micro}} (@bestDamages);
+    my @sortedMicros=sort {$awardStats{$b}{micro} <=> $awardStats{$a}{micro}} (@bestDamages);
 
     my ($damageWinner,$ecoWinner,$microWinner)=($sortedDamages[0],$sortedEcos[0],$sortedMicros[0]);
-    my ($bestDamage,$bestEco,$bestMicro)=($awardStats{$damageWinner}->{damage},$awardStats{$ecoWinner}->{eco},$awardStats{$microWinner}->{micro});
-    my ($secondBestDamage,$secondBestEco,$secondBestMicro)=($awardStats{$sortedDamages[1]}->{damage},$awardStats{$sortedEcos[1]}->{eco},$awardStats{$sortedMicros[1]}->{micro});
+    my ($bestDamage,$bestEco,$bestMicro)=($awardStats{$damageWinner}{damage},$awardStats{$ecoWinner}{eco},$awardStats{$microWinner}{micro});
+    my ($secondBestDamage,$secondBestEco,$secondBestMicro)=($awardStats{$sortedDamages[1]}{damage},$awardStats{$sortedEcos[1]}{eco},$awardStats{$sortedMicros[1]}{micro});
     my $maxLength=length($damageWinner);
     $maxLength=length($ecoWinner) if(length($ecoWinner) > $maxLength);
     $maxLength=length($microWinner) if(length($microWinner) > $maxLength);
@@ -14831,14 +14831,14 @@ sub cbAhServerQuit {
 
   my %teamCounts;
   foreach my $player (keys %{$p_runningBattle->{users}}) {
-    if(defined $p_runningBattle->{users}->{$player}->{battleStatus} && $p_runningBattle->{users}->{$player}->{battleStatus}->{mode}) {
-      my $playerTeam=$p_runningBattle->{users}->{$player}->{battleStatus}->{team};
+    if(defined $p_runningBattle->{users}{$player}{battleStatus} && $p_runningBattle->{users}{$player}{battleStatus}{mode}) {
+      my $playerTeam=$p_runningBattle->{users}{$player}{battleStatus}{team};
       $teamCounts{$playerTeam}=0 unless(exists $teamCounts{$playerTeam});
       $teamCounts{$playerTeam}++;
     }
   }
   foreach my $bot (@bots) {
-    my $botTeam=$p_runningBattle->{bots}->{$bot}->{battleStatus}->{team};
+    my $botTeam=$p_runningBattle->{bots}{$bot}{battleStatus}{team};
     $teamCounts{$botTeam}=0 unless(exists $teamCounts{$botTeam});
     $teamCounts{$botTeam}++;
   }
@@ -14870,7 +14870,7 @@ sub cbAhServerQuit {
 
   my @gdrPlayers;
   foreach my $player (keys %{$p_runningBattle->{users}}) {
-    my %gdrPlayer=(accountId => $p_runningBattle->{users}->{$player}->{accountId},
+    my %gdrPlayer=(accountId => $p_runningBattle->{users}{$player}{accountId},
                    name => $player,
                    ip => '',
                    team => '',
@@ -14879,10 +14879,10 @@ sub cbAhServerQuit {
                    loseTime => '');
     $gdrPlayer{loseTime}=$defeatTimes{$player}-$timestamps{lastGameStart} if(exists $defeatTimes{$player});
     $gdrPlayer{ip}=$gdrIPs{$player} if(exists $gdrIPs{$player});
-    if(defined $p_runningBattle->{users}->{$player}->{battleStatus}
-       && $p_runningBattle->{users}->{$player}->{battleStatus}->{mode}) {
-      $gdrPlayer{team}=$p_runningBattle->{users}->{$player}->{battleStatus}->{id};
-      $gdrPlayer{allyTeam}=$p_runningBattle->{users}->{$player}->{battleStatus}->{team};
+    if(defined $p_runningBattle->{users}{$player}{battleStatus}
+       && $p_runningBattle->{users}{$player}{battleStatus}{mode}) {
+      $gdrPlayer{team}=$p_runningBattle->{users}{$player}{battleStatus}{id};
+      $gdrPlayer{allyTeam}=$p_runningBattle->{users}{$player}{battleStatus}{team};
       if(! %winningTeams) {
         $gdrPlayer{win}=2;
       }elsif(exists $winningTeams{$gdrPlayer{allyTeam}}) {
@@ -14894,11 +14894,11 @@ sub cbAhServerQuit {
   %gdrIPs=();
   my @gdrBots;
   foreach my $bot (@bots) {
-    my %gdrBot=(accountId => $p_runningBattle->{users}->{$p_runningBattle->{bots}->{$bot}->{owner}}->{accountId},
+    my %gdrBot=(accountId => $p_runningBattle->{users}{$p_runningBattle->{bots}{$bot}{owner}}{accountId},
                 name => $bot,
-                ai => $p_runningBattle->{bots}->{$bot}->{aiDll},
-                team => $p_runningBattle->{bots}->{$bot}->{battleStatus}->{id},
-                allyTeam => $p_runningBattle->{bots}->{$bot}->{battleStatus}->{team},
+                ai => $p_runningBattle->{bots}{$bot}{aiDll},
+                team => $p_runningBattle->{bots}{$bot}{battleStatus}{id},
+                allyTeam => $p_runningBattle->{bots}{$bot}{battleStatus}{team},
                 win => 0);
     if(! %winningTeams) {
       $gdrBot{win}=2;
@@ -14996,12 +14996,12 @@ sub cbAhServerMessage {
   if($msg =~ /^ -> Connection established \(given id (\d+)\)$/) {
 
     my $playerNb=$1;
-    if(! exists $autohost->{players}->{$playerNb}) {
+    if(! exists $autohost->{players}{$playerNb}) {
       slog("Received a connection established message for an unknown user, cancelling checks on in-game IP",2);
       return;
     }
-    my $name=$autohost->{players}->{$playerNb}->{name};
-    my $gameIp=$autohost->{players}->{$playerNb}->{address};
+    my $name=$autohost->{players}{$playerNb}{name};
+    my $gameIp=$autohost->{players}{$playerNb}{address};
     if(! $gameIp) {
       slog("Unable to retrieve in-game IP for user $name, cancelling checks on in-game IP",2);
       return;
@@ -15010,9 +15010,9 @@ sub cbAhServerMessage {
     $gdrIPs{$name}=$gameIp;
 
     my $p_battleUserData;
-    $p_battleUserData=$lobby->{battle}->{users}->{$name} if(%{$lobby->{battle}} && exists $lobby->{battle}->{users}->{$name});
+    $p_battleUserData=$lobby->{battle}{users}{$name} if(%{$lobby->{battle}} && exists $lobby->{battle}{users}{$name});
     if((defined $p_battleUserData && defined $p_battleUserData->{scriptPass})
-       || (exists $p_runningBattle->{users}->{$name} && defined $p_runningBattle->{users}->{$name}->{scriptPass})) {
+       || (exists $p_runningBattle->{users}{$name} && defined $p_runningBattle->{users}{$name}{scriptPass})) {
       if($gameIp =~ /^\d+(?:\.\d+){3}$/) {
         seenUserIp($name,$gameIp);
       }else{
@@ -15021,7 +15021,7 @@ sub cbAhServerMessage {
     }
 
     my $p_lobbyUserData;
-    $p_lobbyUserData=$lobby->{users}->{$name} if(exists $lobby->{users}->{$name});
+    $p_lobbyUserData=$lobby->{users}{$name} if(exists $lobby->{users}{$name});
     my $lobbyIp;
     if(defined $p_lobbyUserData && $p_lobbyUserData->{ip}) {
       $lobbyIp=$p_lobbyUserData->{ip};
@@ -15046,16 +15046,16 @@ sub cbAhServerMessage {
       slog("Unable to perform spoof protection for user $name, unknown lobby IP address",2) unless($name eq $conf{lobbyLogin});
     }
 
-    $p_lobbyUserData=$p_runningBattle->{users}->{$name} if(! defined $p_lobbyUserData && exists $p_runningBattle->{users}->{$name});
+    $p_lobbyUserData=$p_runningBattle->{users}{$name} if(! defined $p_lobbyUserData && exists $p_runningBattle->{users}{$name});
     if(defined $p_lobbyUserData) {
       my $p_ban=$spads->getUserBan($name,$p_lobbyUserData,isUserAuthenticated($name),$gameIp,getPlayerSkillForBanCheck($name));
       if($p_ban->{banType} < 2) {
         sayBattleAndGame("Kicking $name from game (banned)");
         $autohost->sendChatMessage("/kickbynum $playerNb");
         logMsg("game","> /kickbynum $playerNb") if($conf{logGameChat});
-      }elsif($p_ban->{banType} == 2 && exists $p_runningBattle->{users}->{$name}
-             && defined($p_runningBattle->{users}->{$name}->{battleStatus})
-             && $p_runningBattle->{users}->{$name}->{battleStatus}->{mode}) {
+      }elsif($p_ban->{banType} == 2 && exists $p_runningBattle->{users}{$name}
+             && defined($p_runningBattle->{users}{$name}{battleStatus})
+             && $p_runningBattle->{users}{$name}{battleStatus}{mode}) {
         sayBattleAndGame("Kicking $name from game (force-spec ban)");
         $autohost->sendChatMessage("/kickbynum $playerNb");
         logMsg("game","> /kickbynum $playerNb") if($conf{logGameChat});
@@ -15110,7 +15110,7 @@ sub unloadPlugin {
   if(exists $pluginsReverseDeps{$pluginName}) {
     my @dependentPlugins=keys %{$pluginsReverseDeps{$pluginName}};
     foreach my $dependentPlugin (@dependentPlugins) {
-      if(! exists $pluginsReverseDeps{$pluginName}->{$dependentPlugin}) {
+      if(! exists $pluginsReverseDeps{$pluginName}{$dependentPlugin}) {
         slog("Ignoring already unloaded dependent plugin ($dependentPlugin) during $pluginName plugin unload operation",5);
         next;
       }
@@ -15128,11 +15128,11 @@ sub unloadPlugin {
       slog("Inconsistent plugin dependency state: $dependencyPlugin was not marked as having any dependent plugins whereas $pluginName is a dependent plugin",2);
       next;
     }
-    if(! exists $pluginsReverseDeps{$dependencyPlugin}->{$pluginName}) {
+    if(! exists $pluginsReverseDeps{$dependencyPlugin}{$pluginName}) {
       slog("Inconsistent plugin dependency state: $pluginName was not marked as being a dependent plugin of $dependencyPlugin",2);
       next;
     }
-    delete $pluginsReverseDeps{$dependencyPlugin}->{$pluginName};
+    delete $pluginsReverseDeps{$dependencyPlugin}{$pluginName};
   }
 
   $plugins{$pluginName}->onUnload($reason) if($plugins{$pluginName}->can('onUnload'));
@@ -15212,7 +15212,7 @@ sub instantiatePlugin {
     if(! exists $pluginsReverseDeps{$pluginDep}) {
       $pluginsReverseDeps{$pluginDep}={$pluginName => 1};
     }else{
-      $pluginsReverseDeps{$pluginDep}->{$pluginName}=1;
+      $pluginsReverseDeps{$pluginDep}{$pluginName}=1;
     }
   }
 
@@ -15235,7 +15235,7 @@ sub pluginsUpdateSkill {
     if($plugins{$pluginName}->can('updatePlayerSkill')) {
       my $pluginResult=$plugins{$pluginName}->updatePlayerSkill($p_userSkill,
                                                                 $accountId,
-                                                                $lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod},
+                                                                $lobby->{battles}{$lobby->{battle}{battleId}}{mod},
                                                                 $currentGameType);
       if(ref $pluginResult eq 'ARRAY') {
         my ($newPlayerSkill,$newPlayerSigma);
@@ -15245,7 +15245,7 @@ sub pluginsUpdateSkill {
       }
       if($pluginResult) {
         if($pluginResult == 2) {
-          slog("Using degraded mode for skill retrieving by plugin $pluginName ($accountId, $lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod}, $currentGameType)",2);
+          slog("Using degraded mode for skill retrieving by plugin $pluginName ($accountId, $lobby->{battles}{$lobby->{battle}{battleId}}{mod}, $currentGameType)",2);
           $p_userSkill->{skillOrigin}='PluginDegraded';
         }else{
           $p_userSkill->{skillOrigin}='Plugin';
@@ -15272,13 +15272,13 @@ if($genDoc) {
     $allHelp{$com}={} unless(exists $allHelp{$com});
     my @comHelp=@{$p_comHelp->{$com}};
     my $comDesc=shift(@comHelp);
-    $allHelp{$com}->{command}={desc => $comDesc, examples => \@comHelp};
+    $allHelp{$com}{command}={desc => $comDesc, examples => \@comHelp};
   }
   foreach my $settingType (keys %{$p_setHelp}) {
     foreach my $setting (keys %{$p_setHelp->{$settingType}}) {
-      my $settingName=$p_setHelp->{$settingType}->{$setting}->{name};
+      my $settingName=$p_setHelp->{$settingType}{$setting}{name};
       $allHelp{$settingName}={} unless(exists $allHelp{$settingName});
-      $allHelp{$settingName}->{$settingType}=$p_setHelp->{$settingType}->{$setting};
+      $allHelp{$settingName}{$settingType}=$p_setHelp->{$settingType}{$setting};
     }
   }
 
@@ -15421,14 +15421,14 @@ EOF
 <HTML>
 <HEAD>
 <!-- Generated by SPADS v$SPADS_VERSION on $genTime GMT-->
-<TITLE>$listContents{$listType}->[0]</TITLE>
+<TITLE>$listContents{$listType}[0]</TITLE>
 <LINK REL="stylesheet" TYPE="text/css" HREF="spadsDoc.css" TITLE="Style">
 </HEAD>
 
 <BODY BGCOLOR="white">
 
 <FONT size="+1" CLASS="FrameHeadingFont">
-<B>$listContents{$listType}->[0]</B></FONT>
+<B>$listContents{$listType}[0]</B></FONT>
 <BR>
 
 <TABLE BORDER="0" WIDTH="100%" SUMMARY="">
@@ -15443,7 +15443,7 @@ EOF
 <HTML>
 <HEAD>
 <!-- Generated by SPADS v$SPADS_VERSION on $genTime GMT-->
-<TITLE>$listContents{$listType}->[0] help</TITLE>
+<TITLE>$listContents{$listType}[0] help</TITLE>
 <LINK REL="stylesheet" TYPE="text/css" HREF="spadsDoc.css" TITLE="Style">
 </HEAD>
 
@@ -15453,20 +15453,20 @@ EOF
     foreach my $item (sort keys %allHelp) {
       next if($item eq "");
       foreach my $itemType (sort keys %{$allHelp{$item}}) {
-        next unless($itemType =~ /^$listContents{$listType}->[1]$/);
-        print HTML "<FONT CLASS=\"$items{$itemType}->[1]\"><A HREF=\"spadsDoc_$listType.html\#$itemType:$item\" target=\"mainFrame\">$item</A></FONT><BR>\n";
+        next unless($itemType =~ /^$listContents{$listType}[1]$/);
+        print HTML "<FONT CLASS=\"$items{$itemType}[1]\"><A HREF=\"spadsDoc_$listType.html\#$itemType:$item\" target=\"mainFrame\">$item</A></FONT><BR>\n";
         print HTML2 <<EOF;
 <A NAME="$itemType:$item"></a>
 <TABLE BORDER="1" WIDTH="100%" CELLPADDING="3" CELLSPACING="0" SUMMARY="">
-<TR BGCOLOR="#$items{$itemType}->[2]" ><TD COLSPAN=2><FONT SIZE="+2"><B>$item ($items{$itemType}->[0])</B></FONT></TD></TR>
+<TR BGCOLOR="#$items{$itemType}[2]" ><TD COLSPAN=2><FONT SIZE="+2"><B>$item ($items{$itemType}[0])</B></FONT></TD></TR>
 EOF
         if($itemType eq "command") {
-          my $comSyntax=$allHelp{$item}->{$itemType}->{desc};
+          my $comSyntax=$allHelp{$item}{$itemType}{desc};
           $comSyntax=encodeHtmlEntities($comSyntax);
           print HTML2 "<TR BGCOLOR=\"white\" CLASS=\"TableRowColor\"><TD WIDTH=\"15%\"><B>Syntax</B></TD><TD>$comSyntax</TD></TR>\n";
-          if(@{$allHelp{$item}->{$itemType}->{examples}}) {
+          if(@{$allHelp{$item}{$itemType}{examples}}) {
             print HTML2 "<TR BGCOLOR=\"white\" CLASS=\"TableRowColor\"><TD WIDTH=\"15%\"><B>Example(s)</B></TD><TD>";
-            foreach my $example (@{$allHelp{$item}->{$itemType}->{examples}}) {
+            foreach my $example (@{$allHelp{$item}{$itemType}{examples}}) {
               my $exampleString=encodeHtmlEntities($example);
               print HTML2 "$exampleString<BR>";
             }
@@ -15474,25 +15474,25 @@ EOF
           }
         }else{
           print HTML2 "<TR BGCOLOR=\"white\" CLASS=\"TableRowColor\"><TD WIDTH=\"15%\"><B>Explicit name</B></TD><TD>";
-          foreach my $helpLine (@{$allHelp{$item}->{$itemType}->{explicitName}}) {
+          foreach my $helpLine (@{$allHelp{$item}{$itemType}{explicitName}}) {
             my $lineHtml=encodeHtmlHelp($helpLine);
             print HTML2 "$lineHtml<BR>";
           }
           print HTML2 "</TD></TR>\n";
           print HTML2 "<TR BGCOLOR=\"white\" CLASS=\"TableRowColor\"><TD WIDTH=\"15%\"><B>Description</B></TD><TD>";
-          foreach my $helpLine (@{$allHelp{$item}->{$itemType}->{description}}) {
+          foreach my $helpLine (@{$allHelp{$item}{$itemType}{description}}) {
             my $lineHtml=encodeHtmlHelp($helpLine);
             print HTML2 "$lineHtml<BR>";
           }
           print HTML2 "</TD></TR>\n";
           print HTML2 "<TR BGCOLOR=\"white\" CLASS=\"TableRowColor\"><TD WIDTH=\"15%\"><B>Format / Allowed values</B></TD><TD CLASS=\"FormattedText\">";
-          foreach my $helpLine (@{$allHelp{$item}->{$itemType}->{format}}) {
+          foreach my $helpLine (@{$allHelp{$item}{$itemType}{format}}) {
             my $lineHtml=encodeHtmlHelp($helpLine);
             print HTML2 "$lineHtml<BR>";
           }
           print HTML2 "</TD></TR>\n";
           print HTML2 "<TR BGCOLOR=\"white\" CLASS=\"TableRowColor\"><TD WIDTH=\"15%\"><B>Default value</B></TD><TD>";
-          foreach my $helpLine (@{$allHelp{$item}->{$itemType}->{default}}) {
+          foreach my $helpLine (@{$allHelp{$item}{$itemType}{default}}) {
             my $lineHtml=encodeHtmlHelp($helpLine);
             print HTML2 "$lineHtml<BR>";
           }
