@@ -1,0 +1,16 @@
+[setLogLevel]
+!setLogLevel <logCategory> <level> [<duration>] - Change current log level for one or all SPADS log categories (temporarily if <duration> is provided)
+"!setLogLevel lobbyInterface DEBUG" sets log level for the lobby interface to DEBUG (= level 5)
+"!setLogLevel lobby d" same as above
+"!setLogLevel autoHostInterface 4" sets log level for the autoHost interface to INFO (= level 4)
+"!setLogLevel a info 5m" same as above except the default log level is restored after 5 minutes
+"!setLogLevel SPADS notice" sets main SPADS log level to NOTICE (= level 3)
+"!setLogLevel s 2" sets main SPADS log level to WARNING (= level 2)
+"!setLogLevel autohost err 1h" sets log level for the autoHost interface to ERROR (= level 1) and restores default log level after 1 hour
+"!setLogLevel lobby crit" sets log level for the lobby interface to CRITICAL (= level 0)
+"!setLogLevel L C 1d" same as above except the default log level is restored after 1 day
+"!setLogLevel * DEBUG" sets log level for all categories to DEBUG (= level 5)
+"!setLogLevel * DEBUG 10" same as above except te default log levels are restored after 10 seconds
+"!setLogLevel A" restores default log level for the autoHost interface
+"!setLogLevel *" restores default log levels for all categories
+"!setLogLevel" same as above
