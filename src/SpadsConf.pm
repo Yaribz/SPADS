@@ -26,7 +26,7 @@ use FileHandle;
 use Fcntl qw':DEFAULT :flock';
 use File::Basename;
 use File::Copy;
-use File::Spec;
+use File::Spec::Functions qw'catdir catfile file_name_is_absolute';
 use FindBin;
 use List::Util qw'any all none notall';
 use Storable qw'nstore retrieve dclone';
@@ -39,7 +39,7 @@ use SimpleLog;
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.13.9';
+my $moduleVersion='0.13.10';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -415,7 +415,7 @@ sub new {
                        useTimestamps => [1,-t STDOUT ? 0 : 1],
                        prefix => '[SPADS] ');
 
-  my ($p_hConf,$r_hPresetAttribs) =  loadSettingsFile($sLog,$p_conf->{''}{etcDir}.'/hostingPresets.conf',{},\%hostingParameters,$p_macros,undef,'hSet');
+  my ($p_hConf,$r_hPresetAttribs) =  loadSettingsFile($sLog,catfile($p_conf->{''}{etcDir},'hostingPresets.conf'),{},\%hostingParameters,$p_macros,undef,'hSet');
   if(! checkHConfig($sLog,$p_conf,$p_hConf)) {
     $sLog->log('Unable to load hosting presets',1);
     return 0;
@@ -425,7 +425,7 @@ sub new {
     return 0;
   }
 
-  my ($p_bConf,$r_bPresetAttribs) =  loadSettingsFile($sLog,$p_conf->{''}{etcDir}.'/battlePresets.conf',{},\%battleParameters,$p_macros,1);
+  my ($p_bConf,$r_bPresetAttribs) =  loadSettingsFile($sLog,catfile($p_conf->{''}{etcDir},'battlePresets.conf'),{},\%battleParameters,$p_macros,1);
   if(! checkBConfig($sLog,$p_conf,$p_bConf)) {
     $sLog->log('Unable to load battle presets',1);
     return 0;
@@ -713,7 +713,7 @@ sub _acquireLock {
 
 sub isAbsolutePath {
   my $fileName=shift;
-  my $fileSpecRes=File::Spec->file_name_is_absolute($fileName);
+  my $fileSpecRes=file_name_is_absolute($fileName);
   return $fileSpecRes == 2 if($win);
   return $fileSpecRes;
 }
@@ -737,16 +737,16 @@ sub checkValue {
   return 1 unless(@{$p_types});
   foreach my $type (@{$p_types}) {
     my $checkFunction;
-    if(ref $type eq 'CODE') {
-      $checkFunction=$type;
-    }else{
+    if(ref($type) eq '') {
       next if($isFirstVal && (any {$type eq $_} (qw'integerRange nonNullIntegerRange')));
       $checkFunction=$paramTypes{$type};
-    }
-    if(ref($checkFunction)) {
-      return 1 if(&{$checkFunction}($value,$isFirstVal));
     }else{
+      $checkFunction=$type;
+    }
+    if(ref($checkFunction) eq '') {
       return 1 if($value =~ /^$checkFunction$/);
+    }else{
+      return 1 if(&{$checkFunction}($value,$isFirstVal));
     }
   }
   return 0;
@@ -967,12 +967,12 @@ sub loadSettingsFile {
   }
 
   if(@invalidGlobalParams) {
-    $sLog->log("Configuration file \"$cFile\" contains inconsistent values for following global parameter(s): ".join(',',@invalidGlobalParams),1);
+    $sLog->log("Configuration file \"$cFile\" contains inconsistent value for following global parameter(s): ".join(',',@invalidGlobalParams),1);
     return {};
   }
 
   if(@invalidSectionParams) {
-    $sLog->log("Configuration file \"$cFile\" contains inconsistent values for following section parameter(s): ".join(',',@invalidSectionParams),1);
+    $sLog->log("Configuration file \"$cFile\" contains inconsistent value for following section parameter(s): ".join(',',@invalidSectionParams),1);
     return {};
   }
 
@@ -1381,7 +1381,7 @@ PYTHON_PLUGIN_WRAPPER_END
           cancelModuleLoad($pluginName);
           return 0;
         }
-        $INC{"$pluginName.pm"}=File::Spec->catfile($pluginsDir,"$lowerCasePluginName.py");
+        $INC{"$pluginName.pm"}=catfile($pluginsDir,"$lowerCasePluginName.py");
       }else{
         $self->{log}->log("Unable to load module for plugin \"$pluginName\" (module not found in plugin directory)",1);
         return 0;
@@ -1438,7 +1438,7 @@ sub loadPluginConf {
   $p_globalParams//={};
   $p_presetParams//={};
   return 1 unless(%{$p_globalParams} || %{$p_presetParams});
-  my $p_pluginPresets = loadSettingsFile($self->{log},"$self->{conf}{etcDir}/$pluginName.conf",$p_globalParams,$p_presetParams,$self->{macros});
+  my $p_pluginPresets = loadSettingsFile($self->{log},catfile($self->{conf}{etcDir},"$pluginName.conf"),$p_globalParams,$p_presetParams,$self->{macros});
   if(%{$p_presetParams} && exists $p_pluginPresets->{'_DEFAULT_'}) {
     my $defaultPreset=$self->{conf}{defaultPreset};
     if(! exists $p_pluginPresets->{$defaultPreset}) {
@@ -1568,7 +1568,7 @@ sub checkSpadsConfig {
     my ($paramName,$baseParam)=@{$r_relDirParam};
     my $baseDir = defined $baseParam ? $p_conf->{''}{$baseParam} : $spadsDir;
     my $realValue=$p_conf->{''}{$paramName};
-    my $fixedValue = isAbsolutePath($realValue) ? $realValue : File::Spec->catdir($baseDir,$realValue);
+    my $fixedValue = isAbsolutePath($realValue) ? $realValue : catdir($baseDir,$realValue);
     my $errorMsg;
     if(! -d $fixedValue) {
       $errorMsg='not a directory';
@@ -1616,7 +1616,7 @@ sub checkSpadsConfig {
       $dataFile=$shareableDataName.$defaultDataFileExtension;
     }
     if(! isAbsolutePath($dataFile)) {
-      $dataFile = File::Spec->catfile($p_conf->{''}{varDir},$dataFile);
+      $dataFile = catfile($p_conf->{''}{varDir},$dataFile);
     }
     my $dataFileDir=dirname($dataFile);
     my $errorMsg;

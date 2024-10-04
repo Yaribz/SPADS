@@ -22,12 +22,20 @@ use File::Spec::Functions qw'catdir';
 use List::Util qw'any none';
 
 use Exporter 'import';
-@EXPORT=qw/$spadsVersion $spadsDir loadPythonPlugin get_flag fix_string getBosses getLobbyState getSpringPid getSpringServerType getTimestamps getUserPref getRunningBattle getConfMacros getCurrentVote getPlugin getPluginList addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess forkCall removeProcessCallback createDetachedProcess addTimer removeTimer addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog updateSetting secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives/;
+@EXPORT=qw/$spadsVersion $spadsDir loadPythonPlugin get_flag fix_string getBosses getLobbyState getSpringPid getSpringServerType getTimestamps getUserPref getRunningBattle getConfMacros getCurrentVote getPlugin getPluginList addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess forkCall removeProcessCallback createDetachedProcess addTimer removeTimer addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog updateSetting secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives LOBBY_STATE_DISCONNECTED LOBBY_STATE_CONNECTING LOBBY_STATE_CONNECTED LOBBY_STATE_LOGGED_IN LOBBY_STATE_SYNCHRONIZED LOBBY_STATE_OPENING_BATTLE LOBBY_STATE_BATTLE_OPENED/;
 
-my $apiVersion='0.39';
+my $apiVersion='0.40';
 
 our $spadsVersion=$::SPADS_VERSION;
 our $spadsDir=$::CWD;
+
+*LOBBY_STATE_DISCONNECTED=\&::LOBBY_STATE_DISCONNECTED;
+*LOBBY_STATE_CONNECTING=\&::LOBBY_STATE_CONNECTING;
+*LOBBY_STATE_CONNECTED=\&::LOBBY_STATE_CONNECTED;
+*LOBBY_STATE_LOGGED_IN=\&::LOBBY_STATE_LOGGED_IN;
+*LOBBY_STATE_SYNCHRONIZED=\&::LOBBY_STATE_SYNCHRONIZED;
+*LOBBY_STATE_OPENING_BATTLE=\&::LOBBY_STATE_OPENING_BATTLE;
+*LOBBY_STATE_BATTLE_OPENED=\&::LOBBY_STATE_BATTLE_OPENED;
 
 sub getVersion {
   return $apiVersion;
@@ -700,30 +708,75 @@ do so, the plugin must implement following configuration callback:
 =item C<getParams($pluginName)>
 
 This callback must return a reference to an array containing 2 elements. The
-first element is a reference to a hash containing the global plugin settings
+first element is a reference to a hash containing the plugin global settings
 declarations, the second one is the same but for plugin preset settings
 declarations. These hashes use setting names as keys, and references to array of
-allowed types as values. The types must match the keys of C<%paramTypes> defined
-in SpadsConf.pm.
+allowed types as values. The types must be either strings that match the keys of
+the C<%paramTypes> hash defined in SpadsConf.pm file, or custom functions to
+implement custom value checks. Such custom value checking functions take 2
+parameters: the value to check as first parameter and a boolean specifying if
+the value is the default value (i.e. first value declared in the definition, for
+preset settings) as second parameter. The function must return C<true> if the
+value is valid, or C<false> if it is invalid (refer to examples below).
+
+As for global SPADS core settings, the global settings of the plugin cannot be
+changed dynamically except by editing and reloading the configuration files (for
+example by using the C<!reloadConf> command). The global settings are defined
+before the preset definition sections in the plugin configuration file. Only one
+definition is allowed for each global setting, and only one value can be
+configured in each global setting definition. Global settings aren't impacted
+by preset changes. Global settings should be used for the structural
+parameterization of the plugin, which isn't supposed to be modified during
+runtime and isn't useful from end user point of view (for example file/directory
+path settings...).
+
+As for SPADS core preset settings, the preset settings of the plugin can be
+changed dynamically (using the C<< !plugin <pluginName> set <settingName> <settingValue> >>
+command for example, or simply by changing current global preset). The preset
+settings are defined in the preset definition sections of the plugin
+configuration file, after the global plugin settings. The preset settings can be
+defined multiple times (once in each preset declaration section). Multiple
+values can be configured in each preset setting definition (values are separated
+by pipe character C<|>, the first value is the default value applied when
+loading the preset and the remaining values are the other allowed values).
+Preset settings are impacted by preset changes. Preset settings should be used
+for settings that need to be visible by end users and/or modifiable easily at
+runtime.
 
 Example of implementation in Perl:
 
   my %globalPluginParams = ( MyGlobalSetting1 => ['integer'],
                              MyGlobalSetting2 => ['ipAddr']);
   my %presetPluginParams = ( MyPresetSetting1 => ['readableDir','null'],
-                             MyPresetSetting2 => ['bool'] );
+                             MyPresetSetting2 => ['bool', \&myCustomSettingValueCheck] );
 
-  sub getParams { return [\%globalPluginParams,\%presetPluginParams]; }
+  sub myCustomSettingValueCheck {
+    my ($settingValue,$isDefault)=@_;
+    return $settingValue eq 'true' || $settingValue eq 'false'
+  }
+
+  sub getParams { return [\%globalPluginParams,\%presetPluginParams] }
 
 Example of implementation in Python:
+
+  def myCustomSettingValueCheck(settingValue,isDefault):
+      return settingValue == 'true' or settingValue == 'false'
 
   globalPluginParams = { 'MyGlobalSetting1': ['integer'],
                          'MyGlobalSetting2': ['ipAddr'] }
   presetPluginParams = { 'MyPresetSetting1': ['readableDir','null'],
-                         'MyPresetSetting2': ['bool'] };
+                         'MyPresetSetting2': ['bool', myCustomSettingValueCheck], };
 
   def getParams(pluginName):
       return [ globalPluginParams , presetPluginParams ]
+
+In these examples, the preset setting C<MyPresetSetting2> is declared as
+supporting both the values of the predefined type "bool" and the values allowed
+by the custom function C<myCustomSettingValueCheck>. The predefined type "bool"
+allows values C<0> and C<1>. The custom function C<myCustomSettingValueCheck>
+allows values C<"true"> and C<"false">. So in the end the allowed values for the
+preset setting C<MyPresetSetting2> are: C<0>, C<1>, C<"true"> and
+C<"false">.
 
 =back
 
@@ -811,9 +864,14 @@ C<$userName> is the name of the user who just left the battle lobby
 
 =item C<onLobbyConnected($self,$lobbyInterface)>
 
-This callback is called each time the autohost successfully logged in on the
-lobby server, after all login info has been received from lobby server (this
-callback is called after the C<onLobbyLogin($lobbyInterface)> callback).
+/!\ RENAMED TO C<onLobbySynchronized> /!\
+
+This callback has been renamed to C<onLobbySynchronized> since SPADS v0.13.35.
+It can still be used under the name C<onLobbyConnected> for the sake of backward
+compatibility, however this name is misleading so its usage under this name is
+not recommended (the callback is only called when the lobby connection is fully
+synchronized, i.e. when all the initial commands sent by the lobby server after
+successfully logging in have been received).
 
 The C<$lobbyInterface> parameter is the instance of the
  L<SpringLobbyInterface|https://github.com/Yaribz/SpringLobbyInterface> module
@@ -824,15 +882,86 @@ used by SPADS.
 This callback is called each time the autohost is disconnected from the lobby
 server.
 
-=item C<onLobbyLogin($self,$lobbyInterface)>
+=item C<onLobbyLoggedIn($self,$lobbyInterface)>
 
-This callback is called each time the autohost tries to login on the lobby
-server, just after the LOGIN command has been sent to the lobby server (this
-callback is called before the C<onLobbyConnected($lobbyInterface)> callback).
+This callback is called each time the autohost successfully logins on the lobby
+server. It is one of the three callbacks triggered when a new connection
+to the lobby server is established. These callbacks are called in following
+order:
+
+=over 4
+
+=item * 1) C<onLobbyLogin> (called when trying to login)
+
+=item * 2) C<onLobbyLoggedIn> (called when successfully logged in)
+
+=item * 3) C<onLobbySynchronized> (called when state is synchronized with
+server)
+
+=back
 
 The C<$lobbyInterface> parameter is the instance of the
  L<SpringLobbyInterface|https://github.com/Yaribz/SpringLobbyInterface> module
 used by SPADS.
+
+Note: This callback is the ideal place for a plugin to register its lobby
+command handlers using the C<addLobbyCommandHandler> function of the plugin API,
+if this plugin needs to process the commands sent by the lobby server during the
+initial lobby state synchronization phase (i.e. commands sent before the
+C<LOGININFOEND> command). For plugins that do not require being called back
+during the initial lobby state synchronization phase, the C<onLobbySynchronized>
+callback should be used instead to register the lobby command handlers.
+
+=item C<onLobbyLogin($self,$lobbyInterface)>
+
+This callback is called each time the autohost tries to login on the lobby
+server. It is one of the three callbacks triggered when a new connection to the
+lobby server is established. These callbacks are called in following order:
+
+=over 4
+
+=item * 1) C<onLobbyLogin> (called when trying to login)
+
+=item * 2) C<onLobbyLoggedIn> (called when successfully logged in)
+
+=item * 3) C<onLobbySynchronized> (called when state is synchronized with
+server)
+
+=back
+
+The C<$lobbyInterface> parameter is the instance of the
+ L<SpringLobbyInterface|https://github.com/Yaribz/SpringLobbyInterface> module
+used by SPADS.
+
+=item C<onLobbySynchronized($self,$lobbyInterface)>
+
+This callback is called each time the autohost completes the lobby state
+synchronization phase, which occurs after successfully logging in. It is one of
+the three callbacks triggered when a new connection to the lobby server is
+established. These callbacks are called in following order:
+
+=over 4
+
+=item * 1) C<onLobbyLogin> (called when trying to login)
+
+=item * 2) C<onLobbyLoggedIn> (called when successfully logged in)
+
+=item * 3) C<onLobbySynchronized> (called when state is synchronized with
+server)
+
+=back
+
+The C<$lobbyInterface> parameter is the instance of the
+ L<SpringLobbyInterface|https://github.com/Yaribz/SpringLobbyInterface> module
+used by SPADS.
+
+Note: This callback is the ideal place for a plugin to register its lobby
+command handlers using the C<addLobbyCommandHandler> function of the plugin API,
+as long as this plugin does not need to process the commands sent by the lobby
+server during the initial lobby state synchronization phase (i.e. commands sent
+before the C<LOGININFOEND> command). For plugins that require being called back
+during the initial lobby state synchronization phase, the C<onLobbyLoggedIn>
+callback must be used instead to register the lobby command handlers.
 
 =item C<onPresetApplied($self,$oldPresetName,$newPresetName)>
 
@@ -1657,9 +1786,41 @@ C<SpringLobbyInterface> object.
 
 =item C<getLobbyState()>
 
-This accessor returns an integer describing current lobby state (C<0>: not
-connected, C<1>: connecting, C<2>: connected, C<3>: just logged in, C<4>:
-initial lobby data received, C<5>: opening battle, C<6>: battle opened)
+This accessor returns an integer describing the current lobby state. The
+ corresponding constants are provided to ease lobby state handling/comparisons,
+as listed below:
+
+=over 4
+
+=item * C<0> - C<LOBBY_STATE_DISCONNECTED> (disconnected from lobby server)
+
+=item * C<1> - C<LOBBY_STATE_CONNECTING> (connecting to lobby server)
+
+=item * C<2> - C<LOBBY_STATE_CONNECTED> (connected to lobby server but not
+logged in yet)
+
+=item * C<3> - C<LOBBY_STATE_LOGGED_IN> (logged in but not synchronized yet)
+
+=item * C<4> - C<LOBBY_STATE_SYNCHRONIZED> (synchronized, i.e all the commands
+describing the initial state of the lobby have been received from server)
+
+=item * C<5> - C<LOBBY_STATE_OPENING_BATTLE> (opening battle)
+
+=item * C<6> - C<LOBBY_STATE_BATTLE_OPENED> (battle opened)
+
+=back
+
+Perl plugins can use these constants directly in the plugin code, like this for
+example:
+
+  if(getLobbyState() >= LOBBY_STATE_CONNECTED) {
+    slog("SPADS is connected to lobby server",3);
+  }
+
+Python plugins must call them as SPADS functions, like this for example:
+
+  if spads.getLobbyState() >= spads.LOBBY_STATE_CONNECTED():
+      spads.slog("SPADS is connected to lobby server",3)
 
 =item C<getPluginList()>
 
@@ -1750,6 +1911,17 @@ or after the lobby interface module handlers. If this parameter is set to a true
 value, the command handlers will be called before the lobby interface module
 handlers. If this parameter is not provided or set to a false value, the command
 handlers will be called after the lobby interface module handlers.
+
+Note: As all lobby command handlers are automatically removed by SPADS when it
+is disconnected from the lobby server (due to network problems for example),
+plugins should always re-set up their lobby command handlers each time SPADS
+successfully reconnects. This can be done automatically by doing the
+C<addLobbyCommandHandler> call in the C<onLobbySynchronized> event-based
+callback (for plugins that don't need to process the commands sent by the lobby
+server during the initial lobby state synchronization phase) or in the
+C<onLobbyLoggedIn> event-based callback (for plugins that need to process the
+commands sent by the lobby server during the initial lobby state synchronization
+phase).
 
 =item C<addSpadsCommandHandler(\%handlers,$replace=0)>
 
@@ -2301,7 +2473,7 @@ Inline::Python Perl module (the bridge between Perl and Python): L<documentation
 
 =head1 COPYRIGHT
 
-Copyright (C) 2013-2020  Yann Riou <yaribzh@gmail.com>
+Copyright (C) 2013-2024  Yann Riou <yaribzh@gmail.com>
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by

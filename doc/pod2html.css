@@ -1,3 +1,7 @@
+HTML {
+  background: #002b44;
+}
+
 BODY {
   background: white;
   color: black;
@@ -6,7 +10,6 @@ BODY {
   min-width: 900px;
   max-width: 1200px;
   margin: 5px auto;
-  border: 2px dotted darkblue;
 }
 
 TABLE {
@@ -46,6 +49,7 @@ PRE     {
   color: black;
   padding-top: 1em;
   padding-bottom: 1em;
+  padding-left: 10px;
   white-space: pre;
   margin-left: 40px;
   margin-bottom: 30px;
@@ -80,30 +84,29 @@ UL#index {
   width: 300px;
   margin: 16px 0 30px 20px;
   padding: 10px 0px 10px 40px;
-  background: #FFFFCE;
-  -moz-border-radius: 30px 30px 30px 30px;
-  -webkit-border-radius: 30px 30px 30px 30px;
-  border-radius: 30px 30px 30px 30px;
-  -moz-box-shadow: 6px 3px 5px #297CCF;
-  -webkit-box-shadow: 6px 3px 5px #297CCF;
-  box-shadow: 6px 3px 5px #297CCF;
+  background: #FFFFC0;
+  -moz-border-radius: 20px;
+  -webkit-border-radius: 20px;
+  border-radius: 20px;
+  -moz-box-shadow: 2px 2px 4px #297CCF;
+  -webkit-box-shadow: 2px 2px 4px #297CCF;
+  box-shadow: 2px 2px 4px #297CCF;
 }
 
 dt {
-  width: 90%;
+  width: 95%;
   margin-left: 10px;
-  padding: 5px 5px 5px 20px;
-  -moz-border-radius: 15px 15px 15px 15px;
-  -webkit-border-radius: 15px 15px 15px 15px;
-  border-radius: 15px 15px 15px 15px;
-  background: #FFF1D4;
-  background: #F3F3FF;
-  background: #EBFFD6;
+  padding: 4px 5px 6px 12px;
+  -moz-border-radius: 15px;
+  -webkit-border-radius: 15px;
+  border-radius: 15px;
+  background: #D0F8C8;
+  font-weight: bold;
 
 }
 
 dt code {
-  background: #EBFFD6;
+  background: #D0F8C8;
 }
 
 dd {

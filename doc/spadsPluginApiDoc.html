@@ -66,45 +66,45 @@
 
 <p>Perl:</p>
 
-<pre><code>  package MyPlugin;
+<pre><code>package MyPlugin;
 
-  use SpadsPluginApi;
+use SpadsPluginApi;
 
-  my $pluginVersion=&#39;0.1&#39;;
-  my $requiredSpadsVersion=&#39;0.11&#39;;
+my $pluginVersion=&#39;0.1&#39;;
+my $requiredSpadsVersion=&#39;0.11&#39;;
 
-  sub getVersion { return $pluginVersion; }
-  sub getRequiredSpadsVersion { return $requiredSpadsVersion; }
+sub getVersion { return $pluginVersion; }
+sub getRequiredSpadsVersion { return $requiredSpadsVersion; }
 
-  sub new {
-    my $class=shift;
-    my $self = {};
-    bless($self,$class);
-    slog(&quot;MyPlugin plugin loaded (version $pluginVersion)&quot;,3);
-    return $self;
-  }
+sub new {
+  my $class=shift;
+  my $self = {};
+  bless($self,$class);
+  slog(&quot;MyPlugin plugin loaded (version $pluginVersion)&quot;,3);
+  return $self;
+}
 
-  1;</code></pre>
+1;</code></pre>
 
 <p>Python:</p>
 
-<pre><code>  import perl
-  spads=perl.MyPlugin
+<pre><code>import perl
+spads=perl.MyPlugin
 
-  pluginVersion = &#39;0.1&#39;
-  requiredSpadsVersion = &#39;0.12.29&#39;
+pluginVersion = &#39;0.1&#39;
+requiredSpadsVersion = &#39;0.12.29&#39;
 
-  def getVersion(pluginObject):
-      return pluginVersion
+def getVersion(pluginObject):
+    return pluginVersion
 
-  def getRequiredSpadsVersion(pluginName):
-      return requiredSpadsVersion
+def getRequiredSpadsVersion(pluginName):
+    return requiredSpadsVersion
 
 
-  class MyPlugin:
+class MyPlugin:
 
-      def __init__(self,context):
-          spads.slog(&quot;MyPlugin plugin loaded (version %s)&quot; % pluginVersion,3)</code></pre>
+    def __init__(self,context):
+        spads.slog(&quot;MyPlugin plugin loaded (version %s)&quot; % pluginVersion,3)</code></pre>
 
 <h1 id="DESCRIPTION">DESCRIPTION</h1>
 
@@ -126,16 +126,16 @@
 
 <p>SPADS uses the <code>Inline::Python</code> Perl module to interface Perl code with Python code. Unfortunately, some versions of this module don&#39;t auto-convert Perl strings entirely when used with Python 3 (Python 2 is unaffected): depending on the version of Python and the version of the <code>Inline::Python</code> Perl module used by your system, it is possible that the Python plugin callbacks receive Python byte strings as parameters instead of normal Python strings. In order to mitigate this problem, the plugin API offers both a way to detect from the Python plugin code if current system is affected (by calling the <code>get_flag</code> function with parameter <code>&#39;use_byte_string&#39;</code>), and a way to workaround the problem by calling a dedicated <code>fix_string</code> function which fixes the string values if needed. For additional information regarding these Python specific functions of the plugin API, refer to the <a href="#Python-specific">API FUNCTIONS - Python specific</a> section. Python plugins can also choose to implement their own pure Python function which fixes strings coming from SPADS if needed like this for example:</p>
 
-<pre><code>  def fix_spads_string(spads_string):
-      if hasattr(spads_string,&#39;decode&#39;):
-          return spads_string.decode(&#39;utf-8&#39;)
-      return spads_string
-  
-  def fix_spads_strings(*spads_strings):
-      fixed_strings=[]
-      for spads_string in spads_strings:
-          fixed_strings.append(fix_spads_string(spads_string))
-      return fixed_strings</code></pre>
+<pre><code> def fix_spads_string(spads_string):
+     if hasattr(spads_string,&#39;decode&#39;):
+         return spads_string.decode(&#39;utf-8&#39;)
+     return spads_string
+ 
+ def fix_spads_strings(*spads_strings):
+     fixed_strings=[]
+     for spads_string in spads_strings:
+         fixed_strings.append(fix_spads_string(spads_string))
+     return fixed_strings</code></pre>
 
 <h2 id="Windows-limitations">Windows limitations</h2>
 
@@ -184,26 +184,40 @@
 <dt id="getParams-pluginName"><code>getParams($pluginName)</code></dt>
 <dd>
 
-<p>This callback must return a reference to an array containing 2 elements. The first element is a reference to a hash containing the global plugin settings declarations, the second one is the same but for plugin preset settings declarations. These hashes use setting names as keys, and references to array of allowed types as values. The types must match the keys of <code>%paramTypes</code> defined in SpadsConf.pm.</p>
+<p>This callback must return a reference to an array containing 2 elements. The first element is a reference to a hash containing the plugin global settings declarations, the second one is the same but for plugin preset settings declarations. These hashes use setting names as keys, and references to array of allowed types as values. The types must be either strings that match the keys of the <code>%paramTypes</code> hash defined in SpadsConf.pm file, or custom functions to implement custom value checks. Such custom value checking functions take 2 parameters: the value to check as first parameter and a boolean specifying if the value is the default value (i.e. first value declared in the definition, for preset settings) as second parameter. The function must return <code>true</code> if the value is valid, or <code>false</code> if it is invalid (refer to examples below).</p>
+
+<p>As for global SPADS core settings, the global settings of the plugin cannot be changed dynamically except by editing and reloading the configuration files (for example by using the <code>!reloadConf</code> command). The global settings are defined before the preset definition sections in the plugin configuration file. Only one definition is allowed for each global setting, and only one value can be configured in each global setting definition. Global settings aren&#39;t impacted by preset changes. Global settings should be used for the structural parameterization of the plugin, which isn&#39;t supposed to be modified during runtime and isn&#39;t useful from end user point of view (for example file/directory path settings...).</p>
+
+<p>As for SPADS core preset settings, the preset settings of the plugin can be changed dynamically (using the <code>!plugin &lt;pluginName&gt; set &lt;settingName&gt; &lt;settingValue&gt;</code> command for example, or simply by changing current global preset). The preset settings are defined in the preset definition sections of the plugin configuration file, after the global plugin settings. The preset settings can be defined multiple times (once in each preset declaration section). Multiple values can be configured in each preset setting definition (values are separated by pipe character <code>|</code>, the first value is the default value applied when loading the preset and the remaining values are the other allowed values). Preset settings are impacted by preset changes. Preset settings should be used for settings that need to be visible by end users and/or modifiable easily at runtime.</p>
 
 <p>Example of implementation in Perl:</p>
 
-<pre><code>  my %globalPluginParams = ( MyGlobalSetting1 =&gt; [&#39;integer&#39;],
-                             MyGlobalSetting2 =&gt; [&#39;ipAddr&#39;]);
-  my %presetPluginParams = ( MyPresetSetting1 =&gt; [&#39;readableDir&#39;,&#39;null&#39;],
-                             MyPresetSetting2 =&gt; [&#39;bool&#39;] );
+<pre><code>my %globalPluginParams = ( MyGlobalSetting1 =&gt; [&#39;integer&#39;],
+                           MyGlobalSetting2 =&gt; [&#39;ipAddr&#39;]);
+my %presetPluginParams = ( MyPresetSetting1 =&gt; [&#39;readableDir&#39;,&#39;null&#39;],
+                           MyPresetSetting2 =&gt; [&#39;bool&#39;, \&amp;myCustomSettingValueCheck] );
 
-  sub getParams { return [\%globalPluginParams,\%presetPluginParams]; }</code></pre>
+sub myCustomSettingValueCheck {
+  my ($settingValue,$isDefault)=@_;
+  return $settingValue eq &#39;true&#39; || $settingValue eq &#39;false&#39;
+}
+
+sub getParams { return [\%globalPluginParams,\%presetPluginParams] }</code></pre>
 
 <p>Example of implementation in Python:</p>
 
-<pre><code>  globalPluginParams = { &#39;MyGlobalSetting1&#39;: [&#39;integer&#39;],
-                         &#39;MyGlobalSetting2&#39;: [&#39;ipAddr&#39;] }
-  presetPluginParams = { &#39;MyPresetSetting1&#39;: [&#39;readableDir&#39;,&#39;null&#39;],
-                         &#39;MyPresetSetting2&#39;: [&#39;bool&#39;] };
+<pre><code>def myCustomSettingValueCheck(settingValue,isDefault):
+    return settingValue == &#39;true&#39; or settingValue == &#39;false&#39;
 
-  def getParams(pluginName):
-      return [ globalPluginParams , presetPluginParams ]</code></pre>
+globalPluginParams = { &#39;MyGlobalSetting1&#39;: [&#39;integer&#39;],
+                       &#39;MyGlobalSetting2&#39;: [&#39;ipAddr&#39;] }
+presetPluginParams = { &#39;MyPresetSetting1&#39;: [&#39;readableDir&#39;,&#39;null&#39;],
+                       &#39;MyPresetSetting2&#39;: [&#39;bool&#39;, myCustomSettingValueCheck], };
+
+def getParams(pluginName):
+    return [ globalPluginParams , presetPluginParams ]</code></pre>
+
+<p>In these examples, the preset setting <code>MyPresetSetting2</code> is declared as supporting both the values of the predefined type &quot;bool&quot; and the values allowed by the custom function <code>myCustomSettingValueCheck</code>. The predefined type &quot;bool&quot; allows values <code>0</code> and <code>1</code>. The custom function <code>myCustomSettingValueCheck</code> allows values <code>&quot;true&quot;</code> and <code>&quot;false&quot;</code>. So in the end the allowed values for the preset setting <code>MyPresetSetting2</code> are: <code>0</code>, <code>1</code>, <code>&quot;true&quot;</code> and <code>&quot;false&quot;</code>.</p>
 
 </dd>
 </dl>
@@ -221,12 +235,12 @@
 
 <p>Example of implementation in Perl:</p>
 
-<pre><code>  sub getDependencies { return (&#39;SpringForumInterface&#39;,&#39;MailAlerts&#39;); }</code></pre>
+<pre><code>sub getDependencies { return (&#39;SpringForumInterface&#39;,&#39;MailAlerts&#39;); }</code></pre>
 
 <p>Example of implementation in Python:</p>
 
-<pre><code>  def getDependencies(pluginName):
-      return (&#39;SpringForumInterface&#39;,&#39;MailAlerts&#39;)</code></pre>
+<pre><code>def getDependencies(pluginName):
+    return (&#39;SpringForumInterface&#39;,&#39;MailAlerts&#39;)</code></pre>
 
 </dd>
 </dl>
@@ -294,7 +308,9 @@
 <dt id="onLobbyConnected-self-lobbyInterface"><code>onLobbyConnected($self,$lobbyInterface)</code></dt>
 <dd>
 
-<p>This callback is called each time the autohost successfully logged in on the lobby server, after all login info has been received from lobby server (this callback is called after the <code>onLobbyLogin($lobbyInterface)</code> callback).</p>
+<p>/!\ RENAMED TO <code>onLobbySynchronized</code> /!\</p>
+
+<p>This callback has been renamed to <code>onLobbySynchronized</code> since SPADS v0.13.35. It can still be used under the name <code>onLobbyConnected</code> for the sake of backward compatibility, however this name is misleading so its usage under this name is not recommended (the callback is only called when the lobby connection is fully synchronized, i.e. when all the initial commands sent by the lobby server after successfully logging in have been received).</p>
 
 <p>The <code>$lobbyInterface</code> parameter is the instance of the <a href="https://github.com/Yaribz/SpringLobbyInterface">SpringLobbyInterface</a> module used by SPADS.</p>
 
@@ -305,12 +321,71 @@
 <p>This callback is called each time the autohost is disconnected from the lobby server.</p>
 
 </dd>
+<dt id="onLobbyLoggedIn-self-lobbyInterface"><code>onLobbyLoggedIn($self,$lobbyInterface)</code></dt>
+<dd>
+
+<p>This callback is called each time the autohost successfully logins on the lobby server. It is one of the three callbacks triggered when a new connection to the lobby server is established. These callbacks are called in following order:</p>
+
+<ul>
+
+<li><p>1) <code>onLobbyLogin</code> (called when trying to login)</p>
+
+</li>
+<li><p>2) <code>onLobbyLoggedIn</code> (called when successfully logged in)</p>
+
+</li>
+<li><p>3) <code>onLobbySynchronized</code> (called when state is synchronized with server)</p>
+
+</li>
+</ul>
+
+<p>The <code>$lobbyInterface</code> parameter is the instance of the <a href="https://github.com/Yaribz/SpringLobbyInterface">SpringLobbyInterface</a> module used by SPADS.</p>
+
+<p>Note: This callback is the ideal place for a plugin to register its lobby command handlers using the <code>addLobbyCommandHandler</code> function of the plugin API, if this plugin needs to process the commands sent by the lobby server during the initial lobby state synchronization phase (i.e. commands sent before the <code>LOGININFOEND</code> command). For plugins that do not require being called back during the initial lobby state synchronization phase, the <code>onLobbySynchronized</code> callback should be used instead to register the lobby command handlers.</p>
+
+</dd>
 <dt id="onLobbyLogin-self-lobbyInterface"><code>onLobbyLogin($self,$lobbyInterface)</code></dt>
 <dd>
 
-<p>This callback is called each time the autohost tries to login on the lobby server, just after the LOGIN command has been sent to the lobby server (this callback is called before the <code>onLobbyConnected($lobbyInterface)</code> callback).</p>
+<p>This callback is called each time the autohost tries to login on the lobby server. It is one of the three callbacks triggered when a new connection to the lobby server is established. These callbacks are called in following order:</p>
+
+<ul>
+
+<li><p>1) <code>onLobbyLogin</code> (called when trying to login)</p>
+
+</li>
+<li><p>2) <code>onLobbyLoggedIn</code> (called when successfully logged in)</p>
+
+</li>
+<li><p>3) <code>onLobbySynchronized</code> (called when state is synchronized with server)</p>
+
+</li>
+</ul>
 
 <p>The <code>$lobbyInterface</code> parameter is the instance of the <a href="https://github.com/Yaribz/SpringLobbyInterface">SpringLobbyInterface</a> module used by SPADS.</p>
+
+</dd>
+<dt id="onLobbySynchronized-self-lobbyInterface"><code>onLobbySynchronized($self,$lobbyInterface)</code></dt>
+<dd>
+
+<p>This callback is called each time the autohost completes the lobby state synchronization phase, which occurs after successfully logging in. It is one of the three callbacks triggered when a new connection to the lobby server is established. These callbacks are called in following order:</p>
+
+<ul>
+
+<li><p>1) <code>onLobbyLogin</code> (called when trying to login)</p>
+
+</li>
+<li><p>2) <code>onLobbyLoggedIn</code> (called when successfully logged in)</p>
+
+</li>
+<li><p>3) <code>onLobbySynchronized</code> (called when state is synchronized with server)</p>
+
+</li>
+</ul>
+
+<p>The <code>$lobbyInterface</code> parameter is the instance of the <a href="https://github.com/Yaribz/SpringLobbyInterface">SpringLobbyInterface</a> module used by SPADS.</p>
+
+<p>Note: This callback is the ideal place for a plugin to register its lobby command handlers using the <code>addLobbyCommandHandler</code> function of the plugin API, as long as this plugin does not need to process the commands sent by the lobby server during the initial lobby state synchronization phase (i.e. commands sent before the <code>LOGININFOEND</code> command). For plugins that require being called back during the initial lobby state synchronization phase, the <code>onLobbyLoggedIn</code> callback must be used instead to register the lobby command handlers.</p>
 
 </dd>
 <dt id="onPresetApplied-self-oldPresetName-newPresetName"><code>onPresetApplied($self,$oldPresetName,$newPresetName)</code></dt>
@@ -959,7 +1034,43 @@
 <dt id="getLobbyState"><code>getLobbyState()</code></dt>
 <dd>
 
-<p>This accessor returns an integer describing current lobby state (<code>0</code>: not connected, <code>1</code>: connecting, <code>2</code>: connected, <code>3</code>: just logged in, <code>4</code>: initial lobby data received, <code>5</code>: opening battle, <code>6</code>: battle opened)</p>
+<p>This accessor returns an integer describing the current lobby state. The corresponding constants are provided to ease lobby state handling/comparisons, as listed below:</p>
+
+<ul>
+
+<li><p><code>0</code> - <code>LOBBY_STATE_DISCONNECTED</code> (disconnected from lobby server)</p>
+
+</li>
+<li><p><code>1</code> - <code>LOBBY_STATE_CONNECTING</code> (connecting to lobby server)</p>
+
+</li>
+<li><p><code>2</code> - <code>LOBBY_STATE_CONNECTED</code> (connected to lobby server but not logged in yet)</p>
+
+</li>
+<li><p><code>3</code> - <code>LOBBY_STATE_LOGGED_IN</code> (logged in but not synchronized yet)</p>
+
+</li>
+<li><p><code>4</code> - <code>LOBBY_STATE_SYNCHRONIZED</code> (synchronized, i.e all the commands describing the initial state of the lobby have been received from server)</p>
+
+</li>
+<li><p><code>5</code> - <code>LOBBY_STATE_OPENING_BATTLE</code> (opening battle)</p>
+
+</li>
+<li><p><code>6</code> - <code>LOBBY_STATE_BATTLE_OPENED</code> (battle opened)</p>
+
+</li>
+</ul>
+
+<p>Perl plugins can use these constants directly in the plugin code, like this for example:</p>
+
+<pre><code>if(getLobbyState() &gt;= LOBBY_STATE_CONNECTED) {
+  slog(&quot;SPADS is connected to lobby server&quot;,3);
+}</code></pre>
+
+<p>Python plugins must call them as SPADS functions, like this for example:</p>
+
+<pre><code>if spads.getLobbyState() &gt;= spads.LOBBY_STATE_CONNECTED():
+    spads.slog(&quot;SPADS is connected to lobby server&quot;,3)</code></pre>
 
 </dd>
 <dt id="getPluginList"><code>getPluginList()</code></dt>
@@ -1042,6 +1153,8 @@
 <p><code>$priority</code> is the priority of the handlers. Lowest priority number actually means higher priority. If not provided, the plugin name is used as priority, which means it is executed after handlers having priority &lt; 1000, and before handlers having priority &gt; 1000. Usually you don&#39;t need to provide priority, unless you use data managed by other handlers.</p>
 
 <p><code>$isPreCallback</code> specifies whether the command handlers must be called before or after the lobby interface module handlers. If this parameter is set to a true value, the command handlers will be called before the lobby interface module handlers. If this parameter is not provided or set to a false value, the command handlers will be called after the lobby interface module handlers.</p>
+
+<p>Note: As all lobby command handlers are automatically removed by SPADS when it is disconnected from the lobby server (due to network problems for example), plugins should always re-set up their lobby command handlers each time SPADS successfully reconnects. This can be done automatically by doing the <code>addLobbyCommandHandler</code> call in the <code>onLobbySynchronized</code> event-based callback (for plugins that don&#39;t need to process the commands sent by the lobby server during the initial lobby state synchronization phase) or in the <code>onLobbyLoggedIn</code> event-based callback (for plugins that need to process the commands sent by the lobby server during the initial lobby state synchronization phase).</p>
 
 </dd>
 <dt id="addSpadsCommandHandler-handlers-replace-0"><code>addSpadsCommandHandler(\%handlers,$replace=0)</code></dt>
@@ -1403,24 +1516,24 @@
 
 <p>This function allows Python plugins to automatically convert byte strings to normal strings if needed. The function takes any number of byte strings or normal strings as parameters, and returns them converted to normal strings if needed (parameters which are already normal strings are returned without any modification). Refer to section <a href="#Perl-strings-conversions">PYTHON SPECIFIC NOTES - Perl strings conversions</a> for the use case of this function. Here is an example of usage:</p>
 
-<pre><code>  import perl
-  spads=perl.ExamplePlugin
-  
-  [...]
-  
-  class ExamplePlugin:
+<pre><code> import perl
+ spads=perl.ExamplePlugin
+ 
+ [...]
+ 
+ class ExamplePlugin:
 
-  [...]
-  
-      def onPrivateMsg(self,userName,message):
-          (userName,message)=spads.fix_string(userName,message)
+ [...]
+ 
+     def onPrivateMsg(self,userName,message):
+         (userName,message)=spads.fix_string(userName,message)
 
-  [...]
-  
-  def hMyCommand(source,user,params,checkOnly):
-      user=spads.fix_string(user)
-      for i in range(len(params)):
-          params[i]=spads.fix_string(params[i])</code></pre>
+ [...]
+ 
+ def hMyCommand(source,user,params,checkOnly):
+     user=spads.fix_string(user)
+     for i in range(len(params)):
+         params[i]=spads.fix_string(params[i])</code></pre>
 
 </dd>
 <dt id="get_flag-flag_name"><code>get_flag(flag_name)</code></dt>
@@ -1445,16 +1558,16 @@
 
 <p>Here is an example of usage:</p>
 
-<pre><code>  import perl
-  spads=perl.ExamplePlugin
-  
-  [...]
-  
-      if spads.get_flag(&#39;can_add_socket&#39;):
-          spads.addSocket(socket,readSocketCallback)
-      else:
-          spads.slog(&quot;This plugin requires the addSocket function&quot;,1)
-          return False</code></pre>
+<pre><code> import perl
+ spads=perl.ExamplePlugin
+ 
+ [...]
+ 
+     if spads.get_flag(&#39;can_add_socket&#39;):
+         spads.addSocket(socket,readSocketCallback)
+     else:
+         spads.slog(&quot;This plugin requires the addSocket function&quot;,1)
+         return False</code></pre>
 
 </dd>
 </dl>
@@ -1567,7 +1680,7 @@
 
 <h1 id="COPYRIGHT">COPYRIGHT</h1>
 
-<p>Copyright (C) 2013-2020 Yann Riou &lt;yaribzh@gmail.com&gt;</p>
+<p>Copyright (C) 2013-2024 Yann Riou &lt;yaribzh@gmail.com&gt;</p>
 
 <p>This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.</p>
 

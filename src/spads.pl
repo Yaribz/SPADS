@@ -76,6 +76,13 @@ use constant {
   EXIT_CERTIFICATE => 49,  # invalid/untrusted certificate
   EXIT_LOGIN => 50,        # login failure
 
+  LOBBY_STATE_DISCONNECTED => 0,
+  LOBBY_STATE_CONNECTING => 1,
+  LOBBY_STATE_CONNECTED => 2,
+  LOBBY_STATE_LOGGED_IN => 3,
+  LOBBY_STATE_SYNCHRONIZED => 4,
+  LOBBY_STATE_OPENING_BATTLE => 5,
+  LOBBY_STATE_BATTLE_OPENED => 6,
 };
 
 if(MSWIN32) {
@@ -99,7 +106,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.34';
+our $SPADS_VERSION='0.13.35';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -428,7 +435,7 @@ our %timestamps=(connectAttempt => 0,
                  usLockRequestForGameStart => 0);
 my $syncedSpringVersion='';
 my $fullSpringVersion='';
-our $lobbyState=0; # 0:not_connected, 1:connecting, 2:connected, 3:logged_in, 4:start_data_received, 5:opening_battle, 6:battle_opened
+our $lobbyState=LOBBY_STATE_DISCONNECTED;
 my %pendingRedirect;
 my $lobbyBrokenConnection=0;
 my $loadArchivesInProgress=0;
@@ -1464,7 +1471,7 @@ sub updateTargetMod {
 }
 
 sub pingIfNeeded {
-  return unless($lobbyState > 1);
+  return unless($lobbyState > LOBBY_STATE_CONNECTING);
   my $delay=shift;
   $delay//=5;
   if( ( time - $timestamps{ping} > 5 && time - $lobby->{lastSndTs} > $delay )
@@ -2261,12 +2268,12 @@ sub sendLobbyCommand {
   $lastSentMessages{$timestamp}=[] unless(exists $lastSentMessages{$timestamp});
   push(@{$lastSentMessages{$timestamp}},$size);
   if(! $lobby->sendCommand(@{$p_params})) {
-    $lobbyBrokenConnection=1 if($lobbyState > 0);
+    $lobbyBrokenConnection=1 if($lobbyState > LOBBY_STATE_DISCONNECTED);
   }
 }
 
 sub checkQueuedLobbyCommands {
-  return unless($lobbyState > 1 && (@messageQueue || @lowPriorityMessageQueue));
+  return unless($lobbyState > LOBBY_STATE_CONNECTING && (@messageQueue || @lowPriorityMessageQueue));
   my $alreadySent=checkLastSentMessages();
   while(@messageQueue) {
     my $toBeSent=computeMessageSize($messageQueue[0]->[0]);
@@ -2309,7 +2316,7 @@ sub openBattle {
         );
     slog("Hosting game \"$targetMod\" using engine version \"$fullSpringVersion\"",3);
   }
-  $lobbyState=5;
+  $lobbyState=LOBBY_STATE_OPENING_BATTLE;
   queueLobbyCommand(['OPENBATTLE',
                      0,
                      $hSettings{natType},
@@ -2345,7 +2352,7 @@ sub openBattle {
 sub closeBattle {
   queueLobbyCommand(["LEAVEBATTLE"]);
   $currentNbNonPlayer=0;
-  $lobbyState=4;
+  $lobbyState=LOBBY_STATE_SYNCHRONIZED;
   $closeBattleAfterGame=0 if($closeBattleAfterGame == 2);
   if(%bosses) {
     broadcastMsg("Boss mode disabled");
@@ -2626,7 +2633,7 @@ sub getTargetBattleInfo {
 }
 
 sub updateBattleStates {
-  if($lobbyState < 6) {
+  if($lobbyState < LOBBY_STATE_BATTLE_OPENED) {
     $balanceState=0;
     $colorsState=0;
   }else{
@@ -2637,7 +2644,7 @@ sub updateBattleStates {
 
 sub updateBattleInfoIfNeeded {
 
-  return if($lobbyState < 6);
+  return if($lobbyState < LOBBY_STATE_BATTLE_OPENED);
 
   my $updateNeeded=0;
   my ($nbNonPlayer,$lockedStatus)=getTargetBattleInfo();
@@ -2762,7 +2769,7 @@ sub sayPrivate {
 
 sub sayBattle {
   my $msg=shift;
-  return unless($lobbyState > 5 && %{$lobby->{battle}});
+  return unless($lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}});
   my $p_messages=splitMsg($msg,$conf{maxChatMessageLength}-14);
   foreach my $mes (@{$p_messages}) {
     queueLobbyCommand(["SAYBATTLEEX","* $mes"]);
@@ -2771,7 +2778,7 @@ sub sayBattle {
 
 sub sayBattleUser {
   my ($user,$msg)=@_;
-  return unless($lobbyState > 5 && %{$lobby->{battle}});
+  return unless($lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}});
   my $p_messages=splitMsg($msg,$conf{maxChatMessageLength}-22-length($user));
   foreach my $mes (@{$p_messages}) {
     queueLobbyCommand(["SAYBATTLEPRIVATEEX",$user,"* $mes"]);
@@ -2782,7 +2789,7 @@ sub sayBattleUser {
 sub sayChan {
   my ($chan,$msg)=@_;
   $chan//=$masterChannel;
-  return unless($lobbyState >= 4 && (exists $lobby->{channels}->{$chan}));
+  return unless($lobbyState >= LOBBY_STATE_SYNCHRONIZED && (exists $lobby->{channels}->{$chan}));
   my $p_messages=splitMsg($msg,$conf{maxChatMessageLength}-9-length($chan));
   foreach my $mes (@{$p_messages}) {
     queueLobbyCommand(["SAYEX",$chan,"* $mes"]);
@@ -3019,7 +3026,7 @@ sub processAliases {
         return (\@cmd,0);
       }else{
         my $modName=$targetMod;
-        $modName=$lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod} if($lobbyState >= 6);
+        $modName=$lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod} if($lobbyState >= LOBBY_STATE_BATTLE_OPENED);
         my $p_modOptions=getModOptions($modName);
         my $p_mapOptions=getMapOptions($currentMap);
         if($lcCmd eq "startpostype" || exists $p_modOptions->{$lcCmd} || exists $p_mapOptions->{$lcCmd}) {
@@ -3396,7 +3403,7 @@ sub sendApiResponse {
       return;
     }
     if($r_origin->{source} eq 'pv') {
-      return unless($lobbyState > 3 && exists $lobby->{users}{$r_origin->{user}});
+      return unless($lobbyState > LOBBY_STATE_LOGGED_IN && exists $lobby->{users}{$r_origin->{user}});
       my $r_jsonResponseStrings=splitMsg($jsonResponseString,$conf{maxChatMessageLength}-length($r_origin->{user})-31);
       my $nbChunks=@{$r_jsonResponseStrings};
       if($nbChunks==1) {
@@ -3861,7 +3868,7 @@ sub checkAntiFloodDataPurge {
 }
 
 sub checkAdvertMsg {
-  if($conf{advertDelay} && $conf{advertMsg} ne '' && $lobbyState > 5 && %{$lobby->{battle}}) {
+  if($conf{advertDelay} && $conf{advertMsg} ne '' && $lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}}) {
     if(time - $timestamps{advert} > $conf{advertDelay} * 60) {
       my @battleUsers=keys %{$lobby->{battle}->{users}};
       if($#battleUsers > 0 && ! $autohost->getState()) {
@@ -3886,7 +3893,7 @@ sub checkPendingGetSkills {
   foreach my $accountId (keys %pendingGetSkills) {
     if(time - $pendingGetSkills{$accountId} > 5) {
       delete($pendingGetSkills{$accountId});
-      next if($lobbyState < 4 || ! exists $lobby->{accounts}->{$accountId});
+      next if($lobbyState < LOBBY_STATE_SYNCHRONIZED || ! exists $lobby->{accounts}->{$accountId});
       my $player=$lobby->{accounts}->{$accountId};
       next unless(exists $battleSkills{$player});
       my $skillPref=getUserPref($player,'skillMode');
@@ -3895,7 +3902,7 @@ sub checkPendingGetSkills {
       pluginsUpdateSkill($battleSkills{$player},$accountId);
       sendPlayerSkill($player);
       checkBattleBansForPlayer($player);
-      $needRebalance=1 if($previousPlayerSkill != $battleSkills{$player}->{skill} && $lobbyState > 5 && %{$lobby->{battle}} && exists $lobby->{battle}->{users}->{$player}
+      $needRebalance=1 if($previousPlayerSkill != $battleSkills{$player}->{skill} && $lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}} && exists $lobby->{battle}->{users}->{$player}
                           && defined $lobby->{battle}->{users}->{$player}->{battleStatus} && $lobby->{battle}->{users}->{$player}->{battleStatus}->{mode});
     }
   }
@@ -4204,7 +4211,7 @@ sub rotateMap {
 
 sub setAsOutOfGame {
   %springPrematureEndData=();
-  if($lobbyState > 3) {
+  if($lobbyState > LOBBY_STATE_LOGGED_IN) {
     my %clientStatus = %{$lobby->{users}->{$conf{lobbyLogin}}->{status}};
     $clientStatus{inGame}=0;
     queueLobbyCommand(["MYSTATUS",$lobby->marshallClientStatus(\%clientStatus)]);
@@ -4224,7 +4231,7 @@ sub setAsOutOfGame {
   $springPid=0;
   $timestamps{lastGameEnd}=time;
   $spads->decreaseGameBasedBans() if($timestamps{lastGameStartPlaying} >= $timestamps{lastGameStart});
-  if($lobbyState > 5) {
+  if($lobbyState > LOBBY_STATE_OPENING_BATTLE) {
     if($conf{rotationEndGame} ne "off" && $timestamps{lastGameStartPlaying} >= $timestamps{lastGameStart} && time - $timestamps{lastGameStartPlaying} > $conf{rotationDelay}) {
       $timestamps{autoRestore}=time;
       if($conf{rotationType} eq "preset") {
@@ -4235,7 +4242,7 @@ sub setAsOutOfGame {
     }
   }
   foreach my $notifiedUser (keys %pendingNotifications) {
-    sayPrivate($notifiedUser,"***** End-game notification *****") if($lobbyState > 3 && exists $lobby->{users}->{$notifiedUser});
+    sayPrivate($notifiedUser,"***** End-game notification *****") if($lobbyState > LOBBY_STATE_LOGGED_IN && exists $lobby->{users}->{$notifiedUser});
     delete($pendingNotifications{$notifiedUser});
   }
   $balRandSeed=intRand();
@@ -4504,8 +4511,8 @@ sub getUserIps {
 
 sub getLatestUserIp {
   my $user=shift;
-  return $lobby->{users}->{$user}->{ip} if($lobbyState > 3 && exists $lobby->{users}->{$user} && defined $lobby->{users}->{$user}->{ip});
-  if($lobbyState > 5 && %{$lobby->{battle}}) {
+  return $lobby->{users}->{$user}->{ip} if($lobbyState > LOBBY_STATE_LOGGED_IN && exists $lobby->{users}->{$user} && defined $lobby->{users}->{$user}->{ip});
+  if($lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}}) {
     return $lobby->{battle}->{users}->{$user}->{ip} if(exists $lobby->{battle}->{users}->{$user} && defined $lobby->{battle}->{users}->{$user}->{ip});
   }
   my $accountId=getLatestUserAccountId($user);
@@ -5724,7 +5731,7 @@ sub startGameServer {
 
   if(defined $p_players) {
     my $cancelMsg;
-    if($lobbyState < 6 || ! %{$lobby->{battle}}) {
+    if($lobbyState < LOBBY_STATE_BATTLE_OPENED || ! %{$lobby->{battle}}) {
       $cancelMsg='battle lobby closed';
     }elsif(any {! exists $lobby->{battle}{users}{$_}} @{$p_players}) {
       $cancelMsg='players left battle lobby';
@@ -5758,7 +5765,7 @@ sub startGameServer {
   }
   %gdrIPs=();
   %teamStats=();
-  if($lobbyState > 3 && exists $lobby->{users}->{$gdrLobbyBot}) {
+  if($lobbyState > LOBBY_STATE_LOGGED_IN && exists $lobby->{users}->{$gdrLobbyBot}) {
     $gdrEnabled=1;
   }else{
     $gdrEnabled=0;
@@ -6098,7 +6105,7 @@ sub logMsg {
 }
 
 sub needRehost {
-  return 0 unless($lobbyState >= 6);
+  return 0 unless($lobbyState >= LOBBY_STATE_BATTLE_OPENED);
   my %params = (
     battleName => 'title',
     port => 'port',
@@ -6120,7 +6127,7 @@ sub needRehost {
 }
 
 sub specExtraPlayers {
-  return unless($lobbyState > 5 && %{$lobby->{battle}});
+  return unless($lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}});
 
   my @bots=@{$lobby->{battle}->{botList}};
   my @players=sort {$currentPlayers{$a} <=> $currentPlayers{$b}} (keys %currentPlayers);
@@ -6158,7 +6165,7 @@ sub specExtraPlayers {
 }
 
 sub enforceMaxSpecs {
-  return unless($lobbyState > 5 && %{$lobby->{battle}});
+  return unless($lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}});
   return if($conf{maxSpecs} eq '');
 
   my @specs=sort {$currentSpecs{$a} <=> $currentSpecs{$b}} (keys %currentSpecs);
@@ -6178,7 +6185,7 @@ sub enforceMaxSpecs {
 }
 
 sub enforceMaxBots {
-  return unless($lobbyState > 5 && %{$lobby->{battle}});
+  return unless($lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}});
 
   
   my @bots=@{$lobby->{battle}->{botList}};
@@ -6240,11 +6247,11 @@ sub enforceMaxBots {
 
 sub updateCurrentGameType {
   my $nbPlayers=0;
-  $nbPlayers=(keys %{$lobby->{battle}->{users}}) - getNbNonPlayer() + (keys %{$lobby->{battle}->{bots}}) if($lobbyState > 5 && %{$lobby->{battle}});
+  $nbPlayers=(keys %{$lobby->{battle}->{users}}) - getNbNonPlayer() + (keys %{$lobby->{battle}->{bots}}) if($lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}});
   my $newGameType=(getTargetBattleStructure($nbPlayers))[2];
   return if($newGameType eq $currentGameType);
   $currentGameType=$newGameType;
-  return unless($lobbyState > 5 && %{$lobby->{battle}});
+  return unless($lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}});
   my $needRebalance=0;
   foreach my $user (keys %battleSkills) {
     my $accountId=$lobby->{users}->{$user}->{accountId};
@@ -6274,7 +6281,7 @@ sub updateCurrentGameType {
 }
 
 sub updateBattleSkillsForNewSkillAndRankModes {
-  return unless($lobbyState > 5 && %{$lobby->{battle}});
+  return unless($lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}});
   foreach my $user (keys %{$lobby->{battle}->{users}}) {
     updateBattleSkillForNewSkillAndRankModes($user);
   }
@@ -6346,7 +6353,7 @@ sub updateBattleSkillForNewSkillAndRankModes {
 }
 
 sub sendPlayerSkill {
-  return unless($lobbyState > 5 && %{$lobby->{battle}});
+  return unless($lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}});
   
   my $player=shift;
   if(! exists $lobby->{battle}->{users}->{$player}) {
@@ -6404,7 +6411,7 @@ sub sendPlayerSkill {
 }
 
 sub getBattleSkills {
-  return unless($lobbyState > 5 && %{$lobby->{battle}});
+  return unless($lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}});
   foreach my $user (keys %{$lobby->{battle}->{users}}) {
     getBattleSkill($user);
   }
@@ -6507,7 +6514,7 @@ sub applySettingChange {
 }
 
 sub applyBattleBans {
-  return unless($lobbyState > 5 && %{$lobby->{battle}});
+  return unless($lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}});
   foreach my $user (keys %{$lobby->{battle}->{users}}) {
     checkBattleBansForPlayer($user);
   }
@@ -6515,7 +6522,7 @@ sub applyBattleBans {
 
 sub checkBattleBansForPlayer {
   my $user=shift;
-  return unless($lobbyState > 5 && %{$lobby->{battle}});
+  return unless($lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}});
   my $p_ban=$spads->getUserBan($user,$lobby->{users}->{$user},isUserAuthenticated($user),undef,getPlayerSkillForBanCheck($user));
   if($p_ban->{banType} < 2) {
     queueLobbyCommand(["KICKFROMBATTLE",$user]);
@@ -6534,7 +6541,7 @@ sub checkBattleBansForPlayer {
 }
 
 sub applyAllSettings {
-  return unless($lobbyState > 5);
+  return unless($lobbyState > LOBBY_STATE_OPENING_BATTLE);
   applySettingChange(".*");
   sendBattleSettings();
 }
@@ -6789,7 +6796,7 @@ sub getUserPref {
   }else{
     my $aId=getLatestUserAccountId($user);
     $p_prefs=$spads->getUserPrefs($aId,$user);
-    if($spads->{sharedDataTs}{preferences} && $lobbyState > 5 && %{$lobby->{battle}} && exists $lobby->{battle}{users}{$user}) {
+    if($spads->{sharedDataTs}{preferences} && $lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}} && exists $lobby->{battle}{users}{$user}) {
       $prefCache{$user}=$p_prefs;
       $prefCacheTs{$user}=time;
     }
@@ -7173,7 +7180,7 @@ sub queueGDR {
     }
   }
   %gdr=();
-  return if($lobbyState < 4 || ! exists $lobby->{users}->{$gdrLobbyBot});
+  return if($lobbyState < LOBBY_STATE_SYNCHRONIZED || ! exists $lobby->{users}->{$gdrLobbyBot});
   while(@gdrQueue) {
     my $serializedGdr=shift(@gdrQueue);
     my $timestamp=time;
@@ -7276,7 +7283,7 @@ sub endGameProcessing {
          my ($endGameCommandPid,$exitCode,$signalNb,$hasCoreDump)=@_;
          $nbEndGameCommandRunning--;
          my $executionTime=secToTime(time-$endGameCommandData{startTime});
-         if($conf{endGameCommandMsg} ne '' && $lobbyState > 5 && %{$lobby->{battle}}) {
+         if($conf{endGameCommandMsg} ne '' && $lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}}) {
            my @endGameMsgs=@{$spads->{values}->{endGameCommandMsg}};
            foreach my $endGameMsg (@endGameMsgs) {
              if($endGameMsg =~ /^\((\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*)\)(.+)$/) {
@@ -7343,7 +7350,7 @@ sub getCmdVoteSettings {
 
 sub hAddBot {
   my ($source,$user,$p_params,$checkOnly)=@_;
-  if($lobbyState < 6) {
+  if($lobbyState < LOBBY_STATE_BATTLE_OPENED) {
     answer("Unable to add AI bot, battle lobby is closed");
     return 0;
   }
@@ -7449,7 +7456,7 @@ sub hAddBot {
 
 sub hAddBox {
   my ($source,$user,$p_params,$checkOnly)=@_;
-  if($lobbyState < 6) {
+  if($lobbyState < LOBBY_STATE_BATTLE_OPENED) {
     answer("Unable to add start box, battle lobby is closed");
     return 0;
   }
@@ -7565,7 +7572,7 @@ sub hAuth {
 sub hBalance {
   my ($source,$user,$p_params,$checkOnly)=@_;
 
-  if($lobbyState < 6) {
+  if($lobbyState < LOBBY_STATE_BATTLE_OPENED) {
     answer("Unable to balance teams, battle lobby is closed");
     return 0;
   }
@@ -7704,7 +7711,7 @@ sub hBan {
     $banMode='user';
     $bannedUser=$lobby->{accounts}->{$id};
   }
-  if($banMode eq 'user' && $lobbyState >= 6 && exists $lobby->{battle}->{users}->{$bannedUser}) {
+  if($banMode eq 'user' && $lobbyState >= LOBBY_STATE_BATTLE_OPENED && exists $lobby->{battle}->{users}->{$bannedUser}) {
     if($p_ban->{banType} < 2) {
       queueLobbyCommand(["KICKFROMBATTLE",$bannedUser]);
     }else{
@@ -7815,7 +7822,7 @@ sub hBanIp {
     $banMode='user';
     $bannedUser=$lobby->{accounts}->{$id};
   }
-  if($banMode eq 'user' && $lobbyState >= 6 && exists $lobby->{battle}->{users}->{$bannedUser}) {
+  if($banMode eq 'user' && $lobbyState >= LOBBY_STATE_BATTLE_OPENED && exists $lobby->{battle}->{users}->{$bannedUser}) {
     if($p_ban->{banType} < 2) {
       queueLobbyCommand(["KICKFROMBATTLE",$bannedUser]);
     }else{
@@ -7932,7 +7939,7 @@ sub hBanIps {
     $banMode='user';
     $bannedUser=$lobby->{accounts}->{$id};
   }
-  if($banMode eq 'user' && $lobbyState >= 6 && exists $lobby->{battle}->{users}->{$bannedUser}) {
+  if($banMode eq 'user' && $lobbyState >= LOBBY_STATE_BATTLE_OPENED && exists $lobby->{battle}->{users}->{$bannedUser}) {
     if($p_ban->{banType} < 2) {
       queueLobbyCommand(["KICKFROMBATTLE",$bannedUser]);
     }else{
@@ -7955,7 +7962,7 @@ sub hBKick {
     return 0;
   }
   
-  if($lobbyState < 6 || ! %{$lobby->{battle}}) {
+  if($lobbyState < LOBBY_STATE_BATTLE_OPENED || ! %{$lobby->{battle}}) {
     answer("Unable to kick from battle lobby, battle lobby is closed");
     return 0;
   }
@@ -7991,7 +7998,7 @@ sub hBoss {
     return 0;
   }
   
-  if($lobbyState < 6 || ! %{$lobby->{battle}}) {
+  if($lobbyState < LOBBY_STATE_BATTLE_OPENED || ! %{$lobby->{battle}}) {
     answer("Unable to modify boss mode, battle lobby is closed");
     return 0;
   }
@@ -8062,7 +8069,7 @@ sub hBPreset {
   $timestamps{autoRestore}=time;
   $spads->applyBPreset($bPreset);
   %conf=%{$spads->{conf}};
-  sendBattleSettings() if($lobbyState >= 6);
+  sendBattleSettings() if($lobbyState >= LOBBY_STATE_BATTLE_OPENED);
   sayBattleAndGame("Battle preset \"$bPreset\" ($spads->{bSettings}->{description}) applied by $user");
   return 1;
 }
@@ -8080,7 +8087,7 @@ sub hBSet {
   $bSetting=lc($bSetting);
 
   my $modName=$targetMod;
-  $modName=$lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod} if($lobbyState >= 6);
+  $modName=$lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod} if($lobbyState >= LOBBY_STATE_BATTLE_OPENED);
   my $p_modOptions=getModOptions($modName);
   my $p_mapOptions=getMapOptions($currentMap);
 
@@ -8136,7 +8143,7 @@ sub hBSet {
     }
     return 1 if($checkOnly);
     $spads->{bSettings}->{$bSetting}=$val;
-    sendBattleSetting($bSetting) if($lobbyState >= 6);
+    sendBattleSetting($bSetting) if($lobbyState >= LOBBY_STATE_BATTLE_OPENED);
     $timestamps{autoRestore}=time;
     sayBattleAndGame("Battle setting changed by $user ($bSetting=$val)");
     answer("Battle setting changed ($bSetting=$val)") if($source eq "pv");
@@ -8388,7 +8395,7 @@ sub hChpasswd {
   }
   return 1 if($checkOnly);
   my $oldLevel=0;
-  $oldLevel=getUserAccessLevel($passwdUser) if($lobbyState > 3 && exists $lobby->{users}->{$passwdUser});
+  $oldLevel=getUserAccessLevel($passwdUser) if($lobbyState > LOBBY_STATE_LOGGED_IN && exists $lobby->{users}->{$passwdUser});
   if($#{$p_params} == 0) {
     setAccountUserPref($aId,$passwdUser,'password','');
     answer("Password removed for user $passwdUser");
@@ -8396,7 +8403,7 @@ sub hChpasswd {
     setAccountUserPref($aId,$passwdUser,'password',md5_base64($p_params->[1]));
     answer("Password set to \"$p_params->[1]\" for user $passwdUser");
   }
-  if($user ne $passwdUser && $lobbyState > 3 && exists $lobby->{users}->{$passwdUser}) {
+  if($user ne $passwdUser && $lobbyState > LOBBY_STATE_LOGGED_IN && exists $lobby->{users}->{$passwdUser}) {
     sayPrivate($passwdUser,"Your AutoHost password has been modified by $user");
   }
   return 1;
@@ -8433,7 +8440,7 @@ sub hChrank {
     setAccountUserPref($aId,$modifiedUser,"rankMode",$val);
     answer("RankMode set to \"$val\" for user $modifiedUser");
   }
-  if($lobbyState > 5 && %{$lobby->{battle}} && exists $lobby->{battle}->{users}->{$modifiedUser}) {
+  if($lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}} && exists $lobby->{battle}->{users}->{$modifiedUser}) {
     updateBattleSkillForNewSkillAndRankModes($modifiedUser);
     if(defined $lobby->{battle}->{users}->{$modifiedUser}->{battleStatus} && $lobby->{battle}->{users}->{$modifiedUser}->{battleStatus}->{mode}) {
       $balanceState=0;
@@ -8474,7 +8481,7 @@ sub hChskill {
     setAccountUserPref($aId,$modifiedUser,'skillMode',$val);
     answer("SkillMode set to \"$val\" for user $modifiedUser");
   }
-  if($lobbyState > 5 && %{$lobby->{battle}} && exists $lobby->{battle}->{users}->{$modifiedUser}) {
+  if($lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}} && exists $lobby->{battle}->{users}->{$modifiedUser}) {
     updateBattleSkillForNewSkillAndRankModes($modifiedUser);
     if(defined $lobby->{battle}->{users}->{$modifiedUser}->{battleStatus} && $lobby->{battle}->{users}->{$modifiedUser}->{battleStatus}->{mode}) {
       $balanceState=0;
@@ -8492,7 +8499,7 @@ sub hCKick {
     return 0;
   }
   
-  if($lobbyState < 4 || ! exists $lobby->{channels}->{$masterChannel} ) {
+  if($lobbyState < LOBBY_STATE_SYNCHRONIZED || ! exists $lobby->{channels}->{$masterChannel} ) {
     answer("Unable to kick from channel \#$masterChannel (outside of channel)");
     return 0;
   }
@@ -8531,7 +8538,7 @@ sub hCKick {
 
 sub hClearBox {
   my ($source,$user,$p_params,$checkOnly)=@_;
-  if($lobbyState < 6) {
+  if($lobbyState < LOBBY_STATE_BATTLE_OPENED) {
     answer("Unable to clear start box, battle lobby is closed");
     return 0;
   }
@@ -8567,7 +8574,7 @@ sub hClearBox {
 
 sub hCloseBattle {
   my ($source,$user,$p_params,$checkOnly)=@_;
-  if($lobbyState < 6) {
+  if($lobbyState < LOBBY_STATE_BATTLE_OPENED) {
     answer("Unable to close battle lobby, it is already closed");
     return 0;
   }
@@ -8612,7 +8619,7 @@ sub hEndVote {
 sub hFixColors {
   my ($source,$user,$p_params,$checkOnly)=@_;
 
-  if($lobbyState < 6) {
+  if($lobbyState < LOBBY_STATE_BATTLE_OPENED) {
     answer("Unable to fix colors, battle lobby is closed");
     return 0;
   }
@@ -8630,7 +8637,7 @@ sub hFixColors {
 sub hForce {
   my ($source,$user,$p_params,$checkOnly)=@_;
 
-  if($lobbyState < 6 || ! %{$lobby->{battle}}) {
+  if($lobbyState < LOBBY_STATE_BATTLE_OPENED || ! %{$lobby->{battle}}) {
     answer('Unable to force player battle status, battle lobby is closed');
     return 0;
   }
@@ -8863,7 +8870,7 @@ sub hForceStart {
 
   my $gameState=$autohost->getState();
   if($gameState == 0) {
-    if($lobbyState < 6) {
+    if($lobbyState < LOBBY_STATE_BATTLE_OPENED) {
       answer("Unable to start game, battle lobby is closed");
       return 0;
     }
@@ -8954,7 +8961,7 @@ sub hHelp {
     }
 
     my $modName=$targetMod;
-    $modName=$lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod} if($lobbyState >= 6);
+    $modName=$lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod} if($lobbyState >= LOBBY_STATE_BATTLE_OPENED);
     my $p_modOptions=getModOptions($modName);
     my $p_mapOptions=getMapOptions($currentMap);
 
@@ -9292,7 +9299,7 @@ sub hJoinAs {
     answer("Unable to add in-game player, game is not running");
     return 0;
   }
-  if($lobbyState < 6 || ! %{$lobby->{battle}}) {
+  if($lobbyState < LOBBY_STATE_BATTLE_OPENED || ! %{$lobby->{battle}}) {
     answer("Unable to add in-game player, battle lobby is closed");
     return 0;
   }
@@ -9423,7 +9430,7 @@ sub hKickBan {
       return 0;
     }
   }
-  if(! @{$p_kickBannedUsers} && $lobbyState > 5 && %{$lobby->{battle}}) {
+  if(! @{$p_kickBannedUsers} && $lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}}) {
     my @players=keys(%{$lobby->{battle}->{users}});
     $p_kickBannedUsers=cleverSearch($p_params->[0],\@players);
     if($#{$p_kickBannedUsers} > 0) {
@@ -9465,7 +9472,7 @@ sub hKickBan {
     }
   }
 
-  if($lobbyState > 5 && %{$lobby->{battle}}) {
+  if($lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}}) {
     if(exists $lobby->{battle}->{users}->{$bannedUser}) {
       queueLobbyCommand(["KICKFROMBATTLE",$bannedUser]);
     }
@@ -9501,7 +9508,7 @@ sub hLearnMaps {
     return 0;
   }
 
-  if($lobbyState < 4) {
+  if($lobbyState < LOBBY_STATE_SYNCHRONIZED) {
     answer("Unable to learn map hashes: not connected to lobby");
     return 0;
   }
@@ -9831,7 +9838,7 @@ sub hList {
       @filters=() if($#filters == 0 && lc($filters[0]) eq 'all');
     }
     my $modName=$targetMod;
-    $modName=$lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod} if($lobbyState >= 6);
+    $modName=$lobby->{battles}->{$lobby->{battle}->{battleId}}->{mod} if($lobbyState >= LOBBY_STATE_BATTLE_OPENED);
     my $p_modOptions=getModOptions($modName);
     my $p_mapOptions=getMapOptions($currentMap);
     my @bSettings;
@@ -10178,7 +10185,7 @@ sub hList {
 
 sub hLoadBoxes {
   my ($source,$user,$p_params,$checkOnly)=@_;
-  if($lobbyState < 6 || ! %{$lobby->{battle}}) {
+  if($lobbyState < LOBBY_STATE_BATTLE_OPENED || ! %{$lobby->{battle}}) {
     answer("Unable to load start boxes, battle lobby is closed");
     return 0;
   }
@@ -10291,7 +10298,7 @@ sub hLock {
     invalidSyntax($user,"lock");
     return 0;
   }
-  if($lobbyState < 6) {
+  if($lobbyState < LOBBY_STATE_BATTLE_OPENED) {
     answer("Unable to lock battle lobby, battle is closed");
     return 0;
   }
@@ -10354,7 +10361,7 @@ sub hNextMap {
     invalidSyntax($user,'nextmap');
     return 0;
   }
-  if($lobbyState < 6) {
+  if($lobbyState < LOBBY_STATE_BATTLE_OPENED) {
     answer("Unable to rotate map, battle is closed");
     return 0;
   }
@@ -10369,7 +10376,7 @@ sub hNextPreset {
     invalidSyntax($user,'nextpreset');
     return 0;
   }
-  if($lobbyState < 6) {
+  if($lobbyState < LOBBY_STATE_BATTLE_OPENED) {
     answer("Unable to rotate preset, battle is closed");
     return 0;
   }
@@ -10397,11 +10404,11 @@ sub hNotify {
 sub hOpenBattle {
   my ($source,$user,$p_params,$checkOnly)=@_;
 
-  if($lobbyState >= 6 && ! $closeBattleAfterGame) {
+  if($lobbyState >= LOBBY_STATE_BATTLE_OPENED && ! $closeBattleAfterGame) {
     answer("Unable to open battle lobby, it is already opened");
     return 0;
   }
-  if($lobbyState == 5) {
+  if($lobbyState == LOBBY_STATE_OPENING_BATTLE) {
     answer('Opening of the battle lobby is already in progress');
     return 0;
   }
@@ -10603,7 +10610,7 @@ sub hPreset {
 sub hPromote {
   my ($source,$user,$p_params,$checkOnly)=@_;
 
-  if($lobbyState < 6) {
+  if($lobbyState < LOBBY_STATE_BATTLE_OPENED) {
     answer("Unable to promote battle, battle is closed");
     return 0;
   }
@@ -10735,7 +10742,7 @@ sub hPSet {
         $coopMsg.=" (this has no effect currently because the \"$C{3}idShareMode$C{1}\" setting is set to \"$C{7}$conf{idShareMode}$C{1}\")";
       }else{
         $coopMsg.=" (other players who enter \"$C{3}!coop $val$C{1}\" will coop with you if they are in the same team)" if($val ne "");
-        if($lobbyState > 5 && %{$lobby->{battle}} && exists $lobby->{battle}->{users}->{$user}
+        if($lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}} && exists $lobby->{battle}->{users}->{$user}
            && defined $lobby->{battle}->{users}->{$user}->{battleStatus} && $lobby->{battle}->{users}->{$user}->{battleStatus}->{mode}) {
           $balanceState=0;
           %balanceTarget=();
@@ -10754,7 +10761,7 @@ sub hPSet {
       }elsif($conf{clanMode} !~ /pref/) {
         $coopMsg.=" (this has no effect currently because the \"$C{3}clanMode$C{1}\" setting is set to \"$C{7}$conf{clanMode}$C{1}\", which disables clan preference management)";
       }else{
-        if($lobbyState > 5 && %{$lobby->{battle}} && exists $lobby->{battle}->{users}->{$user}
+        if($lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}} && exists $lobby->{battle}->{users}->{$user}
            && defined $lobby->{battle}->{users}->{$user}->{battleStatus} && $lobby->{battle}->{users}->{$user}->{battleStatus}->{mode}) {
           $balanceState=0;
           %balanceTarget=();
@@ -10799,7 +10806,7 @@ sub hQuit {
 sub hRebalance {
   my ($source,$user,$p_params,$checkOnly)=@_;
 
-  if($lobbyState < 6) {
+  if($lobbyState < LOBBY_STATE_BATTLE_OPENED) {
     answer("Unable to balance teams, battle lobby is closed");
     return 0;
   }
@@ -10995,7 +11002,7 @@ sub hRehost {
     invalidSyntax($user,"rehost");
     return 0;
   }
-  if($lobbyState < 6) {
+  if($lobbyState < LOBBY_STATE_BATTLE_OPENED) {
     answer("Unable to rehost battle, battle is closed");
     return 0;
   }
@@ -11122,7 +11129,7 @@ sub hRemoveBot {
     invalidSyntax($user,'removebot');
     return 0;
   }
-  if($lobbyState < 6) {
+  if($lobbyState < LOBBY_STATE_BATTLE_OPENED) {
     answer("Unable to remove AI bot, battle lobby is closed");
     return 0;
   }
@@ -11209,7 +11216,7 @@ sub hRing {
     return 0;
   }
 
-  if($lobbyState < 6 || ! %{$lobby->{battle}}) {
+  if($lobbyState < LOBBY_STATE_BATTLE_OPENED || ! %{$lobby->{battle}}) {
     answer("Unable to ring, battle is closed");
     return 0;
   }
@@ -11330,7 +11337,7 @@ sub hSaveBoxes {
     return 0;
   }
 
-  if($lobbyState < 6 || ! %{$lobby->{battle}}) {
+  if($lobbyState < LOBBY_STATE_BATTLE_OPENED || ! %{$lobby->{battle}}) {
     answer("Unable to save start boxes, battle is closed");
     return 0;
   }
@@ -11589,8 +11596,8 @@ sub hSendLobby {
     return 0;
   }
 
-  if($lobbyState < 4) {
-    answer("Unable to send data to lobby server, not connected");
+  if($lobbyState < LOBBY_STATE_SYNCHRONIZED) {
+    answer("Unable to send data to lobby server, lobby is not synchronized yet");
     return 0;
   }
 
@@ -11639,7 +11646,7 @@ sub hSet {
   $setting=lc($setting);
 
   if($setting eq "map") {
-    if($val eq '' && $lobbyState > 5) {
+    if($val eq '' && $lobbyState > LOBBY_STATE_OPENING_BATTLE) {
       return 'nextMap' if($checkOnly);
       rotateMap($conf{rotationManual},1);
       return 'nextMap';
@@ -11769,7 +11776,7 @@ sub hSmurfs {
 
   }else{
 
-    if($lobbyState < 6 || ! %{$lobby->{battle}}) {
+    if($lobbyState < LOBBY_STATE_BATTLE_OPENED || ! %{$lobby->{battle}}) {
       answer("Unable to perform smurf detection in battle, battle lobby is closed");
       return 0;
     }
@@ -11819,7 +11826,7 @@ sub hSplit {
     invalidSyntax($user,"split");
     return 0;
   }
-  if($lobbyState < 6) {
+  if($lobbyState < LOBBY_STATE_BATTLE_OPENED) {
     answer("Unable to split map, battle lobby is closed");
     return 0;
   }
@@ -11881,7 +11888,7 @@ sub hSpecAfk {
     invalidSyntax($user,"specafk");
     return 0;
   }
-  if($lobbyState < 6 || ! %{$lobby->{battle}}) {
+  if($lobbyState < LOBBY_STATE_BATTLE_OPENED || ! %{$lobby->{battle}}) {
     answer("Unable to spec unready AFK players, battle is closed");
     return 0;
   }
@@ -11915,7 +11922,7 @@ sub hSpecAfk {
 sub hStart {
   my ($source,$user,$p_params,$checkOnly)=@_;
 
-  if($lobbyState != 6) {
+  if($lobbyState != LOBBY_STATE_BATTLE_OPENED) {
     answer("Unable to start game, battle lobby is closed");
     return 0;
   }
@@ -12191,7 +12198,7 @@ sub getGameStatus {
 sub getBattleLobbyStatus {
   my $user=shift;
   
-  return undef unless($lobbyState > 5 && %{$lobby->{battle}});
+  return undef unless($lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}});
   
   my $userLevel=getUserAccessLevel($user);
   my ($p_C,$B)=initUserIrcColors($user);
@@ -12481,7 +12488,7 @@ sub hStatus {
       return 0;
     }
   }elsif($p_params->[0] eq "battle") {
-    if($lobbyState < 6 || ! %{$lobby->{battle}}) {
+    if($lobbyState < LOBBY_STATE_BATTLE_OPENED || ! %{$lobby->{battle}}) {
       answer("Unable to retrieve battle status, battle is closed");
       return 0;
     }
@@ -12802,7 +12809,7 @@ sub hUnlock {
     invalidSyntax($user,"unlock");
     return 0;
   }
-  if($lobbyState < 6) {
+  if($lobbyState < LOBBY_STATE_BATTLE_OPENED) {
     answer("Unable to unlock battle lobby, battle is closed");
     return 0;
   }
@@ -12845,7 +12852,7 @@ sub hUnlockSpec {
     invalidSyntax($user,'unlockspec');
     return 0;
   }
-  if($lobbyState < 6) {
+  if($lobbyState < LOBBY_STATE_BATTLE_OPENED) {
     answer('Unable to unlock battle lobby for spectator, battle is closed');
     return 0;
   }
@@ -13326,7 +13333,7 @@ sub hSkill {
       pluginsUpdateSkill($battleSkills{$player},$accountId);
       sendPlayerSkill($player);
       checkBattleBansForPlayer($player);
-      $needRebalance=1 if($previousPlayerSkill != $battleSkills{$player}->{skill} && $lobbyState > 5 && %{$lobby->{battle}} && exists $lobby->{battle}->{users}->{$player}
+      $needRebalance=1 if($previousPlayerSkill != $battleSkills{$player}->{skill} && $lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}} && exists $lobby->{battle}->{users}->{$player}
                           && defined $lobby->{battle}->{users}->{$player}->{battleStatus} && $lobby->{battle}->{users}->{$player}->{battleStatus}->{mode});
     }else{
       slog("Ignoring invalid skill parameter ($skillParam)",2);
@@ -13475,7 +13482,7 @@ sub hApiStatus {
 # Lobby interface callbacks ###################################################
 
 sub cbLobbyConnect {
-  $lobbyState=2;
+  $lobbyState=LOBBY_STATE_CONNECTED;
   my $lobbySyncedSpringVersion=$_[2];
   $lobbySyncedSpringVersion=$1 if($lobbySyncedSpringVersion =~ /^([^\.]+)\./);
   $lanMode=$_[4];
@@ -13513,7 +13520,7 @@ sub cbStartTls {
       }else{
         slog("Untrusted lobby certificate, lobby server authenticity cannot be verified:\n".($lobby->{lobbySock}->dump_peer_certificate())."SHA-256: $lobby->{tlsCertifHash}",2);
         slog("Restart SPADS with following parameter if you decide to trust this certificate: --tls-cert-trust=$conf{lobbyHost}:$lobby->{tlsCertifHash}",2);
-        $lobbyState=0;
+        $lobbyState=LOBBY_STATE_DISCONNECTED;
         SimpleEvent::unregisterSocket($lobby->{lobbySock});
         $lobby->disconnect();
         quitAfterGame('untrusted lobby certificate',EXIT_CERTIFICATE);
@@ -13525,7 +13532,7 @@ sub cbStartTls {
 }
 
 sub startTlsFailed {
-  $lobbyState=0;
+  $lobbyState=LOBBY_STATE_DISCONNECTED;
   slog('Failed to enable TLS !',2);
   SimpleEvent::unregisterSocket($lobby->{lobbySock});
   $lobby->disconnect();
@@ -13607,8 +13614,8 @@ sub cbRedirect {
 
 sub cbLobbyDisconnect {
   slog("Disconnected from lobby server (connection reset by peer)",2);
-  logMsg("battle","=== $conf{lobbyLogin} left ===") if($lobbyState > 5 && $conf{logBattleJoinLeave});
-  $lobbyState=0;
+  logMsg("battle","=== $conf{lobbyLogin} left ===") if($lobbyState > LOBBY_STATE_OPENING_BATTLE && $conf{logBattleJoinLeave});
+  $lobbyState=LOBBY_STATE_DISCONNECTED;
   $currentNbNonPlayer=0;
   if(%currentVote && exists $currentVote{command} && @{$currentVote{command}}) {
     foreach my $pluginName (@pluginsOrder) {
@@ -13628,20 +13635,23 @@ sub cbLobbyDisconnect {
 }
 
 sub cbConnectTimeout {
-  $lobbyState=0;
+  $lobbyState=LOBBY_STATE_DISCONNECTED;
   slog("Timeout while connecting to lobby server ($conf{lobbyHost}:$conf{lobbyPort})",2);
   SimpleEvent::unregisterSocket($lobby->{lobbySock});
   $lobby->disconnect();
 }
 
 sub cbLoginAccepted {
-  $lobbyState=3;
+  $lobbyState=LOBBY_STATE_LOGGED_IN;
   slog("Logged on lobby server",4);
   $triedGhostWorkaround=0;
+  foreach my $pluginName (@pluginsOrder) {
+    $plugins{$pluginName}->onLobbyLoggedIn($lobby) if($plugins{$pluginName}->can('onLobbyLoggedIn'));
+  }
 }
 
 sub cbLoginInfoEnd {
-  $lobbyState=4;
+  $lobbyState=LOBBY_STATE_SYNCHRONIZED;
   queueLobbyCommand(["JOIN",$conf{masterChannel}]) if($conf{masterChannel} ne "");
   my %chansToJoin;
   if($conf{promoteChannels}) {
@@ -13671,6 +13681,7 @@ sub cbLoginInfoEnd {
   }
   foreach my $pluginName (@pluginsOrder) {
     $plugins{$pluginName}->onLobbyConnected($lobby) if($plugins{$pluginName}->can('onLobbyConnected'));
+    $plugins{$pluginName}->onLobbySynchronized($lobby) if($plugins{$pluginName}->can('onLobbySynchronized'));
   }
 }
 
@@ -13685,7 +13696,7 @@ sub cbLoginDenied {
   }else{
     $triedGhostWorkaround=0;
   }
-  $lobbyState=0;
+  $lobbyState=LOBBY_STATE_DISCONNECTED;
   SimpleEvent::unregisterSocket($lobby->{lobbySock});
   $lobby->disconnect();
 }
@@ -13693,15 +13704,15 @@ sub cbLoginDenied {
 sub cbAgreementEnd {
   slog("Spring Lobby agreement has not been accepted for this account yet, please login with a Spring lobby client and accept the agreement",1);
   quitAfterGame("Spring Lobby agreement not accepted yet for this account",EXIT_LOGIN);
-  $lobbyState=0;
+  $lobbyState=LOBBY_STATE_DISCONNECTED;
   SimpleEvent::unregisterSocket($lobby->{lobbySock});
   $lobby->disconnect();
 }
 
 sub cbLoginTimeout {
   slog("Unable to log on lobby server (timeout)",2);
-  logMsg("battle","=== $conf{lobbyLogin} left ===") if($lobbyState > 5 && $conf{logBattleJoinLeave});
-  $lobbyState=0;
+  logMsg("battle","=== $conf{lobbyLogin} left ===") if($lobbyState > LOBBY_STATE_OPENING_BATTLE && $conf{logBattleJoinLeave});
+  $lobbyState=LOBBY_STATE_DISCONNECTED;
   foreach my $joinedChan (keys %{$lobby->{channels}}) {
     logMsg("channel_$joinedChan","=== $conf{lobbyLogin} left ===") if($conf{logChanJoinLeave});
   }
@@ -13735,7 +13746,7 @@ sub cbLeft {
 sub cbOpenBattle {
   sendBattleSettings();
   applyMapBoxes();
-  $lobbyState=6;
+  $lobbyState=LOBBY_STATE_BATTLE_OPENED;
   $timestamps{rotationEmpty}=time;
   logMsg("battle","=== $conf{lobbyLogin} joined ===") if($conf{logBattleJoinLeave});
   foreach my $pluginName (@pluginsOrder) {
@@ -13746,13 +13757,13 @@ sub cbOpenBattle {
 sub cbOpenBattleFailed {
   my (undef,$reason)=@_;
   slog("Unable to open battle ($reason)",1);
-  $lobbyState=4;
+  $lobbyState=LOBBY_STATE_SYNCHRONIZED;
   closeBattleAfterGame("unable to open battle");
 }
 
 sub cbOpenBattleTimeout {
   slog("Unable to open battle (timeout)",1);
-  $lobbyState=4;
+  $lobbyState=LOBBY_STATE_SYNCHRONIZED;
   closeBattleAfterGame("timeout while opening battle");
 }
 
@@ -13790,7 +13801,7 @@ sub cbClientStatus {
     }
   }
 
-  if($lobbyState > 5 && %{$lobby->{battle}} && exists $lobby->{battle}->{users}->{$user} && defined $lobby->{battle}->{users}->{$user}->{scriptPass}
+  if($lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}} && exists $lobby->{battle}->{users}->{$user} && defined $lobby->{battle}->{users}->{$user}->{scriptPass}
      && $autohost->getState() && $lobby->{users}->{$user}->{status}->{inGame} && ! exists $p_runningBattle->{users}->{$user}
      && ! exists $inGameAddedUsers{$user} && getUserAccessLevel($user) >= $conf{midGameSpecLevel}) {
     $inGameAddedUsers{$user}=$lobby->{battle}->{users}->{$user}->{scriptPass};
@@ -13808,7 +13819,7 @@ sub cbClientIpPort {
 sub cbClientBattleStatus {
   my (undef,$user)=@_;
 
-  if($lobbyState < 6 || ! exists $lobby->{battle}->{users}->{$user}) {
+  if($lobbyState < LOBBY_STATE_BATTLE_OPENED || ! exists $lobby->{battle}->{users}->{$user}) {
     slog("Ignoring CLIENTBATTLESTATUS command (client \"$user\" out of current battle)",2);
     return;
   }
@@ -14245,9 +14256,9 @@ sub cbRemoveBot {
 }
 
 sub cbBattleClosed {
-  if(! %{$lobby->{battle}} && $lobbyState >= 6) {
+  if(! %{$lobby->{battle}} && $lobbyState >= LOBBY_STATE_BATTLE_OPENED) {
     $currentNbNonPlayer=0;
-    $lobbyState=4;
+    $lobbyState=LOBBY_STATE_SYNCHRONIZED;
     %currentPlayers=();
     %currentSpecs=();
     %battleSkills=();
@@ -14319,7 +14330,7 @@ sub cbServerMsg {
     $accountInGameTime=secToTime($1*60);
   }elsif($msg =~ /^Ingame time: (.+)$/) {
     $accountInGameTime=$1;
-  }elsif($lobbyState == 5 && $msg =~ /^A TLS connection is required to host battles/) {
+  }elsif($lobbyState == LOBBY_STATE_OPENING_BATTLE && $msg =~ /^A TLS connection is required to host battles/) {
     cbOpenBattleFailed(undef,'lobby server requires TLS connection to host battles');
   }
 }
@@ -14537,7 +14548,7 @@ sub cbAhPlayerLeft {
     my $name=$autohost->{players}->{$playerNb}->{name};
     logMsg("game","=== $name left ===") if($conf{logGameJoinLeave});
     if(exists $currentVote{command} && exists $currentVote{remainingVoters}{$name}) {
-      delete $currentVote{remainingVoters}{$name} unless($lobbyState > 5 && %{$lobby->{battle}} && exists $lobby->{battle}{users}{$name});
+      delete $currentVote{remainingVoters}{$name} unless($lobbyState > LOBBY_STATE_OPENING_BATTLE && %{$lobby->{battle}} && exists $lobby->{battle}{users}{$name});
     }
   }else{
     logMsg("game","=== \#$playerNb (unknown) left ===")  if($conf{logGameJoinLeave});
@@ -15770,7 +15781,7 @@ sub checkLobbyConnection {
       if(time-$timestamps{connectAttempt} > $lobbyReconnectDelay) {
         $lobbyReconnectDelay=undef unless(index($conf{lobbyReconnectDelay},'-') == -1);
         $timestamps{connectAttempt}=time;
-        $lobbyState=1;
+        $lobbyState=LOBBY_STATE_CONNECTING;
         $lobby->addCallbacks({REDIRECT => \&cbRedirect});
         $lobbyBrokenConnection=0;
         if($lobby->connect(\&cbLobbyDisconnect,{TASSERVER => \&cbLobbyConnect},\&cbConnectTimeout)) {
@@ -15779,22 +15790,22 @@ sub checkLobbyConnection {
           }
         }else{
           $lobby->removeCallbacks(['REDIRECT']);
-          $lobbyState=0;
+          $lobbyState=LOBBY_STATE_DISCONNECTED;
           slog("Connection to lobby server failed",1);
         }
       }
     }
   }
 
-  if( $lobbyState > 0 && ( (time - $timestamps{connectAttempt} > 30 && time - $lobby->{lastRcvTs} > 60) || $lobbyBrokenConnection ) ) {
+  if($lobbyState > LOBBY_STATE_DISCONNECTED && ( (time - $timestamps{connectAttempt} > 30 && time - $lobby->{lastRcvTs} > 60) || $lobbyBrokenConnection ) ) {
     if($lobbyBrokenConnection) {
       $lobbyBrokenConnection=0;
       slog("Disconnecting from lobby server (broken connection detected)",2);
     }else{
       slog("Disconnected from lobby server (timeout)",2);
     }
-    logMsg("battle","=== $conf{lobbyLogin} left ===") if($lobbyState > 5 && $conf{logBattleJoinLeave});
-    $lobbyState=0;
+    logMsg("battle","=== $conf{lobbyLogin} left ===") if($lobbyState > LOBBY_STATE_OPENING_BATTLE && $conf{logBattleJoinLeave});
+    $lobbyState=LOBBY_STATE_DISCONNECTED;
     $currentNbNonPlayer=0;
     if(%currentVote && exists $currentVote{command} && @{$currentVote{command}}) {
       foreach my $pluginName (@pluginsOrder) {
@@ -15818,8 +15829,8 @@ sub checkLobbyConnection {
     my ($ip,$port)=($pendingRedirect{ip},$pendingRedirect{port});
     %pendingRedirect=();
     slog("Following redirection to $ip:$port",3);
-    logMsg("battle","=== $conf{lobbyLogin} left ===") if($lobbyState > 5 && $conf{logBattleJoinLeave});
-    $lobbyState=0;
+    logMsg("battle","=== $conf{lobbyLogin} left ===") if($lobbyState > LOBBY_STATE_OPENING_BATTLE && $conf{logBattleJoinLeave});
+    $lobbyState=LOBBY_STATE_DISCONNECTED;
     foreach my $joinedChan (keys %{$lobby->{channels}}) {
       logMsg("channel_$joinedChan","=== $conf{lobbyLogin} left ===") if($conf{logChanJoinLeave});
     }
@@ -15837,7 +15848,7 @@ sub checkLobbyConnection {
 }
 
 sub manageBattle {
-  if($lobbyState == 4 && ! $closeBattleAfterGame) {
+  if($lobbyState == LOBBY_STATE_SYNCHRONIZED && ! $closeBattleAfterGame) {
     if(exists $availableModsNameToNb{$targetMod} && defined $availableMods[$availableModsNameToNb{$targetMod}]{hash}) {
       openBattle();
     }elsif(! $loadArchivesInProgress) {
@@ -15845,9 +15856,9 @@ sub manageBattle {
     }
   }
 
-  closeBattle() if($lobbyState >= 6 && $closeBattleAfterGame && $autohost->getState() == 0);
+  closeBattle() if($lobbyState >= LOBBY_STATE_BATTLE_OPENED && $closeBattleAfterGame && $autohost->getState() == 0);
 
-  return if($lobbyState < 6 || ! %{$lobby->{battle}});
+  return if($lobbyState < LOBBY_STATE_BATTLE_OPENED || ! %{$lobby->{battle}});
 
   if(! $springPid && all {$_ eq $conf{lobbyLogin} || $lobby->{users}{$_}{status}{bot}} (keys %{$lobby->{battle}{users}}) ) {
     if($conf{restoreDefaultPresetDelay} && $timestamps{autoRestore} && time-$timestamps{autoRestore} > $conf{restoreDefaultPresetDelay}) {
@@ -15883,7 +15894,7 @@ sub checkExit {
     if($quitAfterGame{condition} == 0) {
       slog('Game is not running, closing battle (preparing to shutdown)',3);
       $closeBattleAfterGame=1;
-    }elsif($lobbyState > 5) {
+    }elsif($lobbyState > LOBBY_STATE_OPENING_BATTLE) {
       my @players=grep {$_ ne $conf{lobbyLogin} && ! $lobby->{users}{$_}{status}{bot}} (keys %{$lobby->{battle}{users}});
       if(! @players) {
         slog('Game is not running and battle is empty, closing battle (preparing to shutdown)',3);
@@ -15900,7 +15911,7 @@ sub checkExit {
       slog("Game is not running, exiting",3);
       $simpleEventLoopStopping=1;
       SimpleEvent::stopLoop();
-    }elsif($lobbyState > 5) {
+    }elsif($lobbyState > LOBBY_STATE_OPENING_BATTLE) {
       my @players=grep {$_ ne $conf{lobbyLogin} && ! $lobby->{users}{$_}{status}{bot}} (keys %{$lobby->{battle}{users}});
       if(! @players) {
         slog("Game is not running and battle is empty, exiting",3);
@@ -15932,8 +15943,8 @@ sub postMainLoop {
     foreach my $joinedChan (keys %{$lobby->{channels}}) {
       logMsg("channel_$joinedChan","=== $conf{lobbyLogin} left ===") if($conf{logChanJoinLeave});
     }
-    logMsg("battle","=== $conf{lobbyLogin} left ===") if($lobbyState > 5 && $conf{logBattleJoinLeave});
-    $lobbyState=0;
+    logMsg("battle","=== $conf{lobbyLogin} left ===") if($lobbyState > LOBBY_STATE_OPENING_BATTLE && $conf{logBattleJoinLeave});
+    $lobbyState=LOBBY_STATE_DISCONNECTED;
     if($quitAfterGame{action} == 1) {
       sendLobbyCommand([['EXIT','AutoHost restarting']]);
     }else{

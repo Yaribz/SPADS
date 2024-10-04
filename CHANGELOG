@@ -1023,6 +1023,9 @@ spads.pl:
 0.13.32: add SpringLobbyProtocol to the list of auto-updated packages (new dependency of SpringLobbyInterface)
 0.13.33: allow SPADS auto-update process to work even if the SpringLobbyInterface module could not be loaded (this happens during normal update procedure when the new SpringLobbyProtocol module hasn't been downloaded yet)
 0.13.34: fix "!sendLobby" command syntax for compatibility with new lobby interface module (parameter handling in shell mode)
+0.13.35: add new "onLobbyLoggedIn" plugin API event-based callback
+         rename "onLobbyConnected" plugin API event-based callback to "onLobbySynchronized"
+         add lobby state constants to ease lobby state management
 
 SpadsConf.pm:
 ============
@@ -1224,6 +1227,8 @@ SpadsConf.pm:
           stop auto-importing previous configuration for manually loaded plugins (now handled by spads.pl) and plugins removed from "autoLoadPlugins" list (their configuration is auto-reloaded, as previous value of "autoLoadPlugins" is now used)
         allow plugins to use custom setting value checking functions (instead of predefined type identifiers)
 0.13.9: correctly honour the "transparent" attribute of battle presets and hosting presets even when they are loaded indirectly by a global preset
+0.13.10: fix custom setting value check functions not working for Python plugins
+         fix incorrect path separator used in some error messages on Windows (cosmetic change)
 
 spadsInstaller.pl:
 =================
@@ -1409,6 +1414,14 @@ SpadsPluginApi.pm:
 0.36: allow plugins to set SPADS exit code when calling "quit" function from SPADS plugin API
 0.37: new customization callback for plugins: "delayShutdown" (plugins can now delay SPADS shutdown operation)
 0.38: new plugin API accessor "getUserPref"
+0.39: add documentation for the plugin API functions to send chat messages
+0.40: rename "onLobbyConnected" callback to "onLobbySynchronized"
+      add new "onLobbyLoggedIn" callback
+      add lobby state constants to ease lobby state handling/comparisons from plugins
+      improve documentation of "onLobbyLogin" and "onLobbySynchronized" callbacks (explain lobby state synchronization phase)
+      extend documentation of "addLobbyCommandHandler" API function (handlers auto-removed on disconnection => usage of "onLobbyLoggedIn"/"onLobbySynchronized")
+      improve documentation of "getParams" configuration callback (custom types, global/preset settings)
+      extend documentation of "getLobbyState" API function (new lobby state constants, examples)
 
 SpadsUpdater.pm:
 ===============
