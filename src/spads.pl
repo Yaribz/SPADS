@@ -106,7 +106,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.36';
+our $SPADS_VERSION='0.13.37';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -1046,21 +1046,25 @@ sub secToBriefTime {
 sub secToTime {
   my $sec=shift;
   my @units=qw'year day hour minute second';
-  my @amounts=(gmtime $sec)[5,7,2,1,0];
-  $amounts[0]-=70;
-  my @strings;
-  for my $i (0..$#units) {
-    if($amounts[$i] == 1) {
-      push(@strings,"1 $units[$i]");
-    }elsif($amounts[$i] > 1) {
-      push(@strings,"$amounts[$i] $units[$i]s");
-    }
+  my %unitsSeconds = (
+    year => 31536000,
+    day => 86400,
+    hour => 3600,
+    minute => 60,
+    second => 1,
+  );
+  my @timeStrings;
+  foreach my $unit (@units) {
+    my $unitSeconds=$unitsSeconds{$unit};
+    next unless($sec >= $unitSeconds);
+    my $nbUnits=int($sec/$unitSeconds);
+    push(@timeStrings,"$nbUnits $unit".($nbUnits>1?'s':''));
+    $sec-=$nbUnits*$unitSeconds;
   }
-  @strings=("0 second") unless(@strings);
-  return $strings[0] if($#strings == 0);
-  my $endString=pop(@strings);
-  my $startString=join(", ",@strings);
-  return "$startString and $endString";
+  return '0 second' unless(@timeStrings);
+  my $endString=pop(@timeStrings);
+  return $endString unless(@timeStrings);
+  return join(', ',@timeStrings).' and '.$endString;
 }
 
 sub secToDayAge {
