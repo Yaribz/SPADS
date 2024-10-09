@@ -12,33 +12,6 @@ BODY {
   margin: 5px auto;
 }
 
-TABLE {
-  border-collapse: collapse;
-  border-spacing: 0;
-  border-width: 0;
-  color: inherit;
-}
-
-TD {
-  margin: 0;
-  padding: 0;
-}
-
-DIV {  border-width: 0; }
-DT { margin-top: 1em; }
-
-TH {
-  background: #bbbbbb;
-  color: inherit;
-  padding: 0.4ex 1ex;
-  text-align: left;
-}
-
-TH A:link, TH A:visited {
-  background: transparent;
-  color: black;
-}
-
 CODE {
   background: #e3e3e3;
 }
@@ -93,7 +66,8 @@ UL#index {
   box-shadow: 2px 2px 4px #297CCF;
 }
 
-dt {
+DT {
+  margin-top: 1em;
   width: 95%;
   margin-left: 10px;
   padding: 4px 5px 6px 12px;
@@ -102,13 +76,16 @@ dt {
   border-radius: 15px;
   background: #D0F8C8;
   font-weight: bold;
-
 }
 
-dt code {
+DT CODE {
   background: #D0F8C8;
 }
 
-dd {
+DD {
   margin-bottom: 30px;
+}
+
+:target {
+  scroll-margin-top: 2ex;
 }
