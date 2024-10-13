@@ -952,7 +952,7 @@ sub _getEngineGithubDownloadUrl {
       }
     }
   }
-  my $httpRes=HTTP::Tiny->new(timeout => 10)->request('GET','https://github.com/'.$ghRepo.'/releases/expanded_assets/'.$ghTag);
+  my $httpRes=HTTP::Tiny->new(timeout => 10)->request('GET','https://github.com/'.$ghRepo.'/releases/expanded_assets/'.HTTP::Tiny->_uri_escape($ghTag));
   if($httpRes->{success}) {
     if($httpRes->{content} =~ /href="([^"]+\/$r_githubInfo->{asset})"/) {
       my $assetUrl=$1;
