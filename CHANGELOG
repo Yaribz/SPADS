@@ -1486,6 +1486,7 @@ SpadsUpdater.pm:
       engine version auto-management: add GitHub release cache system
       engine version auto-management: allow disabling warning messages for missing releases
       improve logging of HTTP errors
+0.28: fix engine downloads from GitHub no longer working when engine tag contains reserved URI characters (thanks DeviousNull)
 
 springLobbyCertificates.dat:
 ===========================
