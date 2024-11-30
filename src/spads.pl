@@ -106,7 +106,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.37';
+our $SPADS_VERSION='0.13.38';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -6099,7 +6099,7 @@ sub logMsg {
       return;
     }
   }
-  if(! open(CHAT,">>$conf{logDir}/chat/$file.log")) {
+  if(! open(CHAT,'>>:encoding(utf-8)',"$conf{logDir}/chat/$file.log")) {
     slog("Unable to log chat message into file \"$conf{logDir}/chat/$file.log\"",1);
     return;
   }
@@ -7144,7 +7144,7 @@ sub translateSideIfNeeded {
 sub getGameDataFromLog {
   my $logFile="$conf{instanceDir}/infolog.txt";
   my ($demoFile,$gameId);
-  if(open(SPRINGLOG,"<$logFile")) {
+  if(open(SPRINGLOG,'<:encoding(utf-8)',"$logFile")) {
     while(local $_ = <SPRINGLOG>) {
       $demoFile=$1 if(/recording demo: (.+)$/);
       $gameId=$1 if(/GameID: ([0-9a-f]+)$/);
@@ -14567,6 +14567,8 @@ sub cbAhPlayerLeft {
 
 sub cbAhPlayerChat {
   my (undef,$playerNb,$dest,$msg)=@_;
+  $msg =~ s/\cJ/<LF>/g;
+  $msg =~ s/\cM/<CR>/g;
   my $player=$autohost->{players}{$playerNb}{name};
   my $destString;
   if($dest eq '') {
