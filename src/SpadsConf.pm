@@ -39,7 +39,7 @@ use SimpleLog;
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.13.10';
+my $moduleVersion='0.13.11';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -1798,7 +1798,7 @@ sub processCmdAttribs {
         return 0;
       }
       my $val=$r_cmdAttribs->{$cmd}{$attr};
-      if(! checkValue($val,$globalParameters{$attr})) {
+      if(! checkValue($val,$globalParameters{$attr},1)) {
         $sLog->log("Invalid value \"$val\" for attribute \"$attr\" declared for command \"$cmd\"",1);
         return 0;
       }
@@ -3529,7 +3529,7 @@ sub checkUserPref {
   $invalidValue=1 if($prefValue =~ /[\:\|]/);
   foreach my $pref (@{$preferencesListsFields[1]}) {
     if($prefName eq lc($pref)) {
-      if($invalidValue || ($prefValue ne '' && exists $spadsSectionParameters{$pref} && (! checkValue($prefValue,$spadsSectionParameters{$pref})))) {
+      if($invalidValue || ($prefValue ne '' && exists $spadsSectionParameters{$pref} && (! checkValue($prefValue,$spadsSectionParameters{$pref},1)))) {
         return ("invalid value \"$prefValue\" for preference $pref",$pref);
       }else{
         return ('',$pref);

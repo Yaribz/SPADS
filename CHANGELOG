@@ -1233,6 +1233,7 @@ SpadsConf.pm:
 0.13.9: correctly honour the "transparent" attribute of battle presets and hosting presets even when they are loaded indirectly by a global preset
 0.13.10: fix custom setting value check functions not working for Python plugins
          fix incorrect path separator used in some error messages on Windows (cosmetic change)
+0.13.11: minor fix for checks of command attributes values and user preferences values
 
 spadsInstaller.pl:
 =================
