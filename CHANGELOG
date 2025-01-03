@@ -194,6 +194,7 @@ helpSettings.dat:
 0.7.3: update description of "autoManagedSpringVersion" global setting (add "unstable" engine release from GitHub)
 0.7.4: add new placeholders for "promoteMsg" global setting ("%P": number of players in battle, "%S": number of spectators in battle, "%U": total number of users in battle)
 0.7.5: new engine version auto-management functionalities (multi-branch GitHub release tags, Recoil engine shortcut and BAR rolling releases)
+0.7.6: remove Springie emulation mode (deprecated)
 
 PerlUnitSync.pm:
 ===============
@@ -1030,6 +1031,12 @@ spads.pl:
 0.13.37: rework the "secToTime" helper function to avoid leap second bug in multi-year duration calculations
 0.13.38: use UTF-8 explicitly in log files (fix "Wide character in print" warnings)
          remove carriage return and line feed characters in messages coming from game server (they are now decoded from UTF-8 explicitly and control characters are no longer automatically removed)
+0.13.39: refactor and optimize commands handling
+         add support for custom command parameters parsing (handle parameters containing spaces)
+         remove Springie emulation mode (deprecated)
+         use array reference instead of string to return canonical/adjusted command from command handlers
+         extend command aliasing functionality (alias parameters can be reused to build new parameters)
+         improve private and hidden settings management
 
 SpadsConf.pm:
 ============
@@ -1427,6 +1434,7 @@ SpadsPluginApi.pm:
       extend documentation of "addLobbyCommandHandler" API function (handlers auto-removed on disconnection => usage of "onLobbyLoggedIn"/"onLobbySynchronized")
       improve documentation of "getParams" configuration callback (custom types, global/preset settings)
       extend documentation of "getLobbyState" API function (new lobby state constants, examples)
+0.41: SPADS command handlers now use array reference instead of string to return canonical/adjusted command
 
 SpadsUpdater.pm:
 ===============

@@ -1172,7 +1172,7 @@ def getParams(pluginName):
 
 <p><code>$checkOnly</code> indicates that the command must not be executed but only checked for consistency (this mode is used for !callVote command)</p>
 
-<p>If the command cannot be executed (invalid syntax ...) the handler must return <code>0</code>. If the command is correct but requires automatic parameter adjustments (automatic case correction or name completion for example), a string containing the adjusted command must be returned. If it can be executed directly without any adjustement, <code>1</code> must be returned.</p>
+<p>If the command cannot be executed (invalid syntax ...) the handler must return <code>0</code>. If the command is correct but requires automatic parameter adjustments (automatic case correction or name completion for example), a reference to an array containing the adjusted command must be returned. If it can be executed directly without any adjustment, <code>1</code> must be returned.</p>
 
 <p><code>$replace</code> indicates if the handlers provided can replace existing ones: <code>0</code> means add handlers only if there is no handler for the given command (default), <code>1</code> means add or replace if existing.</p>
 

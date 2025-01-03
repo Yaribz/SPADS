@@ -106,7 +106,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.38';
+our $SPADS_VERSION='0.13.39';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -128,7 +128,11 @@ for my $i (0..15) {
 my @IRC_STYLE=(\%IRC_COLORS,'');
 my @NO_IRC_STYLE=(\%NO_COLOR,'');
 
-my @READ_ONLY_SETTINGS=qw'description commandsfile battlepreset hostingpreset welcomemsg welcomemsgingame maplink ghostmaplink preset battlename advertmsg endgamecommand endgamecommandenv endgamecommandmsg';
+my %PRIVATE_SETTINGS = map {$_ => 1} (qw'commandsFile endGameCommand endGameCommandEnv');
+my %HIDDEN_PRESET_SETTINGS = map {$_ => 1} (qw'description preset hostingPreset battlePreset welcomeMsg welcomeMsgInGame mapLink ghostMapLink advertMsg commandsFile endGameCommand endGameCommandEnv endGameCommandMsg');
+my %HIDDEN_HOSTING_SETTINGS = map {$_ => 1} (qw'description battleName');
+my %HIDDEN_PLUGIN_SETTINGS = map {$_ => 1} (qw'commandsFile helpFile');
+my %HIDDEN_SETTINGS_LOWERCASE = map {lc($_) => 1} (keys %HIDDEN_PRESET_SETTINGS,keys %HIDDEN_HOSTING_SETTINGS);
 
 my @OPTION_TYPES=qw'error bool list number string section';
 
@@ -250,6 +254,30 @@ my %SPADS_CORE_CMD_HANDLERS = (
   whois => \&hWhois,
   '#skill' => \&hSkill );
 
+my %SPADS_CORE_CMDS_CUSTOM_PARAM_PARSING = (
+  addbot => 3,
+  advert => 1,
+  ban => 4,
+  banip => 4,
+  banips => 4,
+  bset => 2,
+  callvote => 1,
+  cheat => 1,
+  coop => 1,
+  hset => 2,
+  loadboxes => 1,
+  map => 1,
+  plugin => 4,
+  pset => 2,
+  rck => 1,
+  reloadconf => 1,
+  restart => 1,
+  say => 1,
+  send => 1,
+  sendlobby => 1,
+  set => 2,
+    );
+
 my %SPADS_CORE_CMD_ALIASES=(
   b => ['vote','b'],
   coop => ['pSet','shareId'],
@@ -260,7 +288,7 @@ my %SPADS_CORE_CMD_ALIASES=(
   map => ['set','map'],
   n => ['vote','n'],
   rc => ['reloadConf'],
-  rck => ['reloadConf','keepSettings'],
+  rck => ['reloadConf','keepSettings %1%'],
   s => ['status'],
   sb => ['status','battle'],
   spec => ['force','%1%','spec'],
@@ -521,6 +549,7 @@ my %prefCacheTs;
 our %spadsCmdHandlers=%SPADS_CORE_CMD_HANDLERS;
 our %spadsApiHandlers=%SPADS_CORE_API_HANDLERS;
 our %spadsApiRights=%SPADS_CORE_API_RIGHTS;
+our %spadsCmdsCustomParamParsing=%SPADS_CORE_CMDS_CUSTOM_PARAM_PARSING;
 my %nbRelayedApiCalls;
 my %ignoredRelayedApiUsers;
 my %pendingRelayedJsonRpcChunks;
@@ -2865,203 +2894,96 @@ sub getUserAccessLevel {
   return $coreUserAccessLevel;
 }
 
-sub deprecatedMsg {
-  my ($user,$cmd,$action)=@_;
-  if($conf{springieEmulation} eq "warn" && exists $lobby->{users}{$user} && (! $lobby->{users}{$user}{status}{inGame})) {
-    sayPrivate($user,getDeprecatedMsg($cmd,$action));
-  }
-}
-
-sub getDeprecatedMsg {
-  my ($cmd,$action)=@_;
-  return "The !$cmd command is deprecated on this AutoHost, please $action";
-}
-
-sub processAliases {
-  my ($user,$p_cmd)=@_;
-  my ($p_C,$B)=initUserIrcColors($user);
-  my %C=%{$p_C};
-  my @cmd=@{$p_cmd};
+sub parseSpadsCmd {
+  my $command=shift;
+  
+  my $paramsStartIdx=index($command,' ');
+  my @cmd = ($paramsStartIdx > -1 ? substr($command,0,$paramsStartIdx) : $command);
   my $lcCmd=lc($cmd[0]);
-  if($conf{springieEmulation} ne "off") {
-    if($lcCmd eq "admins") {
-      return (["list","users"],getDeprecatedMsg($lcCmd,"use the unified command \"$C{3}!list users$C{1}\" instead"));
-    }
-    if($lcCmd eq "autolock") {
-      if($#cmd == 0) {
-        deprecatedMsg($user,$lcCmd,"use \"$C{3}!set autoLock off$C{1}\" to disable autolocking");
-        return (["set","autoLock","off"],0);
-      }
-      if($cmd[1] =~ /^\d+$/) {
-        if($conf{autoLock} eq "on" || $conf{autoSpecExtraPlayers}) {
-          my $newTeamSize=ceil($cmd[1]/($conf{nbTeams}*$conf{nbPlayerById}));
-          deprecatedMsg($user,$lcCmd,"use the unified command \"$C{3}!set teamSize $newTeamSize$C{1}\" instead to set the wanted team size");
-          return (["set","teamSize",$newTeamSize],0);
-        }else{
-          deprecatedMsg($user,$lcCmd,"use \"$C{3}!set autoLock on$C{1}\" to enable autolocking");
-          return (["set","autoLock","on"],0);
-        }
-      }
-    }
-    if($lcCmd eq "cbalance") {
-      if($conf{balanceMode} eq "clan;skill") {
-        sayPrivate($user,"The $C{12}!$lcCmd$C{1} command is deprecated on this AutoHost. Balance mode is already set to \"$C{12}clan;skill$C{1}\": standard $C{3}!balance$C{1} command already manages clans") if($conf{springieEmulation} eq "warn");
-        return (["balance"],0);
-      }else{
-        deprecatedMsg($user,$lcCmd,"adjust the balance mode to your needs using \"$C{3}!set balanceMode <mode>$C{1}\" command instead (refer to \"$C{3}!list settings$C{1}\" for allowed values)");
-        return (["set","balanceMode","clan;skill"],0);
-      }
-    }
-    if($lcCmd eq "corners") {
-      deprecatedMsg($user,$lcCmd,"use the unified command \"$C{3}!split c <size>$C{1}\" instead (refer to \"$C{3}!help split$C{1}\")");
-      if($#cmd > 1 && $cmd[2] =~ /^\d+$/) {
-        return (["split","c",$cmd[2]*2],0);
-      }
-    }
-    if($lcCmd eq "exit") {
-      deprecatedMsg($user,$lcCmd,"use the unified command \"$C{3}!stop$C{1}\" instead");
-      return (["stop"],0);
-    }
-    if($lcCmd eq "fix") {
-      sayPrivate($user,"The $C{12}!$lcCmd$C{1} command is deprecated on this AutoHost. IDs are automatically fixed during balance, according to the nbPlayerById setting (refer to \"$C{3}!list settings$C{1}\")");
-    }
-    if($lcCmd eq "listbans") {
-      return (["list","bans"],getDeprecatedMsg($lcCmd,"use the unified command \"$C{3}!list bans$C{1}\" instead"));
-    }
-    if($lcCmd eq "listmaps") {
-      my @filters=@cmd;
-      shift(@filters);
-      return (["list","maps",@filters],getDeprecatedMsg($lcCmd,"use the unified command \"$C{3}!list maps$C{1}\" instead"));
-    }
-    if($lcCmd eq "listoptions") {
-      return (["list","bSettings"],getDeprecatedMsg($lcCmd,"use the unified command \"$C{3}!list bSettings$C{1}\" instead"));
-    }
-    if($lcCmd eq "listpresets") {
-      return (["list","presets"],getDeprecatedMsg($lcCmd,"use the unified command \"$C{3}!list presets$C{1}\" instead"));
-    }
-    if($lcCmd eq "manage") {
-      deprecatedMsg($user,$lcCmd,"adjust the auto* settings to your needs, using $C{3}!set$C{1} command instead (refer to \"$C{3}!list settings$C{1}\" for allowed values");
-    }
-    if($lcCmd eq "presetdetails") {
-      return (["list","settings"],getDeprecatedMsg($lcCmd,"use the unified command \"$C{3}!list settings$C{1}\" instead to list the current preset details"));
-    }
-    if($lcCmd eq "random") {
-      if($conf{balanceMode} eq "random") {
-        sayPrivate($user,"Balance mode is already set to \"$C{12}random$C{1}\": standard $C{3}!balance$C{1} command already performs random balance") if($conf{springieEmulation} eq "warn");
-        return (["balance"],0);
-      }else{
-        deprecatedMsg($user,$lcCmd,"adjust the balance mode to your needs using \"$C{3}!set balanceMode <mode>$C{1}\" command instead (refer to \"$C{3}!list settings$C{1}\" for allowed values)");
-        return (["set","balanceMode","random"],0);
-      }
-    }
-    if($lcCmd eq "voteboss") {
-      my @realCmd=("callVote","boss");
-      my $realCmdString=join(" ",@realCmd);
-      deprecatedMsg($user,$lcCmd,"use the unified command \"$C{3}!$realCmdString [<player>]$C{1}\" instead");
-      if($#cmd > 0) {
-        return ([@realCmd,$cmd[1]],0);
-      }else{
-        return ([@realCmd],0);
-      }
-    }
-    if($lcCmd eq "voteexit") {
-      my @realCmd=("callVote","stop");
-      my $realCmdString=join(" ",@realCmd);
-      deprecatedMsg($user,$lcCmd,"use the unified command \"$C{3}!$realCmdString$C{1}\" instead");
-      return ([@realCmd],0);
-    }
-    if($lcCmd eq "voteforce" || $lcCmd eq "voteforcestart") {
-      my @realCmd=("callVote","forceStart");
-      my $realCmdString=join(" ",@realCmd);
-      deprecatedMsg($user,$lcCmd,"use the unified command \"$C{3}!$realCmdString$C{1}\" instead");
-      return ([@realCmd],0);
-    }
-    if($lcCmd eq "votekick") {
-      my @realCmd=("callVote","kick");
-      my $realCmdString=join(" ",@realCmd);
-      deprecatedMsg($user,$lcCmd,"use the unified command \"$C{3}!$realCmdString <player>$C{1}\" instead");
-      return ([@realCmd,$cmd[1]],0) if($#cmd > 0);
-    }
-    if($lcCmd eq "votekickspec") {
-      my @realCmd=("callVote","set","maxSpecs","0");
-      my $realCmdString=join(" ",@realCmd);
-      deprecatedMsg($user,$lcCmd,"use the unified command \"$C{3}!$realCmdString$C{1}\" instead");
-      return ([@realCmd],0);
-    }
-    if($lcCmd eq "votemap") {
-      my @realCmd=("callVote","map");
-      my $realCmdString=join(" ",@realCmd);
-      deprecatedMsg($user,$lcCmd,"use the unified command \"$C{3}!$realCmdString <map>$C{1}\" instead");
-      my @filters=@cmd;
-      shift(@filters);
-      return ([@realCmd,@filters],0);
-    }
-    if($lcCmd eq "votepreset") {
-      my @realCmd=("callVote","preset");
-      my $realCmdString=join(" ",@realCmd);
-      deprecatedMsg($user,$lcCmd,"use the unified command \"$C{3}!$realCmdString <preset>$C{1}\" instead");
-      return ([@realCmd,$cmd[1]],0) if($#cmd > 0);
-    }
-    if($lcCmd eq "voterehost") {
-      my @realCmd=("callVote","rehost");
-      my $realCmdString=join(" ",@realCmd);
-      deprecatedMsg($user,$lcCmd,"use the unified command \"$C{3}!$realCmdString$C{1}\" instead");
-      return ([@realCmd],0);
-    }
-    if($lcCmd eq "votesetoptions") {
-      deprecatedMsg($user,$lcCmd,"use the unified command \"$C{3}!callVote bSet <setting> <value>$C{1}\" instead");
-    }
-  }
 
-  if($conf{allowSettingsShortcut} && ! exists $spadsCmdHandlers{$lcCmd} && none {$lcCmd eq $_} @READ_ONLY_SETTINGS) {
+  my $cmdShortcut;
+  if($conf{allowSettingsShortcut} && ! exists $spadsCmdHandlers{$lcCmd} && ! $HIDDEN_SETTINGS_LOWERCASE{$lcCmd}) {
     if(any {$lcCmd eq $_} qw'users presets hpresets bpresets settings bsettings hsettings vsettings aliases bans maps pref rotationmaps plugins psettings') {
-      unshift(@cmd,"list");
-      return (\@cmd,0);
+      $cmdShortcut='list';
     }else{
       my @checkPrefResult=$spads->checkUserPref($lcCmd,'');
       if(! $checkPrefResult[0] && $lcCmd ne 'skillmode' && $lcCmd ne 'rankmode') {
-        unshift(@cmd,"pSet");
-        return (\@cmd,0);
+        $cmdShortcut='pSet';
       }elsif(any {$lcCmd eq lc($_)} (keys %{$spads->{values}})) {
-        unshift(@cmd,"set");
-        return (\@cmd,0);
+        $cmdShortcut='set';
       }elsif(any {$lcCmd eq lc($_)} (keys %{$spads->{hValues}})) {
-        unshift(@cmd,"hSet");
-        return (\@cmd,0);
+        $cmdShortcut='hSet';
       }else{
         my $modName=$targetMod;
         $modName=$lobby->{battles}{$lobby->{battle}{battleId}}{mod} if($lobbyState >= LOBBY_STATE_BATTLE_OPENED);
         my $p_modOptions=getModOptions($modName);
         my $p_mapOptions=getMapOptions($currentMap);
-        if($lcCmd eq "startpostype" || exists $p_modOptions->{$lcCmd} || exists $p_mapOptions->{$lcCmd}) {
-          unshift(@cmd,"bSet");
-          return (\@cmd,0);
+        $cmdShortcut='bSet' if($lcCmd eq 'startpostype' || exists $p_modOptions->{$lcCmd} || exists $p_mapOptions->{$lcCmd});
+      }
+    }
+  }
+  my $r_cmdAliases;
+  if(defined $cmdShortcut) {
+    $r_cmdAliases={};
+    substr($command,0,0,' ');
+    $paramsStartIdx=0;
+    @cmd=($cmdShortcut);
+    $lcCmd=lc($cmdShortcut);
+  }else{
+    $r_cmdAliases=getCmdAliases();
+    if(exists $r_cmdAliases->{$lcCmd} && @{$r_cmdAliases->{$lcCmd}} == 1) {
+      @cmd=($r_cmdAliases->{$lcCmd}[0]);
+      $lcCmd=lc($cmd[0]);
+    }
+  }
+
+  if($paramsStartIdx > -1 && $paramsStartIdx < length($command)-1) {
+    my $paramsString=substr($command,$paramsStartIdx+1);
+    my @parsedParams;
+    if(exists $spadsCmdsCustomParamParsing{$lcCmd}) {
+      my $customParsing=$spadsCmdsCustomParamParsing{$lcCmd};
+      if(ref $customParsing eq '') {
+        if($customParsing) {
+          $paramsString=~s/^ +//;
+          if($paramsString ne '') {
+            if($customParsing > 1) {
+              @parsedParams=split(/ +/,$paramsString,$customParsing);
+              pop(@parsedParams) if($parsedParams[-1] eq '');
+            }else{
+              @parsedParams=($paramsString);
+            }
+          }
+        }else{
+          @parsedParams=($paramsString);
         }
-      }
-    }
-  }
-
-  my $p_cmdAliases=getCmdAliases();
-  if(exists $p_cmdAliases->{$lcCmd}) {
-    my $paramsReordered=0;
-    my @newCmd;
-    foreach my $token (@{$p_cmdAliases->{$lcCmd}}) {
-      if($token =~ /^\%(\d)\%$/) {
-        $paramsReordered=1;
-        push(@newCmd,$cmd[$1] // '');
       }else{
-        push(@newCmd,$token);
+        @parsedParams=$customParsing->($paramsString);
       }
+    }else{
+      $paramsString=~s/^ +//;
+      @parsedParams=split(/ +/,$paramsString);
     }
-    if(! $paramsReordered) {
-      for my $i (1..$#cmd) {
-        push(@newCmd,$cmd[$i]);
-      }
-    }
-    return (\@newCmd,0);
+    push(@cmd,@parsedParams);
   }
 
-  return (0,0);
+  return ($lcCmd,@cmd) unless(exists $r_cmdAliases->{$lcCmd});
+  
+  my $paramsReordered=0;
+  my @newCmd;
+  foreach my $token (@{$r_cmdAliases->{$lcCmd}}) {
+    if($token =~ /^(.*)\%(\d)\%(.*)$/) {
+      $paramsReordered=1;
+      push(@newCmd,$1.($cmd[$2]//'').$3);
+    }else{
+      push(@newCmd,$token);
+    }
+  }
+  if(! $paramsReordered) {
+    for my $i (1..$#cmd) {
+      push(@newCmd,$cmd[$i]);
+    }
+  }
+  return (lc($newCmd[0]),@newCmd);
 }
 
 sub getCmdAliases {
@@ -3073,12 +2995,8 @@ sub getCmdAliases {
   return \%cmdAliases;
 }
 
-sub handleRequest {
-  my ($source,$user,$command,$floodCheck)=@_;
-  $floodCheck//=1;
-  
-  return if($floodCheck && checkCmdFlood($user));
-  
+sub updateAnswerFunction {
+  my ($source,$user)=@_;
   if($source eq 'game') {
     if(isUserAllowedToSpeakInGame($user)) {
       $p_answerFunction = \&sayBattleAndGame;
@@ -3086,143 +3004,132 @@ sub handleRequest {
       $p_answerFunction = sub { sayPrivate($user,$_[0]) };
     }
   }else{
-    my %answerFunctions = ( pv => sub { sayPrivate($user,$_[0]) },
-                            battle => \&sayBattle,
-                            chan => sub { sayChan($masterChannel,$_[0]) } );
-    $p_answerFunction=$answerFunctions{$source};
+    $p_answerFunction = { pv => sub { sayPrivate($user,$_[0]) },
+                          battle => \&sayBattle,
+                          chan => sub { sayChan($masterChannel,$_[0]) } }->{$source};
   }
-  
-  my @cmd=split(/ +/,$command);
-  
-  my ($p_cmd,$warnMes)=processAliases($user,\@cmd);
-  @cmd=@{$p_cmd} if($p_cmd);
-  
-  my $lcCmd=lc($cmd[0]);
+}
 
-  if($lcCmd eq '#skill' && $user eq $sldbLobbyBot) {
-    executeCommand($source,$user,\@cmd);
+sub handleRequest {
+  my ($source,$user,$command,$floodCheck)=@_;
+  $floodCheck//=1;
+  
+  return if($floodCheck && checkCmdFlood($user));
+
+  updateAnswerFunction($source,$user);
+
+  my ($lcCmd,@cmd)=parseSpadsCmd($command);
+  
+  return executeCommand($source,$user,\@cmd)
+      if($user eq $sldbLobbyBot && substr($lcCmd,0,1) eq '#' && exists $spadsCmdHandlers{$lcCmd});
+
+  if(! exists $spads->{commands}{$lcCmd} && (none {exists $spads->{pluginsConf}{$_}{commands}{$lcCmd}} (keys %{$spads->{pluginsConf}}))) {
+    answer("Invalid command \"$cmd[0]\"") unless($source eq 'chan');
     return;
   }
 
-  if($lcCmd eq 'sendlobby') {
-    @cmd=($1,$2) if($command =~ /^(\w+) +([^ ].*)$/);
-  }
-  
   slog("Start of \"$lcCmd\" command processing",5);
-  my $commandExists=0;
-  $commandExists=1 if(exists $spads->{commands}{$lcCmd});
-  if(! $commandExists) {
-    foreach my $pluginName (keys %{$spads->{pluginsConf}}) {
-      if(exists $spads->{pluginsConf}{$pluginName}{commands}{$lcCmd}) {
-        $commandExists=1;
-        last;
-      }
-    }
-  }
-  if($commandExists) {
-    
-    if($lcCmd eq "endvote") {
-      if(%currentVote && exists $currentVote{command}) {
-        my $p_voteCmd=$currentVote{command};
-        if($currentVote{user} eq $user || ($#{$p_voteCmd} > 0 && $p_voteCmd->[0] eq 'joinAs' && $p_voteCmd->[1] eq $user)) {
-          executeCommand($source,$user,\@cmd);
-          slog("End of \"$lcCmd\" command processing",5);
-          return;
-        }
-      }else{
-        answer("Unable to end vote, there is no vote in progress");
+
+  if($lcCmd eq "endvote") {
+    if(%currentVote && exists $currentVote{command}) {
+      my $p_voteCmd=$currentVote{command};
+      if($currentVote{user} eq $user || ($#{$p_voteCmd} > 0 && $p_voteCmd->[0] eq 'joinAs' && $p_voteCmd->[1] eq $user)) {
+        executeCommand($source,$user,\@cmd);
         slog("End of \"$lcCmd\" command processing",5);
         return;
       }
-    }
-    
-    my $p_levels=getCommandLevels($source,$user,$lcCmd);
-    
-    if($lcCmd eq 'set' && $#cmd > 0 &&  defined $p_levels->{voteLevel} && $p_levels->{voteLevel} ne '') {
-
-      my @freeSettingsEntries=split(/;/,$conf{freeSettings});
-      my %freeSettings;
-      foreach my $freeSettingEntry (@freeSettingsEntries) {
-        if($freeSettingEntry =~ /^([^\(]+)\(([^\)]+)\)$/) {
-          $freeSettings{lc($1)}=$2;
-        }else{
-          $freeSettings{lc($freeSettingEntry)}=undef;
-        }
-      }
-
-      my $lcSetting=lc($cmd[1]);
-      if(exists $freeSettings{$lcSetting}) {
-        my $allowed=1;
-        if(defined $freeSettings{$lcSetting}) {
-          $allowed=0;
-          my $value='';
-          $value=$cmd[2] if($#cmd > 1);
-          my @directRanges=split(',',$freeSettings{$lcSetting},-1);
-          foreach my $range (@directRanges) {
-            if(isRange($range)) {
-              $allowed=1 if(matchRange($range,$value));
-            }elsif($value eq $range) {
-              $allowed=1;
-            }
-            last if($allowed);
-          }
-        }
-        $p_levels->{directLevel}=$p_levels->{voteLevel} if($allowed);
-      }
-    }
-    
-    my $level=getUserAccessLevel($user);
-    my $levelWithoutBoss=$level;
-    
-    if(%bosses && ! exists $bosses{$user}) {
-      my $p_bossLevels=$spads->getCommandLevels("boss","battle","player","stopped");
-      $level=0 if(exists $p_bossLevels->{directLevel} && $level < $p_bossLevels->{directLevel});
-    }
-
-    if((defined $p_levels->{directLevel} && $p_levels->{directLevel} ne "" && $level >= $p_levels->{directLevel})
-       || ($lcCmd eq 'boss' && @cmd == 1 && keys %bosses == 1 && exists $bosses{$user})) {
-      my @realCmd=@cmd;
-      my $rewrittenCommand=executeCommand($source,$user,\@cmd);
-      @realCmd=split(/ /,$rewrittenCommand) if(defined $rewrittenCommand && $rewrittenCommand && $rewrittenCommand ne '1');
-      if(%currentVote && exists $currentVote{command} && $#{$currentVote{command}} == $#realCmd) {
-        my $isSameCmd=1;
-        for my $i (0..$#realCmd) {
-          if(lc($realCmd[$i]) ne lc($currentVote{command}[$i])) {
-            $isSameCmd=0;
-            last;
-          }
-        }
-        if($isSameCmd) {
-          foreach my $pluginName (@pluginsOrder) {
-            $plugins{$pluginName}->onVoteStop(0) if($plugins{$pluginName}->can('onVoteStop'));
-          }
-          sayBattleAndGame('Cancelling "'.(join(' ',@{$currentVote{command}}))."\" vote (command executed directly by $user)");
-          %currentVote=();
-        }
-      }
-    }elsif(defined $p_levels->{voteLevel} && $p_levels->{voteLevel} ne "" && $level >= $p_levels->{voteLevel}) {
-      if($conf{autoCallvote}) {
-        executeCommand($source,$user,["callvote",@cmd]);
-      }else{
-        answer("$user, you are not allowed to call command \"$cmd[0]\" directly in current context (try !callvote $command).");
-      }
     }else{
-      if((defined $p_levels->{directLevel} && $p_levels->{directLevel} ne "" && $levelWithoutBoss >= $p_levels->{directLevel})
-         || (defined $p_levels->{voteLevel} && $p_levels->{voteLevel} ne "" && $levelWithoutBoss >= $p_levels->{voteLevel})) {
-        answer("$user, you are not allowed to call command \"$cmd[0]\" in current context (boss mode is enabled).");
+      answer("Unable to end vote, there is no vote in progress");
+      slog("End of \"$lcCmd\" command processing",5);
+      return;
+    }
+  }
+  
+  my $p_levels=getCommandLevels($source,$user,$lcCmd);
+  
+  if($lcCmd eq 'set' && $#cmd > 0 &&  defined $p_levels->{voteLevel} && $p_levels->{voteLevel} ne '') {
+
+    my @freeSettingsEntries=split(/;/,$conf{freeSettings});
+    my %freeSettings;
+    foreach my $freeSettingEntry (@freeSettingsEntries) {
+      if($freeSettingEntry =~ /^([^\(]+)\(([^\)]+)\)$/) {
+        $freeSettings{lc($1)}=$2;
       }else{
-        answer("$user, you are not allowed to call command \"$cmd[0]\" in current context.");
+        $freeSettings{lc($freeSettingEntry)}=undef;
       }
     }
 
-    if($warnMes && $conf{springieEmulation} eq "warn" && exists $lobby->{users}{$user} && (! $lobby->{users}{$user}{status}{inGame})) {
-      sayPrivate($user,"********************");
-      sayPrivate($user,$warnMes);
+    my $lcSetting=lc($cmd[1]);
+    if(exists $freeSettings{$lcSetting}) {
+      my $allowed=1;
+      if(defined $freeSettings{$lcSetting}) {
+        $allowed=0;
+        my $value='';
+        $value=$cmd[2] if($#cmd > 1);
+        my @directRanges=split(',',$freeSettings{$lcSetting},-1);
+        foreach my $range (@directRanges) {
+          if(isRange($range)) {
+            $allowed=1 if(matchRange($range,$value));
+          }elsif($value eq $range) {
+            $allowed=1;
+          }
+          last if($allowed);
+        }
+      }
+      $p_levels->{directLevel}=$p_levels->{voteLevel} if($allowed);
     }
-
-  }else{
-    answer("Invalid command \"$cmd[0]\"") unless($source eq "chan");
   }
+  
+  my $level=getUserAccessLevel($user);
+  my $levelWithoutBoss=$level;
+  
+  if(%bosses && ! exists $bosses{$user}) {
+    my $p_bossLevels=$spads->getCommandLevels("boss","battle","player","stopped");
+    $level=0 if(exists $p_bossLevels->{directLevel} && $level < $p_bossLevels->{directLevel});
+  }
+
+  if((defined $p_levels->{directLevel} && $p_levels->{directLevel} ne "" && $level >= $p_levels->{directLevel})
+     || ($lcCmd eq 'boss' && @cmd == 1 && keys %bosses == 1 && exists $bosses{$user})) {
+    my @realCmd=@cmd;
+    my $rewrittenCommand=executeCommand($source,$user,\@cmd);
+    if(defined $rewrittenCommand) {
+      if(ref $rewrittenCommand eq 'ARRAY') {
+        @realCmd=@{$rewrittenCommand};
+      }elsif($rewrittenCommand && $rewrittenCommand ne '1') {
+        @realCmd=split(/ /,$rewrittenCommand); # for legacy plugins
+      }
+    }
+    if(%currentVote && exists $currentVote{command} && $#{$currentVote{command}} == $#realCmd) {
+      my $isSameCmd=1;
+      for my $i (0..$#realCmd) {
+        if(lc($realCmd[$i]) ne lc($currentVote{command}[$i])) {
+          $isSameCmd=0;
+          last;
+        }
+      }
+      if($isSameCmd) {
+        foreach my $pluginName (@pluginsOrder) {
+          $plugins{$pluginName}->onVoteStop(0) if($plugins{$pluginName}->can('onVoteStop'));
+        }
+        sayBattleAndGame('Cancelling "'.(join(' ',@{$currentVote{command}}))."\" vote (command executed directly by $user)");
+        %currentVote=();
+      }
+    }
+  }elsif(defined $p_levels->{voteLevel} && $p_levels->{voteLevel} ne "" && $level >= $p_levels->{voteLevel}) {
+    if($conf{autoCallvote}) {
+      executeCommand($source,$user,["callvote",\@cmd]); # array ref is passed as callvote parameter to avoid reparsing command
+    }else{
+      answer("$user, you are not allowed to call command \"$cmd[0]\" directly in current context (try !callvote $command).");
+    }
+  }else{
+    if((defined $p_levels->{directLevel} && $p_levels->{directLevel} ne "" && $levelWithoutBoss >= $p_levels->{directLevel})
+       || (defined $p_levels->{voteLevel} && $p_levels->{voteLevel} ne "" && $levelWithoutBoss >= $p_levels->{voteLevel})) {
+      answer("$user, you are not allowed to call command \"$cmd[0]\" in current context (boss mode is enabled).");
+    }else{
+      answer("$user, you are not allowed to call command \"$cmd[0]\" in current context.");
+    }
+  }
+
   slog("End of \"$lcCmd\" command processing",5);
 }
 
@@ -3230,18 +3137,7 @@ sub executeCommand {
   my ($source,$user,$p_cmd,$checkOnly)=@_;
   $checkOnly//=0;
 
-  if($source eq 'game') {
-    if(isUserAllowedToSpeakInGame($user)) {
-      $p_answerFunction = \&sayBattleAndGame;
-    }else{
-      $p_answerFunction = sub { sayPrivate($user,$_[0]) };
-    }
-  }else{
-    my %answerFunctions = ( pv => sub { sayPrivate($user,$_[0]) },
-                            battle => \&sayBattle,
-                            chan => sub { sayChan($masterChannel,$_[0]) } );
-    $p_answerFunction=$answerFunctions{$source};
-  }
+  updateAnswerFunction($source,$user);
   
   my @cmd=@{$p_cmd};
   my $command=lc(shift(@cmd));
@@ -7144,7 +7040,7 @@ sub translateSideIfNeeded {
 sub getGameDataFromLog {
   my $logFile="$conf{instanceDir}/infolog.txt";
   my ($demoFile,$gameId);
-  if(open(SPRINGLOG,'<:encoding(utf-8)',"$logFile")) {
+  if(open(SPRINGLOG,'<:encoding(utf-8)',$logFile)) {
     while(local $_ = <SPRINGLOG>) {
       $demoFile=$1 if(/recording demo: (.+)$/);
       $gameId=$1 if(/GameID: ([0-9a-f]+)$/);
@@ -7377,9 +7273,7 @@ sub hAddBot {
     return 0;
   }
 
-  my ($botName,$botSide,@botAiStrings)=@{$p_params};
-  my $botAi;
-  $botAi=join(' ',@botAiStrings) if(@botAiStrings);
+  my ($botName,$botSide,$botAi)=@{$p_params};
   my $p_botColor;
 
   my ($p_localBotsNames,$p_localBots)=getPresetLocalBots();
@@ -7516,9 +7410,7 @@ sub hAddBox {
 sub hAdvert {
   my ($source,$user,$p_params,$checkOnly)=@_;
   return 1 if($checkOnly);
-  my $newAdvertMsg='';
-  $newAdvertMsg=join(' ',@{$p_params}) if(@{$p_params});
-  my @newAdvertMsgs=split(/\|/,$newAdvertMsg);
+  my @newAdvertMsgs=split(/\|/,$p_params->[0]//'');
   $spads->{values}{advertMsg}=\@newAdvertMsgs;
   $conf{advertMsg}=$newAdvertMsgs[0];
   answer("Advert message updated.");
@@ -7609,7 +7501,7 @@ sub hBalance {
 
 sub hBan {
   my ($source,$user,$p_params,$checkOnly)=@_;
-  my ($bannedUser,$banType,$duration,@reason)=@{$p_params};
+  my ($bannedUser,$banType,$duration,$reason)=@{$p_params};
   
   if(! defined $bannedUser) {
     invalidSyntax($user,"ban");
@@ -7684,8 +7576,8 @@ sub hBan {
           return 0;
         }
       }
-      if(@reason) {
-        $p_ban->{reason}=join(" ",@reason);
+      if(defined $reason) {
+        $p_ban->{reason}=$reason;
         if($p_ban->{reason} =~ /[\:\|]/) {
           answer("Invalid reason (reason cannot contain ':' or '|' characters)");
           return 0;
@@ -7733,7 +7625,7 @@ sub hBan {
 
 sub hBanIp {
   my ($source,$user,$p_params,$checkOnly)=@_;
-  my ($bannedUser,$banType,$duration,@reason)=@{$p_params};
+  my ($bannedUser,$banType,$duration,$reason)=@{$p_params};
   
   if(! defined $bannedUser) {
     invalidSyntax($user,"banip");
@@ -7769,8 +7661,8 @@ sub hBanIp {
           return 0;
         }
       }
-      if(@reason) {
-        $p_ban->{reason}=join(" ",@reason);
+      if(defined $reason) {
+        $p_ban->{reason}=$reason;
         if($p_ban->{reason} =~ /[\:\|]/) {
           answer("Invalid reason (reason cannot contain ':' or '|' characters)");
           return 0;
@@ -7844,7 +7736,7 @@ sub hBanIp {
 
 sub hBanIps {
   my ($source,$user,$p_params,$checkOnly)=@_;
-  my ($bannedUser,$banType,$duration,@reason)=@{$p_params};
+  my ($bannedUser,$banType,$duration,$reason)=@{$p_params};
   
   if(! defined $bannedUser) {
     invalidSyntax($user,"banips");
@@ -7880,8 +7772,8 @@ sub hBanIps {
           return 0;
         }
       }
-      if(@reason) {
-        $p_ban->{reason}=join(" ",@reason);
+      if(defined $reason) {
+        $p_ban->{reason}=$reason;
         if($p_ban->{reason} =~ /[\:\|]/) {
           answer("Invalid reason (reason cannot contain ':' or '|' characters)");
           return 0;
@@ -7988,10 +7880,10 @@ sub hBKick {
     return 0;
   }
 
-  return "bKick $kickedUser" if($checkOnly);
+  return ['bKick',$kickedUser] if($checkOnly);
  
   queueLobbyCommand(["KICKFROMBATTLE",$kickedUser]);
-  return "bKick $kickedUser";
+  return ['bKick',$kickedUser];
 }
 
 sub hBoss {
@@ -8035,7 +7927,7 @@ sub hBoss {
     return 0;
   }
 
-  return "boss $bossUser" if($checkOnly);
+  return ['boss',$bossUser] if($checkOnly);
 
   if(%bosses) {
     $bosses{$bossUser}=1;
@@ -8045,7 +7937,7 @@ sub hBoss {
   my $bossMsg="Boss mode enabled for $bossUser";
   $bossMsg.=" (by $user)" if($user ne $bossUser);
   broadcastMsg($bossMsg);
-  return "boss $bossUser";
+  return ['boss',$bossUser];
 }
 
 sub hBPreset {
@@ -8086,8 +7978,8 @@ sub hBSet {
     return 0;
   }
 
-  my ($bSetting,@vals)=@{$p_params};
-  my $val=join(" ",@vals);
+  my ($bSetting,$val)=@{$p_params};
+  $val//='';
   $bSetting=lc($bSetting);
 
   my $modName=$targetMod;
@@ -8193,30 +8085,41 @@ sub isNotAllowedToVoteForResign {
 sub hCallVote {
   my ($source,$user,$p_params,$checkOnly)=@_;
 
-  if($checkOnly || ! @{$p_params}) {
+  if($checkOnly || $#{$p_params} != 0) {
     invalidSyntax($user,'callvote');
     return 0;
   }
 
-  $p_params->[0]=$1 if($p_params->[0] =~ /^!(.+)$/);
-
-  my ($p_cmd,$warnMes)=processAliases($user,$p_params);
-  $p_params=$p_cmd if($p_cmd);
-
-  sayPrivate($user,$warnMes) if($warnMes && $conf{springieEmulation} eq "warn" && exists $lobby->{users}{$user} && (! $lobby->{users}{$user}{status}{inGame}));
-
-  my $checkValue=executeCommand($source,$user,$p_params,1);
+  my ($lcCmd,@cmd);
+  
+  my $fullCmd=$p_params->[0];
+  if(ref $fullCmd eq 'ARRAY') { # avoid reparsing command in auto-call vote case
+    @cmd=@{$fullCmd};
+    $lcCmd=lc($cmd[0]);
+  }else{
+    $fullCmd =~ s/^!//;
+    if($fullCmd !~ /^\w/) {
+      invalidSyntax($user,'callvote');
+      return 0;
+    }
+    ($lcCmd,@cmd)=parseSpadsCmd($fullCmd);
+  }
+  
+  my $checkValue=executeCommand($source,$user,\@cmd,1);
   return 0 unless($checkValue);
 
-  if($checkValue ne '1') {
-    my @rewrittenCommand=split(/ /,$checkValue);
-    $p_params=\@rewrittenCommand;
+  if(ref $checkValue eq 'ARRAY') {
+    @cmd=@{$checkValue};
+    $lcCmd=lc($cmd[0]);
+  }elsif($checkValue ne '1') {
+    @cmd=split(/ /,$checkValue); # for legacy plugins
+    $lcCmd=lc($cmd[0]);
   }
 
-  my $p_levelsForVote=getCommandLevels($source,$user,lc($p_params->[0]));
+  my $p_levelsForVote=getCommandLevels($source,$user,$lcCmd);
 
   if(! defined $p_levelsForVote->{voteLevel} || $p_levelsForVote->{voteLevel} eq '') {
-    answer("$user, you are not allowed to vote for command \"$p_params->[0]\" in current context.");
+    answer("$user, you are not allowed to vote for command \"$cmd[0]\" in current context.");
     return 0;
   }
 
@@ -8226,19 +8129,19 @@ sub hCallVote {
   
   if($voterLevel < $p_levelsForVote->{voteLevel}) {
     if($voterLevelWithoutBoss >= $p_levelsForVote->{voteLevel}) {
-      answer("$user, you are not allowed to vote for command \"$p_params->[0]\" in current context (boss mode is enabled).");
+      answer("$user, you are not allowed to vote for command \"$cmd[0]\" in current context (boss mode is enabled).");
     }else{
-      answer("$user, you are not allowed to vote for command \"$p_params->[0]\" in current context.");
+      answer("$user, you are not allowed to vote for command \"$cmd[0]\" in current context.");
     }
     return 0;
   }
 
   if(%currentVote) {
     if(exists $currentVote{command}) {
-      if((exists $currentVote{remainingVoters}{$user} || exists $currentVote{awayVoters}{$user}) && $#{$currentVote{command}} == $#{$p_params}) {
+      if((exists $currentVote{remainingVoters}{$user} || exists $currentVote{awayVoters}{$user}) && $#{$currentVote{command}} == $#cmd) {
         my $isSameCmd=1;
-        for my $i (0..$#{$p_params}) {
-          if(lc($p_params->[$i]) ne lc($currentVote{command}[$i])) {
+        for my $i (0..$#cmd) {
+          if(lc($cmd[$i]) ne lc($currentVote{command}[$i])) {
             $isSameCmd=0;
             last;
           }
@@ -8257,7 +8160,7 @@ sub hCallVote {
   if(exists $lobby->{battle}{users}) {
     foreach my $bUser (keys %{$lobby->{battle}{users}}) {
       next if($bUser eq $user || $bUser eq $conf{lobbyLogin});
-      my $p_levels=getCommandLevels($source,$bUser,lc($p_params->[0]));
+      my $p_levels=getCommandLevels($source,$bUser,$lcCmd);
       my $level=getUserAccessLevel($bUser);
       $level=0 if(%bosses && ! exists $bosses{$bUser});
       if(defined $p_levels->{voteLevel} && $p_levels->{voteLevel} ne "" && $level >= $p_levels->{voteLevel}) {
@@ -8274,7 +8177,7 @@ sub hCallVote {
       next if($autohost->{players}{$gUserNb}{disconnectCause} != -1);
       my $gUser=$autohost->{players}{$gUserNb}{name};
       next if($gUser eq $user || $gUser eq $conf{lobbyLogin} || exists $remainingVoters{$gUser});
-      my $p_levels=getCommandLevels($source,$gUser,lc($p_params->[0]));
+      my $p_levels=getCommandLevels($source,$gUser,$lcCmd);
       my $level=getUserAccessLevel($gUser);
       $level=0 if(%bosses && ! exists $bosses{$gUser});
       if(defined $p_levels->{voteLevel} && $p_levels->{voteLevel} ne "" && $level >= $p_levels->{voteLevel}) {
@@ -8285,21 +8188,21 @@ sub hCallVote {
         $remainingVoters{$gUser}{notifyTime} = time+$votePvMsgDelay if($votePvMsgDelay);
       }
     }
-    if(lc($p_params->[0]) eq 'resign') {
-      map {delete $remainingVoters{$_} if(isNotAllowedToVoteForResign($_,$p_params->[1]))} (keys %remainingVoters);
+    if($lcCmd eq 'resign') {
+      map {delete $remainingVoters{$_} if(isNotAllowedToVoteForResign($_,$cmd[1]))} (keys %remainingVoters);
     }
   }
 
   if(%remainingVoters) {
     my $voteCallAllowed=1;
     foreach my $pluginName (@pluginsOrder) {
-      $voteCallAllowed=$plugins{$pluginName}->onVoteRequest($source,$user,$p_params,\%remainingVoters) if($plugins{$pluginName}->can('onVoteRequest'));
+      $voteCallAllowed=$plugins{$pluginName}->onVoteRequest($source,$user,\@cmd,\%remainingVoters) if($plugins{$pluginName}->can('onVoteRequest'));
       delete @remainingVoters{@{$voteCallAllowed}} if(ref $voteCallAllowed eq 'ARRAY');
       last unless($voteCallAllowed && %remainingVoters);
     }
     return 0 unless($voteCallAllowed);
-    return executeCommand($source,$user,$p_params) unless(%remainingVoters);
-    my $r_cmdVoteSettings=getCmdVoteSettings(lc($p_params->[0]));
+    return executeCommand($source,$user,\@cmd) unless(%remainingVoters);
+    my $r_cmdVoteSettings=getCmdVoteSettings($lcCmd);
     my $awayVoteDelay=$r_cmdVoteSettings->{awayVoteDelay};
     my $awayVoteTime=0;
     if($awayVoteDelay ne '') {
@@ -8311,7 +8214,7 @@ sub hCallVote {
                     user => $user,
                     awayVoteTime => $awayVoteTime,
                     source => $source,
-                    command => $p_params,
+                    command => \@cmd,
                     remainingVoters => \%remainingVoters,
                     yesCount => 1,
                     noCount => 0,
@@ -8326,14 +8229,14 @@ sub hCallVote {
     }else{
       $playersAllowedString="User(s) allowed to vote: $playersAllowedString";
     }
-    sayBattleAndGame("$user called a vote for command \"".join(' ',@{$p_params})."\" [!vote y, !vote n, !vote b]");
+    sayBattleAndGame("$user called a vote for command \"".join(' ',@cmd)."\" [!vote y, !vote n, !vote b]");
     sayBattleAndGame($playersAllowedString);
     foreach my $pluginName (@pluginsOrder) {
-      $plugins{$pluginName}->onVoteStart($user,$p_params) if($plugins{$pluginName}->can('onVoteStart'));
+      $plugins{$pluginName}->onVoteStart($user,\@cmd) if($plugins{$pluginName}->can('onVoteStart'));
     }
     return 1;
   }else{
-    return executeCommand($source,$user,$p_params);
+    return executeCommand($source,$user,\@cmd);
   }
 
 }
@@ -8367,7 +8270,7 @@ sub hCheat {
       return 1;
     }
   }
-  my $params=join(" ",@{$p_params});
+  my $params=$p_params->[0];
   $params="/$params" unless($params =~ /^\//);
 
   $autohost->sendChatMessage("/cheat 1");
@@ -8529,7 +8432,7 @@ sub hCKick {
     return 0;
   }
 
-  return "cKick $kickedUser" if($checkOnly);
+  return ['cKick',$kickedUser] if($checkOnly);
 
   my %sourceNames = ( pv => "private",
                       chan => "channel \#$masterChannel",
@@ -8537,7 +8440,7 @@ sub hCKick {
                       battle => "battle lobby" );
 
   sayPrivate("ChanServ","!kick \#$masterChannel $kickedUser requested by $user in $sourceNames{$source}");
-  return "cKick $kickedUser";
+  return ['cKick',$kickedUser];
 }
 
 sub hClearBox {
@@ -8764,11 +8667,11 @@ sub hForce {
     }
   }
 
-  my $canonicalCommandForm='force ';
+  my @canonicalCommandForm=('force');
   if($#fixedForceOrders == 0) {
-    $canonicalCommandForm.="$fixedForceOrders[0][0] $fixedForceOrders[0][1]".($fixedForceOrders[0][1] eq 'spec' ? '' : " $fixedForceOrders[0][2]");
+    push(@canonicalCommandForm,$fixedForceOrders[0][0],$fixedForceOrders[0][1],$fixedForceOrders[0][1] eq 'spec' ? () : $fixedForceOrders[0][2]);
   }else{
-    $canonicalCommandForm.='* ';
+    push(@canonicalCommandForm,'*','');
     my @manualBalance;
     my ($latestTeam,$latestId)=(-1,-1);
     for my $playerIdx (0..(($#fixedForceOrders-1)/2)) {
@@ -8790,11 +8693,11 @@ sub hForce {
       ($latestTeam,$latestId)=($team,$id);
     }
     foreach my $p_team (@manualBalance) {
-      $canonicalCommandForm.='('.(join(',',map { join('+',@{$_}) } @{$p_team})).')';
+      $canonicalCommandForm[-1].='('.(join(',',map { join('+',@{$_}) } @{$p_team})).')';
     }
   }
 
-  return $canonicalCommandForm if($checkOnly);
+  return \@canonicalCommandForm if($checkOnly);
   
   my $p_battle=$lobby->getBattle();
   foreach my $p_forceOrder (@fixedForceOrders) {
@@ -8832,7 +8735,7 @@ sub hForce {
     }
   }
 
-  return $canonicalCommandForm;
+  return \@canonicalCommandForm;
 }
 
 sub hForcePreset {
@@ -8928,12 +8831,12 @@ sub hGKick {
     return 0;
   }
 
-  return "gKick $kickedUser" if($checkOnly);
+  return ['gKick',$kickedUser] if($checkOnly);
 
   $autohost->sendChatMessage("/kickbynum $p_ahPlayers->{$kickedUser}{playerNb}");
   logMsg("game","> /kickbynum $p_ahPlayers->{$kickedUser}{playerNb}") if($conf{logGameChat});
 
-  return "gKick $kickedUser";
+  return ['gKick',$kickedUser];
   
 }
 
@@ -8969,7 +8872,7 @@ sub hHelp {
     my $p_modOptions=getModOptions($modName);
     my $p_mapOptions=getMapOptions($currentMap);
 
-    if(! exists $spads->{help}{$helpCommand} && $conf{allowSettingsShortcut} && none {$helpCommand eq $_} @READ_ONLY_SETTINGS) {
+    if(! exists $spads->{help}{$helpCommand} && $conf{allowSettingsShortcut} && ! $HIDDEN_SETTINGS_LOWERCASE{$helpCommand}) {
       if(exists $spads->{helpSettings}{global}{$helpCommand}) {
         $setting=$helpCommand;
         $helpCommand="global";
@@ -9252,12 +9155,12 @@ sub hHSet {
     return 0;
   }
 
-  my ($hSetting,@vals)=@{$p_params};
-  my $val=join(" ",@vals);
+  my ($hSetting,$val)=@{$p_params};
+  $val//='';
   $hSetting=lc($hSetting);
 
   foreach my $hParam (keys %{$spads->{hValues}}) {
-    next if(any {$hParam eq $_} qw'description battleName');
+    next if($HIDDEN_HOSTING_SETTINGS{$hParam});
     if($hSetting eq lc($hParam)) {
       my $allowed=0;
       foreach my $allowedValue (@{$spads->{hValues}{$hParam}}) {
@@ -9336,27 +9239,27 @@ sub hJoinAs {
   }
 
   if($joinedEntity eq 'spec') {
-    return "joinAs spec $joiningPlayer" if($checkOnly);
+    return ['joinAs','spec',$joiningPlayer] if($checkOnly);
     $inGameAddedUsers{$joiningPlayer}=$lobby->{battle}{users}{$joiningPlayer}{scriptPass};
     my $joinMsg="Adding user $joiningPlayer as spectator";
     $joinMsg.= " (by $user)" if($user ne $joiningPlayer);
     sayBattle($joinMsg);
     $autohost->sendChatMessage("/adduser $joiningPlayer $inGameAddedUsers{$joiningPlayer}");
-    return "joinAs spec $joiningPlayer";
+    return ['joinAs','spec',$joiningPlayer];
   }elsif($joinedEntity =~ /^\#(\d+)$/) {
     my $joinedId=$1;
     if(! exists $runningBattleReversedMapping{teams}{$joinedId}) {
       answer("Unable to add in-game player in ID $joinedId (invalid in-game ID, use !status to check in-game IDs)");
       return 0;
     }
-    return "joinAs $joinedEntity $joiningPlayer" if($checkOnly);
+    return ['joinAs',$joinedEntity,$joiningPlayer] if($checkOnly);
     $inGameAddedPlayers{$joiningPlayer}=$joinedId;
     $inGameAddedUsers{$joiningPlayer}=$lobby->{battle}{users}{$joiningPlayer}{scriptPass};
     my $joinMsg="Adding player $joiningPlayer in ID $joinedId";
     $joinMsg.=" (by $user)" if($user ne $joiningPlayer);
     sayBattleAndGame($joinMsg);
     $autohost->sendChatMessage("/adduser $joiningPlayer $inGameAddedUsers{$joiningPlayer} 0 $joinedId");
-    return "joinAs $joinedEntity $joiningPlayer";
+    return ['joinAs',$joinedEntity,$joiningPlayer];
   }else{
     my @inGamePlayers=(keys %{$p_runningBattle->{users}},keys %inGameAddedPlayers);
     my $p_joinedPlayers=cleverSearch($joinedEntity,\@inGamePlayers);
@@ -9390,14 +9293,14 @@ sub hJoinAs {
         $joinedId=$inGameAddedPlayers{$joinedEntity};
       }
     }
-    return "joinAs $joinedEntity $joiningPlayer" if($checkOnly);
+    return ['joinAs',$joinedEntity,$joiningPlayer] if($checkOnly);
     $inGameAddedPlayers{$joiningPlayer}=$joinedId;
     $inGameAddedUsers{$joiningPlayer}=$lobby->{battle}{users}{$joiningPlayer}{scriptPass};
     my $joinMsg="Adding player $joiningPlayer in ID $joinedId";
     $joinMsg.=" (by $user)" if($user ne $joiningPlayer);
     sayBattleAndGame($joinMsg);
     $autohost->sendChatMessage("/adduser $joiningPlayer $inGameAddedUsers{$joiningPlayer} 0 $joinedId");
-    return "joinAs $joinedEntity $joiningPlayer";
+    return ['joinAs',$joinedEntity,$joiningPlayer];
   }
 }
 
@@ -9467,7 +9370,7 @@ sub hKickBan {
     return 0;
   }
 
-  return "kickBan $bannedUser" if($checkOnly);
+  return ['kickBan',$bannedUser] if($checkOnly);
 
   if($autohost->getState()) {
     my $p_ahPlayers=$autohost->getPlayersByNames();
@@ -9501,7 +9404,7 @@ sub hKickBan {
     $kickBanDuration=secToTime($conf{kickBanDuration});
   }
   broadcastMsg("Battle ban added for user \"$bannedUser\" (duration: $kickBanDuration, reason: temporary kick-ban by $user)");
-  return "kickBan $bannedUser";
+  return ['kickBan',$bannedUser];
 }
 
 sub hLearnMaps {
@@ -9567,6 +9470,7 @@ sub hLearnMaps {
     answer("Following map(s) (re)learned: $addedMapsString");
   }
 
+  return 1;
 }
 
 sub getVoteSettings {
@@ -9732,7 +9636,7 @@ sub hList {
     foreach my $pluginName (sort keys %{$spads->{pluginsConf}}) {
       my $p_values=$spads->{pluginsConf}{$pluginName}{values};
       foreach my $setting (sort keys %{$p_values}) {
-        next if(any {$setting eq $_} qw'commandsFile helpFile');
+        next if($HIDDEN_PLUGIN_SETTINGS{$setting});
         next if($filterUnmodifiableSettings && $#{$p_values->{$setting}} < 1);
         next unless(all {index(lc("$pluginName $setting"),lc($_)) > -1} @filters);
         my $allowedValues=join(" | ",@{$p_values->{$setting}});
@@ -9780,7 +9684,7 @@ sub hList {
     }
     my @settingsData;
     foreach my $setting (sort keys %{$spads->{values}}) {
-      next if(any {$setting eq $_} qw'description commandsFile battlePreset hostingPreset welcomeMsg welcomeMsgInGame preset mapLink ghostMapLink advertMsg endGameCommand endGameCommandEnv endGameCommandMsg');
+      next if($HIDDEN_PRESET_SETTINGS{$setting});
       next if($filterUnmodifiableSettings && $#{$spads->{values}{$setting}} < 1 && $setting ne 'map');
       next unless(all {index(lc($setting),lc($_)) > -1} @filters);
       my $allowedValues=join(" | ",@{$spads->{values}{$setting}});
@@ -9910,7 +9814,7 @@ sub hList {
     }
     my @settingsData;
     foreach my $setting (sort keys %{$spads->{hValues}}) {
-      next if(any {$setting eq $_} qw'description battleName');
+      next if($HIDDEN_HOSTING_SETTINGS{$setting});
       next if($filterUnmodifiableSettings && $#{$spads->{hValues}{$setting}} < 1);
       next unless(all {index(lc($setting),lc($_)) > -1} @filters);
       if($setting eq 'password') {
@@ -10198,9 +10102,7 @@ sub hLoadBoxes {
     return 0;
   }
 
-  my @params;
-  my $paramsString=join(' ',@{$p_params});
-  @params=shellwords($paramsString) if($paramsString);
+  my @params=shellwords($p_params->[0]//'');
 
   if($#params > 2) {
     invalidSyntax($user,"loadboxes");
@@ -10427,7 +10329,7 @@ sub hOpenBattle {
 sub hPlugin {
   my ($source,$user,$p_params,$checkOnly)=@_;
 
-  my ($pluginName,$action,$param,@vals)=@{$p_params};
+  my ($pluginName,$action,$param,$val)=@{$p_params};
   if(! defined $action) {
     invalidSyntax($user,'plugin');
     return 0;
@@ -10535,7 +10437,7 @@ sub hPlugin {
 
     my $setting;
     foreach my $pluginSetting (keys %{$p_pluginConf->{values}}) {
-      next if(any {$pluginSetting eq $_} qw'commandsFile helpFile');
+      next if($HIDDEN_PLUGIN_SETTINGS{$pluginSetting});
       if(lc($param) eq lc($pluginSetting)) {
         $setting=$pluginSetting;
         last;
@@ -10546,8 +10448,7 @@ sub hPlugin {
       return 0;
     }
 
-    my $val='';
-    $val=join(' ',@vals) if(@vals);
+    $val//='';
 
     my $allowed=0;
     foreach my $allowedValue (@{$p_pluginConf->{values}{$setting}}) {
@@ -10871,8 +10772,8 @@ sub hReloadConf {
   my %confMacrosReload=%confMacros;
   my $p_macrosUsedForReload=\%confMacrosReload;
 
-  my $paramsString=join(" ",@{$p_params});
-  if($paramsString) {
+  my $paramsString=$p_params->[0];
+  if(defined $paramsString && $paramsString ne '') {
     my @params=shellwords($paramsString);
     if(! @params) {
       invalidSyntax($user,"reloadconf");
@@ -11116,7 +11017,7 @@ sub hResign {
     return 0;
   }
 
-  return "resign $resignedPlayer".($isTeamResign?' TEAM':'') if($checkOnly);
+  return ['resign',$resignedPlayer,$isTeamResign ? 'TEAM' : ()] if($checkOnly);
 
   map {$autohost->sendChatMessage('/specbynum '.$autohost->getPlayer($_)->{playerNb})} @playersToResign;
 
@@ -11125,6 +11026,8 @@ sub hResign {
   }else{
     sayBattleAndGame("Resigned player $playersToResign[0] (by $user)");
   }
+
+  return ['resign',$resignedPlayer,$isTeamResign ? 'TEAM' : ()];
 }
 
 sub hRemoveBot {
@@ -11154,12 +11057,12 @@ sub hRemoveBot {
     return 0;
   }
   
-  return "removeBot $p_removedBots->[0]" if($checkOnly);
+  return ['removeBot',$p_removedBots->[0]] if($checkOnly);
 
   sayBattle("Removing local AI bot $p_removedBots->[0] (by $user)");
   queueLobbyCommand(['REMOVEBOT',$p_removedBots->[0]]);
 
-  return "removeBot $p_removedBots->[0]";
+  return ['removeBot',$p_removedBots->[0]];
 }
 
 sub hRestart {
@@ -11167,8 +11070,8 @@ sub hRestart {
 
   my $waitMode='game';
 
-  my $paramsString=join(' ',@{$p_params});
-  if($paramsString) {
+  my $paramsString=$p_params->[0];
+  if(defined $paramsString && $paramsString ne '') {
     my @params=shellwords($paramsString);
     if(! @params) {
       invalidSyntax($user,'restart');
@@ -11240,11 +11143,11 @@ sub hRing {
         return 0;
       }
     }
-    return "ring $rungUser" if($checkOnly);
+    return ['ring',$rungUser] if($checkOnly);
     sayBattleAndGame("Ringing $rungUser (by $user)");
     $lastRungUsers{$rungUser}=time;
     queueLobbyCommand(["RING",$rungUser,$lobby->{protocolExtensions}{'ring:originator'} ? $user : ()]);
-    return "ring $rungUser";
+    return ['ring',$rungUser];
   }
 
   my @rungUsers;
@@ -11387,9 +11290,8 @@ sub hSay {
 
   return 1 if($checkOnly);
 
-  my $msg=join(" ",@{$p_params});
   my $prompt="<$user> ";
-  my $p_messages=splitMsg($msg,$conf{maxAutoHostMsgLength}-length($prompt)-1);
+  my $p_messages=splitMsg($p_params->[0],$conf{maxAutoHostMsgLength}-length($prompt)-1);
   foreach my $mes (@{$p_messages}) {
     $autohost->sendChatMessage("$prompt$mes");
     logMsg("game","> $prompt$mes") if($conf{logGameChat});
@@ -11585,7 +11487,7 @@ sub hSend {
 
   return 1 if($checkOnly);
 
-  my $params=join(" ",@{$p_params});
+  my $params=$p_params->[0];
   $autohost->sendChatMessage($params);
   logMsg("game","> $params") if($conf{logGameChat});
 
@@ -11595,7 +11497,7 @@ sub hSend {
 sub hSendLobby {
   my ($source,$user,$p_params,$checkOnly)=@_;
 
-  if($#{$p_params} < 0) {
+  if($#{$p_params} != 0) {
     invalidSyntax($user,"sendlobby");
     return 0;
   }
@@ -11605,18 +11507,12 @@ sub hSendLobby {
     return 0;
   }
 
-  my @lobbyCmd;
-  if($#{$p_params} == 0) {
-    @lobbyCmd=parse_line(' ',0,$p_params->[0]);
-    if(! @lobbyCmd) {
-      answer('Unable to parse lobby command (syntax error)');
-      return 0;
-    }
-    $lobbyCmd[-1]//='';
-  }else{
-    # case where !sendLobby is triggered by a command alias
-    @lobbyCmd=@{$p_params};
+  my @lobbyCmd=parse_line(' ',0,$p_params->[0]);
+  if(! @lobbyCmd) {
+    answer('Unable to parse lobby command (syntax error)');
+    return 0;
   }
+  $lobbyCmd[-1]//='';
   
   # SpringLobbyProtocol is assumed to be loaded by SpringLobbyInterface
   # (it can't be loaded by SPADS core as it would block auto-update from SPADS < 0.13.32)
@@ -11645,15 +11541,18 @@ sub hSet {
     return 0;
   }
 
-  my ($setting,@vals)=@{$p_params};
-  my $val=join(" ",@vals);
+  my ($setting,$val)=@{$p_params};
   $setting=lc($setting);
 
   if($setting eq "map") {
-    if($val eq '' && $lobbyState > LOBBY_STATE_OPENING_BATTLE) {
-      return 'nextMap' if($checkOnly);
+    if($val eq '') {
+      if($lobbyState < LOBBY_STATE_BATTLE_OPENED) {
+        answer('Unable to rotate map, battle is closed');
+        return 0;
+      }
+      return ['nextMap'] if($checkOnly);
       rotateMap($conf{rotationManual},1);
-      return 'nextMap';
+      return ['nextMap'];
     }
     my $realVal=searchMap($val);
     if(! $realVal) {
@@ -11664,7 +11563,7 @@ sub hSet {
       answer("Map is already set to \"$realVal\"");
       return 0;
     }
-    return "set map $realVal" if($checkOnly);
+    return ['set','map',$realVal] if($checkOnly);
     $spads->{conf}{map}=$realVal;
     %conf=%{$spads->{conf}};
     $timestamps{autoRestore}=time;
@@ -11683,11 +11582,11 @@ sub hSet {
     }
     sayBattleAndGame($msg);
     answer("Map changed: $realVal") if($source eq "pv");
-    return "set map $realVal";
+    return ['set','map',$realVal];
   }
 
   foreach my $param (keys %{$spads->{values}}) {
-    next if(any {$param eq $_} qw'description commandsFile battlePreset hostingPreset welcomeMsg welcomeMsgInGame mapLink ghostMapLink preset advertMsg endGameCommand endGameCommandEnv endGameCommandMsg');
+    next if($HIDDEN_PRESET_SETTINGS{$param});
     if($setting eq lc($param)) {
       my $allowed=0;
       foreach my $allowedValue (@{$spads->{values}{$param}}) {
@@ -13391,19 +13290,17 @@ sub hApiGetSettings {
   
   return (undef,'INVALID_PARAMS') unless(ref $r_params eq 'ARRAY' && @{$r_params} && (all {defined $_ && ref $_ eq ''} @{$r_params}));
   
-  my @forbiddenSettings=qw'commandsFile endGameCommand endGameCommandEnv';
-  
   my %result;
   if(@{$r_params} == 1 && $r_params->[0] eq '*') {
     foreach my $set (keys %{$spads->{values}}) {
-      $result{$set}=$conf{$set} unless(any {$set eq $_} @forbiddenSettings);
+      $result{$set}=$conf{$set} unless($PRIVATE_SETTINGS{$set});
     }
     return (\%result,undef);
   }
   
   my @invalidSettings;
   foreach my $set (@{$r_params}) {
-    if(exists $spads->{values}{$set} && (none {$set eq $_} @forbiddenSettings)) {
+    if(exists $spads->{values}{$set} && ! $PRIVATE_SETTINGS{$set}) {
       $result{$set}=$conf{$set};
     }else{
       push(@invalidSettings,$set);

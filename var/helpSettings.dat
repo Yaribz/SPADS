@@ -870,13 +870,13 @@ Contains the names of the SPADS plugins that will be automatically loaded on sta
 <null>
 
 [global:springieEmulation]
-Springie emulation mode
+Springie emulation mode (deprecated)
 -
-Specifies the Springie emulation mode.
+This setting is ignored since SPADS 0.13.39.
 -
-on: Springie commands are emulated
-off: Springie commands are not emulated
-warn: Springie commands are emulated, but a warning message is sent in private to the player when a deprecated command is used
+on
+off
+warn
 -
 off
 

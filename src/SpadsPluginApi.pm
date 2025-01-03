@@ -24,7 +24,7 @@ use List::Util qw'any none';
 use Exporter 'import';
 @EXPORT=qw/$spadsVersion $spadsDir loadPythonPlugin get_flag fix_string getBosses getLobbyState getSpringPid getSpringServerType getTimestamps getUserPref getRunningBattle getConfMacros getCurrentVote getPlugin getPluginList addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess forkCall removeProcessCallback createDetachedProcess addTimer removeTimer addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog updateSetting secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives LOBBY_STATE_DISCONNECTED LOBBY_STATE_CONNECTING LOBBY_STATE_CONNECTED LOBBY_STATE_LOGGED_IN LOBBY_STATE_SYNCHRONIZED LOBBY_STATE_OPENING_BATTLE LOBBY_STATE_BATTLE_OPENED/;
 
-my $apiVersion='0.40';
+my $apiVersion='0.41';
 
 our $spadsVersion=$::SPADS_VERSION;
 our $spadsDir=$::CWD;
@@ -1947,9 +1947,9 @@ for consistency (this mode is used for !callVote command)
 
 If the command cannot be executed (invalid syntax ...) the handler must return
 C<0>. If the command is correct but requires automatic parameter adjustments
-(automatic case correction or name completion for example), a string containing
-the adjusted command must be returned. If it can be executed directly without
-any adjustement, C<1> must be returned.
+(automatic case correction or name completion for example), a reference to an
+array containing the adjusted command must be returned. If it can be executed
+directly without any adjustment, C<1> must be returned.
 
 C<$replace> indicates if the handlers provided can replace existing ones: C<0>
 means add handlers only if there is no handler for the given command (default),
