@@ -2,14 +2,15 @@ package InGameMute;
 
 use strict;
 
+use List::Util 'none';
 use Storable qw/nstore retrieve/;
 
 use SpadsPluginApi;
 
 no warnings 'redefine';
 
-my $pluginVersion='0.5';
-my $requiredSpadsVersion='0.11.5';
+my $pluginVersion='0.6';
+my $requiredSpadsVersion='0.13.39';
 
 my %globalPluginParams = ( commandsFile => ['notNull'],
                            helpFile => ['notNull'],
@@ -98,7 +99,13 @@ sub hSpadsMute {
 
   my ($mutedPlayer,$duration,$type)=@{$p_params};
   $duration=0 unless(defined $duration);
-  if(! defined $type) {
+  if(defined $type) {
+    $type=lc($type);
+    if(none {$type eq $_} (qw'draw chat full')) {
+      invalidSyntax($user,'mute','invalid mute type');
+      return 0;
+    }
+  }else{
     if(lc($duration) eq 'draw') {
       $duration=0;
       $type='draw';
@@ -169,7 +176,12 @@ sub hSpadsMute {
     return 0;
   }
 
-  return "mute $mutedPlayer $duration" if($checkOnly);
+  my @canonicalMuteCmd=('mute',$mutedPlayer);
+  if($duration || $type ne 'full') {
+    push(@canonicalMuteCmd,$duration);
+    push(@canonicalMuteCmd,$type) unless($type eq 'full');
+  }
+  return \@canonicalMuteCmd if($checkOnly);
 
   my $endMuteTs=0;
   $endMuteTs=time+($minuteDuration * 60) if($minuteDuration);
@@ -197,7 +209,7 @@ sub hSpadsMute {
   answer("In-game mute added for $mutedPlayer (type: $type, duration: $muteDuration)") if($source eq 'pv');
   broadcastMsg("In-game mute added for $mutedPlayer by $user (type: $type, duration: $muteDuration)");
   $autohost->sendChatMessage("/mute $mutedPlayer $chatMute $drawMute") if($isInGame);
-  return 1;
+  return \@canonicalMuteCmd;
 }
 
 sub hSpadsMutes {
@@ -273,7 +285,7 @@ sub hSpadsUnmute {
   }
 
   my $unmutedPlayer=$p_matchingPlayers->[0];
-  return "unmute $unmutedPlayer" if($checkOnly);
+  return ['unmute',$unmutedPlayer] if($checkOnly);
 
   my $removedFilter=$mutedPlayers{$unmutedPlayer};
   delete $self->{mutes}->{$removedFilter};
@@ -281,7 +293,7 @@ sub hSpadsUnmute {
   answer("In-game mute removed for $unmutedPlayer") if($source eq 'pv');
   broadcastMsg("In-game mute removed for $unmutedPlayer by $user");
   applyUnmuteInGame($removedFilter);
-  return 1;
+  return ['unmute',$unmutedPlayer];
 }
 
 sub applyUnmuteInGame {
