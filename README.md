@@ -84,14 +84,14 @@ Documentation
   (files are generated in the directory specified by the "varDir" setting in
   spads.conf):
   
-        perl spads.pl etc/spads.conf --doc
+      perl spads.pl etc/spads.conf --doc
     
 * The SPADS plugin API documentation is available online
   [here](http://planetspads.free.fr/spads/doc/spadsPluginApiDoc.html). It can
   be generated from any SPADS installation directory by using following
   command (the pod2html.css file can be found [here](doc/pod2html.css)):
   
-        pod2html -css=pod2html.css --infile=SpadsPluginApi.pm --outfile=spadsPluginApiDoc.html --title="SPADS Plugin API Doc"
+      pod2html -css=pod2html.css --infile=SpadsPluginApi.pm --outfile=spadsPluginApiDoc.html --title="SPADS Plugin API Doc"
     
 * Additional documentation can be found on [SPADS wiki](http://springrts.com/wiki/SPADS).
 
