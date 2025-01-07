@@ -2,7 +2,7 @@
 #
 # SPADS: Spring Perl Autohost for Dedicated Server
 #
-# Copyright (C) 2008-2024  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2025  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -106,7 +106,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.39';
+our $SPADS_VERSION='0.13.40';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -3010,6 +3010,58 @@ sub updateAnswerFunction {
   }
 }
 
+sub checkCommandRightsOverride {
+  my ($lcCmd,$r_cmd,$source,$user,$effectiveUserAccessLevel,$userAccessLevel,$r_requiredAccessLevels)=@_;
+
+  if($lcCmd eq 'set' && $#{$r_cmd} > 0 && defined $r_requiredAccessLevels->{voteLevel} && $r_requiredAccessLevels->{voteLevel} ne '') {
+    
+    my @freeSettingsEntries=split(/;/,$conf{freeSettings});
+    my %freeSettings;
+    foreach my $freeSettingEntry (@freeSettingsEntries) {
+      if($freeSettingEntry =~ /^([^\(]+)\(([^\)]+)\)$/) {
+        $freeSettings{lc($1)}=$2;
+      }else{
+        $freeSettings{lc($freeSettingEntry)}=undef;
+      }
+    }
+
+    my $lcSetting=lc($r_cmd->[1]);
+    if(exists $freeSettings{$lcSetting}) {
+      my $allowed=1;
+      if(defined $freeSettings{$lcSetting}) {
+        $allowed=0;
+        my $value=$r_cmd->[2]//'';
+        my @directRanges=split(',',$freeSettings{$lcSetting},-1);
+        foreach my $range (@directRanges) {
+          if(isRange($range)) {
+            $allowed=1 if(matchRange($range,$value));
+          }elsif($value eq $range) {
+            $allowed=1;
+          }
+          last if($allowed);
+        }
+      }
+      $r_requiredAccessLevels->{directLevel}=$r_requiredAccessLevels->{voteLevel} if($allowed);
+    }
+    
+  }
+  
+  foreach my $pluginName (@pluginsOrder) {
+    next unless($plugins{$pluginName}->can('commandRightsOverride'));
+    my $override=$plugins{$pluginName}->commandRightsOverride($lcCmd,$r_cmd,$source,$user,$effectiveUserAccessLevel,$userAccessLevel,$r_requiredAccessLevels);
+    return $override if(defined $override);
+  }
+
+  if($lcCmd eq 'endvote') {
+    my $r_voteCmd=$currentVote{command};
+    return 1 if(defined $r_voteCmd && ($currentVote{user} eq $user || ($#{$r_voteCmd} > 0 && $r_voteCmd->[0] eq 'joinAs' && $r_voteCmd->[1] eq $user)));
+  }elsif($lcCmd eq 'boss') {
+    return 1 if(@{$r_cmd} == 1 && keys %bosses == 1 && exists $bosses{$user});
+  }
+  
+  return;
+}
+
 sub handleRequest {
   my ($source,$user,$command,$floodCheck)=@_;
   $floodCheck//=1;
@@ -3030,55 +3082,7 @@ sub handleRequest {
 
   slog("Start of \"$lcCmd\" command processing",5);
 
-  if($lcCmd eq "endvote") {
-    if(%currentVote && exists $currentVote{command}) {
-      my $p_voteCmd=$currentVote{command};
-      if($currentVote{user} eq $user || ($#{$p_voteCmd} > 0 && $p_voteCmd->[0] eq 'joinAs' && $p_voteCmd->[1] eq $user)) {
-        executeCommand($source,$user,\@cmd);
-        slog("End of \"$lcCmd\" command processing",5);
-        return;
-      }
-    }else{
-      answer("Unable to end vote, there is no vote in progress");
-      slog("End of \"$lcCmd\" command processing",5);
-      return;
-    }
-  }
-  
   my $p_levels=getCommandLevels($source,$user,$lcCmd);
-  
-  if($lcCmd eq 'set' && $#cmd > 0 &&  defined $p_levels->{voteLevel} && $p_levels->{voteLevel} ne '') {
-
-    my @freeSettingsEntries=split(/;/,$conf{freeSettings});
-    my %freeSettings;
-    foreach my $freeSettingEntry (@freeSettingsEntries) {
-      if($freeSettingEntry =~ /^([^\(]+)\(([^\)]+)\)$/) {
-        $freeSettings{lc($1)}=$2;
-      }else{
-        $freeSettings{lc($freeSettingEntry)}=undef;
-      }
-    }
-
-    my $lcSetting=lc($cmd[1]);
-    if(exists $freeSettings{$lcSetting}) {
-      my $allowed=1;
-      if(defined $freeSettings{$lcSetting}) {
-        $allowed=0;
-        my $value='';
-        $value=$cmd[2] if($#cmd > 1);
-        my @directRanges=split(',',$freeSettings{$lcSetting},-1);
-        foreach my $range (@directRanges) {
-          if(isRange($range)) {
-            $allowed=1 if(matchRange($range,$value));
-          }elsif($value eq $range) {
-            $allowed=1;
-          }
-          last if($allowed);
-        }
-      }
-      $p_levels->{directLevel}=$p_levels->{voteLevel} if($allowed);
-    }
-  }
   
   my $level=getUserAccessLevel($user);
   my $levelWithoutBoss=$level;
@@ -3088,8 +3092,9 @@ sub handleRequest {
     $level=0 if(exists $p_bossLevels->{directLevel} && $level < $p_bossLevels->{directLevel});
   }
 
-  if((defined $p_levels->{directLevel} && $p_levels->{directLevel} ne "" && $level >= $p_levels->{directLevel})
-     || ($lcCmd eq 'boss' && @cmd == 1 && keys %bosses == 1 && exists $bosses{$user})) {
+  my $cmdRightsOverride=checkCommandRightsOverride($lcCmd,\@cmd,$source,$user,$level,$levelWithoutBoss,$p_levels);
+
+  if($cmdRightsOverride || (! defined $cmdRightsOverride && defined $p_levels->{directLevel} && $p_levels->{directLevel} ne "" && $level >= $p_levels->{directLevel})) {
     my @realCmd=@cmd;
     my $rewrittenCommand=executeCommand($source,$user,\@cmd);
     if(defined $rewrittenCommand) {

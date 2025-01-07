@@ -1,6 +1,6 @@
 # SpadsPluginApi: SPADS plugin API
 #
-# Copyright (C) 2013-2024  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2013-2025  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -24,7 +24,7 @@ use List::Util qw'any none';
 use Exporter 'import';
 @EXPORT=qw/$spadsVersion $spadsDir loadPythonPlugin get_flag fix_string getBosses getLobbyState getSpringPid getSpringServerType getTimestamps getUserPref getRunningBattle getConfMacros getCurrentVote getPlugin getPluginList addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess forkCall removeProcessCallback createDetachedProcess addTimer removeTimer addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog updateSetting secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives LOBBY_STATE_DISCONNECTED LOBBY_STATE_CONNECTING LOBBY_STATE_CONNECTED LOBBY_STATE_LOGGED_IN LOBBY_STATE_SYNCHRONIZED LOBBY_STATE_OPENING_BATTLE LOBBY_STATE_BATTLE_OPENED/;
 
-my $apiVersion='0.41';
+my $apiVersion='0.42';
 
 our $spadsVersion=$::SPADS_VERSION;
 our $spadsDir=$::CWD;
@@ -1115,7 +1115,8 @@ or undef to allow the game to start.
 =item C<preSpadsCommand($self,$command,$source,$user,\@params)>
 
 This callback is called each time a SPADS command is called, just before it is
-actually executed.
+actually executed. This callback is called after the C<commandRightsOverride>
+callback.
 
 C<$command> is the name of the command (without the parameters)
 
@@ -1239,6 +1240,47 @@ lobby server only, 2: authenticated by autohost)
 
 The callback must return the new access level value if changed, or undef if not
 changed.
+
+=item C<commandRightsOverride($self,$lowerCaseCommandName,\@command,$source,$user,$effectiveUserAccessLevel,$userAccessLevel,\%requiredAccessLevels)>
+
+This callback is called each time a SPADS command is called by a user, just
+before checking the user access level requirements. It allows plugins to bypass
+this check and implement their own logic to allow or disallow the command
+execution. This callback is called before the C<preSpadsCommand> callback,
+which can still be used to prevent the command execution later in the workflow
+even though the C<commandRightsOverride> callback allowed it.
+
+C<$lowerCaseCommandName> is the name of the command being called (in lowercase)
+
+C<\@command> is an array reference containing the full command being called
+
+C<$source> indicates the way the command was called (C<"pv">: private lobby
+message, C<"battle">: battle lobby message, C<"chan">: master lobby channel
+message, C<"game">: in game message)
+
+C<$user> is the name of the user who called the command
+
+C<$effectiveUserAccessLevel> is the effective access level of the user who
+called the command (taking boss mode into account if applicable)
+
+C<$userAccessLevel> is the original access level of the user who called the
+command (ignoring boss mode)
+
+C<\%requiredAccessLevels> is a reference to a hash containing the access levels
+normally required to call the command in current context. The hash keys are
+C<directLevel> for the access level required to call the command directly, and
+C<voteLevel> for the access level required to call a vote for the command. The
+values can be undefined or empty string when there is no access level associated
+(i.e. the command cannot be called), or the corresponding required access level
+value (integer).
+
+The return value of the callback determines whether the default access level
+requirements for the command must be bypassed. If an undefined value is
+returned, the default behavior is applied (no bypass of access level
+requirements). If a true value is returned, the access level requirements are
+bypassed and the user is allowed to call the command directly. If a false value
+is returned, the user is denied the right to call the command directly,
+regardless of his access level.
 
 =item C<delayShutdown($self)>
 
@@ -2473,7 +2515,7 @@ Inline::Python Perl module (the bridge between Perl and Python): L<documentation
 
 =head1 COPYRIGHT
 
-Copyright (C) 2013-2024  Yann Riou <yaribzh@gmail.com>
+Copyright (C) 2013-2025  Yann Riou <yaribzh@gmail.com>
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by

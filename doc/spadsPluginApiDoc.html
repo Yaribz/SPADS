@@ -531,7 +531,7 @@ def getParams(pluginName):
 <dt id="preSpadsCommand-self-command-source-user-params"><code>preSpadsCommand($self,$command,$source,$user,\@params)</code></dt>
 <dd>
 
-<p>This callback is called each time a SPADS command is called, just before it is actually executed.</p>
+<p>This callback is called each time a SPADS command is called, just before it is actually executed. This callback is called after the <code>commandRightsOverride</code> callback.</p>
 
 <p><code>$command</code> is the name of the command (without the parameters)</p>
 
@@ -600,6 +600,28 @@ def getParams(pluginName):
 <p><code>$isAuthenticated</code> indicates if the user has been authenticated (0: lobby server in LAN mode and not authenticated at autohost level, 1: authenticated by lobby server only, 2: authenticated by autohost)</p>
 
 <p>The callback must return the new access level value if changed, or undef if not changed.</p>
+
+</dd>
+<dt id="commandRightsOverride-self-lowerCaseCommandName-command-source-user-effectiveUserAccessLevel-userAccessLevel-requiredAccessLevels"><code>commandRightsOverride($self,$lowerCaseCommandName,\@command,$source,$user,$effectiveUserAccessLevel,$userAccessLevel,\%requiredAccessLevels)</code></dt>
+<dd>
+
+<p>This callback is called each time a SPADS command is called by a user, just before checking the user access level requirements. It allows plugins to bypass this check and implement their own logic to allow or disallow the command execution. This callback is called before the <code>preSpadsCommand</code> callback, which can still be used to prevent the command execution later in the workflow even though the <code>commandRightsOverride</code> callback allowed it.</p>
+
+<p><code>$lowerCaseCommandName</code> is the name of the command being called (in lowercase)</p>
+
+<p><code>\@command</code> is an array reference containing the full command being called</p>
+
+<p><code>$source</code> indicates the way the command was called (<code>&quot;pv&quot;</code>: private lobby message, <code>&quot;battle&quot;</code>: battle lobby message, <code>&quot;chan&quot;</code>: master lobby channel message, <code>&quot;game&quot;</code>: in game message)</p>
+
+<p><code>$user</code> is the name of the user who called the command</p>
+
+<p><code>$effectiveUserAccessLevel</code> is the effective access level of the user who called the command (taking boss mode into account if applicable)</p>
+
+<p><code>$userAccessLevel</code> is the original access level of the user who called the command (ignoring boss mode)</p>
+
+<p><code>\%requiredAccessLevels</code> is a reference to a hash containing the access levels normally required to call the command in current context. The hash keys are <code>directLevel</code> for the access level required to call the command directly, and <code>voteLevel</code> for the access level required to call a vote for the command. The values can be undefined or empty string when there is no access level associated (i.e. the command cannot be called), or the corresponding required access level value (integer).</p>
+
+<p>The return value of the callback determines whether the default access level requirements for the command must be bypassed. If an undefined value is returned, the default behavior is applied (no bypass of access level requirements). If a true value is returned, the access level requirements are bypassed and the user is allowed to call the command directly. If a false value is returned, the user is denied the right to call the command directly, regardless of his access level.</p>
 
 </dd>
 <dt id="delayShutdown-self"><code>delayShutdown($self)</code></dt>

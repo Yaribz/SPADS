@@ -1037,6 +1037,7 @@ spads.pl:
          use array reference instead of string to return canonical/adjusted command from command handlers
          extend command aliasing functionality (alias parameters can be reused to build new parameters)
          improve private and hidden settings management
+0.13.40: new plugin API customization callback "commandRightsOverride" (allows overriding access level requirements for calling SPADS commands)
 
 SpadsConf.pm:
 ============
@@ -1435,6 +1436,7 @@ SpadsPluginApi.pm:
       improve documentation of "getParams" configuration callback (custom types, global/preset settings)
       extend documentation of "getLobbyState" API function (new lobby state constants, examples)
 0.41: SPADS command handlers now use array reference instead of string to return canonical/adjusted command
+0.42: new plugin API customization callback "commandRightsOverride" (allows overriding access level requirements for calling SPADS commands)
 
 SpadsUpdater.pm:
 ===============
