@@ -2,7 +2,7 @@
 #
 # This program installs SPADS in current directory from remote repository.
 #
-# Copyright (C) 2008-2024  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2025  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.42 (2024/09/14)
+# Version 0.43 (2025/01/20)
 
 use strict;
 
@@ -76,7 +76,7 @@ my @RECOIL_SPECIFIC_RELEASES=(qw'bar barTesting');
 my %RECOIL_GITHUB_REPO_PARAMS=(
   owner => 'beyond-all-reason',
   name => 'spring',
-  tag => 'spring_bar_{<branch>}<version>',
+  tag => 'spring_bar_{<branch>}<version>|<version>',
   asset => '.+_<os>-<bitness>-minimal-portable\.7z',
     );
 
@@ -1249,30 +1249,34 @@ if($engineBinariesType eq 'official') {
 }elsif(any {$engineBinariesType eq $_} (qw'recoil github')) {
 
   my %ghInfo;
+  my $ghTags;
   my $ghAsset;
   if($engineBinariesType eq 'recoil') {
-    @ghInfo{qw'owner name tag'}=@RECOIL_GITHUB_REPO_PARAMS{qw'owner name tag'};
-    $ghAsset=$RECOIL_GITHUB_REPO_PARAMS{asset};
+    @ghInfo{qw'owner name'}=@RECOIL_GITHUB_REPO_PARAMS{qw'owner name'};
+    ($ghTags,$ghAsset)=@RECOIL_GITHUB_REPO_PARAMS{qw'tag asset'};
   }else{
     $ghInfo{owner}=promptString('       Please enter the GitHub repository owner name',$RECOIL_GITHUB_REPO_PARAMS{owner},$autoInstallData{githubOwner},sub {$_[0]=~/^[\w\-]+$/});
     setLastRun('githubOwner',$ghInfo{owner});
     $ghInfo{name}=promptString('       Please enter the GitHub repository name',$RECOIL_GITHUB_REPO_PARAMS{name},$autoInstallData{githubName},sub {$_[0]=~/^[\w\-\.]+$/});
     setLastRun('githubName',$ghInfo{name});
-    $ghInfo{tag}=promptString('       Please enter the GitHub release tag template',$RECOIL_GITHUB_REPO_PARAMS{tag},$autoInstallData{githubTag}, sub {index($_[0],'<version>') != -1 && index($_[0],',') == -1});
-    setLastRun('githubTag',$ghInfo{tag});
+    $ghTags=promptString('       Please enter the GitHub release tag template',$RECOIL_GITHUB_REPO_PARAMS{tag},$autoInstallData{githubTag}, sub {all {index($_,'<version>') != -1 && index($_,',') == -1} split(/\|/,$_[0])});
+    setLastRun('githubTag',$ghTags);
     $ghAsset=promptString('       Please enter the GitHub asset regular expression',$RECOIL_GITHUB_REPO_PARAMS{asset},$autoInstallData{githubAsset},\&ghAssetTemplateToRegex);
     setLastRun('githubAsset',$ghAsset);
   }
+  $ghInfo{tags}=[split(/\|/,$ghTags)];
   $ghInfo{asset}=ghAssetTemplateToRegex($ghAsset);
   
   my $ghRepo=join('/',@ghInfo{qw'owner name'});
-  my $ghRepoHash=substr(md5_base64($ghRepo),0,7);
-  $ghRepoHash=~tr/\/\+/ab/;
-  my $ghSubdir=$ghInfo{tag};
-  $ghSubdir =~ s/\Q<version>\E/($ghRepoHash)/g;
-  $ghSubdir =~ s/\Q<branch>\E/BRANCH/g;
-  $ghSubdir =~ tr/\\\/\:\*\?\"\<\>\|/........./;
-  $ghInfo{subdir}=$ghSubdir;
+  my ($ghRepoHash,$ghTagsHash) = map {substr(md5_base64($_),0,7)} ($ghRepo,$ghTags);
+  tr/\/\+/ab/ foreach($ghRepoHash,$ghTagsHash);
+  if(all {$ghInfo{$_} eq $RECOIL_GITHUB_REPO_PARAMS{$_}} (qw'owner name')) {
+    $ghInfo{subdir}='recoil';
+    $ghInfo{subdir}.="($ghTagsHash)" unless($ghTags eq $RECOIL_GITHUB_REPO_PARAMS{tag});
+  }else{
+    $ghInfo{subdir}="github($ghRepoHash-$ghTagsHash)";
+  }
+
   $isRecoilEngine=1 if($ghInfo{owner} eq $RECOIL_GITHUB_REPO_PARAMS{owner});
 
   slog('Checking available engine versions...',3);
@@ -1303,11 +1307,12 @@ if($engineBinariesType eq 'official') {
     $engineReleasesVersionAndTag{$engineReleaseName}=[$releaseVersion,$releaseTag];
     $engineVersionsReleases{$releaseVersion}{$engineReleaseName}=1;
   }
+
+  my @tagRegexps; # contains regexps to extract branch from tag, only for tags containing branch placeholders
+  map {push(@tagRegexps,SpadsUpdater::buildTagRegexp($_,'branch')) if(index($_,'<branch>') > -1)} @{$ghInfo{tags}};
   
-  my ($defaultBranch,$tagRegexp);
-  my $tagTemplateHasBranch = index($ghInfo{tag},'<branch>') > -1;
-  if($tagTemplateHasBranch) {
-    $tagRegexp=SpadsUpdater::buildTagRegexp($ghInfo{tag},'branch');
+  my $defaultBranch;
+  if(@tagRegexps) {
     my $errMsg;
     ($defaultBranch,$errMsg)=SpadsUpdater::getGithubDefaultBranch($ghInfo{owner},$ghInfo{name});
     if(defined $defaultBranch) {
@@ -1333,7 +1338,14 @@ if($engineBinariesType eq 'official') {
       }
       if($versionsToAdd >= 0) {
         if($versionsToAdd > 0) {
-          $printedVersion.='('.$1.')' if(defined $ghReleaseTag && defined $tagRegexp && $ghReleaseTag =~ /^$tagRegexp$/ && (! defined $defaultBranch || $1 ne $defaultBranch));
+          if(defined $ghReleaseTag) {
+            foreach my $tagRegexp (@tagRegexps) {
+              if($ghReleaseTag =~ /^$tagRegexp$/) {
+                $printedVersion.='('.$1.')' unless(defined $defaultBranch && $1 eq $defaultBranch);
+                last;
+              }
+            }
+          }
           print "  $printedVersion$versionComment\n";
         }else{
           print "  [...]\n";
@@ -1346,7 +1358,14 @@ if($engineBinariesType eq 'official') {
       my @matchingEngineReleases=sort keys %{$engineVersionsReleases{$printedVersion}};
       delete @engineReleasesToPrint{@matchingEngineReleases};
       my $versionComment='    '.join(' ', map { '['.$_.']' } @matchingEngineReleases);
-      $printedVersion.='('.$1.')' if(defined $ghReleaseTag && defined $tagRegexp && $ghReleaseTag =~ /^$tagRegexp$/ && (! defined $defaultBranch || $1 ne $defaultBranch));
+      if(defined $ghReleaseTag) {
+        foreach my $tagRegexp (@tagRegexps) {
+          if($ghReleaseTag =~ /^$tagRegexp$/) {
+            $printedVersion.='('.$1.')' unless(defined $defaultBranch && $1 eq $defaultBranch);
+            last;
+          }
+        }
+      }
       print "  $printedVersion$versionComment\n  [...]\n";
     }
   }
@@ -1366,6 +1385,7 @@ if($engineBinariesType eq 'official') {
   my ($engineVersion,$releaseTag);
   my $autoInstallValue=$autoInstallData{autoManagedSpringVersion};
   my $autoManagedSpringVersion='';
+  my %ghInfoForSetup=%ghInfo;
   while(1) {
     $autoManagedSpringVersion=promptStdin("[6/$nbSteps] Which engine version do you want to use (".(join(',',$engineVersionExample,sort(keys %engineReleasesVersionAndTag),'...')).')',$engineVersionExample,$autoInstallValue);
     $autoInstallValue=undef;
@@ -1385,27 +1405,30 @@ if($engineBinariesType eq 'official') {
       if($autoManagedSpringVersion =~ /^(.+)\(([\w\-\.\/]+)\)$/) {
         my $ghBranch;
         ($engineVersion,$ghBranch)=($1,$2);
-        if($tagTemplateHasBranch) {
-          $releaseTag=$ghInfo{tag};
-          $releaseTag =~ s/\Q<version>\E/$engineVersion/g;
-          $releaseTag =~ s/\Q<branch>\E/$ghBranch/g;
+        if(@tagRegexps) {
+          my @releaseTags=@{$ghInfoForSetup{tags}};
+          s/\Q<branch>\E/$ghBranch/g foreach(@releaseTags);
+          $ghInfoForSetup{tags}=\@releaseTags;
         }else{
-          slog("Inconsistent engine version format: engine branch \"$ghBranch\" specified but the GitHub release tag template \"$ghInfo{tag}\" does NOT contain any \"<branch>\" placeholder",2);
+          slog("Inconsistent engine version format: engine branch \"$ghBranch\" specified but the GitHub release tag template \"".join('|',@{$ghInfo{tags}}).'" does NOT contain any "<branch>" placeholder',2);
           ($engineVersion,$releaseTag,$autoManagedSpringVersion)=(undef,undef,'');
           next;
         }
       }else{
         $engineVersion=$autoManagedSpringVersion;
-        if($tagTemplateHasBranch) {
+        if(@tagRegexps) {
           $releaseTag=$r_engineVersionToReleaseTag->{$engineVersion};
           if(defined $releaseTag) {
-            if(defined $tagRegexp && $releaseTag =~ /^$tagRegexp$/) {
-              $autoManagedSpringVersion.='('.$1.')' unless(defined $defaultBranch && $1 eq $defaultBranch);
+            foreach my $tagRegexp (@tagRegexps) {
+              if($releaseTag =~ /^$tagRegexp$/) {
+                $autoManagedSpringVersion.='('.$1.')' if(! defined $defaultBranch || $1 ne $defaultBranch);
+                last;
+              }
             }
           }elsif(defined $defaultBranch) {
-            $releaseTag=$ghInfo{tag};
-            $releaseTag =~ s/\Q<version>\E/$engineVersion/g;
-            $releaseTag =~ s/\Q<branch>\E/$defaultBranch/g;
+            my @releaseTags=@{$ghInfoForSetup{tags}};
+            s/\Q<branch>\E/$defaultBranch/g foreach(@releaseTags);
+            $ghInfoForSetup{tags}=\@releaseTags;
           }else{
             slog("Could not auto-detect branch for engine version \"$engineVersion\" (specify desired branch between parentheses after engine version or select a different engine version)",2);
             ($engineVersion,$releaseTag,$autoManagedSpringVersion)=(undef,undef,'');
@@ -1414,7 +1437,7 @@ if($engineBinariesType eq 'official') {
         }
       }
     }
-    my $engineSetupRes=$updater->setupEngine($engineVersion,$releaseTag,\%ghInfo,1);
+    my $engineSetupRes=$updater->setupEngine($engineVersion,$releaseTag,\%ghInfoForSetup,1);
     if($engineSetupRes < -9) {
       slog("Installation failed: unable to find, download and extract all required files for engine $engineVersion, please choose a different version",2);
       ($engineVersion,$releaseTag,$autoManagedSpringVersion)=(undef,undef,'');
@@ -1425,8 +1448,8 @@ if($engineBinariesType eq 'official') {
     last;
   }
   setLastRun('autoManagedSpringVersion',$autoManagedSpringVersion);
-  $conf{autoManagedSpringVersion} = ($engineBinariesType eq 'recoil' ? '[RECOIL]' : "[GITHUB]{owner=$ghInfo{owner},name=$ghInfo{name},tag=$ghInfo{tag},asset=$ghAsset}").$autoManagedSpringVersion;
-  $conf{autoInstalledSpringDir}=$updater->getEngineDir($engineVersion,\%ghInfo);
+  $conf{autoManagedSpringVersion} = ($engineBinariesType eq 'recoil' ? '[RECOIL]' : "[GITHUB]{owner=$ghInfo{owner},name=$ghInfo{name},tag=".join('|',@{$ghInfo{tags}}).",asset=$ghAsset}").$autoManagedSpringVersion;
+  $conf{autoInstalledSpringDir}=$updater->getEngineDir($engineVersion,\%ghInfoForSetup);
   
 }else{
   $conf{autoManagedSpringVersion}='';

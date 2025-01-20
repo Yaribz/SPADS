@@ -1,6 +1,6 @@
 # Object-oriented Perl module handling SPADS configuration files
 #
-# Copyright (C) 2008-2024  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2025  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -39,7 +39,7 @@ use SimpleLog;
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.13.11';
+my $moduleVersion='0.13.12';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -306,18 +306,25 @@ my %paramTypes = (login => '[\w\[\]]{2,20}',
 
 sub _computeGhInfoSubdir {
   my $r_ghInfo=shift;
-  my $ghRepoHash=substr(md5_base64(join('/',@{$r_ghInfo}{qw'owner name'})),0,7);
-  $ghRepoHash=~tr/\/\+/ab/;
-  my $ghSubdir=$r_ghInfo->{tag};
-  $ghSubdir =~ s/\Q<version>\E/($ghRepoHash)/g;
-  $ghSubdir =~ s/\Q<branch>\E/BRANCH/g;
-  $ghSubdir =~ tr/\\\/\:\*\?\"\<\>\|/........./;
-  $r_ghInfo->{subdir}=$ghSubdir;
+  if($r_ghInfo->{owner} eq 'beyond-all-reason' && $r_ghInfo->{name} eq 'spring') {
+    $r_ghInfo->{subdir}='recoil';
+    return if(@{$r_ghInfo->{tags}} == 2 && $r_ghInfo->{tags}[0] eq 'spring_bar_{<branch>}<version>' && $r_ghInfo->{tags}[1] eq '<version>');
+  }
+  my $ghTagsHash=substr(md5_base64(join('|',@{$r_ghInfo->{tags}})),0,7);
+  $ghTagsHash=~tr/\/\+/ab/;
+  if(defined $r_ghInfo->{subdir}) {
+    $r_ghInfo->{subdir}.="($ghTagsHash)";
+  }else{
+    my $ghRepoHash=substr(md5_base64(join('/',@{$r_ghInfo}{qw'owner name'})),0,7);
+    $ghRepoHash=~tr/\/\+/ab/;
+    $r_ghInfo->{subdir}="github($ghRepoHash-$ghTagsHash)";
+  }
 }
 
 sub parseAutoManagedSpringVersion {
   my $autoManagedString=shift;
-  substr($autoManagedString,0,8)='[GITHUB]{owner=beyond-all-reason,name=spring,tag=spring_bar_{<branch>}<version>,asset=.+_<os>-<bitness>-minimal-portable\.7z}' if(substr($autoManagedString,0,8) eq '[RECOIL]');
+  substr($autoManagedString,0,8)='[GITHUB]{owner=beyond-all-reason,name=spring,tag=spring_bar_{<branch>}<version>|<version>,asset=.+_<os>-<bitness>-minimal-portable\.7z}'
+      if(substr($autoManagedString,0,8) eq '[RECOIL]');
   my %autoManagedInfo;
   if($autoManagedString =~ /^\[GITHUB\]\{(.+)\}([^\}]+)$/) {
     my ($githubInfoString,%ghInfo);
@@ -326,10 +333,14 @@ sub parseAutoManagedSpringVersion {
       return undef unless($ghInfoString =~ /^([^\=]+)=(.+)$/);
       return undef unless(any {$1 eq $_} (qw'owner name tag asset'));
       return undef if(exists $ghInfo{$1});
-      $ghInfo{$1}=$2;
+      if($1 eq 'tag') {
+        $ghInfo{tags}=[split(/\|/,$2)];
+      }else{
+        $ghInfo{$1}=$2;
+      }
     }
-    return undef unless(all {exists $ghInfo{$_}} (qw'owner name tag asset'));
-    return undef if(index($ghInfo{tag},'<version>') == -1);
+    return undef unless(all {exists $ghInfo{$_}} (qw'owner name tags asset'));
+    return undef if(any {index($_,'<version>') == -1} @{$ghInfo{tags}});
     my $osString = $win ? 'windows' : $macOs ? 'macos' : 'linux';
     my $bitnessString = $Config{ptrsize} > 4 ? 64 : 32;
     $ghInfo{asset}=~s/\Q<os>\E/$osString/g;
@@ -343,8 +354,8 @@ sub parseAutoManagedSpringVersion {
     if($release =~ /^([^\(]+)\((.+)\)$/) {
       my $ghBranch;
       ($release,$ghBranch)=($1,$2);
-      return undef unless(defined $autoManagedInfo{github} && index($autoManagedInfo{github}{tag},'<branch>') > -1);
-      $autoManagedInfo{github}{tag} =~ s/\Q<branch>\E/$ghBranch/g;
+      return undef unless(defined $autoManagedInfo{github} && any {index($_,'<branch>') > -1} @{$autoManagedInfo{github}{tags}});
+      s/\Q<branch>\E/$ghBranch/g foreach(@{$autoManagedInfo{github}{tags}});
       _computeGhInfoSubdir($autoManagedInfo{github});
     }
     return undef if(substr($release,0,3) eq 'bar' && ! (defined $autoManagedInfo{github} && $autoManagedInfo{github}{owner} eq 'beyond-all-reason'));
@@ -359,8 +370,8 @@ sub parseAutoManagedSpringVersion {
     $autoManagedInfo{mode}='version';
     my $ghBranch=$2;
     if(defined $ghBranch) {
-      return undef unless(defined $autoManagedInfo{github} && index($autoManagedInfo{github}{tag},'<branch>') > -1);
-      $autoManagedInfo{github}{tag} =~ s/\Q<branch>\E/$ghBranch/g
+      return undef unless(defined $autoManagedInfo{github} && any {index($_,'<branch>') > -1} @{$autoManagedInfo{github}{tags}});
+      s/\Q<branch>\E/$ghBranch/g foreach(@{$autoManagedInfo{github}{tags}});
     }
     return \%autoManagedInfo;
   }

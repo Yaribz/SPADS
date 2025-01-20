@@ -1242,6 +1242,8 @@ SpadsConf.pm:
 0.13.10: fix custom setting value check functions not working for Python plugins
          fix incorrect path separator used in some error messages on Windows (cosmetic change)
 0.13.11: minor fix for checks of command attributes values and user preferences values
+0.13.12: support multiple Github tag templates simultaneously
+         update default tag templates to handle the new Github release tag format used by Recoil engine
 
 spadsInstaller.pl:
 =================
@@ -1351,6 +1353,7 @@ spadsInstaller.pl:
       SPADS configuration files can now be auto-patched during installation using special syntax in installation templates
 0.41: add SpringLobbyProtocol to the list of auto-updated packages (new dependency of SpringLobbyInterface)
 0.42: use BAR specific Rapid repository when auto-downloading BAR (use pr-downloader environment variables defined in BAR launcher config file)
+0.43: update default tag templates to handle the new Github release tag format used by Recoil engine
 
 SpadsPluginApi.pm:
 =================
@@ -1500,6 +1503,7 @@ SpadsUpdater.pm:
       engine version auto-management: allow disabling warning messages for missing releases
       improve logging of HTTP errors
 0.28: fix engine downloads from GitHub no longer working when engine tag contains reserved URI characters (thanks DeviousNull)
+0.29: support multiple Github tag templates simultaneously
 
 springLobbyCertificates.dat:
 ===========================

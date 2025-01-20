@@ -1,6 +1,6 @@
 # Perl module used for Spads auto-updating functionnality
 #
-# Copyright (C) 2008-2024  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2025  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -36,7 +36,7 @@ use Time::HiRes;
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $archName=($win?'win':'linux').($Config{ptrsize} > 4 ? 64 : 32);
 
-our $VERSION='0.28';
+our $VERSION='0.29';
 
 my @constructorParams = qw'sLog repository release packages';
 my @optionalConstructorParams = qw'localDir springDir';
@@ -226,6 +226,7 @@ sub _resolveEngineReleaseNameToVersion {
             my $idFilter = $release eq 'bar' ? "manual-$osString" : "manual-$osString-test-engine";
             my $downloadBaseUrl='https://github.com/'.$r_githubInfo->{owner}.'/'.$r_githubInfo->{name}.'/releases/download/';
             my $downloadBaseUrlLength=length($downloadBaseUrl);
+            my @tagRegexps=map {buildTagRegexp($_)} @{$r_githubInfo->{tags}};
             foreach my $r_barSetup (@{$r_barOnlineConfig->{setups}}) {
               next unless(ref $r_barSetup eq 'HASH' && ref $r_barSetup->{package} eq 'HASH');
               my $r_barPackage=$r_barSetup->{package};
@@ -239,8 +240,9 @@ sub _resolveEngineReleaseNameToVersion {
                   my $endOfTagPos=index($releaseTag,'/');
                   next unless($endOfTagPos > -1);
                   substr($releaseTag,$endOfTagPos)='';
-                  my $tagRegexp=buildTagRegexp($r_githubInfo->{tag});
-                  return ($1,$releaseTag) if($releaseTag =~ /^$tagRegexp$/);
+                  foreach my $tagRegexp (@tagRegexps) {
+                    return ($1,$releaseTag) if($releaseTag =~ /^$tagRegexp$/);
+                  }
                 }
               }
               $sl->log("Unable to find $enginePrefix engine release tag in Beyond All Reason JSON config file",2) unless($ignoreUnexistingRelease);
@@ -264,7 +266,7 @@ sub _resolveEngineReleaseNameToVersion {
       return (undef,undef);
     }
     my $ghRepo=$r_githubInfo->{owner}.'/'.$r_githubInfo->{name};
-    my $tagRegexp=buildTagRegexp($r_githubInfo->{tag});
+    my @tagRegexps=map {buildTagRegexp($_)} @{$r_githubInfo->{tags}};
     my $errMsg="Unable to retrieve engine version number for $release release";
     if($release eq 'stable') {
       my $ghRepoUrl='https://github.com/'.$ghRepo.'/';
@@ -276,8 +278,10 @@ sub _resolveEngineReleaseNameToVersion {
         my $failureReason;
         if(length($redirectedUrl) > $tagBaseUrlLength && substr($redirectedUrl,0,$tagBaseUrlLength) eq $tagBaseUrl) {
           my $releaseTag=substr($redirectedUrl,$tagBaseUrlLength);
-          return ($1,$releaseTag) if($releaseTag =~ /^$tagRegexp$/);
-          $failureReason="URL for latest release \"$redirectedUrl\" doesn't match tag template \"$r_githubInfo->{tag}\"" unless($ignoreUnexistingRelease);
+          foreach my $tagRegexp (@tagRegexps) {
+            return ($1,$releaseTag) if($releaseTag =~ /^$tagRegexp$/);
+          }
+          $failureReason="URL for latest release \"$redirectedUrl\" doesn't match tag template \"".join('|',@{$r_githubInfo->{tags}})."\"" unless($ignoreUnexistingRelease);
         }else{
           $failureReason="unexpected URL for latest release \"$redirectedUrl\"";
         }
@@ -299,11 +303,12 @@ sub _resolveEngineReleaseNameToVersion {
       my $releaseWithLabelOnly = $release eq 'testing';
       foreach my $r_release (@{$r_releases}) {
         my ($releaseTag,$r_releaseLabels)=@{$r_release};
-        next unless($releaseTag =~ /^$tagRegexp$/);
         next if($releaseWithLabelOnly && ! %{$r_releaseLabels});
-        return ($1,$releaseTag) ;
+        foreach my $tagRegexp (@tagRegexps) {
+          return ($1,$releaseTag) if($releaseTag =~ /^$tagRegexp$/);
+        }
       }
-      $sl->log($errMsg.' (no release '.($releaseWithLabelOnly ? 'with label ' : '')."found matching tag template \"$r_githubInfo->{tag}\" on GitHub repository \"$ghRepo\")",2);
+      $sl->log($errMsg.' (no release '.($releaseWithLabelOnly ? 'with label ' : '')."found matching tag template \"".join('|',@{$r_githubInfo->{tags}})."\" on GitHub repository \"$ghRepo\")",2);
       return (undef,undef);
     }
   }
@@ -491,12 +496,18 @@ sub checkEngineReleasesFromGithub {
     return ([],{},undef,undef);
   }
 
-  my $tagRegexp=buildTagRegexp($r_githubInfo->{tag});
+  my @tagRegexps=map {buildTagRegexp($_)} @{$r_githubInfo->{tags}};
   my (@orderedVersionsAndTags,%engineVersionToReleaseTag,$testingVersion,$unstableVersion);
   foreach my $r_release (@{$r_releases}) {
     my ($releaseTag,$r_releaseLabels)=@{$r_release};
-    next unless($releaseTag =~ /^$tagRegexp$/);
-    my $releaseVersion=$1;
+    my $releaseVersion;
+    foreach my $tagRegexp (@tagRegexps) {
+      if($releaseTag =~ /^$tagRegexp$/) {
+        $releaseVersion=$1;
+        last;
+      }
+    }
+    next unless(defined $releaseVersion);
     $engineVersionToReleaseTag{$releaseVersion}=$releaseTag;
     push(@orderedVersionsAndTags,[$releaseVersion,$releaseTag]);
     $unstableVersion//=$releaseVersion;
@@ -504,9 +515,9 @@ sub checkEngineReleasesFromGithub {
     $testingVersion//=$releaseVersion;
   }
   if(! %engineVersionToReleaseTag) {
-    $sl->log("No release found matching tag template \"$r_githubInfo->{tag}\" on GitHub repository \"$ghRepo\"",2);
+    $sl->log("No release found matching tag template \"".join('|',@{$r_githubInfo->{tags}})."\" on GitHub repository \"$ghRepo\"",2);
   }elsif(! defined $testingVersion) {
-    $sl->log("No release with label found matching tag template \"$r_githubInfo->{tag}\" on GitHub repository \"$ghRepo\"",2);
+    $sl->log("No release with label found matching tag template \"".join('|',@{$r_githubInfo->{tags}})."\" on GitHub repository \"$ghRepo\"",2);
   }
   return (\@orderedVersionsAndTags,\%engineVersionToReleaseTag,$testingVersion,$unstableVersion);
 }
@@ -940,32 +951,51 @@ sub getGithubDefaultBranch {
 sub _getEngineGithubDownloadUrl {
   my ($version,$ghTag,$r_githubInfo)=@_;
   my $ghRepo=$r_githubInfo->{owner}.'/'.$r_githubInfo->{name};
-  if(! defined $ghTag) {
-    $ghTag=$r_githubInfo->{tag};
-    $ghTag =~ s/\Q<version>\E/$version/g;
-    if(index($ghTag,'<branch>') > -1) {
-      my ($defaultBranch,$errMsg)=getGithubDefaultBranch($r_githubInfo->{owner},$r_githubInfo->{name});
-      if(defined $defaultBranch) {
-        $ghTag =~ s/\Q<branch>\E/$defaultBranch/g;
-      }else{
-        return (undef,"unable to identify default branch of GitHub repository \"$ghRepo\", $errMsg");
-      }
-    }
-  }
-  my $httpRes=HTTP::Tiny->new(timeout => 10)->request('GET','https://github.com/'.$ghRepo.'/releases/expanded_assets/'.HTTP::Tiny->_uri_escape($ghTag));
-  if($httpRes->{success}) {
-    if($httpRes->{content} =~ /href="([^"]+\/$r_githubInfo->{asset})"/) {
-      my $assetUrl=$1;
-      $assetUrl='https://github.com'.$assetUrl if(substr($assetUrl,0,1) eq '/');
-      return ($assetUrl);
-    }else{
-      return (undef,"no asset matching regular expression \"$r_githubInfo->{asset}\" found in release \"$ghTag\" of GitHub repository \"$ghRepo\"");
-    }
-  }elsif($httpRes->{status} == 404) {
-    return (undef,"release not found on GitHub: invalid tag \"$ghTag\" or invalid repository \"$ghRepo\"");
+  my @ghTags;
+  if(defined $ghTag) {
+    @ghTags=($ghTag);
   }else{
-    return (undef,"unable to check version availability, HTTP status:$httpRes->{status}");
+    @ghTags=@{$r_githubInfo->{tags}};
+    my $defaultBranch;
+    foreach my $tag (@ghTags) {
+      $tag =~ s/\Q<version>\E/$version/g;
+      next unless(index($tag,'<branch>') > -1);
+      if(! defined $defaultBranch) {
+        my $errMsg;
+        ($defaultBranch,$errMsg)=getGithubDefaultBranch($r_githubInfo->{owner},$r_githubInfo->{name});
+        return (undef,"unable to identify default branch of GitHub repository \"$ghRepo\", $errMsg")
+            unless(defined $defaultBranch);
+      }
+      $tag =~ s/\Q<branch>\E/$defaultBranch/g;
+    }
   }
+  my @tagsWithNoMatchingAsset;
+  my @notFoundTags;
+  my %httpErrStatus;
+  foreach my $relTag (@ghTags) {
+    my $httpRes=HTTP::Tiny->new(timeout => 10)->request('GET','https://github.com/'.$ghRepo.'/releases/expanded_assets/'.HTTP::Tiny->_uri_escape($relTag));
+    if($httpRes->{success}) {
+      if($httpRes->{content} =~ /href="([^"]+\/$r_githubInfo->{asset})"/) {
+        my $assetUrl=$1;
+        $assetUrl='https://github.com'.$assetUrl if(substr($assetUrl,0,1) eq '/');
+        return ($assetUrl);
+      }else{
+        push(@tagsWithNoMatchingAsset,$relTag);
+      }
+    }elsif($httpRes->{status} == 404) {
+      push(@notFoundTags,$relTag);
+    }else{
+      $httpErrStatus{$httpRes->{status}}=1;
+    }
+  }
+  return (undef,'release not found on GitHub: invalid tag'.(@notFoundTags>1?'s':'').' "'.join(', ',@notFoundTags)."\" or invalid repository \"$ghRepo\"")
+      unless(@tagsWithNoMatchingAsset || %httpErrStatus);
+  my @errMsgs;
+  push(@errMsgs,"no asset matching regular expression \"$r_githubInfo->{asset}\" found in release".(@tagsWithNoMatchingAsset>1?'s':'').' "'.join(', ',@tagsWithNoMatchingAsset)."\" of GitHub repository \"$ghRepo\"")
+      if(@tagsWithNoMatchingAsset);
+  push(@errMsgs,'unable to check version availability, HTTP status: '.join(', ',sort keys %httpErrStatus))
+      if(%httpErrStatus);
+  return (undef,join(' + ',@errMsgs));
 }
 
 # Called by spadsInstaller.pl, spads.pl
