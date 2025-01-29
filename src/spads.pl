@@ -106,7 +106,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.40';
+our $SPADS_VERSION='0.13.41';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -13512,6 +13512,7 @@ sub cbRedirect {
       slog("Invalid IP address \"$ip\" received in REDIRECT command, ignoring redirection",1);
       return;
     }
+    slog("Received redirection request to $ip:$port",3);
     %pendingRedirect=(ip => $ip, port => $port);
   }else{
     slog("Ignoring redirection request to address $ip",2);
@@ -15737,13 +15738,15 @@ sub checkLobbyConnection {
     my ($ip,$port)=($pendingRedirect{ip},$pendingRedirect{port});
     %pendingRedirect=();
     slog("Following redirection to $ip:$port",3);
-    logMsg("battle","=== $conf{lobbyLogin} left ===") if($lobbyState > LOBBY_STATE_OPENING_BATTLE && $conf{logBattleJoinLeave});
-    $lobbyState=LOBBY_STATE_DISCONNECTED;
-    foreach my $joinedChan (keys %{$lobby->{channels}}) {
-      logMsg("channel_$joinedChan","=== $conf{lobbyLogin} left ===") if($conf{logChanJoinLeave});
+    if($lobbyState > LOBBY_STATE_DISCONNECTED) {
+      logMsg("battle","=== $conf{lobbyLogin} left ===") if($lobbyState > LOBBY_STATE_OPENING_BATTLE && $conf{logBattleJoinLeave});
+      $lobbyState=LOBBY_STATE_DISCONNECTED;
+      foreach my $joinedChan (keys %{$lobby->{channels}}) {
+        logMsg("channel_$joinedChan","=== $conf{lobbyLogin} left ===") if($conf{logChanJoinLeave});
+      }
+      SimpleEvent::unregisterSocket($lobby->{lobbySock});
+      $lobby->disconnect();
     }
-    SimpleEvent::unregisterSocket($lobby->{lobbySock});
-    $lobby->disconnect();
     $conf{lobbyHost}=$ip;
     $conf{lobbyPort}=$port;
     $lobby = SpringLobbyInterface->new(serverHost => $conf{lobbyHost},

@@ -1038,6 +1038,7 @@ spads.pl:
          extend command aliasing functionality (alias parameters can be reused to build new parameters)
          improve private and hidden settings management
 0.13.40: new plugin API customization callback "commandRightsOverride" (allows overriding access level requirements for calling SPADS commands)
+0.13.41: fix Perl warnings occuring when the lobby server closes the connection just after sending the REDIRECT command
 
 SpadsConf.pm:
 ============
