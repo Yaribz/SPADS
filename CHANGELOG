@@ -1039,6 +1039,7 @@ spads.pl:
          improve private and hidden settings management
 0.13.40: new plugin API customization callback "commandRightsOverride" (allows overriding access level requirements for calling SPADS commands)
 0.13.41: fix Perl warnings occuring when the lobby server closes the connection just after sending the REDIRECT command
+0.13.42: fix bug introduced in SPADS 0.13.39 which made the "preSpadsCommand" and "postSpadsCommand" plugin API callbacks receive nested arrays as command parameters for auto-voted commands
 
 SpadsConf.pm:
 ============

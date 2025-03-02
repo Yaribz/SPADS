@@ -106,7 +106,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.41';
+our $SPADS_VERSION='0.13.42';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -3149,9 +3149,10 @@ sub executeCommand {
 
   if(exists $spadsCmdHandlers{$command}) {
     my $commandAllowed=1;
+    my $r_actualParams = (@cmd == 1 && ref $cmd[0] eq 'ARRAY') ? $cmd[0] : \@cmd;
     if(! $checkOnly) {
       foreach my $pluginName (@pluginsOrder) {
-        $commandAllowed=$plugins{$pluginName}->preSpadsCommand($command,$source,$user,\@cmd) if($plugins{$pluginName}->can('preSpadsCommand'));
+        $commandAllowed=$plugins{$pluginName}->preSpadsCommand($command,$source,$user,$r_actualParams) if($plugins{$pluginName}->can('preSpadsCommand'));
         last unless($commandAllowed);
       }
     }
@@ -3159,7 +3160,7 @@ sub executeCommand {
     my $spadsCommandRes=&{$spadsCmdHandlers{$command}}($source,$user,\@cmd,$checkOnly);
     if(! $checkOnly) {
       foreach my $pluginName (@pluginsOrder) {
-        $plugins{$pluginName}->postSpadsCommand($command,$source,$user,\@cmd,$spadsCommandRes) if($plugins{$pluginName}->can('postSpadsCommand'));
+        $plugins{$pluginName}->postSpadsCommand($command,$source,$user,$r_actualParams,$spadsCommandRes) if($plugins{$pluginName}->can('postSpadsCommand'));
       }
     }
     return $spadsCommandRes;
