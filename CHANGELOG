@@ -1356,6 +1356,9 @@ spadsInstaller.pl:
 0.41: add SpringLobbyProtocol to the list of auto-updated packages (new dependency of SpringLobbyInterface)
 0.42: use BAR specific Rapid repository when auto-downloading BAR (use pr-downloader environment variables defined in BAR launcher config file)
 0.43: update default tag templates to handle the new Github release tag format used by Recoil engine
+0.44: add "s44(test)" to the list of games available for auto-download (current test version of "Spring: 1944")
+      add "s44" to the list of map sets available for auto-download (all "Spring: 1944" specific maps)
+      allow "sdz" file extension in addition to "sd7" for auto-downloaded map archives
 
 SpadsPluginApi.pm:
 =================

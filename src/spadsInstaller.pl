@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.43 (2025/01/20)
+# Version 0.44 (2025/03/15)
 
 use strict;
 
@@ -376,7 +376,7 @@ sub downloadMapsWithProgressBar {
   my $downloadAborted;
   for my $idx (0..$#{$r_urls}) {
     my $url=$r_urls->[$idx];
-    if($url =~ /\/([^\/]+\.sd7)$/) {
+    if($url =~ /\/([^\/]+\.sd[7z])$/) {
       my $fileName=$1;
       updateProgressBar(undef,$fileName);
       my $filePath=catfile($targetDir,$fileName);
@@ -817,6 +817,7 @@ sub configureSpringDataDir {
       if(-f $prdPath && -x _) {
         $games{'techa(test)'}=['Tech Annihilation','rapid://techa:test'];
         $games{bar}=['Beyond All Reason','rapid://byar:test'];
+        $games{'s44(test)'}=['Spring: 1944 (test)','rapid://s44:test'];
       }
       my %gamesData;
       foreach my $shortName (sort keys %games) {
@@ -892,6 +893,7 @@ sub configureSpringDataDir {
       createDir($mapsDir);
       print "\nDirectory \"$mapsDir\" has been created to store the maps used by the autohost.\n";
       my @allBarMaps;
+      my @s44MapsUrls;
       if(SpadsUpdater::checkHttpsSupport()) {
         my $httpTiny=HTTP::Tiny->new(timeout => 10);
         my $httpRes=$httpTiny->get('https://maps-metadata.beyondallreason.dev/latest/live_maps.validated.json');
@@ -928,6 +930,32 @@ sub configureSpringDataDir {
             slog('Failed to retrieve the list of Beyond All Reason maps ('.getHttpErrMsg($httpRes).')',2)
           }
         }
+        @s44MapsUrls=map {'https://springfiles.springrts.com/files/maps/'.$_} (
+          qw'
+          1944_antwerp_alpha2.sd7
+          1944_bloodbay_v1.sd7
+          1944_bocageskirmish.sd7
+          1944_caucasus_skirmish_v4.sd7
+          1944_cooper_hill_v3.sd7
+          1944_floodbank_v0.sd7
+          1944_hill_128.sd7
+          1944_keep_off_the_grass_v2.sd7
+          1944_kiev_v4.sd7
+          1944_liege_v2.sd7
+          1944_moro_river_v1.sd7
+          nuclear_winter_1944.sd7
+          1944_plateau_v2.sd7
+          1944_prokhorovka_v2.sd7
+          1944_prokhorovka_tactics_v3.sd7
+          1944_red_planet_tactics.sd7
+          1944_river_valley_v4.sdz
+          1944_road_to_rome_v3.sd7
+          1944_sierra_tactics.sd7
+          1944_titan.sd7
+          1944_terra_firma.sd7
+          verdant_1944.sd7
+          1944_village_crossing_v2.sd7
+          ');
       }else{
         slog("Unable to retrieve Beyond All Reason map lists because TLS support is missing (IO::Socket::SSL version 1.42 or superior and Net::SSLeay version 1.49 or superior are required)",2);
       }
@@ -937,6 +965,10 @@ sub configureSpringDataDir {
       if(@allBarMaps) {
         print '  bar      : all Beyond All Reason maps ('.(scalar @allBarMaps)." maps)\n";
         push(@availableMapSets,'bar');
+      }
+      if(@s44MapsUrls) {
+        print '  s44      : all Spring: 1944 maps ('.(scalar @s44MapsUrls)." maps)\n";
+        push(@availableMapSets,'s44');
       }
       print "  none     : no automatic map download (map archives must be placed manually in \"$mapsDir\")\n";
       print "\n";
@@ -954,6 +986,9 @@ sub configureSpringDataDir {
         slog('Downloading maps...',3);
         my @mapUrls=map {'http://planetspads.free.fr/spring/maps/'.$_} (qw'comet_catcher_redux.sd7 deltasiegedry.sd7 red_comet.sd7');
         downloadMapsWithProgressBar(\@mapUrls,$mapsDir);
+      }elsif($autoDownloadMaps eq 's44') {
+        slog('Downloading maps...',3);
+        downloadMapsWithProgressBar(\@s44MapsUrls,$mapsDir);
       }
     }else{
       $nbSteps-=2;
