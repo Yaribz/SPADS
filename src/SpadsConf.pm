@@ -39,7 +39,7 @@ use SimpleLog;
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.13.12';
+my $moduleVersion='0.13.13';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -308,7 +308,7 @@ sub _computeGhInfoSubdir {
   my $r_ghInfo=shift;
   if($r_ghInfo->{owner} eq 'beyond-all-reason' && $r_ghInfo->{name} eq 'spring') {
     $r_ghInfo->{subdir}='recoil';
-    return if(@{$r_ghInfo->{tags}} == 2 && $r_ghInfo->{tags}[0] eq 'spring_bar_{<branch>}<version>' && $r_ghInfo->{tags}[1] eq '<version>');
+    return if(@{$r_ghInfo->{tags}} == 3 && $r_ghInfo->{tags}[0] eq 'recoil{<branch>}<version>' && $r_ghInfo->{tags}[1] eq 'spring_bar_{<branch>}<version>' && $r_ghInfo->{tags}[2] eq '<version>');
   }
   my $ghTagsHash=substr(md5_base64(join('|',@{$r_ghInfo->{tags}})),0,7);
   $ghTagsHash=~tr/\/\+/ab/;
@@ -323,7 +323,7 @@ sub _computeGhInfoSubdir {
 
 sub parseAutoManagedSpringVersion {
   my $autoManagedString=shift;
-  substr($autoManagedString,0,8)='[GITHUB]{owner=beyond-all-reason,name=spring,tag=spring_bar_{<branch>}<version>|<version>,asset=.+_<os>-<bitness>-minimal-portable\.7z}'
+  substr($autoManagedString,0,8)='[GITHUB]{owner=beyond-all-reason,name=spring,tag=recoil{<branch>}<version>|spring_bar_{<branch>}<version>|<version>,asset=recoil_.+_<arch>-<os>\.7z|.+_<os>-<bitness>-minimal-portable\.7z}'
       if(substr($autoManagedString,0,8) eq '[RECOIL]');
   my %autoManagedInfo;
   if($autoManagedString =~ /^\[GITHUB\]\{(.+)\}([^\}]+)$/) {
@@ -333,19 +333,22 @@ sub parseAutoManagedSpringVersion {
       return undef unless($ghInfoString =~ /^([^\=]+)=(.+)$/);
       return undef unless(any {$1 eq $_} (qw'owner name tag asset'));
       return undef if(exists $ghInfo{$1});
-      if($1 eq 'tag') {
-        $ghInfo{tags}=[split(/\|/,$2)];
+      if($1 eq 'tag' || $1 eq 'asset') {
+        $ghInfo{$1.'s'}=[split(/\|/,$2)];
       }else{
         $ghInfo{$1}=$2;
       }
     }
-    return undef unless(all {exists $ghInfo{$_}} (qw'owner name tags asset'));
+    return undef unless(all {exists $ghInfo{$_}} (qw'owner name tags assets'));
     return undef if(any {index($_,'<version>') == -1} @{$ghInfo{tags}});
     my $osString = $win ? 'windows' : $macOs ? 'macos' : 'linux';
-    my $bitnessString = $Config{ptrsize} > 4 ? 64 : 32;
-    $ghInfo{asset}=~s/\Q<os>\E/$osString/g;
-    $ghInfo{asset}=~s/\Q<bitness>\E/$bitnessString/g;
-    return undef if(! eval { qw/^$ghInfo{asset}$/ } || $@);
+    my ($bitnessString,$archString) = $Config{ptrsize} > 4 ? (64,'amd64') : (32,'i386');
+    foreach my $assetTemplate (@{$ghInfo{assets}}) {
+      $assetTemplate=~s/\Q<os>\E/$osString/g;
+      $assetTemplate=~s/\Q<bitness>\E/$bitnessString/g;
+      $assetTemplate=~s/\Q<arch>\E/$archString/g;
+      return undef if(! eval { qw/^$assetTemplate$/ } || $@);
+    }
     _computeGhInfoSubdir(\%ghInfo);
     $autoManagedInfo{github}=\%ghInfo;
   }

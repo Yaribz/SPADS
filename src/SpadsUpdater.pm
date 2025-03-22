@@ -36,7 +36,7 @@ use Time::HiRes;
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $archName=($win?'win':'linux').($Config{ptrsize} > 4 ? 64 : 32);
 
-our $VERSION='0.29';
+our $VERSION='0.30';
 
 my @constructorParams = qw'sLog repository release packages';
 my @optionalConstructorParams = qw'localDir springDir';
@@ -975,13 +975,14 @@ sub _getEngineGithubDownloadUrl {
   foreach my $relTag (@ghTags) {
     my $httpRes=HTTP::Tiny->new(timeout => 10)->request('GET','https://github.com/'.$ghRepo.'/releases/expanded_assets/'.HTTP::Tiny->_uri_escape($relTag));
     if($httpRes->{success}) {
-      if($httpRes->{content} =~ /href="([^"]+\/$r_githubInfo->{asset})"/) {
-        my $assetUrl=$1;
-        $assetUrl='https://github.com'.$assetUrl if(substr($assetUrl,0,1) eq '/');
-        return ($assetUrl);
-      }else{
-        push(@tagsWithNoMatchingAsset,$relTag);
+      foreach my $assetTemplate (@{$r_githubInfo->{assets}}) {
+        if($httpRes->{content} =~ /href="([^"]+\/$assetTemplate)"/) {
+          my $assetUrl=$1;
+          $assetUrl='https://github.com'.$assetUrl if(substr($assetUrl,0,1) eq '/');
+          return ($assetUrl);
+        }
       }
+      push(@tagsWithNoMatchingAsset,$relTag);
     }elsif($httpRes->{status} == 404) {
       push(@notFoundTags,$relTag);
     }else{
@@ -991,7 +992,7 @@ sub _getEngineGithubDownloadUrl {
   return (undef,'release not found on GitHub: invalid tag'.(@notFoundTags>1?'s':'').' "'.join(', ',@notFoundTags)."\" or invalid repository \"$ghRepo\"")
       unless(@tagsWithNoMatchingAsset || %httpErrStatus);
   my @errMsgs;
-  push(@errMsgs,"no asset matching regular expression \"$r_githubInfo->{asset}\" found in release".(@tagsWithNoMatchingAsset>1?'s':'').' "'.join(', ',@tagsWithNoMatchingAsset)."\" of GitHub repository \"$ghRepo\"")
+  push(@errMsgs,"no asset matching regular expression \"".join('|',@{$r_githubInfo->{assets}})."\" found in release".(@tagsWithNoMatchingAsset>1?'s':'').' "'.join(', ',@tagsWithNoMatchingAsset)."\" of GitHub repository \"$ghRepo\"")
       if(@tagsWithNoMatchingAsset);
   push(@errMsgs,'unable to check version availability, HTTP status: '.join(', ',sort keys %httpErrStatus))
       if(%httpErrStatus);

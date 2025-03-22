@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.44 (2025/03/15)
+# Version 0.45 (2025/03/22)
 
 use strict;
 
@@ -76,8 +76,8 @@ my @RECOIL_SPECIFIC_RELEASES=(qw'bar barTesting');
 my %RECOIL_GITHUB_REPO_PARAMS=(
   owner => 'beyond-all-reason',
   name => 'spring',
-  tag => 'spring_bar_{<branch>}<version>|<version>',
-  asset => '.+_<os>-<bitness>-minimal-portable\.7z',
+  tag => 'recoil{<branch>}<version>|spring_bar_{<branch>}<version>|<version>',
+  asset => 'recoil_.+_<arch>-<os>\.7z|.+_<os>-<bitness>-minimal-portable\.7z',
     );
 
 my @MAP_RESOLVERS=(
@@ -1100,9 +1100,10 @@ sub ghAssetTemplateToRegex {
   my $assetTmpl=shift;
   return undef if(index($assetTmpl,',') != -1);
   my $osString = MSWIN32 ? 'windows' : $macOs ? 'macos' : 'linux';
-  my $bitnessString = $Config{ptrsize} > 4 ? 64 : 32;
+  my ($bitnessString,$archString) = $Config{ptrsize} > 4 ? (64,'amd64') : (32,'i386');
   $assetTmpl=~s/\Q<os>\E/$osString/g;
   $assetTmpl=~s/\Q<bitness>\E/$bitnessString/g;
+  $assetTmpl=~s/\Q<arch>\E/$archString/g;
   return $assetTmpl if(eval { qw/^$assetTmpl$/ } && ! $@);
   return undef;
 }
@@ -1285,22 +1286,22 @@ if($engineBinariesType eq 'official') {
 
   my %ghInfo;
   my $ghTags;
-  my $ghAsset;
+  my $ghAssets;
   if($engineBinariesType eq 'recoil') {
     @ghInfo{qw'owner name'}=@RECOIL_GITHUB_REPO_PARAMS{qw'owner name'};
-    ($ghTags,$ghAsset)=@RECOIL_GITHUB_REPO_PARAMS{qw'tag asset'};
+    ($ghTags,$ghAssets)=@RECOIL_GITHUB_REPO_PARAMS{qw'tag asset'};
   }else{
     $ghInfo{owner}=promptString('       Please enter the GitHub repository owner name',$RECOIL_GITHUB_REPO_PARAMS{owner},$autoInstallData{githubOwner},sub {$_[0]=~/^[\w\-]+$/});
     setLastRun('githubOwner',$ghInfo{owner});
     $ghInfo{name}=promptString('       Please enter the GitHub repository name',$RECOIL_GITHUB_REPO_PARAMS{name},$autoInstallData{githubName},sub {$_[0]=~/^[\w\-\.]+$/});
     setLastRun('githubName',$ghInfo{name});
-    $ghTags=promptString('       Please enter the GitHub release tag template',$RECOIL_GITHUB_REPO_PARAMS{tag},$autoInstallData{githubTag}, sub {all {index($_,'<version>') != -1 && index($_,',') == -1} split(/\|/,$_[0])});
+    $ghTags=promptString('       Please enter the GitHub release tag template',$RECOIL_GITHUB_REPO_PARAMS{tag},$autoInstallData{githubTag},sub {all {index($_,'<version>') != -1 && index($_,',') == -1} split(/\|/,$_[0])});
     setLastRun('githubTag',$ghTags);
-    $ghAsset=promptString('       Please enter the GitHub asset regular expression',$RECOIL_GITHUB_REPO_PARAMS{asset},$autoInstallData{githubAsset},\&ghAssetTemplateToRegex);
-    setLastRun('githubAsset',$ghAsset);
+    $ghAssets=promptString('       Please enter the GitHub asset regular expression',$RECOIL_GITHUB_REPO_PARAMS{asset},$autoInstallData{githubAsset},sub {all {ghAssetTemplateToRegex($_)} split(/\|/,$_[0])});
+    setLastRun('githubAsset',$ghAssets);
   }
   $ghInfo{tags}=[split(/\|/,$ghTags)];
-  $ghInfo{asset}=ghAssetTemplateToRegex($ghAsset);
+  $ghInfo{assets}=[map {ghAssetTemplateToRegex($_)} split(/\|/,$ghAssets)];
   
   my $ghRepo=join('/',@ghInfo{qw'owner name'});
   my ($ghRepoHash,$ghTagsHash) = map {substr(md5_base64($_),0,7)} ($ghRepo,$ghTags);
@@ -1445,7 +1446,7 @@ if($engineBinariesType eq 'official') {
           s/\Q<branch>\E/$ghBranch/g foreach(@releaseTags);
           $ghInfoForSetup{tags}=\@releaseTags;
         }else{
-          slog("Inconsistent engine version format: engine branch \"$ghBranch\" specified but the GitHub release tag template \"".join('|',@{$ghInfo{tags}}).'" does NOT contain any "<branch>" placeholder',2);
+          slog("Inconsistent engine version format: engine branch \"$ghBranch\" specified but the GitHub release tag template \"$ghTags\" does NOT contain any \"<branch>\" placeholder",2);
           ($engineVersion,$releaseTag,$autoManagedSpringVersion)=(undef,undef,'');
           next;
         }
@@ -1483,7 +1484,7 @@ if($engineBinariesType eq 'official') {
     last;
   }
   setLastRun('autoManagedSpringVersion',$autoManagedSpringVersion);
-  $conf{autoManagedSpringVersion} = ($engineBinariesType eq 'recoil' ? '[RECOIL]' : "[GITHUB]{owner=$ghInfo{owner},name=$ghInfo{name},tag=".join('|',@{$ghInfo{tags}}).",asset=$ghAsset}").$autoManagedSpringVersion;
+  $conf{autoManagedSpringVersion} = ($engineBinariesType eq 'recoil' ? '[RECOIL]' : "[GITHUB]{owner=$ghInfo{owner},name=$ghInfo{name},tag=$ghTags,asset=$ghAssets}").$autoManagedSpringVersion;
   $conf{autoInstalledSpringDir}=$updater->getEngineDir($engineVersion,\%ghInfoForSetup);
   
 }else{
