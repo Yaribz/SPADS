@@ -33,7 +33,7 @@ sub new {
   bless($self,$class);
 
   # We call the API function "slog" to log a notice message (level 3) when the plugin is loaded
-  slog("HelloWorld plugin loaded (version $pluginVersion)",3);
+  slog("Plugin loaded (version $pluginVersion)",3);
 
   # We return the instantiated plugin
   return $self;

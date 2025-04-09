@@ -10,9 +10,9 @@ use SpadsPluginApi;
 # This is the first version of the plugin
 my $pluginVersion='0.1';
 
-# This plugin is compatible with any SPADS version which supports plugins
-# (only SPADS versions >= 0.11 support plugins)
-my $requiredSpadsVersion='0.11';
+# Only SPADS versions >= 0.13.35 support the "onLobbySynchronized" callback and
+# lobby state constants.
+my $requiredSpadsVersion='0.13.35';
 
 # We define one global setting "words" and one preset setting "immuneLevel".
 # "words" has no type associated (no restriction on allowed values)
@@ -44,27 +44,33 @@ sub new {
   bless($self,$class);
 
   # We call the API function "slog" to log a notice message (level 3) when the plugin is loaded
-  slog("ForbiddenWords plugin loaded (version $pluginVersion)",3);
+  slog("Plugin loaded (version $pluginVersion)",3);
 
-  # We set up a lobby command handler on SAIDBATTLE
-  addLobbyCommandHandler({SAIDBATTLE => \&hLobbySaidBattle});
+  # If SPADS is already connected and synchronized with the lobby server, then
+  # we add our lobby command handler for SAIDBATTLE. Else this will be done
+  # later by our "onLobbySynchronized" callback (once the connection to the
+  # lobby server is established).
+  addLobbyCommandHandler({SAIDBATTLE => \&hLobbySaidBattle})
+      if(getLobbyState() >= LOBBY_STATE_SYNCHRONIZED);
 
   # We return the instantiated plugin
   return $self;
 
 }
 
-# This callback is called each time we (re)connect to the lobby server
-sub onLobbyConnected {
+# This callback is called every time the connection to the lobby server is
+# (re)established, just after all initial lobby synchronization commands have
+# been received.
+sub onLobbySynchronized {
 
   # When we are disconnected from the lobby server, all lobby command
-  # handlers are automatically removed, so we (re)set up our command
-  # handler here.
+  # handlers are automatically removed, so we (re)add our command handler
+  # every time we (re)connect to the lobby server.
   addLobbyCommandHandler({SAIDBATTLE => \&hLobbySaidBattle});
 
 }
 
-# This is the handler we set up on SAIDBATTLE lobby command.
+# This is the handler we set up for the SAIDBATTLE lobby command.
 # It is called each time a player says something in the battle lobby.
 sub hLobbySaidBattle {
 
@@ -107,8 +113,13 @@ sub hLobbySaidBattle {
 # This callback is called when the plugin is unloaded
 sub onUnload {
 
-  # We remove our lobby command handler when the plugin is unloaded
-  removeLobbyCommandHandler(['SAIDBATTLE']);
+  # If SPADS is currently connected and synchronized with the lobby server, then
+  # we must remove our lobby command handler.
+  removeLobbyCommandHandler(['SAIDBATTLE'])
+      if(getLobbyState() >= LOBBY_STATE_SYNCHRONIZED);
+
+  # We log a notice message when the plugin is unloaded
+  slog("Plugin unloaded",3);
 
 }
 

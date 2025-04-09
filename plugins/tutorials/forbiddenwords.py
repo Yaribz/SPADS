@@ -11,9 +11,9 @@ spads=perl.ForbiddenWords
 # This is the first version of the plugin
 pluginVersion='0.1'
 
-# This plugin requires a SPADS version which supports Python plugins
-# (only SPADS versions >= 0.12.29 support Python plugins)
-requiredSpadsVersion='0.12.29'
+# Only SPADS versions >= 0.13.35 support the "onLobbySynchronized" callback and
+# lobby state constants.
+requiredSpadsVersion='0.13.35'
 
 # We define one global setting "words" and one preset setting "immuneLevel".
 # "words" has no type associated (no restriction on allowed values)
@@ -46,28 +46,39 @@ class ForbiddenWords:
         
         # We call the API function "slog" to log a notice message (level 3) when the plugin is loaded
         spads.slog("Plugin loaded (version %s)" % pluginVersion,3)
+        
+        # If SPADS is already connected and synchronized with the lobby server,
+        # then we add our lobby command handler for SAIDBATTLE. Else this will
+        # be done later by our "onLobbySynchronized" callback (once the
+        # connection to the lobby server is established).
+        if spads.getLobbyState() >= spads.LOBBY_STATE_SYNCHRONIZED():
+            spads.addLobbyCommandHandler({'SAIDBATTLE': hLobbySaidBattle})
 
-        # We set up a lobby command handler on SAIDBATTLE
-        spads.addLobbyCommandHandler({'SAIDBATTLE': hLobbySaidBattle})
 
-
-    # This callback is called each time we (re)connect to the lobby server
-    def onLobbyConnected(self,lobbyInterface):
+    # This callback is called every time the connection to the lobby server is
+    # (re)established, just after all initial lobby synchronization commands
+    # have been received.
+    def onLobbySynchronized(self,lobbyInterface):
         
         # When we are disconnected from the lobby server, all lobby command
-        # handlers are automatically removed, so we (re)set up our command
-        # handler here.
+        # handlers are automatically removed, so we (re)add our command handler
+        # every time we (re)connect to the lobby server.
         spads.addLobbyCommandHandler({'SAIDBATTLE': hLobbySaidBattle})
 
 
     # This callback is called when the plugin is unloaded
     def onUnload(self,reason):
         
-        # We remove our lobby command handler when the plugin is unloaded
-        spads.removeLobbyCommandHandler(['SAIDBATTLE'])
+        # If SPADS is currently connected and synchronized with the lobby server,
+        # then we must remove our lobby command handler.
+        if spads.getLobbyState() >= spads.LOBBY_STATE_SYNCHRONIZED():
+            spads.removeLobbyCommandHandler(['SAIDBATTLE'])
+        
+        # We log a notice message when the plugin is unloaded
+        spads.slog("Plugin unloaded",3)
 
 
-# This is the handler we set up on SAIDBATTLE lobby command.
+# This is the handler we set up for the SAIDBATTLE lobby command.
 # It is called each time a player says something in the battle lobby.
 #   command is the lobby command name (SAIDBATTLE)
 #   user is the name of the user who said something in the battle lobby
@@ -91,7 +102,7 @@ def hLobbySaidBattle(command,user,message):
     
     # We put the forbidden words in a list
     forbiddenWords = pluginConf['words'].split(';')
-            
+    
     # We test each forbidden word
     for forbiddenWord in forbiddenWords:
         
@@ -101,6 +112,6 @@ def hLobbySaidBattle(command,user,message):
             # Then we kick the user from the battle lobby
             spads.sayBattle("Kicking %s from battle (watch your language!)" % user)
             spads.queueLobbyCommand(["KICKFROMBATTLE",user])
-                    
+            
             # We quit the foreach loop (no need to test other forbidden word)
             break
