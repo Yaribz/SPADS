@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.45 (2025/03/22)
+# Version 0.46 (2025/04/24)
 
 use strict;
 
@@ -75,7 +75,7 @@ my @RECOIL_SPECIFIC_RELEASES=(qw'bar barTesting');
 
 my %RECOIL_GITHUB_REPO_PARAMS=(
   owner => 'beyond-all-reason',
-  name => 'spring',
+  name => 'RecoilEngine',
   tag => 'recoil{<branch>}<version>|spring_bar_{<branch>}<version>|<version>',
   asset => 'recoil_.+_<arch>-<os>\.7z|.+_<os>-<bitness>-minimal-portable\.7z',
     );
@@ -1306,7 +1306,7 @@ if($engineBinariesType eq 'official') {
   my $ghRepo=join('/',@ghInfo{qw'owner name'});
   my ($ghRepoHash,$ghTagsHash) = map {substr(md5_base64($_),0,7)} ($ghRepo,$ghTags);
   tr/\/\+/ab/ foreach($ghRepoHash,$ghTagsHash);
-  if(all {$ghInfo{$_} eq $RECOIL_GITHUB_REPO_PARAMS{$_}} (qw'owner name')) {
+  if($ghInfo{owner} eq $RECOIL_GITHUB_REPO_PARAMS{owner} && ($ghInfo{name} eq $RECOIL_GITHUB_REPO_PARAMS{name} || $ghInfo{name} eq 'spring')) {
     $ghInfo{subdir}='recoil';
     $ghInfo{subdir}.="($ghTagsHash)" unless($ghTags eq $RECOIL_GITHUB_REPO_PARAMS{tag});
   }else{

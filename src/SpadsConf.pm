@@ -39,7 +39,7 @@ use SimpleLog;
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.13.13';
+my $moduleVersion='0.13.14';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -306,7 +306,7 @@ my %paramTypes = (login => '[\w\[\]]{2,20}',
 
 sub _computeGhInfoSubdir {
   my $r_ghInfo=shift;
-  if($r_ghInfo->{owner} eq 'beyond-all-reason' && $r_ghInfo->{name} eq 'spring') {
+  if($r_ghInfo->{owner} eq 'beyond-all-reason' && ($r_ghInfo->{name} eq 'spring' || $r_ghInfo->{name} eq 'RecoilEngine')) {
     $r_ghInfo->{subdir}='recoil';
     return if(@{$r_ghInfo->{tags}} == 3 && $r_ghInfo->{tags}[0] eq 'recoil{<branch>}<version>' && $r_ghInfo->{tags}[1] eq 'spring_bar_{<branch>}<version>' && $r_ghInfo->{tags}[2] eq '<version>');
   }
@@ -323,7 +323,7 @@ sub _computeGhInfoSubdir {
 
 sub parseAutoManagedSpringVersion {
   my $autoManagedString=shift;
-  substr($autoManagedString,0,8)='[GITHUB]{owner=beyond-all-reason,name=spring,tag=recoil{<branch>}<version>|spring_bar_{<branch>}<version>|<version>,asset=recoil_.+_<arch>-<os>\.7z|.+_<os>-<bitness>-minimal-portable\.7z}'
+  substr($autoManagedString,0,8)='[GITHUB]{owner=beyond-all-reason,name=RecoilEngine,tag=recoil{<branch>}<version>|spring_bar_{<branch>}<version>|<version>,asset=recoil_.+_<arch>-<os>\.7z|.+_<os>-<bitness>-minimal-portable\.7z}'
       if(substr($autoManagedString,0,8) eq '[RECOIL]');
   my %autoManagedInfo;
   if($autoManagedString =~ /^\[GITHUB\]\{(.+)\}([^\}]+)$/) {

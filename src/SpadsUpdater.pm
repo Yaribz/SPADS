@@ -36,7 +36,7 @@ use Time::HiRes;
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $archName=($win?'win':'linux').($Config{ptrsize} > 4 ? 64 : 32);
 
-our $VERSION='0.30';
+our $VERSION='0.31';
 
 my @constructorParams = qw'sLog repository release packages';
 my @optionalConstructorParams = qw'localDir springDir';
@@ -224,8 +224,6 @@ sub _resolveEngineReleaseNameToVersion {
           if(ref $r_barOnlineConfig eq 'HASH' && ref $r_barOnlineConfig->{setups} eq 'ARRAY') {
             my $osString=$win?'win':'linux';
             my $idFilter = $release eq 'bar' ? "manual-$osString" : "manual-$osString-test-engine";
-            my $downloadBaseUrl='https://github.com/'.$r_githubInfo->{owner}.'/'.$r_githubInfo->{name}.'/releases/download/';
-            my $downloadBaseUrlLength=length($downloadBaseUrl);
             my @tagRegexps=map {buildTagRegexp($_)} @{$r_githubInfo->{tags}};
             foreach my $r_barSetup (@{$r_barOnlineConfig->{setups}}) {
               next unless(ref $r_barSetup eq 'HASH' && ref $r_barSetup->{package} eq 'HASH');
@@ -235,11 +233,8 @@ sub _resolveEngineReleaseNameToVersion {
                 foreach my $r_dlInfo (@{$r_barSetup->{downloads}{resources}}) {
                   next unless(ref $r_dlInfo eq 'HASH' && defined $r_dlInfo->{url} && ref $r_dlInfo->{url} eq '');
                   my $engineUrl=_unescapeUrl($r_dlInfo->{url});
-                  next unless(length($engineUrl) >  $downloadBaseUrlLength && substr($engineUrl,0,$downloadBaseUrlLength) eq $downloadBaseUrl);
-                  my $releaseTag=substr($engineUrl,$downloadBaseUrlLength);
-                  my $endOfTagPos=index($releaseTag,'/');
-                  next unless($endOfTagPos > -1);
-                  substr($releaseTag,$endOfTagPos)='';
+                  next unless($engineUrl =~ /^https:\/\/github\.com\/[\w\.\-]+\/[\w\.\-]+\/releases\/download\/([^\/]+)\//);
+                  my $releaseTag=$1;
                   foreach my $tagRegexp (@tagRegexps) {
                     return ($1,$releaseTag) if($releaseTag =~ /^$tagRegexp$/);
                   }
@@ -269,15 +264,14 @@ sub _resolveEngineReleaseNameToVersion {
     my @tagRegexps=map {buildTagRegexp($_)} @{$r_githubInfo->{tags}};
     my $errMsg="Unable to retrieve engine version number for $release release";
     if($release eq 'stable') {
-      my $ghRepoUrl='https://github.com/'.$ghRepo.'/';
-      my $httpRes=HTTP::Tiny->new(timeout => 10)->request('GET',$ghRepoUrl.'releases/latest');
+      my $httpRes=HTTP::Tiny->new(timeout => 10)->request('GET',"https://github.com/$ghRepo/releases/latest");
       if($httpRes->{success} && ref $httpRes->{redirects} eq 'ARRAY' && @{$httpRes->{redirects}} && defined $httpRes->{url}) {
         my $redirectedUrl=_unescapeUrl($httpRes->{url});
-        my $tagBaseUrl=$ghRepoUrl.'releases/tag/';
-        my $tagBaseUrlLength=length($tagBaseUrl);
         my $failureReason;
-        if(length($redirectedUrl) > $tagBaseUrlLength && substr($redirectedUrl,0,$tagBaseUrlLength) eq $tagBaseUrl) {
-          my $releaseTag=substr($redirectedUrl,$tagBaseUrlLength);
+        if($redirectedUrl =~ /^https:\/\/github\.com\/([\w\.\-]+\/[\w\.\-]+)\/releases\/tag\/(.+)$/) {
+          my ($redirectedGhRepo,$releaseTag)=($1,$2);
+          $sl->log("GitHub repository \"$ghRepo\" has been renamed to \"$redirectedGhRepo\"",2)
+              if($redirectedGhRepo ne $ghRepo);
           foreach my $tagRegexp (@tagRegexps) {
             return ($1,$releaseTag) if($releaseTag =~ /^$tagRegexp$/);
           }
@@ -389,7 +383,11 @@ sub _getGithubRepositoryReleasesPage {
 
   my $httpRes=$httpTiny->request('GET','https://github.com/'.$ghRepo.'/releases?page='.$pageNb);
   return (undef,_getHttpErrMsg($httpRes)) unless($httpRes->{success});
-
+  my $redirectedGhRepo;
+  ($redirectedGhRepo,$ghRepo)=($1,$1)
+      if(ref $httpRes->{redirects} eq 'ARRAY' && @{$httpRes->{redirects}} && defined $httpRes->{url}
+         && _unescapeUrl($httpRes->{url}) =~ /^https:\/\/github\.com\/([\w\.\-]+\/[\w\.\-]+)\/releases/
+         && $ghRepo ne $1);
   my @htmlTagsAndDetails = $httpRes->{content} =~ /\Q<a href="\/$ghRepo\/releases\/tag\/\E([^\"]+)\"(.+?)\Q src="https:\/\/github.com\/$ghRepo\/releases\/expanded_assets\/\E\1"/sg;
   my @results;
   for my $i (0..@htmlTagsAndDetails/2-1) {
@@ -398,7 +396,7 @@ sub _getGithubRepositoryReleasesPage {
     push(@results,[_unescapeUrl($htmlTagsAndDetails[$i*2]),\%labels]);
   }
 
-  return (\@results,undef);
+  return (\@results,undef,$redirectedGhRepo);
 }
 
 sub _getGithubRepositoryReleases {
@@ -406,10 +404,14 @@ sub _getGithubRepositoryReleases {
   my $sl=$self->{sLog};
   
   my $httpTiny=HTTP::Tiny->new(timeout => 10);
-  my ($r_releases,$failureReason)=_getGithubRepositoryReleasesPage($httpTiny,$ghRepo,1);
+  my ($r_releases,$failureReason,$redirectedGhRepo)=_getGithubRepositoryReleasesPage($httpTiny,$ghRepo,1);
   if(! defined $r_releases) {
     $sl->log("Failed to retrieve the list of latest releases for GitHub repository \"$ghRepo\": $failureReason",2);
     return undef;
+  }
+  if(defined $redirectedGhRepo) {
+    $sl->log("GitHub repository \"$ghRepo\" has been renamed to \"$redirectedGhRepo\"",2);
+    ($redirectedGhRepo,$ghRepo)=($ghRepo,$redirectedGhRepo);
   }
   return [] unless(@{$r_releases});
   my $lastRelease=$r_releases->[0][0];
@@ -441,9 +443,14 @@ sub _getGithubRepositoryReleases {
     }
   }
   if(! exists $self->{ghReleasesCache}{$ghRepo}) {
-    $sl->log("Initializing releases cache for GitHub repository \"$ghRepo\"",3);
-    $self->{ghReleasesCache}{$ghRepo}={releasesList => [],
-                                       releasesHash => {}};
+    if(defined $redirectedGhRepo && exists $self->{ghReleasesCache}{$redirectedGhRepo}) {
+      $sl->log("Initializing releases cache of GitHub repository \"$ghRepo\" from renamed repository \"$redirectedGhRepo\"",3);
+      $self->{ghReleasesCache}{$ghRepo}=$self->{ghReleasesCache}{$redirectedGhRepo};
+    }else{
+      $sl->log("Initializing releases cache for GitHub repository \"$ghRepo\"",3);
+      $self->{ghReleasesCache}{$ghRepo}={releasesList => [],
+                                         releasesHash => {}};
+    }
   }
   my $r_alreadyKnownReleases=$self->{ghReleasesCache}{$ghRepo}{releasesHash};
   my (@newReleases,%alreadyProcessedNewReleases);

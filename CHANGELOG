@@ -196,6 +196,7 @@ helpSettings.dat:
 0.7.5: new engine version auto-management functionalities (multi-branch GitHub release tags, Recoil engine shortcut and BAR rolling releases)
 0.7.6: remove Springie emulation mode (deprecated)
 0.7.7: update description of "autoManagedSpringVersion" global setting: multi GitHub tag templates, multi asset regular expressions, "<arch>" placeholder, new default release tag and asset formats for Recoil engine
+0.7.8: update GitHub repository name for Recoil engine (renamed from "spring" to "RecoilEngine")
 
 PerlUnitSync.pm:
 ===============
@@ -1041,6 +1042,8 @@ spads.pl:
 0.13.40: new plugin API customization callback "commandRightsOverride" (allows overriding access level requirements for calling SPADS commands)
 0.13.41: fix Perl warnings occuring when the lobby server closes the connection just after sending the REDIRECT command
 0.13.42: fix bug introduced in SPADS 0.13.39 which made the "preSpadsCommand" and "postSpadsCommand" plugin API callbacks receive nested arrays as command parameters for auto-voted commands
+0.13.43: avoid printing warning when map rotation cannot be performed because only one map is available
+         add a log message when launching game server (INFO level)
 
 SpadsConf.pm:
 ============
@@ -1249,6 +1252,8 @@ SpadsConf.pm:
          update default tag templates to handle the new GitHub release tag format used by Recoil engine
 0.13.13: support multiple GitHub asset regular expressions simultaneously
          update default GitHub realease tag templates and asset regular expressions to handle the new formats used by Recoil engine
+0.13.14: update GitHub repository name for Recoil engine to avoid redirections (renamed from "spring" to "RecoilEngine")
+         use "recoil" engine subdirectory for both "beyond-all-reason/spring" and "beyond-all-reason/RecoilEngine" GitHub repositories
 
 spadsInstaller.pl:
 =================
@@ -1364,6 +1369,8 @@ spadsInstaller.pl:
       allow "sdz" file extension in addition to "sd7" for auto-downloaded map archives
 0.45: support multiple GitHub asset regular expressions simultaneously
       update default GitHub realease tag templates and asset regular expressions to handle the new formats used by Recoil engine
+0.46: update GitHub repository name for Recoil engine to avoid redirections (renamed from "spring" to "RecoilEngine")
+      use "recoil" engine subdirectory for both "beyond-all-reason/spring" and "beyond-all-reason/RecoilEngine" GitHub repositories
 
 SpadsPluginApi.pm:
 =================
@@ -1515,6 +1522,7 @@ SpadsUpdater.pm:
 0.28: fix engine downloads from GitHub no longer working when engine tag contains reserved URI characters (thanks DeviousNull)
 0.29: support multiple GitHub tag templates simultaneously
 0.30: support multiple GitHub asset regular expressions simultaneously
+0.31: support renammed GitHub repository (with automatic import of corresponding releases cache)
 
 springLobbyCertificates.dat:
 ===========================

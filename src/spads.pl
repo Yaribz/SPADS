@@ -106,7 +106,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.42';
+our $SPADS_VERSION='0.13.43';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -4055,8 +4055,10 @@ sub rotateMap {
     sayBattleAndGame("No allowed map compatible with current number of player, map rotation cancelled") if($verbose);
     return;
   }elsif($#{$p_filteredMaps} == 0 && $p_filteredMaps->[0] eq $conf{map}) {
-    slog("Unable to find any other allowed map compatible with current number of players ($nbPlayers), keeping current map",2);
-    sayBattleAndGame("No other allowed map compatible with current number of player, map rotation cancelled") if($verbose);
+    if(@{$p_maps} > 1) {
+      slog("Unable to find any other allowed map compatible with current number of players ($nbPlayers), keeping current map",2);
+      sayBattleAndGame("No other allowed map compatible with current number of player, map rotation cancelled") if($verbose);
+    }
     return;
   }
 
@@ -5681,6 +5683,7 @@ sub startGameServer {
   push(@springServerCmdParams,'--config',$conf{springConfig}) unless($conf{springConfig} eq '');
   my $logFile=catfile($conf{logDir},"spring-$springServerType.log");
 
+  slog('Launching Spring server...',4);
   if($conf{useWin32Process}) {
     $springWin32Process=SimpleEvent::createWin32Process($springServerBin,
                                                         \@springServerCmdParams,
