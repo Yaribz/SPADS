@@ -7,7 +7,7 @@
 # - map files (based on a JSON index file as used by Beyond All Reason)
 # - game files (using pr-downloader)
 #
-# Copyright (C) 2024  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2025  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -40,7 +40,7 @@ use Storable qw'nstore retrieve';
 
 use SpadsPluginApi;
 
-my $pluginVersion='0.2';
+my $pluginVersion='0.3';
 my $requiredSpadsVersion='0.13.15';
 
 use constant {
@@ -416,31 +416,33 @@ sub updateBarBlocking {
       $result{game}={error => $errMsg};
       return \%result;
     }
-    if(! defined $self->{prDownloaderEnvVars}) {
-      my $httpRes=HTTP::Tiny->new(timeout => $r_pluginConf->{httpTimeout})->get(BAR_LAUNCHER_CONFIG_URL);
-      if($httpRes->{success}) {
-        my $r_barLauncherConf = eval {decode_json($httpRes->{content})};
-        if(ref $r_barLauncherConf eq 'HASH' && ref $r_barLauncherConf->{setups} eq 'ARRAY') {
-          my $launcherPackageId = 'manual-'.(MSWIN32 ? 'win' : 'linux');
-          foreach my $r_barSetup (@{$r_barLauncherConf->{setups}}) {
-            next unless(ref $r_barSetup eq 'HASH' && ref $r_barSetup->{package} eq 'HASH');
-            my $r_barPackage=$r_barSetup->{package};
-            next unless(defined $r_barPackage->{id} && ref $r_barPackage->{id} eq '' && $r_barPackage->{id} eq $launcherPackageId);
-            if(ref $r_barSetup->{env_variables} eq 'HASH' && (all {defined $r_barSetup->{env_variables}{$_} && ref $r_barSetup->{env_variables}{$_} eq ''} (keys %{$r_barSetup->{env_variables}}))) {
-              if(! defined $self->{cache}{prDownloaderEnvVars} || keys %{$self->{cache}{prDownloaderEnvVars}} != keys %{$r_barSetup->{env_variables}}
-                 || (any {! defined $self->{cache}{prDownloaderEnvVars}{$_} || $self->{cache}{prDownloaderEnvVars}{$_} ne $r_barSetup->{env_variables}{$_}} (keys %{$r_barSetup->{env_variables}}))) {
-                $self->{cache}{prDownloaderEnvVars}=$r_barSetup->{env_variables};
-                $result{cache}{prDownloaderEnvVars}=$r_barSetup->{env_variables};
+    if(lc(substr($gameRapidTag,0,5)) eq 'byar:') {
+      if(! defined $self->{prDownloaderEnvVars}) {
+        my $httpRes=HTTP::Tiny->new(timeout => $r_pluginConf->{httpTimeout})->get(BAR_LAUNCHER_CONFIG_URL);
+        if($httpRes->{success}) {
+          my $r_barLauncherConf = eval {decode_json($httpRes->{content})};
+          if(ref $r_barLauncherConf eq 'HASH' && ref $r_barLauncherConf->{setups} eq 'ARRAY') {
+            my $launcherPackageId = 'manual-'.(MSWIN32 ? 'win' : 'linux');
+            foreach my $r_barSetup (@{$r_barLauncherConf->{setups}}) {
+              next unless(ref $r_barSetup eq 'HASH' && ref $r_barSetup->{package} eq 'HASH');
+              my $r_barPackage=$r_barSetup->{package};
+              next unless(defined $r_barPackage->{id} && ref $r_barPackage->{id} eq '' && $r_barPackage->{id} eq $launcherPackageId);
+              if(ref $r_barSetup->{env_variables} eq 'HASH' && (all {defined $r_barSetup->{env_variables}{$_} && ref $r_barSetup->{env_variables}{$_} eq ''} (keys %{$r_barSetup->{env_variables}}))) {
+                if(! defined $self->{cache}{prDownloaderEnvVars} || keys %{$self->{cache}{prDownloaderEnvVars}} != keys %{$r_barSetup->{env_variables}}
+                   || (any {! defined $self->{cache}{prDownloaderEnvVars}{$_} || $self->{cache}{prDownloaderEnvVars}{$_} ne $r_barSetup->{env_variables}{$_}} (keys %{$r_barSetup->{env_variables}}))) {
+                  $self->{cache}{prDownloaderEnvVars}=$r_barSetup->{env_variables};
+                  $result{cache}{prDownloaderEnvVars}=$r_barSetup->{env_variables};
+                }
               }
+              last;
             }
-            last;
           }
         }
+        $self->{prDownloaderEnvVars}=$self->{cache}{prDownloaderEnvVars};
       }
-      $self->{prDownloaderEnvVars}=$self->{cache}{prDownloaderEnvVars};
-    }
-    if(defined $self->{prDownloaderEnvVars}) {
-      map {$ENV{$_}=$self->{prDownloaderEnvVars}{$_}} (keys %{$self->{prDownloaderEnvVars}});
+      if(defined $self->{prDownloaderEnvVars}) {
+        map {$ENV{$_}=$self->{prDownloaderEnvVars}{$_}} (keys %{$self->{prDownloaderEnvVars}});
+      }
     }
     my $packagesDir=catdir($prDownloaderWritePath,'packages');
     my $packagesDirTimestamp=(stat($packagesDir))[9]//0;
