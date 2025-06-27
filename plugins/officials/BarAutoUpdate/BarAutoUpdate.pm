@@ -40,7 +40,7 @@ use Storable qw'nstore retrieve';
 
 use SpadsPluginApi;
 
-my $pluginVersion='0.3';
+my $pluginVersion='0.4';
 my $requiredSpadsVersion='0.13.15';
 
 use constant {
@@ -84,9 +84,7 @@ sub new {
     prDownloaderEnvVars => undef,
     cache => {
       eTags => {},
-      mapDownloadDirectory => undef,
       prDownloaderPath => undef,
-      prDownloaderWritePath => undef,
       prDownloaderEnvVars => undef,
     },
   };
@@ -203,10 +201,10 @@ sub acquireBarAuLockAndLoadCache {
     my $r_cache=retrieve($cacheFile);
     if(defined $r_cache) {
       my $needCacheDump;
-      foreach my $writableDirParam (qw'mapDownloadDirectory prDownloaderWritePath') {
-        if(defined $r_cache->{$writableDirParam} && ! (-d $r_cache->{$writableDirParam} && -x _ && -w _)) {
-          slog("Cached value for autodetected \"$writableDirParam\" setting (\"$r_cache->{$writableDirParam}\") is no longer valid, clearing cache",4);
-          undef $r_cache->{$writableDirParam};
+      foreach my $obsoleteCache (qw'mapDownloadDirectory prDownloaderWritePath') {
+        if(exists $r_cache->{$obsoleteCache}) {
+          slog("Removing obsolete data \"$obsoleteCache\" (".(defined $r_cache->{$obsoleteCache} ? "\"$r_cache->{$obsoleteCache}\"" : 'UNDEF').') from cache',4);
+          delete $r_cache->{$obsoleteCache};
           $needCacheDump=1;
         }
       }
@@ -294,26 +292,22 @@ sub updateBarBlocking {
     }
     my $mapDownloadDirectory=$r_pluginConf->{mapDownloadDirectory};
     if($mapDownloadDirectory eq '' && ! defined $errMsg) {
-      if(defined $self->{cache}{mapDownloadDirectory}) {
-        $mapDownloadDirectory=$self->{cache}{mapDownloadDirectory};
+      my ($selectedDir,$nbMapsInSelectedDir)=(undef,-1);
+      my @dataDirs=::splitPaths($r_spadsConf->{springDataDir});
+      foreach my $dataDir (@dataDirs) {
+        my $mapDataDir=catdir($dataDir,'maps');
+        next unless(-d $mapDataDir && -x _ && -w _);
+        if(opendir(my $dirHdl,$mapDataDir)) {
+          my $nbMapsInDir=grep {-f "$mapDataDir/$_" && /\.sd[7z]$/i} readdir($dirHdl);
+          closedir($dirHdl);
+          $nbMapsInDir+=100000 unless(-d "$dataDir/base"); # avoid using engine directory as map download directory when possible
+          ($selectedDir,$nbMapsInSelectedDir)=($mapDataDir,$nbMapsInDir) if($nbMapsInDir > $nbMapsInSelectedDir);
+        }
+      }
+      if(defined $selectedDir) {
+        $mapDownloadDirectory=$selectedDir;
       }else{
-        my ($selectedDir,$nbMapsInSelectedDir)=(undef,-1);
-        my @dataDirs=::splitPaths($r_spadsConf->{springDataDir});
-        foreach my $dataDir (@dataDirs) {
-          my $mapDataDir=catdir($dataDir,'maps');
-          next unless(-d $mapDataDir && -x _ && -w _);
-          if(opendir(my $dirHdl,$mapDataDir)) {
-            my $nbMapsInDir=grep {-f "$mapDataDir/$_" && /\.sd[7z]$/i} readdir($dirHdl);
-            closedir($dirHdl);
-            ($selectedDir,$nbMapsInSelectedDir)=($mapDataDir,$nbMapsInDir) if($nbMapsInDir > $nbMapsInSelectedDir);
-          }
-        }
-        if(defined $selectedDir) {
-          $mapDownloadDirectory=$selectedDir;
-          $result{cache}{mapDownloadDirectory}=$mapDownloadDirectory;
-        }else{
-          $errMsg='failed to find maps download directory automatically using "springDataDir" SPADS setting (you can set "mapDownloadDirectory" plugin setting to configure this directory manually)';
-        }
+        $errMsg='failed to find maps download directory automatically using "springDataDir" SPADS setting (you can set "mapDownloadDirectory" plugin setting to configure this directory manually)';
       }
     }
     if(defined $errMsg) {
@@ -393,70 +387,93 @@ sub updateBarBlocking {
     }
     my $prDownloaderWritePath=$r_pluginConf->{prDownloaderWritePath};
     if($prDownloaderWritePath eq '') {
-      if(defined $self->{cache}{prDownloaderWritePath}) {
-        $prDownloaderWritePath=$self->{cache}{prDownloaderWritePath};
+      my ($selectedDir,$selectedHeuristic)=(undef,-1);
+      my @dataDirs=::splitPaths($r_spadsConf->{springDataDir});
+      foreach my $dataDir (@dataDirs) {
+        next unless(-d $dataDir && -x _ && -w _);
+        my $dirHeuristic = -d "$dataDir/base" ? 0 : 100000;  # avoid using engine directory as pr-downloader write path when possible
+        my $packagesDir=$dataDir.'/packages';
+        if(-d $packagesDir && opendir(my $dirHdl,$packagesDir)) {
+          $dirHeuristic += grep {-f "$packagesDir/$_" && /\.sdp$/i} readdir($dirHdl);
+          closedir($dirHdl);
+        }
+        my $gamesDir=$dataDir.'/games';
+        if(-d $gamesDir && opendir(my $dirHdl,$gamesDir)) {
+          $dirHeuristic += scalar(grep {-f "$gamesDir/$_" && /\.sdz$/i} readdir($dirHdl))*0.00001;
+          closedir($dirHdl);
+        }
+        ($selectedDir,$selectedHeuristic)=($dataDir,$dirHeuristic) if($dirHeuristic > $selectedHeuristic);
+      }
+      if(defined $selectedDir) {
+        $prDownloaderWritePath=$selectedDir;
       }else{
-        my ($selectedDir,$nbRapidSubdir)=(undef,-1);
-        my @dataDirs=::splitPaths($r_spadsConf->{springDataDir});
-        foreach my $dataDir (@dataDirs) {
-          next unless(-d $dataDir && -x _ && -w _);
-          my $nbRapidSubdirInDir=0;
-          map {++$nbRapidSubdirInDir if(-d "$dataDir/$_")} (qw'rapid pool packages');
-          ($selectedDir,$nbRapidSubdir)=($dataDir,$nbRapidSubdirInDir) if($nbRapidSubdirInDir > $nbRapidSubdir);
-        }
-        if(defined $selectedDir) {
-          $prDownloaderWritePath=$selectedDir;
-          $result{cache}{prDownloaderWritePath}=$prDownloaderWritePath;
-        }else{
-          $errMsg='failed to identify correct pr-downloader write path automatically using "springDataDir" SPADS setting (you can set "prDownloaderWritePath" plugin setting to configure this directory manually)';
-        }
+        $errMsg='failed to identify correct pr-downloader write path automatically using "springDataDir" SPADS setting (you can set "prDownloaderWritePath" plugin setting to configure this directory manually)';
       }
     }
     if(defined $errMsg) {
       $result{game}={error => $errMsg};
       return \%result;
     }
-    if(lc(substr($gameRapidTag,0,5)) eq 'byar:') {
-      if(! defined $self->{prDownloaderEnvVars}) {
-        my $httpRes=HTTP::Tiny->new(timeout => $r_pluginConf->{httpTimeout})->get(BAR_LAUNCHER_CONFIG_URL);
-        if($httpRes->{success}) {
-          my $r_barLauncherConf = eval {decode_json($httpRes->{content})};
-          if(ref $r_barLauncherConf eq 'HASH' && ref $r_barLauncherConf->{setups} eq 'ARRAY') {
-            my $launcherPackageId = 'manual-'.(MSWIN32 ? 'win' : 'linux');
-            foreach my $r_barSetup (@{$r_barLauncherConf->{setups}}) {
-              next unless(ref $r_barSetup eq 'HASH' && ref $r_barSetup->{package} eq 'HASH');
-              my $r_barPackage=$r_barSetup->{package};
-              next unless(defined $r_barPackage->{id} && ref $r_barPackage->{id} eq '' && $r_barPackage->{id} eq $launcherPackageId);
-              if(ref $r_barSetup->{env_variables} eq 'HASH' && (all {defined $r_barSetup->{env_variables}{$_} && ref $r_barSetup->{env_variables}{$_} eq ''} (keys %{$r_barSetup->{env_variables}}))) {
-                if(! defined $self->{cache}{prDownloaderEnvVars} || keys %{$self->{cache}{prDownloaderEnvVars}} != keys %{$r_barSetup->{env_variables}}
-                   || (any {! defined $self->{cache}{prDownloaderEnvVars}{$_} || $self->{cache}{prDownloaderEnvVars}{$_} ne $r_barSetup->{env_variables}{$_}} (keys %{$r_barSetup->{env_variables}}))) {
-                  $self->{cache}{prDownloaderEnvVars}=$r_barSetup->{env_variables};
-                  $result{cache}{prDownloaderEnvVars}=$r_barSetup->{env_variables};
-                }
+    my @gameRapidTags = split(/;/,$gameRapidTag);
+    if((any {lc(substr($_,0,5)) eq 'byar:'} @gameRapidTags) && ! defined $self->{prDownloaderEnvVars}) {
+      my $httpRes=HTTP::Tiny->new(timeout => $r_pluginConf->{httpTimeout})->get(BAR_LAUNCHER_CONFIG_URL);
+      if($httpRes->{success}) {
+        my $r_barLauncherConf = eval {decode_json($httpRes->{content})};
+        if(ref $r_barLauncherConf eq 'HASH' && ref $r_barLauncherConf->{setups} eq 'ARRAY') {
+          my $launcherPackageId = 'manual-'.(MSWIN32 ? 'win' : 'linux');
+          foreach my $r_barSetup (@{$r_barLauncherConf->{setups}}) {
+            next unless(ref $r_barSetup eq 'HASH' && ref $r_barSetup->{package} eq 'HASH');
+            my $r_barPackage=$r_barSetup->{package};
+            next unless(defined $r_barPackage->{id} && ref $r_barPackage->{id} eq '' && $r_barPackage->{id} eq $launcherPackageId);
+            if(ref $r_barSetup->{env_variables} eq 'HASH' && (all {defined $r_barSetup->{env_variables}{$_} && ref $r_barSetup->{env_variables}{$_} eq ''} (keys %{$r_barSetup->{env_variables}}))) {
+              if(! defined $self->{cache}{prDownloaderEnvVars} || keys %{$self->{cache}{prDownloaderEnvVars}} != keys %{$r_barSetup->{env_variables}}
+                 || (any {! defined $self->{cache}{prDownloaderEnvVars}{$_} || $self->{cache}{prDownloaderEnvVars}{$_} ne $r_barSetup->{env_variables}{$_}} (keys %{$r_barSetup->{env_variables}}))) {
+                $self->{cache}{prDownloaderEnvVars}=$r_barSetup->{env_variables};
+                $result{cache}{prDownloaderEnvVars}=$r_barSetup->{env_variables};
               }
-              last;
             }
+            last;
           }
         }
-        $self->{prDownloaderEnvVars}=$self->{cache}{prDownloaderEnvVars};
       }
-      if(defined $self->{prDownloaderEnvVars}) {
-        map {$ENV{$_}=$self->{prDownloaderEnvVars}{$_}} (keys %{$self->{prDownloaderEnvVars}});
-      }
+      $self->{prDownloaderEnvVars}=$self->{cache}{prDownloaderEnvVars};
     }
     my $packagesDir=catdir($prDownloaderWritePath,'packages');
     my $packagesDirTimestamp=(stat($packagesDir))[9]//0;
-    open(my $previousStdout,'>&',\*STDOUT);
+    open(my $previousStdout,'>&',\*STDOUT); # workaround for https://github.com/beyond-all-reason/pr-downloader/pull/50
+    open(my $previousStderr,'>&',\*STDERR); # workaround for https://github.com/beyond-all-reason/pr-downloader/issues/58
     open(STDOUT,'>',devnull());
-    my ($ec,$prdErrMsg)=portableSystem($prDownloaderPath,'--disable-logging','--filesystem-writepath',$prDownloaderWritePath,'--download-game',$gameRapidTag);
+    open(STDERR,'>',devnull());
+    my ($prdExitCode,$prdErrorMsg);
+    foreach my $rapidTag (@gameRapidTags) {
+      my $isBarTag = lc(substr($rapidTag,0,5)) eq 'byar:';
+      my %savedEnvVars;
+      if($isBarTag && defined $self->{prDownloaderEnvVars}) {
+        foreach my $envVar (keys %{$self->{prDownloaderEnvVars}}) {
+          $savedEnvVars{$envVar}=$ENV{$envVar} if(exists $ENV{$envVar});
+          $ENV{$envVar}=$self->{prDownloaderEnvVars}{$envVar};
+        }
+      }
+      my ($exitCode,$errorMsg)=portableSystem($prDownloaderPath,'--disable-logging','--filesystem-writepath',$prDownloaderWritePath,'--download-game',$rapidTag);
+      if($isBarTag && defined $self->{prDownloaderEnvVars}) {
+        foreach my $envVar (keys %{$self->{prDownloaderEnvVars}}) {
+          if(exists $savedEnvVars{$envVar}) {
+            $ENV{$envVar}=$savedEnvVars{$envVar};
+          }else{
+            delete $ENV{$envVar};
+          }
+        }
+      }
+      $prdExitCode||=$exitCode;
+      $prdErrorMsg//=$errorMsg;
+    }
     open(STDOUT,'>&',$previousStdout);
-    if(defined $ec) {
-      $result{game}={
-        prdExitCode => $ec,
-        packagesDirUpdated => ((stat($packagesDir))[9]//0) == $packagesDirTimestamp ? 0 : 1,
-      };
-    }else{
-      $result{game}={error => "failed to run pr-downloader ($prdErrMsg)"};
+    open(STDERR,'>&',$previousStderr);
+    $result{game}={error => "failed to run pr-downloader ($prdErrorMsg)"}
+        if(defined $prdErrorMsg);
+    if(defined $prdExitCode) {
+      $result{game}{prdExitCode}=$prdExitCode;
+      $result{game}{packagesDirUpdated} = ((stat($packagesDir))[9]//0) == $packagesDirTimestamp ? 0 : 1;
     }
   }
 
@@ -579,9 +596,9 @@ sub updateBarEnd {
 
   my $r_gameResult=$r_result->{game};
   if(defined $r_gameResult) {
-    if(exists $r_gameResult->{error}) {
-      slog("Error during game auto-update: $r_gameResult->{error}",2);
-    }else{
+    slog("Error during game auto-update: $r_gameResult->{error}",2)
+        if(exists $r_gameResult->{error});
+    if(exists $r_gameResult->{prdExitCode}) {
       my $ecStr = $r_gameResult->{prdExitCode} ? " pr-downloader exited with return value $r_gameResult->{prdExitCode}," : '';
       my $updStr = $r_gameResult->{packagesDirUpdated} ? 'rapid packages updated' : 'no rapid package update';
       slog("Game auto-update:$ecStr $updStr",$r_gameResult->{prdExitCode} ? 2 : ($r_gameResult->{packagesDirUpdated} ? 3 : 5));
@@ -605,11 +622,9 @@ sub updateBarEnd {
         }
       }
     }
-    foreach my $cachedData (qw'mapDownloadDirectory prDownloaderPath prDownloaderWritePath') {
-      if(exists $r_cache->{$cachedData}) {
-        slog("Caching autodetected value for setting \"$cachedData\" (\"$r_cache->{$cachedData}\")",5);
-        $self->{cache}{$cachedData}=$r_cache->{$cachedData};
-      }
+    if(exists $r_cache->{prDownloaderPath}) {
+      slog("Caching autodetected value for setting \"prDownloaderPath\" (\"$r_cache->{prDownloaderPath}\")",5);
+      $self->{cache}{prDownloaderPath}=$r_cache->{prDownloaderPath};
     }
     if(exists $r_cache->{prDownloaderEnvVars}) {
       my $envVars=join(', ',map {"$_=$r_cache->{prDownloaderEnvVars}{$_}"} sort keys %{$r_cache->{prDownloaderEnvVars}});
