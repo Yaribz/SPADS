@@ -11,8 +11,8 @@ refer to the "ClusterManager.conf.README" file.
 Auto-registration of lobby accounts:
 -----------------------------------
 If the lobby account used by the cluster manager instance has lobby server
-admin access, then the required bot accounts for the slave instances can be
-automatically created on the fly by the manager, as they are required.
+admin access, then the required bot accounts for the slave instances will be
+automatically created on the fly by the manager, as they are required (*).
 Otherwise the slave instances will try to auto-register their account if
 needed, but these accounts will lack the bot flag. Also, depending on the
 lobby server configuration, auto-registration may fail if it requires a
@@ -20,6 +20,13 @@ validation code sent by email to finalize the registration. In this case you
 will have to pre-register beforehand all the lobby accounts which could be
 required by the cluster manager to start the slave instances, based on the
 "nameTemplate" plugin setting.
+(*) The names of the accounts created by the cluster manager instance are
+stored in a persistent file ("%varDir%/ClusterManager/existingAccounts.dat").
+This allows the cluster manager to avoid trying to recreate accounts it already
+created previously. However, in some circumstances (when switching lobby server
+or resetting the lobby database on a test lobby server for example), you might
+need to remove this file to force the cluster manager to try to re-create the
+corresponding accounts.
 
 Public instances VS private instances:
 -------------------------------------
