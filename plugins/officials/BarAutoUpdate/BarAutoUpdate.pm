@@ -40,7 +40,7 @@ use Storable qw'nstore retrieve';
 
 use SpadsPluginApi;
 
-my $pluginVersion='0.4';
+my $pluginVersion='0.5';
 my $requiredSpadsVersion='0.13.15';
 
 use constant {
@@ -172,6 +172,28 @@ sub onReloadConf {
     my $confFile='map'.$mapConfType.'.conf';
     $self->{mapConfTimestamps}{$confFile}=(stat(catfile($spadsEtcDir,$confFile)))[9];
   }
+
+  my %rapidTagsInSpadsConf;
+  my $r_hPresets=getSpadsConfFull()->{hPresets};
+  foreach my $hPreset (keys %{$r_hPresets}) {
+    next unless(exists $r_hPresets->{$hPreset}{modName});
+    my @rapidTagsInHPreset=map {substr($_,8)} grep {substr($_,0,8) eq 'rapid://'} @{$r_hPresets->{$hPreset}{modName}};
+    $rapidTagsInSpadsConf{$_}=1 foreach(@rapidTagsInHPreset);
+  }
+  if(%rapidTagsInSpadsConf) {
+    my %rapidTagsUpdated;
+    my $rapidTagsString=$r_pluginConf->{gameRapidTag};
+    if($rapidTagsString ne '') {
+      my @rapidTagsInPluginConf=split(/;/,$rapidTagsString);
+      $rapidTagsUpdated{$_}=1 foreach(@rapidTagsInPluginConf);
+    }
+    my @missingRapidTags = grep {! exists $rapidTagsUpdated{$_}} (keys %rapidTagsInSpadsConf);
+    if(@missingRapidTags) {
+      my $s=@missingRapidTags>1;
+      slog('Following rapid tag'.($s?'s are':' is').' used in SPADS configuration but '.($s?'are':'is')."n't auto-updated by the plugin: ".join(', ',@missingRapidTags),2);
+    }
+  }
+  
   return 1;
 }
 
