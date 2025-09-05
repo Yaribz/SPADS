@@ -39,7 +39,7 @@ use SimpleLog;
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.13.14';
+my $moduleVersion='0.13.15';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -216,7 +216,7 @@ my %spadsSectionParameters = (description => ['notNull'],
 
 my %hostingParameters = (description => ['notNull'],
                          battleName => ['notNull'],
-                         modName => ['tildeRegexpOrString'],
+                         modName => ['modNameType'],
                          port => ['port'],
                          natType => ['integer','integerRange'],
                          password => ['password'],
@@ -293,14 +293,17 @@ my %paramTypes = (login => '[\w\[\]]{2,20}',
                   db => '[^\/]+\/[^\@]+\@(?i:dbi)\:\w+\:\w.*',
                   pluginList => '\w+(;\w+)*',
                   eventModelType => '(auto|internal|AnyEvent)(\([1-9]\d?\d?\))?',
-                  tildeRegexpOrString => sub {
-                                           if(index($_[0],'~') == 0) {
-                                             my $regexp=substr($_[0],1);
-                                             return eval { qr/^$regexp$/ } && ! $@;
-                                           }else{
-                                             return $_[0] ne '';
-                                           }
-                                         },
+                  modNameType => sub {
+                    if(substr($_[0],0,1) eq '~') {
+                      my $regexp=substr($_[0],1);
+                      return eval { qr/^$regexp$/ } && ! $@;
+                    }
+                    if(substr($_[0],0,8) eq 'rapid://') {
+                      my $rapidTag=substr($_[0],8);
+                      return $rapidTag =~ /^[\w\-]+:\w+$/;
+                    }
+                    return $_[0] ne '';
+                  },
                   shareableDataType => '(private|shared(\(.+\))?)',
     );
 

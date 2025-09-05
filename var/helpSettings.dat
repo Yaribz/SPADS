@@ -1946,12 +1946,14 @@ SPADS (default settings)
 [hSet:modName]
 Mod name
 -
-Name of the hosted mod (as returned by the GetPrimaryModName UnitSync function).
-The corresponding mod must be available locally in the "games" or "packages" subdirectories of [set:springDataDir].
-It is also possible to use a regular expression instead of the exact mod name, by prefixing the value with "~". SPADS will then choose the latest mod in lexicographic order whose name match the regular expression, so it should automatically select the latest version of a given mod.
+Name of the hosted game, including version (aka "primary mod name" in unitsync library).
+The corresponding game archives must be available locally in the "games" or "packages" subdirectories of [set:springDataDir].
+A regular expression can be used instead of the exact game version name, by prefixing the value with "~". SPADS will then choose the latest game in lexicographic order whose name matches the regular expression, which should automatically select the latest game version.
+It is also possible to use a rapid tag instead of a specific game name, by prefixing the value with "rapid://". In this case SPADS will use the local rapid repository to resolve the rapid tag to a specific game version (warning: this means the local rapid repository must always be in a state where the game version associated with the rapid tag used by SPADS is available locally, i.e. all update operations of the local rapid repository must include the retrieval of the rapid tag used by SPADS).
 -
-<modName> (<modName> must be the exact mod name, as returned by the GetPrimaryModName UnitSync function)
-~<regularExpression> (at least one mod name must match the <regularExpression> regular expression)
+<modName>: exact game name, including version (as expected by the unitsync library)
+~<regularExpression>: automatic selection of the latest game name matching the regular expression
+rapid://<rapidTag>: automatic resolution of the rapid tag from local rapid repository
 -
 %modName% (set during installation, example: "~Balanced Annihilation V\d+\.\d+")
 

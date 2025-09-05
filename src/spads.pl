@@ -26,8 +26,9 @@ use Cwd 'cwd';
 use Digest::MD5 'md5_base64';
 use Fcntl qw':DEFAULT :flock';
 use File::Copy;
-use File::Spec::Functions qw'catfile file_name_is_absolute';
+use File::Spec::Functions qw'catdir catfile file_name_is_absolute';
 use FindBin;
+use IO::Uncompress::Gunzip '$GunzipError';
 use IPC::Cmd 'can_run';
 use JSON::PP;
 use List::Util qw'first any all none notall shuffle reduce';
@@ -83,6 +84,10 @@ use constant {
   LOBBY_STATE_SYNCHRONIZED => 4,
   LOBBY_STATE_OPENING_BATTLE => 5,
   LOBBY_STATE_BATTLE_OPENED => 6,
+
+  LOADARCHIVES_DEFAULT => 0,
+  LOADARCHIVES_RELOAD => 1,
+  LOADARCHIVES_GAME_ONLY => 2,
 };
 
 if(MSWIN32) {
@@ -106,7 +111,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.43';
+our $SPADS_VERSION='0.13.44';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -453,6 +458,7 @@ our %timestamps=(connectAttempt => 0,
                  autoRestartCheck => 0,
                  autoForcePossible => 0,
                  archivesLoad => 0,
+                 archivesLoadFull => 0,
                  archivesCheck => 0,
                  mapLearned => 0,
                  autoStop => -1,
@@ -469,11 +475,12 @@ my $lobbyBrokenConnection=0;
 my $loadArchivesInProgress=0;
 my %availableMapsNameToNb;
 my @availableMaps;
-my %availableModsNameToNb;
-my @availableMods;
+my %availableModsNameToNb;    # empty unless a game/mod name regex has been used for latest successful load archives operation
+my %rapidModResolutionCache;  # empty unless a game/mod rapid tag has been used for latest successful load archives operation
+my %cachedMods;
 my ($currentNbNonPlayer,$currentLockedStatus)=(0,0);
 my $currentMap=$conf{map};
-my $targetMod="";
+my $targetMod='';
 our $p_runningBattle={};
 my %inGameAddedUsers;
 my %inGameAddedPlayers;
@@ -1472,35 +1479,53 @@ sub generateAdvancedColorPanel {
 
 }
 
-sub getTargetModFromList {
-  my $r_availableModNames=shift;
-  if($spads->{hSettings}{modName} =~ /^~(.+)$/) {
-    my $modRegexp=$1;
-    return ((reduce {$b =~ /^$modRegexp$/ && (! defined $a || $b gt $a) ? $b : $a} (undef,@{$r_availableModNames})), $modRegexp);
-  }else{
-    return (((any {$spads->{hSettings}{modName} eq $_} @{$r_availableModNames}) ? $spads->{hSettings}{modName} : undef), undef);
-  }
-}
-
 sub updateTargetMod {
-  my $verbose=shift;
-  my @availableModsNames=map {$_->{name}} (@availableMods);
-  my ($newMod,$modFilter)=getTargetModFromList(\@availableModsNames);
-  if(defined $newMod) {
-    if($newMod ne $targetMod) {
-      broadcastMsg("New version of current mod detected ($newMod), switching when battle is empty (use !rehost to force)") if($verbose && defined $modFilter);
-      $targetMod=$newMod;
+  my $configuredModName=$spads->{hSettings}{modName};
+
+  my ($modRegexp,$modRapidTag);
+  if(substr($configuredModName,0,1) eq '~') {
+    $modRegexp=substr($configuredModName,1);
+  }elsif(substr($configuredModName,0,8) eq 'rapid://') {
+    $modRapidTag=substr($configuredModName,8);
+  }
+  
+  if(defined $modRapidTag) {
+    my $cachedModRapidName=$rapidModResolutionCache{$modRapidTag};
+    if(defined $cachedModRapidName) {
+      $targetMod=$cachedModRapidName;
+      return 1;
     }
-    loadArchives(sub {quitAfterGame('Unable to reload Spring archives for mod change') unless(shift)},$verbose)
-        unless(defined $availableMods[$availableModsNameToNb{$newMod}]{hash} || $loadArchivesInProgress);
   }else{
-    if(defined $modFilter) {
-      slog("Unable to find mod matching \"$modFilter\" regular expression",1);
-    }else{
-      $targetMod=$spads->{hSettings}{modName};
-      slog("Unable to find mod \"$targetMod\"",1);
+    if(%availableModsNameToNb) {
+      my $newTargetMod;
+      if(defined $modRegexp) {
+        $newTargetMod = reduce {$b =~ /^$modRegexp$/ && (! defined $a || $b gt $a) ? $b : $a} (undef,keys %availableModsNameToNb);
+      }elsif(exists $availableModsNameToNb{$configuredModName}) {
+        $newTargetMod=$configuredModName;
+      }
+      if(defined $newTargetMod) {
+        if(defined $cachedMods{$newTargetMod}) {
+          $targetMod=$newTargetMod;
+          return 1;
+        }
+        loadArchives(sub {quitAfterGame('Unable to reload Spring archives for mod change') unless(shift)},0,LOADARCHIVES_GAME_ONLY)
+            unless($loadArchivesInProgress);
+        return 2;
+      }
+      slog('Unable to find mod '.(defined $modRegexp ? "matching regular expression \"$modRegexp\"" : "\"$configuredModName\""),1);
+      $targetMod='';
+      return 0;
+    }
+    if(! defined $modRegexp && defined $cachedMods{$configuredModName}) {
+      $targetMod=$configuredModName;
+      return 1;
     }
   }
+  
+  loadArchives(sub {quitAfterGame('Unable to reload Spring archives for mod change') unless(shift)},0,LOADARCHIVES_GAME_ONLY)
+      unless($loadArchivesInProgress);
+  
+  return 2;
 }
 
 sub pingIfNeeded {
@@ -1524,219 +1549,278 @@ sub fetchAndLogUnitsyncErrors {
   return $nbError;
 }
 
+sub unitsyncGetPrimaryModName {
+  my $modIdx=shift;
+  my $nbModInfo = $unitsync->GetPrimaryModInfoCount($modIdx);
+  for my $infoNb (0..($nbModInfo-1)) {
+    return $unitsync->GetInfoValueString($infoNb) if($unitsync->GetInfoKey($infoNb) eq 'name');
+  }
+  return undef;
+}
+
 sub loadArchivesBlocking {
-  my $full=shift;
+  my $mode=shift;
 
   my $usLockFile = catfile($conf{$conf{sequentialUnitsync} ? 'varDir' : 'instanceDir'},'unitsync.lock');
   open(my $usLockFh,'>',$usLockFile)
-      or fatalError("Unable to write unitsync library lock file \"$usLockFile\" ($!)",EXIT_SYSTEM);
+      or return {error => "Unable to write unitsync library lock file \"$usLockFile\" ($!)"};
   if(! flock($usLockFh, LOCK_EX|LOCK_NB)) {
     slog('Another process is using unitsync, waiting for lock...',3);
     if(! flock($usLockFh, LOCK_EX)) {
       close($usLockFh);
-      fatalError("Unable to acquire unitsync library lock ($!)",EXIT_SYSTEM);
+      return {error => "Unable to acquire unitsync library lock ($!)"};
     }
     slog('Unitsync library lock acquired',3);
   }
 
   if(! $unitsync->Init(0,0)) {
     fetchAndLogUnitsyncErrors();
-    slog("Unable to initialize UnitSync library",1);
     close($usLockFh);
-    return ([],[],{});
+    return {error => 'Unable to initialize UnitSync library'};
   }
-  my $nbMaps = $unitsync->GetMapCount();
-  slog("No Spring map found",2) unless($nbMaps);
+
   my $nbMods = $unitsync->GetPrimaryModCount();
-  if(! $nbMods) {
-    slog("No Spring mod found",1);
+  if($nbMods <= 0) {
     $unitsync->UnInit();
     close($usLockFh);
-    return ([],[],{});
+    return {error => 'No Spring mod found'};
   }
-  my @newAvailableMaps;
-  my %availableMapsByNames;
-  my $nextProgressReportTs=time()+5;
-  my $printProgressReport;
-  for my $mapNb (0..($nbMaps-1)) {
-    my $currentTime=time();
-    if($currentTime >= $nextProgressReportTs) {
-      $nextProgressReportTs=$currentTime+60;
-      $printProgressReport=1;
-      slog("Caching Spring map checksums... $mapNb/$nbMaps (".int(100*$mapNb/$nbMaps).'%)',3);
-    }
-    my $mapName = $unitsync->GetMapName($mapNb);
-    if(! $full && exists $availableMapsNameToNb{$mapName}) {
-      $newAvailableMaps[$mapNb]=$availableMaps[$availableMapsNameToNb{$mapName}];
-      $availableMapsByNames{$mapName}=$mapNb unless(exists $availableMapsByNames{$mapName});
-      next;
-    }
-    my $mapChecksum = int32($unitsync->GetMapChecksum($mapNb));
-    $unitsync->GetMapArchiveCount($mapName);
-    my $mapArchive = $unitsync->GetMapArchiveName(0);
-    $mapArchive=$1 if($mapArchive =~ /([^\\\/]+)$/);
-    $newAvailableMaps[$mapNb]={name=>$mapName,hash=>$mapChecksum,archive=>$mapArchive};
-    if(exists $availableMapsByNames{$mapName}) {
-      slog("Duplicate archives found for map \"$mapName\" ($mapArchive)",2);
-    }else{
-      $availableMapsByNames{$mapName}=$mapNb;
-    }
-  }
-  slog("Caching Spring map checksums... $nbMaps/$nbMaps (100%)",3) if($printProgressReport);
-  $unitsync->RemoveAllArchives();
-
-  my @invalidMapNbs;
-  my @availableMapsNames=sort keys %availableMapsByNames;
-  my $p_uncachedMapsNames = $spads->getUncachedMaps(\@availableMapsNames);
-  my %newCachedMaps;
-  if(@{$p_uncachedMapsNames}) {
-    my $nbUncachedMaps=$#{$p_uncachedMapsNames}+1;
-    $nextProgressReportTs=time()+5;
-    $printProgressReport=0;
-    for my $uncachedMapNb (0..($#{$p_uncachedMapsNames})) {
+  
+  my (@newAvailableMaps,%newCachedMaps);
+  if(! ($mode & LOADARCHIVES_GAME_ONLY)) {
+    my $nbMaps = $unitsync->GetMapCount();
+    slog("No Spring map found",2) unless($nbMaps > 0);
+    my %availableMapsByNames;
+    my $nextProgressReportTs=time()+5;
+    my $printProgressReport;
+    for my $mapNb (0..($nbMaps-1)) {
       my $currentTime=time();
       if($currentTime >= $nextProgressReportTs) {
         $nextProgressReportTs=$currentTime+60;
         $printProgressReport=1;
-        slog("Caching Spring map info... $uncachedMapNb/$nbUncachedMaps (".int(100*$uncachedMapNb/$nbUncachedMaps).'%)',3);
+        slog("Caching Spring map checksums... $mapNb/$nbMaps (".int(100*$mapNb/$nbMaps).'%)',3);
       }
-      my $mapName=$p_uncachedMapsNames->[$uncachedMapNb];
-      my $mapNb=$availableMapsByNames{$mapName};
-      $newCachedMaps{$mapName}={startPos => [],
-                                options => {}};
-      if($unitsyncOptFuncs{GetMapInfoCount}) {
-        my $nbMapInfo=$unitsync->GetMapInfoCount($mapNb);
-        if($nbMapInfo < 0) {
-          fetchAndLogUnitsyncErrors();
-          slog("Unable to get map info for \"$mapName\", ignoring map.",2);
-          push(@invalidMapNbs,$mapNb);
-          delete $newCachedMaps{$mapName};
-          $unitsync->RemoveAllArchives();
-          next;
-        }
-        for my $infoNb (0..($nbMapInfo-1)) {
-          my $mapInfoKey=$unitsync->GetInfoKey($infoNb);
-          if($mapInfoKey eq 'width') {
-            $newCachedMaps{$mapName}{width}=$unitsync->GetInfoValueInteger($infoNb);
-          }elsif($mapInfoKey eq 'height') {
-            $newCachedMaps{$mapName}{height}=$unitsync->GetInfoValueInteger($infoNb);
-          }elsif($mapInfoKey eq 'xPos') {
-            push(@{$newCachedMaps{$mapName}{startPos}},[$unitsync->GetInfoValueFloat($infoNb)]);
-          }elsif($mapInfoKey eq 'zPos') {
-            if(! @{$newCachedMaps{$mapName}{startPos}}
-               || $#{$newCachedMaps{$mapName}{startPos}[-1]} != 0) {
-              slog("Inconsistentcy in start position data for map $mapName",1);
-              $unitsync->UnInit();
-              $spads->cacheMapsInfo({}) if($spads->{sharedDataTs}{mapInfoCache}); # release lock
-              close($usLockFh);
-              return ([],[],{});
-            }
-            push(@{$newCachedMaps{$mapName}{startPos}[-1]},$unitsync->GetInfoValueFloat($infoNb));
-          }
-        }
+      my $mapName = $unitsync->GetMapName($mapNb);
+      if(! ($mode & LOADARCHIVES_RELOAD) && exists $availableMapsNameToNb{$mapName}) {
+        $newAvailableMaps[$mapNb]=$availableMaps[$availableMapsNameToNb{$mapName}];
+        $availableMapsByNames{$mapName}=$mapNb unless(exists $availableMapsByNames{$mapName});
+        next;
+      }
+      my $mapChecksum = int32($unitsync->GetMapChecksum($mapNb));
+      $unitsync->GetMapArchiveCount($mapName);
+      my $mapArchive = $unitsync->GetMapArchiveName(0);
+      $mapArchive=$1 if($mapArchive =~ /([^\\\/]+)$/);
+      $newAvailableMaps[$mapNb]={name=>$mapName,hash=>$mapChecksum,archive=>$mapArchive};
+      if(exists $availableMapsByNames{$mapName}) {
+        slog("Duplicate archives found for map \"$mapName\" ($mapArchive)",2);
       }else{
-        $newCachedMaps{$mapName}{width}=$unitsync->GetMapWidth($mapNb);
-        if($newCachedMaps{$mapName}{width} < 0) {
-          fetchAndLogUnitsyncErrors();
-          slog("Unable to get map info for \"$mapName\", ignoring map.",2);
-          push(@invalidMapNbs,$mapNb);
-          delete $newCachedMaps{$mapName};
-          $unitsync->RemoveAllArchives();
-          next;
-        }
-        $newCachedMaps{$mapName}{height}=$unitsync->GetMapHeight($mapNb);
-        my $nbStartPos=$unitsync->GetMapPosCount($mapNb);
-        for my $startPosNb (0..($nbStartPos-1)) {
-          push(@{$newCachedMaps{$mapName}{startPos}},[$unitsync->GetMapPosX($mapNb,$startPosNb),$unitsync->GetMapPosZ($mapNb,$startPosNb)]);
-        }
+        $availableMapsByNames{$mapName}=$mapNb;
       }
-      $newCachedMaps{$mapName}{nbStartPos}=$#{$newCachedMaps{$mapName}{startPos}}+1;
-      $unitsync->AddAllArchives($newAvailableMaps[$mapNb]{archive});
-      my $nbMapOptions = $unitsync->GetMapOptionCount($mapName);
-      for my $optionIdx (0..($nbMapOptions-1)) {
-        my %option=(name => $unitsync->GetOptionName($optionIdx),
-                    key => $unitsync->GetOptionKey($optionIdx),
-                    description => $unitsync->GetOptionDesc($optionIdx),
-                    type => $OPTION_TYPES[$unitsync->GetOptionType($optionIdx)],
-                    section => $unitsync->GetOptionSection($optionIdx),
-                    default => "");
-        next if($option{type} eq "error" || $option{type} eq "section");
-        $option{description}=~s/\n/ /g;
-        if($option{type} eq "bool") {
-          $option{default}=$unitsync->GetOptionBoolDef($optionIdx);
-        }elsif($option{type} eq "number") {
-          $option{default}=formatNumber($unitsync->GetOptionNumberDef($optionIdx));
-          $option{numberMin}=formatNumber($unitsync->GetOptionNumberMin($optionIdx));
-          $option{numberMax}=formatNumber($unitsync->GetOptionNumberMax($optionIdx));
-          $option{numberStep}=formatNumber($unitsync->GetOptionNumberStep($optionIdx));
-          if($option{numberStep} < 0) {
-            slog("Invalid step value \"$option{numberStep}\" for number range (map option: \"$option{key}\")",2);
-            $option{numberStep}=0;
-          }
-        }elsif($option{type} eq "string") {
-          $option{default}=$unitsync->GetOptionStringDef($optionIdx);
-          $option{stringMaxLen}=$unitsync->GetOptionStringMaxLen($optionIdx);
-        }elsif($option{type} eq "list") {
-          $option{default}=$unitsync->GetOptionListDef($optionIdx);
-          $option{listCount}=$unitsync->GetOptionListCount($optionIdx);
-          $option{list}={};
-          for my $listIdx (0..($option{listCount}-1)) {
-            my %item=(name => $unitsync->GetOptionListItemName($optionIdx,$listIdx),
-                      description => $unitsync->GetOptionListItemDesc($optionIdx,$listIdx),
-                      key => $unitsync->GetOptionListItemKey($optionIdx,$listIdx));
-            $item{description}=~s/\n/ /g;
-            $option{list}{$item{key}}=\%item;
-          }
-        }
-        $newCachedMaps{$mapName}{options}{$option{key}}=\%option;
-      }
-      $unitsync->RemoveAllArchives();
     }
-    slog("Caching Spring map info... $nbUncachedMaps/$nbUncachedMaps (100%)",3) if($printProgressReport);
-    $spads->cacheMapsInfo(\%newCachedMaps) if($spads->{sharedDataTs}{mapInfoCache});
-  }
-  {
-    my $offset=0;
-    map {splice(@newAvailableMaps,$_-$offset++,1)} @invalidMapNbs;
+    slog("Caching Spring map checksums... $nbMaps/$nbMaps (100%)",3) if($printProgressReport);
+    $unitsync->RemoveAllArchives();
+
+    my @invalidMapNbs;
+    my @availableMapsNames=sort keys %availableMapsByNames;
+    my $p_uncachedMapsNames = $spads->getUncachedMaps(\@availableMapsNames);
+    if(@{$p_uncachedMapsNames}) {
+      my $nbUncachedMaps=$#{$p_uncachedMapsNames}+1;
+      $nextProgressReportTs=time()+5;
+      $printProgressReport=0;
+      for my $uncachedMapNb (0..($#{$p_uncachedMapsNames})) {
+        my $currentTime=time();
+        if($currentTime >= $nextProgressReportTs) {
+          $nextProgressReportTs=$currentTime+60;
+          $printProgressReport=1;
+          slog("Caching Spring map info... $uncachedMapNb/$nbUncachedMaps (".int(100*$uncachedMapNb/$nbUncachedMaps).'%)',3);
+        }
+        my $mapName=$p_uncachedMapsNames->[$uncachedMapNb];
+        my $mapNb=$availableMapsByNames{$mapName};
+        $newCachedMaps{$mapName}={startPos => [],
+                                  options => {}};
+        if($unitsyncOptFuncs{GetMapInfoCount}) {
+          my $nbMapInfo=$unitsync->GetMapInfoCount($mapNb);
+          if($nbMapInfo < 0) {
+            fetchAndLogUnitsyncErrors();
+            slog("Unable to get map info for \"$mapName\", ignoring map.",2);
+            push(@invalidMapNbs,$mapNb);
+            delete $newCachedMaps{$mapName};
+            $unitsync->RemoveAllArchives();
+            next;
+          }
+          for my $infoNb (0..($nbMapInfo-1)) {
+            my $mapInfoKey=$unitsync->GetInfoKey($infoNb);
+            if($mapInfoKey eq 'width') {
+              $newCachedMaps{$mapName}{width}=$unitsync->GetInfoValueInteger($infoNb);
+            }elsif($mapInfoKey eq 'height') {
+              $newCachedMaps{$mapName}{height}=$unitsync->GetInfoValueInteger($infoNb);
+            }elsif($mapInfoKey eq 'xPos') {
+              push(@{$newCachedMaps{$mapName}{startPos}},[$unitsync->GetInfoValueFloat($infoNb)]);
+            }elsif($mapInfoKey eq 'zPos') {
+              if(! @{$newCachedMaps{$mapName}{startPos}}
+                 || $#{$newCachedMaps{$mapName}{startPos}[-1]} != 0) {
+                $unitsync->UnInit();
+                $spads->cacheMapsInfo({}) if($spads->{sharedDataTs}{mapInfoCache}); # release lock
+                close($usLockFh);
+                return {error => "Inconsistentcy in start position data for map $mapName"};
+              }
+              push(@{$newCachedMaps{$mapName}{startPos}[-1]},$unitsync->GetInfoValueFloat($infoNb));
+            }
+          }
+        }else{
+          $newCachedMaps{$mapName}{width}=$unitsync->GetMapWidth($mapNb);
+          if($newCachedMaps{$mapName}{width} < 0) {
+            fetchAndLogUnitsyncErrors();
+            slog("Unable to get map info for \"$mapName\", ignoring map.",2);
+            push(@invalidMapNbs,$mapNb);
+            delete $newCachedMaps{$mapName};
+            $unitsync->RemoveAllArchives();
+            next;
+          }
+          $newCachedMaps{$mapName}{height}=$unitsync->GetMapHeight($mapNb);
+          my $nbStartPos=$unitsync->GetMapPosCount($mapNb);
+          for my $startPosNb (0..($nbStartPos-1)) {
+            push(@{$newCachedMaps{$mapName}{startPos}},[$unitsync->GetMapPosX($mapNb,$startPosNb),$unitsync->GetMapPosZ($mapNb,$startPosNb)]);
+          }
+        }
+        $newCachedMaps{$mapName}{nbStartPos}=$#{$newCachedMaps{$mapName}{startPos}}+1;
+        $unitsync->AddAllArchives($newAvailableMaps[$mapNb]{archive});
+        my $nbMapOptions = $unitsync->GetMapOptionCount($mapName);
+        for my $optionIdx (0..($nbMapOptions-1)) {
+          my %option=(name => $unitsync->GetOptionName($optionIdx),
+                      key => $unitsync->GetOptionKey($optionIdx),
+                      description => $unitsync->GetOptionDesc($optionIdx),
+                      type => $OPTION_TYPES[$unitsync->GetOptionType($optionIdx)],
+                      section => $unitsync->GetOptionSection($optionIdx),
+                      default => "");
+          next if($option{type} eq "error" || $option{type} eq "section");
+          $option{description}=~s/\n/ /g;
+          if($option{type} eq "bool") {
+            $option{default}=$unitsync->GetOptionBoolDef($optionIdx);
+          }elsif($option{type} eq "number") {
+            $option{default}=formatNumber($unitsync->GetOptionNumberDef($optionIdx));
+            $option{numberMin}=formatNumber($unitsync->GetOptionNumberMin($optionIdx));
+            $option{numberMax}=formatNumber($unitsync->GetOptionNumberMax($optionIdx));
+            $option{numberStep}=formatNumber($unitsync->GetOptionNumberStep($optionIdx));
+            if($option{numberStep} < 0) {
+              slog("Invalid step value \"$option{numberStep}\" for number range (map option: \"$option{key}\")",2);
+              $option{numberStep}=0;
+            }
+          }elsif($option{type} eq "string") {
+            $option{default}=$unitsync->GetOptionStringDef($optionIdx);
+            $option{stringMaxLen}=$unitsync->GetOptionStringMaxLen($optionIdx);
+          }elsif($option{type} eq "list") {
+            $option{default}=$unitsync->GetOptionListDef($optionIdx);
+            $option{listCount}=$unitsync->GetOptionListCount($optionIdx);
+            $option{list}={};
+            for my $listIdx (0..($option{listCount}-1)) {
+              my %item=(name => $unitsync->GetOptionListItemName($optionIdx,$listIdx),
+                        description => $unitsync->GetOptionListItemDesc($optionIdx,$listIdx),
+                        key => $unitsync->GetOptionListItemKey($optionIdx,$listIdx));
+              $item{description}=~s/\n/ /g;
+              $option{list}{$item{key}}=\%item;
+            }
+          }
+          $newCachedMaps{$mapName}{options}{$option{key}}=\%option;
+        }
+        $unitsync->RemoveAllArchives();
+      }
+      slog("Caching Spring map info... $nbUncachedMaps/$nbUncachedMaps (100%)",3) if($printProgressReport);
+      $spads->cacheMapsInfo(\%newCachedMaps) if($spads->{sharedDataTs}{mapInfoCache});
+    }
+    {
+      my $offset=0;
+      splice(@newAvailableMaps,$_-$offset++,1) foreach(@invalidMapNbs);
+    }
   }
 
-  my @newAvailableMods;
-  my %availableModsByNames;
-  for my $modNb (0..($nbMods-1)) {
-    my $nbInfo = $unitsync->GetPrimaryModInfoCount($modNb);
-    my $modName='';
-    for my $infoNb (0..($nbInfo-1)) {
-      next if($unitsync->GetInfoKey($infoNb) ne 'name');
-      $modName=$unitsync->GetInfoValueString($infoNb);
-      last;
+  my $configuredModName=$spads->{hSettings}{modName};
+  
+  my ($newTargetMod,$targetModIdx,%availableModsByNames);
+  if(substr($configuredModName,0,1) eq '~') {
+    my $modRegexp=substr($configuredModName,1);
+    for my $modIdx (0..($nbMods-1)) {
+      my $modName=unitsyncGetPrimaryModName($modIdx);
+      if(! defined $modName) {
+        slog("Failed to determine name of mod \#$modIdx",2);
+        next;
+      }
+      if(exists $availableModsByNames{$modName}) {
+        slog("Duplicate archives found for mod \"$modName\"",2);
+        next;
+      }
+      $availableModsByNames{$modName}=$modIdx;
+      ($newTargetMod,$targetModIdx)=($modName,$modIdx)
+          if($modName =~ /^$modRegexp$/ && (! defined $newTargetMod || $modName gt $newTargetMod));
     }
-    my $cachedMod=getMod($modName);
-    if(defined $cachedMod) {
-      $newAvailableMods[$modNb]=$cachedMod;
+    slog("Unable to find mod matching regular expression \"$modRegexp\"",1) unless(defined $newTargetMod);
+  }else{
+    my $resolvedModName;
+    if($configuredModName =~ /^rapid:\/\/([\w\-]+):(\w+)$/) {
+      my ($rapidIdent,$rapidRelease)=($1,$2);
+      my $rapidTag=substr($configuredModName,8);
+      my $rapidTagAndComma=$rapidTag.',';
+      my $lengthOfRapidTagAndComma=length($rapidTag)+1;
+      my @dataDirs=splitPaths($conf{springDataDir});
+      DATADIR_LOOP: foreach my $dataDir (@dataDirs) {
+        my $rapidDir=catdir($dataDir,'rapid');
+        next unless(-d $rapidDir);
+        my $rapidDh;
+        if(! opendir($rapidDh,$rapidDir)) {
+          slog("Failed to open data directory \"$rapidDir\" ($!)",2);
+          next;
+        }
+        my @rapidReposContainingIdentVersions = sort {
+          getModifTime("$rapidDir/$b/$rapidIdent/versions.gz") <=> getModifTime("$rapidDir/$a/$rapidIdent/versions.gz")
+        } (grep {substr($_,0,1) ne '.' && -f "$rapidDir/$_/$rapidIdent/versions.gz"} readdir($rapidDh));
+        close($rapidDh);
+        foreach my $rapidRepo (@rapidReposContainingIdentVersions) {
+          my $versionsGzFile=catfile($rapidDir,$rapidRepo,$rapidIdent,'versions.gz');
+          my $versionsFh=IO::Uncompress::Gunzip->new($versionsGzFile, Transparent => 0);
+          if(! defined $versionsFh) {
+            slog("Failed to open compressed rapid versions file \"$versionsGzFile\": ".($GunzipError||'unrecognized compression'),2);
+            next;
+          }
+          while(my $versionLine=<$versionsFh>) {
+            next unless(substr($versionLine,0,$lengthOfRapidTagAndComma) eq $rapidTagAndComma);
+            chomp($versionLine);
+            my $gameName=(split(/,/,$versionLine,4))[3];
+            if(defined $gameName && $gameName ne '') {
+              $resolvedModName=$gameName;
+              close($versionsFh);
+              last DATADIR_LOOP;
+            }
+            slog("Missing game name field for rapid tag \"$rapidTag\" in rapid versions file \"$versionsGzFile\"",2);
+            last;
+          }
+          close($versionsFh);
+        }
+      }
+      slog("Unable to resolve mod version for rapid tag \"$rapidTag\"",1) unless(defined $resolvedModName);
     }else{
-      $newAvailableMods[$modNb]={name=>$modName,options=>{},sides=>[]};
+      $resolvedModName=$configuredModName;
     }
-    if(exists $availableModsByNames{$modName}) {
-      slog("Duplicate archives found for mod \"$modName\"",2);
-    }else{
-      $availableModsByNames{$modName}=$modNb;
+    if(defined $resolvedModName) {
+      my $modIdx=$unitsync->GetPrimaryModIndex($resolvedModName);
+      if($modIdx<0) {
+        slog("Mod \"$resolvedModName\" not found",1);
+      }else{
+        ($newTargetMod,$targetModIdx)=($resolvedModName,$modIdx);
+      }
     }
   }
   $unitsync->RemoveAllArchives();
-  
-  my @availableModsNames=keys %availableModsByNames;
-  my ($newTargetMod)=getTargetModFromList(\@availableModsNames);
-  if(defined $newTargetMod) {
-    my $modNb=$availableModsByNames{$newTargetMod};
-    my $modChecksum = int32($unitsync->GetPrimaryModChecksum($modNb));
-    if(defined $newAvailableMods[$modNb]{hash} && $modChecksum && $modChecksum == $newAvailableMods[$modNb]{hash}) {
+
+  my %modInfo;
+  if(defined $targetModIdx) {
+    my $modChecksum = int32($unitsync->GetPrimaryModChecksum($targetModIdx));
+    if(! ($mode & LOADARCHIVES_RELOAD) && $modChecksum && exists $cachedMods{$newTargetMod} && $cachedMods{$newTargetMod}{hash} && $modChecksum == $cachedMods{$newTargetMod}{hash}) {
       $unitsync->UnInit();
       close($usLockFh);
-      return (\@newAvailableMaps,\@newAvailableMods,\%newCachedMaps);
+      return {availableMaps => \@newAvailableMaps, newCachedMaps => \%newCachedMaps, targetMod => $newTargetMod, availableModsNameToNb => \%availableModsByNames};
     }
-    $newAvailableMods[$modNb]{hash}=$modChecksum;
-    $newAvailableMods[$modNb]{archive}=$unitsync->GetPrimaryModArchive($modNb);
-    $unitsync->AddAllArchives($newAvailableMods[$modNb]{archive});
+    %modInfo = ( name => $newTargetMod, hash => $modChecksum, archive => $unitsync->GetPrimaryModArchive($targetModIdx), options => {}, sides => [] );
+    $unitsync->AddAllArchives($modInfo{archive});
     my $nbModOptions = $unitsync->GetModOptionCount();
     fetchAndLogUnitsyncErrors() if($nbModOptions < 0);
     for my $optionIdx (0..($nbModOptions-1)) {
@@ -1774,23 +1858,23 @@ sub loadArchivesBlocking {
           $option{list}{$item{key}}=\%item;
         }
       }
-      $newAvailableMods[$modNb]{options}{$option{key}}=\%option;
+      $modInfo{options}{$option{key}}=\%option;
     }
     my $nbModSides = $unitsync->GetSideCount();
     for my $sideIdx (0..($nbModSides-1)) {
       my $sideName = $unitsync->GetSideName($sideIdx);
-      $newAvailableMods[$modNb]{sides}[$sideIdx]=$sideName;
+      $modInfo{sides}[$sideIdx]=$sideName;
     }
     $unitsync->RemoveAllArchives();
   }
 
   $unitsync->UnInit();
   close($usLockFh);
-  return (\@newAvailableMaps,\@newAvailableMods,\%newCachedMaps);
+  return {availableMaps => \@newAvailableMaps, newCachedMaps => \%newCachedMaps, targetMod => $newTargetMod, modData => \%modInfo, availableModsNameToNb => \%availableModsByNames};
 }
 
 sub loadArchivesPostActions {
-  my ($r_availableMaps,$r_availableMods,$r_newCachedMaps,$verbose)=@_;
+  my ($r_loadArchivesResult,$configuredModNameDuringReload,$printModUpdateMsg,$mode)=@_;
 
   chdir($CWD);
 
@@ -1808,57 +1892,91 @@ sub loadArchivesPostActions {
   }
   slog("Spring archives loading process took $loadArchivesDuration",$loadArchivesMsgLogLevel);
 
-  if(! defined $r_availableMods) {
-    slog('Failed to load archives, undefined mods data (unitsync library crash ?)',1);
+  my $errorMsg;
+  if(! ref $r_loadArchivesResult) {
+    $errorMsg='Unitsync library crash ?';
+  }elsif(defined $r_loadArchivesResult->{error}) {
+    $errorMsg=$r_loadArchivesResult->{error};
+  }
+  if(defined $errorMsg) {
+    slog("Failed to load archives - $errorMsg",1);
     return 0;
   }
-  return 0 unless @{$r_availableMods};
-  
-  @availableMaps=@{$r_availableMaps};
-  %availableMapsNameToNb=();
-  for my $mapNb (0..$#availableMaps) {
-    $availableMapsNameToNb{$availableMaps[$mapNb]{name}}=$mapNb unless(exists $availableMapsNameToNb{$availableMaps[$mapNb]{name}});
-  }
-  @availableMods=@{$r_availableMods};
-  %availableModsNameToNb=();
-  for my $modNb (0..$#availableMods) {
-    $availableModsNameToNb{$availableMods[$modNb]{name}}=$modNb unless(exists $availableModsNameToNb{$availableMods[$modNb]{name}});
-  }
 
-  if($spads->{sharedDataTs}{mapInfoCache}) {
-    $spads->refreshSharedDataIfNeeded('mapInfoCache');
+  my $nbMapsLoaded;
+  if($mode & LOADARCHIVES_GAME_ONLY) {
+    $nbMapsLoaded=0;
   }else{
-    $spads->cacheMapsInfo($r_newCachedMaps) if(%{$r_newCachedMaps});
+    @availableMaps=@{$r_loadArchivesResult->{availableMaps}};
+    $nbMapsLoaded=@availableMaps;
+    
+    %availableMapsNameToNb=();
+    for my $mapNb (0..$#availableMaps) {
+      $availableMapsNameToNb{$availableMaps[$mapNb]{name}}=$mapNb unless(exists $availableMapsNameToNb{$availableMaps[$mapNb]{name}});
+    }
+    
+    if($spads->{sharedDataTs}{mapInfoCache}) {
+      $spads->refreshSharedDataIfNeeded('mapInfoCache');
+    }else{
+      my $r_newCachedMaps=$r_loadArchivesResult->{newCachedMaps};
+      $spads->cacheMapsInfo($r_newCachedMaps) if(%{$r_newCachedMaps});
+    }
+
+    $timestamps{mapLearned}=0;
+    $spads->applyMapList(\@availableMaps,$syncedSpringVersion);
+
   }
 
-  updateTargetMod($verbose);
+  %availableModsNameToNb=%{$r_loadArchivesResult->{availableModsNameToNb}};
+  %rapidModResolutionCache=();
 
-  $timestamps{mapLearned}=0;
-  $spads->applyMapList(\@availableMaps,$syncedSpringVersion);
+  my $nbArchivesLoaded;
+  my $newTargetMod=$r_loadArchivesResult->{targetMod};
+  if(defined $newTargetMod) {
+    %rapidModResolutionCache=(substr($configuredModNameDuringReload,8) => $newTargetMod)
+        if(substr($configuredModNameDuringReload,0,8) eq 'rapid://');
+    my $r_modData=$r_loadArchivesResult->{modData};
+    $cachedMods{$newTargetMod}=$r_modData if(defined $r_modData); # modData is only defined when a new uncached mod is selected
+    $nbArchivesLoaded = $nbMapsLoaded + (scalar(%availableModsNameToNb) || 1);
+  }else{
+    $nbArchivesLoaded = ($nbMapsLoaded + %availableModsNameToNb) || 1;
+  }
+  
+  if($configuredModNameDuringReload eq $spads->{hSettings}{modName}) {
+    if(defined $newTargetMod) {
+      if($newTargetMod ne $targetMod) {
+        broadcastMsg("New version of current mod detected ($newTargetMod), switching when battle is empty (use !rehost to force)")
+            if($printModUpdateMsg && $lobbyState >= LOBBY_STATE_BATTLE_OPENED && $lobby->{battles}{$lobby->{battle}{battleId}}{mod} ne $newTargetMod);
+        $targetMod=$newTargetMod;
+      }
+    }else{
+      $targetMod='';
+    }
+  }else{
+    updateTargetMod();
+  }
 
-  return @availableMaps+@availableMods;
+  return $nbArchivesLoaded;
 }
 
 sub loadArchives {
-  my ($r_callback,$verbose,$full)=@_;
+  my ($r_callback,$printModUpdateMsg,$mode)=@_;
+  $mode//=LOADARCHIVES_DEFAULT;
   $loadArchivesInProgress=1;
-  $timestamps{archivesLoad}=time;
-  $timestamps{archivesCheck}=time;
+  my $currentTime=time;
+  $timestamps{archivesLoad}=$currentTime;
+  $timestamps{archivesLoadFull}=$currentTime unless($mode & LOADARCHIVES_GAME_ONLY);
+  $timestamps{archivesCheck}=$currentTime;
+  my $configuredModName=$spads->{hSettings}{modName};
   if(defined $r_callback) {
     if(! SimpleEvent::forkCall(
-           sub {
-             my @loadArchivesBlockingResults=loadArchivesBlocking($full);
-             return @loadArchivesBlockingResults;
-           },
-           sub { 
-             $r_callback->(loadArchivesPostActions(@_,$verbose));
-           } ) ) {
-      slog('Failed to fork for asynchronous Spring archives reload!',1);
-      loadArchivesPostActions([],[],{},$verbose);
+           sub { loadArchivesBlocking($mode) },
+           sub { $r_callback->(loadArchivesPostActions($_[0],$configuredModName,$printModUpdateMsg,$mode)) }
+           ) ) {
+      $r_callback->(loadArchivesPostActions({error => 'Failed to fork for asynchronous Spring archives reload!'},$configuredModName,$printModUpdateMsg,$mode));
     }
   }else{
-    my @loadArchivesBlockingResults=loadArchivesBlocking($full);
-    return loadArchivesPostActions(@loadArchivesBlockingResults,$verbose);
+    return loadArchivesPostActions(loadArchivesBlocking($mode),$configuredModName,$printModUpdateMsg,$mode);
   }
 }
 
@@ -1885,34 +2003,19 @@ sub getMapHashAndArchive {
   return (uint32($spads->getMapHash($mapName,$syncedSpringVersion)),'');
 }
 
-sub getMod {
-  my $modName=shift;
-  return $availableMods[$availableModsNameToNb{$modName}] if(exists $availableModsNameToNb{$modName});
-  return undef;
-}
-
 sub getModHash {
   my $modName=shift;
-  return $availableMods[$availableModsNameToNb{$modName}]{hash} if(exists $availableModsNameToNb{$modName});
-  return 0;
-}
-
-sub getModArchive {
-  my $modName=shift;
-  return $availableMods[$availableModsNameToNb{$modName}]{archive} if(exists $availableModsNameToNb{$modName});
-  return 0;
+  return ($modName ne '' && exists $cachedMods{$modName}) ? $cachedMods{$modName}{hash} : 0;
 }
 
 sub getModOptions {
   my $modName=shift;
-  return $availableMods[$availableModsNameToNb{$modName}]{options} if(exists $availableModsNameToNb{$modName});
-  return {};
+  return ($modName ne '' && exists $cachedMods{$modName}) ? $cachedMods{$modName}{options} : {};
 }
 
 sub getModSides {
   my $modName=shift;
-  return $availableMods[$availableModsNameToNb{$modName}]{sides} if(exists $availableModsNameToNb{$modName});
-  return [];
+  return ($modName ne '' && exists $cachedMods{$modName}) ? $cachedMods{$modName}{sides} : [];
 }
 
 sub getMapOptions {
@@ -2174,17 +2277,28 @@ sub getLocalLanIp {
   return "*";
 }
 
-sub getDirModifTime {
-  return (stat(shift))[9] // 0;
-}
+sub getModifTime { (stat($_[0]))[9] // 0 }
 
 sub getArchivesChangeTime {
   my @dataDirs=splitPaths($conf{springDataDir});
   my $archivesChangeTs=0;
+  my $rapidId;
+  $rapidId=$1 if($spads->{hSettings}{modName} =~ /^rapid:\/\/([\w\-]+):/);
   foreach my $dataDir (@dataDirs) {
     foreach my $dataSubDir (qw'base games maps packages') {
-      my $dirChangeTs=getDirModifTime("$dataDir/$dataSubDir");
+      my $dirChangeTs=getModifTime("$dataDir/$dataSubDir");
       $archivesChangeTs=$dirChangeTs if($dirChangeTs > $archivesChangeTs);
+    }
+    next unless(defined $rapidId);
+    my $rapidDir="$dataDir/rapid";
+    next unless(-d $rapidDir);
+    my $rapidDh;
+    next unless(opendir($rapidDh,$rapidDir));
+    my @rapidReposWithMatchingVersionsGz = grep {substr($_,0,1) ne '.' && -f "$rapidDir/$_/$rapidId/versions.gz"} readdir($rapidDh);
+    close($rapidDh);
+    foreach my $rapidRepo (@rapidReposWithMatchingVersionsGz) {
+      my $versionsGzChangeTs=getModifTime("$rapidDir/$rapidRepo/$rapidId/versions.gz");
+      $archivesChangeTs=$versionsGzChangeTs if($versionsGzChangeTs > $archivesChangeTs);
     }
   }
   return $archivesChangeTs;
@@ -2244,8 +2358,10 @@ sub rehostAfterGame {
 }
 
 sub cancelCloseBattleAfterGame {
+  my $reason=shift;
   $closeBattleAfterGame=0;
   my $msg="Close battle cancelled";
+  $msg.=" (reason: $reason)" if(defined $reason);
   broadcastMsg($msg);
   slog($msg,3);
 }
@@ -2333,6 +2449,10 @@ sub openBattle {
   if(! $mapHash) {
     slog("Unable to retrieve hashcode of map \"$conf{map}\"",1);
     closeBattleAfterGame("unable to retrieve map hashcode");
+    return 0;
+  }
+  if($targetMod eq '') {
+    closeBattleAfterGame('game archive not found');
     return 0;
   }
   my $modHash=getModHash($targetMod);
@@ -2914,8 +3034,7 @@ sub parseSpadsCmd {
       }elsif(any {$lcCmd eq lc($_)} (keys %{$spads->{hValues}})) {
         $cmdShortcut='hSet';
       }else{
-        my $modName=$targetMod;
-        $modName=$lobby->{battles}{$lobby->{battle}{battleId}}{mod} if($lobbyState >= LOBBY_STATE_BATTLE_OPENED);
+        my $modName = $lobbyState >= LOBBY_STATE_BATTLE_OPENED ? $lobby->{battles}{$lobby->{battle}{battleId}}{mod} : $targetMod;
         my $p_modOptions=getModOptions($modName);
         my $p_mapOptions=getMapOptions($currentMap);
         $cmdShortcut='bSet' if($lcCmd eq 'startpostype' || exists $p_modOptions->{$lcCmd} || exists $p_mapOptions->{$lcCmd});
@@ -3723,7 +3842,7 @@ sub checkAutoReloadArchives {
     slog("Checking Spring archives for auto-reload",5);
     $timestamps{archivesCheck}=time;
     my $archivesChangeTs=getArchivesChangeTime();
-    if($archivesChangeTs > $timestamps{archivesLoad} && time - $archivesChangeTs > $conf{autoReloadArchivesMinDelay}) {
+    if($archivesChangeTs > $timestamps{archivesLoadFull} && time - $archivesChangeTs > $conf{autoReloadArchivesMinDelay}) {
       my $archivesChangeDelay=secToTime(time - $archivesChangeTs);
       slog("Spring archives have been modified $archivesChangeDelay ago, auto-reloading archives...",3);
       loadArchives(sub {quitAfterGame('Unable to auto-reload Spring archives') unless(shift)},1);
@@ -6030,7 +6149,7 @@ sub needRehost {
   foreach my $p (keys %params) {
     return 1 if($spads->{hSettings}{$p} ne $lobby->{battles}{$lobby->{battle}{battleId}}{$params{$p}});
   }
-  return 1 if($targetMod ne $lobby->{battles}{$lobby->{battle}{battleId}}{mod});
+  return 1 if($targetMod ne '' && $targetMod ne $lobby->{battles}{$lobby->{battle}{battleId}}{mod});
   return 1 if($spads->{hSettings}{password} ne $lobby->{battle}{password});
   return 0;
 }
@@ -7991,8 +8110,7 @@ sub hBSet {
   $val//='';
   $bSetting=lc($bSetting);
 
-  my $modName=$targetMod;
-  $modName=$lobby->{battles}{$lobby->{battle}{battleId}}{mod} if($lobbyState >= LOBBY_STATE_BATTLE_OPENED);
+  my $modName = $lobbyState >= LOBBY_STATE_BATTLE_OPENED ? $lobby->{battles}{$lobby->{battle}{battleId}}{mod} : $targetMod;
   my $p_modOptions=getModOptions($modName);
   my $p_mapOptions=getMapOptions($currentMap);
 
@@ -8876,8 +8994,7 @@ sub hHelp {
       return 0;
     }
 
-    my $modName=$targetMod;
-    $modName=$lobby->{battles}{$lobby->{battle}{battleId}}{mod} if($lobbyState >= LOBBY_STATE_BATTLE_OPENED);
+    my $modName = $lobbyState >= LOBBY_STATE_BATTLE_OPENED ? $lobby->{battles}{$lobby->{battle}{battleId}}{mod} : $targetMod;
     my $p_modOptions=getModOptions($modName);
     my $p_mapOptions=getMapOptions($currentMap);
 
@@ -9187,10 +9304,17 @@ sub hHSet {
         }
         return 1 if($checkOnly);
         $spads->{hSettings}{$hParam}=$val;
-        updateTargetMod() if($hParam eq "modName");
+        my $modAvailable = $hParam eq 'modName' ? updateTargetMod() : 1;
         $timestamps{autoRestore}=time;
-        sayBattleAndGame("Hosting setting changed by $user ($hParam=$val), use !rehost to apply new value.");
-        answer("Hosting setting changed ($hParam=$val)") if($source eq "pv");
+        my $msgStart='Hosting setting changed ';
+        my $msgEnd="($hParam=$val)";
+        if(! $modAvailable) {
+          $msgEnd.=', unable to find matching mod archive!';
+        }elsif($lobbyState >= LOBBY_STATE_BATTLE_OPENED && $modAvailable == 1) {
+          $msgEnd.=', use !rehost to apply new value.';
+        }
+        sayBattleAndGame($msgStart."by $user ".$msgEnd);
+        answer($msgStart.$msgEnd) if($source eq 'pv');
         return 1;
       }else{
         answer("Value \"$val\" for hosting setting \"$hParam\" is not allowed in current hosting preset");
@@ -9754,8 +9878,7 @@ sub hList {
       $filterUnmodifiableSettings=0;
       @filters=() if($#filters == 0 && lc($filters[0]) eq 'all');
     }
-    my $modName=$targetMod;
-    $modName=$lobby->{battles}{$lobby->{battle}{battleId}}{mod} if($lobbyState >= LOBBY_STATE_BATTLE_OPENED);
+    my $modName = $lobbyState >= LOBBY_STATE_BATTLE_OPENED ? $lobby->{battles}{$lobby->{battle}{battleId}}{mod} : $targetMod;
     my $p_modOptions=getModOptions($modName);
     my $p_mapOptions=getMapOptions($currentMap);
     my @bSettings;
@@ -9832,7 +9955,7 @@ sub hList {
                             "$C{5}Allowed values$C{1}" => '<hidden>'});
       }else{
         my $settingValue=$spads->{hSettings}{$setting};
-        $settingValue=$targetMod if($setting eq 'modName');
+        $settingValue=$targetMod if($setting eq 'modName' && $targetMod ne '');
         my $allowedValues=join(" | ",@{$spads->{hValues}{$setting}});
         my ($coloredSetting,$coloredValue)=($setting,$settingValue);
         if($#{$spads->{hValues}{$setting}} < 1) {
@@ -10319,20 +10442,39 @@ sub hNotify {
 sub hOpenBattle {
   my ($source,$user,$p_params,$checkOnly)=@_;
 
-  if($lobbyState >= LOBBY_STATE_BATTLE_OPENED && ! $closeBattleAfterGame) {
-    answer("Unable to open battle lobby, it is already opened");
-    return 0;
-  }
-  if($lobbyState == LOBBY_STATE_OPENING_BATTLE) {
-    answer('Opening of the battle lobby is already in progress');
-    return 0;
-  }
   if($#{$p_params} != -1) {
-    invalidSyntax($user,"openbattle");
+    invalidSyntax($user,'openbattle');
+    return 0;
+  }
+  
+  if(! $closeBattleAfterGame) {
+    my $msg='Unable to open battle lobby';
+    if($lobbyState >= LOBBY_STATE_BATTLE_OPENED) {
+      $msg='Battle lobby is already opened';
+    }elsif($lobbyState == LOBBY_STATE_OPENING_BATTLE) {
+      $msg='Opening of the battle lobby is already in progress';
+    }elsif($lobbyState < LOBBY_STATE_SYNCHRONIZED) {
+      $msg.=', lobby connection is not synchronized yet';
+    }elsif($targetMod eq '') {
+      $msg.=", no game archive found matching \"$spads->{hSettings}{modName}\"";
+      $msg.=' (archives are currently being reloaded)' if($loadArchivesInProgress);
+    }
+    answer($msg);
     return 0;
   }
   return 1 if($checkOnly);
-  cancelCloseBattleAfterGame();
+  
+  my %sourceNames = ( pv => 'private',
+                      chan => "channel #$masterChannel",
+                      game => 'game',
+                      battle => 'battle lobby' );
+
+  cancelCloseBattleAfterGame("requested by $user in $sourceNames{$source}");
+  if($targetMod eq '') {
+    my $msg="No game archive found matching \"$spads->{hSettings}{modName}\"";
+    $msg.=' (archives are currently being reloaded)' if($loadArchivesInProgress);
+    answer($msg);
+  }
 }
 
 sub hPlugin {
@@ -10544,8 +10686,9 @@ sub hPromote {
     answer('Unable to promote battle, battle lobby is locked');
     return 0;
   }
+  my $r_battle=$lobby->{battles}{$lobby->{battle}{battleId}};
   my $nbHumanPlayers=getNbHumanPlayersInBattle();
-  if($nbHumanPlayers >= $lobby->{battles}{$lobby->{battle}{battleId}}{maxPlayers}) {
+  if($nbHumanPlayers >=  $r_battle->{maxPlayers}) {
     answer('Unable to promote battle, battle lobby is full');
     return 0;
   }
@@ -10563,7 +10706,8 @@ sub hPromote {
 
   my $nbSpecs=getNbSpec()-1;
   my $nbUsers=$nbHumanPlayers+$nbSpecs;
-
+  my $modName = $targetMod eq '' ? $r_battle->{mod} : $targetMod;
+  
   my $neededPlayer="";
   if($conf{autoLock} ne "off" || $conf{autoSpecExtraPlayers} || $conf{autoStart} ne "off") {
     my $nbPlayers=0;
@@ -10577,7 +10721,7 @@ sub hPromote {
   $promoteMsg=~s/\%u/$user/g;
   $promoteMsg=~s/\%p/$neededPlayer/g;
   $promoteMsg=~s/\%b/$hSettings{battleName}/g;
-  $promoteMsg=~s/\%o/$targetMod/g;
+  $promoteMsg=~s/\%o/$modName/g;
   $promoteMsg=~s/\%a/$conf{map}/g;
   $promoteMsg=~s/\%P/$nbHumanPlayers/g;
   $promoteMsg=~s/\%S/$nbSpecs/g;
@@ -10749,13 +10893,13 @@ sub hRebalance {
 sub hReloadArchives {
   my ($source,$user,$p_params,$checkOnly)=@_;
 
-  my $full;
+  my $loadArchivesMode=LOADARCHIVES_DEFAULT;
   if(@{$p_params}) {
     if($#{$p_params} > 0 || lc($p_params->[0]) ne 'full') {
       invalidSyntax($user,"reloadarchives");
       return 0;
     }
-    $full=1;
+    $loadArchivesMode=LOADARCHIVES_RELOAD;
   }
 
   if($loadArchivesInProgress) {
@@ -10771,7 +10915,7 @@ sub hReloadArchives {
       my $nbArchives=shift;
       quitAfterGame('Unable to reload Spring archives') unless($nbArchives);
       $r_asyncAnswerFunction->("$nbArchives Spring archives loaded");
-    }, 1, $full);
+    }, 1, $loadArchivesMode);
 }
 
 sub hReloadConf {
@@ -10916,8 +11060,15 @@ sub hRehost {
     invalidSyntax($user,"rehost");
     return 0;
   }
+  my $reason;
   if($lobbyState < LOBBY_STATE_BATTLE_OPENED) {
-    answer("Unable to rehost battle, battle is closed");
+    $reason='battle is closed';
+  }elsif($targetMod eq '') {
+    $reason="no game archive found matching \"$spads->{hSettings}{modName}\"";
+    $reason.=' (archives are currently being reloaded)' if($loadArchivesInProgress);
+  }
+  if(defined $reason) {
+    answer("Unable to rehost battle, $reason");
     return 0;
   }
   return 1 if($checkOnly);
@@ -15763,19 +15914,26 @@ sub checkLobbyConnection {
 }
 
 sub manageBattle {
-  if($lobbyState == LOBBY_STATE_SYNCHRONIZED && ! $closeBattleAfterGame) {
-    if(exists $availableModsNameToNb{$targetMod} && defined $availableMods[$availableModsNameToNb{$targetMod}]{hash}) {
-      openBattle();
-    }elsif(! $loadArchivesInProgress) {
-      closeBattleAfterGame('mod not found');
-    }
+
+  if($lobbyState == LOBBY_STATE_SYNCHRONIZED
+     && ! $closeBattleAfterGame
+     && $targetMod ne ''
+     && exists $cachedMods{$targetMod}
+     && defined $cachedMods{$targetMod}{hash}) {
+    openBattle();
+    return;
   }
 
-  closeBattle() if($lobbyState >= LOBBY_STATE_BATTLE_OPENED && $closeBattleAfterGame && $autohost->getState() == 0);
+  if($lobbyState >= LOBBY_STATE_BATTLE_OPENED
+     && $closeBattleAfterGame
+     && $autohost->getState() == 0) {
+    closeBattle();
+    return;
+  }
 
   return if($lobbyState < LOBBY_STATE_BATTLE_OPENED || ! %{$lobby->{battle}});
 
-  if(! $springPid && all {$_ eq $conf{lobbyLogin} || $lobby->{users}{$_}{status}{bot}} (keys %{$lobby->{battle}{users}}) ) {
+  if(! $springPid && ! $loadArchivesInProgress && all {$_ eq $conf{lobbyLogin} || $lobby->{users}{$_}{status}{bot}} (keys %{$lobby->{battle}{users}}) ) {
     if($conf{restoreDefaultPresetDelay} && $timestamps{autoRestore} && time-$timestamps{autoRestore} > $conf{restoreDefaultPresetDelay}) {
       my $restoreDefaultPresetDelayTime=secToTime($conf{restoreDefaultPresetDelay});
       broadcastMsg("Battle empty for $restoreDefaultPresetDelayTime, restoring default settings");
@@ -15792,7 +15950,7 @@ sub manageBattle {
         rotateMap($conf{rotationEmpty},0);
       }
     }
-    if(needRehost() && ! $closeBattleAfterGame) {
+    if(needRehost() && ! $closeBattleAfterGame && $targetMod ne '') {
       rehostAfterGame('applying pending hosting settings while battle is empty',1);
       $timestamps{autoRestore}=time if($timestamps{autoRestore});
     }

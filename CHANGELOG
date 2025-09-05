@@ -197,6 +197,7 @@ helpSettings.dat:
 0.7.6: remove Springie emulation mode (deprecated)
 0.7.7: update description of "autoManagedSpringVersion" global setting: multi GitHub tag templates, multi asset regular expressions, "<arch>" placeholder, new default release tag and asset formats for Recoil engine
 0.7.8: update GitHub repository name for Recoil engine (renamed from "spring" to "RecoilEngine")
+0.7.9: the "modName" hosting setting now supports rapid tag values (automatic rapid tag tracking)
 
 PerlUnitSync.pm:
 ===============
@@ -1044,6 +1045,17 @@ spads.pl:
 0.13.42: fix bug introduced in SPADS 0.13.39 which made the "preSpadsCommand" and "postSpadsCommand" plugin API callbacks receive nested arrays as command parameters for auto-voted commands
 0.13.43: avoid printing warning when map rotation cannot be performed because only one map is available
          add a log message when launching game server (INFO level)
+0.13.44: add support for rapid tags in "modName" hosting setting for automatic rapid tag tracking
+         "full" mode for "!reloadArchives" command now also applies to game archives
+         when "modName" hosting setting cannot be resolved to a game available locally:
+           . show configured regular expression or rapid tag in "!hSettings" command output instead
+           . use current hosted game name in promote messages instead
+           . prevent usage of "!rehost" command
+           . do not try to rehost battle automatically
+           . add a message when "modName" hosting setting is changed
+         improve error cases handling for "!openBattle" command
+         improve automatic battle lobby opening/closing (battle is now automatically re-opened when game archive becomes available locally, if the battle hasn't been explicitly closed)
+         prevent automatic empty battle lobby management when archive reloading process is in progress (default preset restoring, map/preset rotation and battle rehosting)
 
 SpadsConf.pm:
 ============
@@ -1254,6 +1266,7 @@ SpadsConf.pm:
          update default GitHub realease tag templates and asset regular expressions to handle the new formats used by Recoil engine
 0.13.14: update GitHub repository name for Recoil engine to avoid redirections (renamed from "spring" to "RecoilEngine")
          use "recoil" engine subdirectory for both "beyond-all-reason/spring" and "beyond-all-reason/RecoilEngine" GitHub repositories
+0.13.15: add support for rapid tags in "modName" hosting setting (automatic rapid tag tracking)
 
 spadsInstaller.pl:
 =================
