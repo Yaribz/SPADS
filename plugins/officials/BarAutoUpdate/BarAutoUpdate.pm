@@ -40,7 +40,7 @@ use Storable qw'nstore retrieve';
 
 use SpadsPluginApi;
 
-my $pluginVersion='0.6';
+my $pluginVersion='0.7';
 my $requiredSpadsVersion='0.13.15';
 
 use constant {
@@ -533,7 +533,7 @@ sub updateBarEnd {
   $self->{updateInProgress}=0;
   slog('End of BAR auto-update process',5);
   
-  if(! ref $r_result eq 'HASH') {
+  if(ref $r_result ne 'HASH') {
     slog('BAR auto-update process terminated abnormally (unknown error)',1);
     return;
   }
