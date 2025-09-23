@@ -35,7 +35,7 @@ use SpringLobbyServer;
 
 use SpadsPluginApi;
 
-my $pluginVersion='0.13';
+my $pluginVersion='0.14';
 my $requiredSpadsVersion='0.13.32';
 
 my %globalPluginParams = (
@@ -62,6 +62,8 @@ sub new {
   
   my %springLobbyServerConf=(
     serverMode => SpringLobbyServer::SRV_MODE_LAN,
+    maxReadQueue => 32768,
+    maxChatMsgLength => 16384,
     logger => \&slog,
     onNewClientConnection => \&springLobbyServerOnNewClientConnection,
     authenticationSvc => \&springLobbyServerAuthenticationSvc,
