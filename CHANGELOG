@@ -1056,6 +1056,8 @@ spads.pl:
          improve error cases handling for "!openBattle" command
          improve automatic battle lobby opening/closing (battle is now automatically re-opened when game archive becomes available locally, if the battle hasn't been explicitly closed)
          prevent automatic empty battle lobby management when archive reloading process is in progress (default preset restoring, map/preset rotation and battle rehosting)
+0.13.45: add checks in chat command handlers to detect inconsistencies in data sent by lobby server (fix: "PERL WARNING: Use of uninitialized value..." messages)
+         include messages received with "SAIDPRIVATEEX" lobby commands in chat logs
 
 SpadsConf.pm:
 ============

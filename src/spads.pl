@@ -111,7 +111,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.44';
+our $SPADS_VERSION='0.13.45';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -598,7 +598,7 @@ $lobby = SpringLobbyInterface->new(serverHost => $conf{lobbyHost},
                                    serverPort => $conf{lobbyPort},
                                    simpleLog => $lobbySimpleLog,
                                    warnForUnhandledMessages => 0,
-                                   inconsistencyHandler => sub { $lobbyBrokenConnection=1; } )
+                                   inconsistencyHandler => sub { return $lobbyBrokenConnection=1; } )
     unless($SLI_LOADING_ERROR);
 
 our $autohost = SpringAutoHostInterface->new(autoHostPort => $conf{autoHostPort},
@@ -13613,6 +13613,7 @@ sub initLobbyConnection {
                         SERVERMSG => \&cbServerMsg,
                         SAIDEX => \&cbSaidEx,
                         SAIDPRIVATE => \&cbSaidPrivate,
+                        SAIDPRIVATEEX => \&cbSaidPrivateEx,
                         SAIDBATTLE => \&cbSaidBattle,
                         SAIDBATTLEEX => \&cbSaidBattleEx,
                         CLIENTSTATUS => \&cbClientStatus,
@@ -14375,6 +14376,11 @@ sub cbRemoveUser {
 
 sub cbSaid {
   my (undef,$chan,$user,$msg)=@_;
+  if(! exists $lobby->{users}{$user}) {
+    slog("Ignoring SAID command (unknown user: \"$user\")",2);
+    $lobbyBrokenConnection=1;
+    return;
+  }
   logMsg("channel_$chan","<$user> $msg") if($conf{logChanChat});
   if($chan eq $masterChannel && $msg =~ /^!(\w.*)$/) {
     handleRequest("chan",$user,$1);
@@ -14404,6 +14410,11 @@ sub cbSaidEx {
 
 sub cbSaidPrivate {
   my (undef,$user,$msg)=@_;
+  if(! exists $lobby->{users}{$user}) {
+    slog("Ignoring SAIDPRIVATE command (unknown user: \"$user\")",2);
+    $lobbyBrokenConnection=1;
+    return;
+  }
   foreach my $pluginName (@pluginsOrder) {
     return if($plugins{$pluginName}->can('onPrivateMsg') && $plugins{$pluginName}->onPrivateMsg($user,$msg) == 1);
   }
@@ -14418,8 +14429,26 @@ sub cbSaidPrivate {
   }
 }
 
+sub cbSaidPrivateEx {
+  my (undef,$user,$msg)=@_;
+  logMsg("pv_$user","* $user $msg") if($conf{logPvChat});
+}
+
 sub cbSaidBattle {
   my (undef,$user,$msg)=@_;
+  my $protocolError;
+  if(! exists $lobby->{users}{$user}) {
+    $protocolError="unknown user: \"$user\"";
+  }elsif(! %{$lobby->{battle}}) {
+    $protocolError='currently out of any battle';
+  }elsif(! exists $lobby->{battle}{users}{$user}) {
+    $protocolError="user \"$user\" out of current battle";
+  }
+  if(defined $protocolError) {
+    slog("Ignoring SAIDBATTLE command ($protocolError)",2);
+    $lobbyBrokenConnection=1;
+    return;
+  }
   logMsg("battle","<$user> $msg") if($conf{logBattleChat});
   return if(checkUserMsgFlood($user));
   if($msg =~ /^!(\w.*)$/) {
@@ -14436,6 +14465,19 @@ sub cbSaidBattle {
 
 sub cbSaidBattleEx {
   my (undef,$user,$msg)=@_;
+  my $protocolError;
+  if(! exists $lobby->{users}{$user}) {
+    $protocolError="unknown user: \"$user\"";
+  }elsif(! %{$lobby->{battle}}) {
+    $protocolError='currently out of any battle';
+  }elsif(! exists $lobby->{battle}{users}{$user}) {
+    $protocolError="user \"$user\" out of current battle";
+  }
+  if(defined $protocolError) {
+    slog("Ignoring SAIDBATTLEEX command ($protocolError)",2);
+    $lobbyBrokenConnection=1;
+    return;
+  }
   logMsg("battle","* $user $msg") if($conf{logBattleChat});
   return if(checkUserMsgFlood($user));
   if($msg =~ /^suggests that (.+)$/) {
@@ -15908,7 +15950,7 @@ sub checkLobbyConnection {
                                        serverPort => $conf{lobbyPort},
                                        simpleLog => $lobbySimpleLog,
                                        warnForUnhandledMessages => 0,
-                                       inconsistencyHandler => sub { $lobbyBrokenConnection=1; } );
+                                       inconsistencyHandler => sub { return $lobbyBrokenConnection=1; } );
     $timestamps{connectAttempt}=0;
   }
 }
