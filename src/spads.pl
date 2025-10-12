@@ -111,7 +111,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.45';
+our $SPADS_VERSION='0.13.46';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -14441,8 +14441,6 @@ sub cbSaidBattle {
     $protocolError="unknown user: \"$user\"";
   }elsif(! %{$lobby->{battle}}) {
     $protocolError='currently out of any battle';
-  }elsif(! exists $lobby->{battle}{users}{$user}) {
-    $protocolError="user \"$user\" out of current battle";
   }
   if(defined $protocolError) {
     slog("Ignoring SAIDBATTLE command ($protocolError)",2);
@@ -14470,8 +14468,6 @@ sub cbSaidBattleEx {
     $protocolError="unknown user: \"$user\"";
   }elsif(! %{$lobby->{battle}}) {
     $protocolError='currently out of any battle';
-  }elsif(! exists $lobby->{battle}{users}{$user}) {
-    $protocolError="user \"$user\" out of current battle";
   }
   if(defined $protocolError) {
     slog("Ignoring SAIDBATTLEEX command ($protocolError)",2);
