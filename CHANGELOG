@@ -1059,6 +1059,7 @@ spads.pl:
 0.13.45: add checks in chat command handlers to detect inconsistencies in data sent by lobby server (fix: "PERL WARNING: Use of uninitialized value..." messages)
          include messages received with "SAIDPRIVATEEX" lobby commands in chat logs
 0.13.46: allow battle chat messages coming from users outside of battle (used by Teiserver)
+0.13.47: show SpringLobbyProtocol module version in "!version" command output
 
 SpadsConf.pm:
 ============

@@ -111,7 +111,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.46';
+our $SPADS_VERSION='0.13.47';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -13062,6 +13062,8 @@ sub hVersion {
     }
     $versionedComponents{'Inline::Python'}=$inlinePythonVer;
   }
+  $versionedComponents{SpringLobbyProtocol}='v'.$SpringLobbyProtocol::VERSION
+      if(defined $SpringLobbyProtocol::VERSION);
   foreach my $component (sort keys %versionedComponents) {
     sayPrivate($user,"- $C{5}$component$C{10} $versionedComponents{$component}");
   }
