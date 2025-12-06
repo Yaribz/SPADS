@@ -39,7 +39,7 @@ use SimpleLog;
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.13.15';
+my $moduleVersion='0.13.16';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -242,7 +242,8 @@ my %paramTypes = (login => '[\w\[\]]{2,20}',
                   null => '',
                   absoluteExecutableFile => sub { return (-f $_[0] && -x $_[0] && isAbsolutePath($_[0])) },
                   unitsyncDirType => sub { return (-f "$_[0]/$unitsyncLibName" && -r "$_[0]/$unitsyncLibName") },
-                  autoUpdateType => '(stable|testing|unstable|contrib)',
+                  autoUpdateType => sub { return (any {$_[0] eq $_} qw'stable testing unstable contrib')
+                                              || $_[0] =~ /^git(?:\@(?:[\da-f]{4,40}|branch=[\w\-\.\/]+|tag=[\w\-\.\/]+))?$/ },
                   autoManagedSpringVersionType => \&parseAutoManagedSpringVersion,
                   autoRestartType => '(on|off|whenEmpty|whenOnlySpec)',
                   absoluteReadableDirs => sub { return $_[0] ne '' && (all {-d $_ && -x $_ && -r $_ && isAbsolutePath($_)} split($win?';':':',$_[0])) },
@@ -891,6 +892,8 @@ sub preProcessConfFile {
     foreach my $macroName (keys %{$p_macros}) {
       s/\%$macroName\%/$p_macros->{$macroName}/g;
     }
+    s!\%ENV\{(\w+)\}\%!$ENV{$1}//''!eg;
+    s!\%\(ENV\{(\w+)\}\|(.*?)\)\%!$ENV{$1}//$2!eg;
     if(/^\{(.*)\}$/) {
       my $subConfFile=$1;
       if(($win && $subConfFile !~ /^[a-zA-Z]\:/) || (! $win && $subConfFile !~ /^\//)) {

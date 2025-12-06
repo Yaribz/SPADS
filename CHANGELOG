@@ -85,6 +85,7 @@ help.dat:
 0.13.3: extend !list command usage to show current vote settings: "!list vSettings"
 0.14.0: add !resign command
 0.14.1: new "!sendLobby" command syntax: parameter handling in shell mode
+0.14.2: the "!update" command now also accepts a Git commit hash as parameter
 
 helpSettings.dat:
 ================
@@ -198,6 +199,7 @@ helpSettings.dat:
 0.7.7: update description of "autoManagedSpringVersion" global setting: multi GitHub tag templates, multi asset regular expressions, "<arch>" placeholder, new default release tag and asset formats for Recoil engine
 0.7.8: update GitHub repository name for Recoil engine (renamed from "spring" to "RecoilEngine")
 0.7.9: the "modName" hosting setting now supports rapid tag values (automatic rapid tag tracking)
+0.7.10: the "autoUpdateRelease" global setting now also accepts a Git commit hash for manual selection of specific SPADS version
 
 PerlUnitSync.pm:
 ===============
@@ -1060,6 +1062,8 @@ spads.pl:
          include messages received with "SAIDPRIVATEEX" lobby commands in chat logs
 0.13.46: allow battle chat messages coming from users outside of battle (used by Teiserver)
 0.13.47: show SpringLobbyProtocol module version in "!version" command output
+0.13.48: allow providing a Git commit hash in "autoUpdateRelease" global setting for manual selection of specific SPADS version
+         the "!update" command now also accepts a Git commit hash as parameter
 
 SpadsConf.pm:
 ============
@@ -1271,6 +1275,8 @@ SpadsConf.pm:
 0.13.14: update GitHub repository name for Recoil engine to avoid redirections (renamed from "spring" to "RecoilEngine")
          use "recoil" engine subdirectory for both "beyond-all-reason/spring" and "beyond-all-reason/RecoilEngine" GitHub repositories
 0.13.15: add support for rapid tags in "modName" hosting setting (automatic rapid tag tracking)
+0.13.16: allow providing a Git commit hash in "autoUpdateRelease" global setting for manual selection of specific SPADS version
+         add support for environment variables in configuration files
 
 spadsInstaller.pl:
 =================
@@ -1388,6 +1394,8 @@ spadsInstaller.pl:
       update default GitHub realease tag templates and asset regular expressions to handle the new formats used by Recoil engine
 0.46: update GitHub repository name for Recoil engine to avoid redirections (renamed from "spring" to "RecoilEngine")
       use "recoil" engine subdirectory for both "beyond-all-reason/spring" and "beyond-all-reason/RecoilEngine" GitHub repositories
+0.47: allow providing a Git commit hash instead of a SPADS release name for immutable/reproducible deployment
+      add support for environment variables in installation templates
 
 SpadsPluginApi.pm:
 =================
@@ -1540,6 +1548,8 @@ SpadsUpdater.pm:
 0.29: support multiple GitHub tag templates simultaneously
 0.30: support multiple GitHub asset regular expressions simultaneously
 0.31: support renammed GitHub repository (with automatic import of corresponding releases cache)
+0.32: allow providing a Git commit hash instead of a SPADS release name for manual selection of specific version
+      use internal URL escaping function
 
 springLobbyCertificates.dat:
 ===========================
@@ -1576,3 +1586,4 @@ update.pl:
 0.14: package PerlUnitSync.pm is now downloaded for all systems (new unitsync interface using FFI::Platypus)
 0.15: add sequentialSpadsUnitsyncProcess.pl component
 0.16: add SpringLobbyProtocol to the list of auto-updated packages (new dependency of SpringLobbyInterface)
+0.17: allow providing a Git commit hash instead of a SPADS release name for manual selection of specific version

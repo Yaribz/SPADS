@@ -227,13 +227,14 @@ Integer
 [global:autoUpdateRelease]
 Auto-update release
 -
-Name of the SPADS release to auto-update to.
+Name of the SPADS release or Git commit to auto-update to.
 -
 <null>: auto-update is disabled
 stable: auto-update to "stable" release (latest official release)
 testing: auto-update to "testing" release (public testing release)
 unstable: auto-update to "unstable" release (release in development)
 contrib: auto-update to "contrib" release (public testing release + unchecked external patches)
+git@<commitHash>: auto-update to the version specified by the Git commit whose hash is <commitHash>
 -
 %release% (set during installation)
 

@@ -36,7 +36,7 @@ use Time::HiRes;
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $archName=($win?'win':'linux').($Config{ptrsize} > 4 ? 64 : 32);
 
-our $VERSION='0.31';
+our $VERSION='0.32';
 
 my @constructorParams = qw'sLog repository release packages';
 my @optionalConstructorParams = qw'localDir springDir';
@@ -92,7 +92,33 @@ sub new {
   $self->{repository}=~s/\/$//;
   $self->{localDir}//=File::Spec->canonpath($FindBin::Bin);
   $self->{engineReleaseVersionCache}={};
+
+  if(substr($self->{release},0,3) eq 'git') {
+    my $release=$self->{release};
+    my $githubUrlIdent;
+    if(substr($release,3,1) eq '@') {
+      if(substr($release,4,4) eq 'tag=') {
+        $githubUrlIdent='refs/tags/'.substr($release,8);
+      }elsif(substr($release,4,7) eq 'branch=') {
+        $githubUrlIdent='refs/heads/'.substr($release,11);
+      }else{
+        $githubUrlIdent=substr($release,4);
+      }
+    }else{
+      $githubUrlIdent='refs/heads/master';
+    }
+    $self->{packagesIndexUrl}='https://raw.githubusercontent.com/Yaribz/SPADS/'._escapeUrl($githubUrlIdent).'/packages.txt';
+  }else{
+    $self->{packagesIndexUrl}=$self->{repository}.'/packages.txt';
+  }
+  
   return $self;
+}
+
+sub _escapeUrl {
+  my $url=shift;
+  $url =~ s/([^A-Za-z0-9\-\._~])/sprintf("%%%02X", ord($1))/eg;
+  return $url;
 }
 
 sub _unescapeUrl {
@@ -740,8 +766,9 @@ sub _updateLockProtected {
     }
   }
 
+  my $release = substr($self->{release},0,3) eq 'git' ? 'unstable' : $self->{release};
   my %allAvailablePackages;
-  if(! $self->downloadFile("$self->{repository}/packages.txt",'packages.txt')) {
+  if(! $self->downloadFile($self->{packagesIndexUrl},'packages.txt')) {
     $sl->log("Unable to download package list",1);
     return -4;
   }
@@ -763,16 +790,16 @@ sub _updateLockProtected {
     return -5;
   }
 
-  if(! exists $allAvailablePackages{$self->{release}}) {
-    $sl->log("Unable to find any package for release \"$self->{release}\"",1);
+  if(! exists $allAvailablePackages{$release}) {
+    $sl->log("Unable to find any package for release \"$release\"",1);
     return -6;
   }
 
-  my %availablePackages=%{$allAvailablePackages{$self->{release}}};
+  my %availablePackages=%{$allAvailablePackages{$release}};
   my @updatedPackages;
   foreach my $packageName (@{$self->{packages}}) {
     if(! exists $availablePackages{$packageName}) {
-      $sl->log("No \"$packageName\" package available for $self->{release} SPADS release",2);
+      $sl->log("No \"$packageName\" package available for $release SPADS release",2);
       next;
     }
     my $currentVersion="_UNKNOWN_";
@@ -980,7 +1007,7 @@ sub _getEngineGithubDownloadUrl {
   my @notFoundTags;
   my %httpErrStatus;
   foreach my $relTag (@ghTags) {
-    my $httpRes=HTTP::Tiny->new(timeout => 10)->request('GET','https://github.com/'.$ghRepo.'/releases/expanded_assets/'.HTTP::Tiny->_uri_escape($relTag));
+    my $httpRes=HTTP::Tiny->new(timeout => 10)->request('GET','https://github.com/'.$ghRepo.'/releases/expanded_assets/'._escapeUrl($relTag));
     if($httpRes->{success}) {
       foreach my $assetTemplate (@{$r_githubInfo->{assets}}) {
         if($httpRes->{content} =~ /href="([^"]+\/$assetTemplate)"/) {

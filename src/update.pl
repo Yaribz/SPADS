@@ -2,7 +2,7 @@
 #
 # This program update SPADS components in current directory from remote repository.
 #
-# Copyright (C) 2008-2024  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2025  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.16 (2024/09/10)
+# Version 0.17 (2025/12/05)
 
 use strict;
 
@@ -45,9 +45,10 @@ sub invalidUsage {
   print <<EOM;
 
 Usage:
-  perl $0 <release> [-f] -a
-  perl $0 <release> [-f] <packageName> [<packageName2> [<packageName3> ...]]
+  perl $0 <release>|git@<commitHash> [-f] -a
+  perl $0 <release>|git@<commitHash> [-f] <packageName> [<packageName2> [<packageName3> ...]]
       <release>: SPADS release to update ("stable", "testing", "unstable" or "contrib")
+      <commitHash>: Git commit hash
       -f: force update (even if it requires manual updates of configuration files)
       -a: update all SPADS packages
       <packageName>: SPADS package to update
@@ -57,7 +58,8 @@ EOM
   exit 1;
 }
 
-invalidUsage() if($#ARGV < 1 || none {$ARGV[0] eq $_} qw/stable testing unstable contrib/);
+invalidUsage() if($#ARGV < 1 || ((none {$ARGV[0] eq $_} qw/stable testing unstable contrib/)
+                                 && $ARGV[0] !~ /^git(?:\@(?:[\da-f]{4,40}|branch=[\w\-\.\/]+|tag=[\w\-\.\/]+))?$/));
 my $release=$ARGV[0];
 
 my %packages;
@@ -114,10 +116,35 @@ if($updaterRc < 0) {
   $sLog->log('Unable to update package(s)',1);
   exit 1;
 }
-if($updaterRc > 0) {
-  $sLog->log("$updaterRc package(s) updated for $release release.",3);
+
+my ($isDynamicVersion,$versionDesc);
+if(substr($release,0,3) eq 'git') {
+  if(substr($release,3,1) eq '@') {
+    if(substr($release,4,4) eq 'tag=') {
+      $versionDesc='Git tag "'.substr($release,8).'"';
+    }elsif(substr($release,4,7) eq 'branch=') {
+      $versionDesc='Git branch "'.substr($release,11).'"';
+      $isDynamicVersion=1;
+    }else{
+      $versionDesc='Git commit "'.substr($release,4).'"';
+    }
+  }else{
+    $versionDesc='latest Git commit';
+    $isDynamicVersion=1;
+  }
 }else{
-  $sLog->log("No update available for $release release.",3);
+  $versionDesc="release \"$release\"";
+  $isDynamicVersion=1;
 }
+
+my $resultMsg;
+if($updaterRc > 0) {
+  $resultMsg="$updaterRc package".($updaterRc>1?'s':'')." updated for $versionDesc.";
+}elsif($isDynamicVersion) {
+  $resultMsg="No update available for $versionDesc.";
+}else{
+  $resultMsg="No local update required for $versionDesc.";
+}
+$sLog->log($resultMsg,3);
 
 exit 0;

@@ -369,8 +369,10 @@
 !unlockSpec - unlocks temporarily an autolocked battle to allow you to join as spectator
 
 [update]
-!update [<release>] - updates SPADS according to the autoUpdateRelease setting or the release specified as parameter if present
-"!update testing" updates SPADS for release "testing", even if autoUpdateRelease is empty
+!update [<release>|git@<commitHash>] - updates SPADS according to the autoUpdateRelease setting or the release / Git commit specified as parameter
+"!update" updates SPADS according to the autoUpdateRelease setting
+"!update testing" updates SPADS to the "testing" release
+"!update git@813bd76" updates SPADS to the version specified by the Git commit whose hash is 813bd76
 
 [version]
 !version - requests versions of all SPADS components

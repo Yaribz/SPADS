@@ -111,7 +111,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.47';
+our $SPADS_VERSION='0.13.48';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -860,11 +860,13 @@ sub onSpringProcessExit {
 }
 
 sub onUpdaterCallEnd {
-  my $updateRc=shift;
+  my ($updateRc,$ignorePackageListDlErr)=@_;
   if($updateRc < 0) {
     if($updateRc > -7 || $updateRc == -12) {
-      delete @pendingAlerts{('UPD-002','UPD-003')};
-      addAlert('UPD-001');
+      if(! $ignorePackageListDlErr || $updateRc != -4) {
+        delete @pendingAlerts{('UPD-002','UPD-003')};
+        addAlert('UPD-001');
+      }
     }elsif($updateRc == -7) {
       delete @pendingAlerts{('UPD-001','UPD-003')};
       addAlert('UPD-002');
@@ -3716,7 +3718,8 @@ sub acquireAutoUpdateLock {
 }
 
 sub checkAutoUpdate {
-  if($conf{autoUpdateRelease} ne '' && $conf{autoUpdateDelay} && time - $timestamps{autoUpdate} > 60 * $conf{autoUpdateDelay}) {
+  if($conf{autoUpdateRelease} ne '' && (substr($conf{autoUpdateRelease},0,4) ne 'git@' || substr($conf{autoUpdateRelease},4,7) eq 'branch=')
+     && $conf{autoUpdateDelay} && time - $timestamps{autoUpdate} > 60 * $conf{autoUpdateDelay}) {
     $timestamps{autoUpdate}=time;
     if(acquireAutoUpdateLock()) {
       if($updater->isUpdateInProgress()) {
@@ -12964,14 +12967,20 @@ sub hUpdate {
   my ($source,$user,$p_params,$checkOnly)=@_;
   my $release;
   if($#{$p_params} == -1) {
-    if($conf{autoUpdateRelease} eq "") {
-      answer("Unable to update: release not specified and autoUpdateRelease is disabled");
+    my $failureReason;
+    if($conf{autoUpdateRelease} eq '') {
+      $failureReason='undefined';
+    }elsif(substr($conf{autoUpdateRelease},0,4) eq 'git@' && substr($conf{autoUpdateRelease},4,7) ne 'branch=') {
+      $failureReason='set to a fixed version';
+    }
+    if(defined $failureReason) {
+      answer("Unable to update: release not specified and autoUpdateRelease setting is $failureReason");
       return 0;
     }
     $release=$conf{autoUpdateRelease};
   }elsif($#{$p_params} == 0) {
     $release=$p_params->[0];
-    if(none {$release eq $_} qw'stable testing unstable contrib') {
+    if((none {$release eq $_} qw'stable testing unstable contrib') && $release !~ /^git(?:\@(?:[\da-f]{4,40}|branch=[\w\-\.\/]+|tag=[\w\-\.\/]+))?$/) {
       invalidSyntax($user,"update","invalid release \"$release\"");
       return 0;
     }
@@ -13002,12 +13011,35 @@ sub hUpdate {
                $answerMsg="Unable to update SPADS components (error code: $updateRc), please check logs for further information";
              }
            }elsif($updateRc == 0) {
-             $answerMsg="No update available for $release release (SPADS components are already up to date)";
+             my ($isDynamicVersion,$versionDesc);
+             if(substr($release,0,3) eq 'git') {
+               if(substr($release,3,1) eq '@') {
+                 if(substr($release,4,4) eq 'tag=') {
+                   $versionDesc='Git tag "'.substr($release,8).'"';
+                 }elsif(substr($release,4,7) eq 'branch=') {
+                   $versionDesc='on Git branch "'.substr($release,11).'"';
+                   $isDynamicVersion=1;
+                 }else{
+                   $versionDesc='Git commit "'.substr($release,4).'"';
+                 }
+               }else{
+                 $versionDesc='on Git repository';
+                 $isDynamicVersion=1;
+               }
+             }else{
+               $versionDesc="for release \"$release\"";
+               $isDynamicVersion=1;
+             }
+             if($isDynamicVersion) {
+               $answerMsg="No update available $versionDesc (SPADS components are already up to date)";
+             }else{
+               $answerMsg="No local update required for $versionDesc";
+             }
            }else{
              $answerMsg="$updateRc SPADS component(s) updated (a restart is needed to apply modifications)";
            }
            sayPrivate($user,$answerMsg);
-           onUpdaterCallEnd($updateRc);
+           onUpdaterCallEnd($updateRc,substr($release,0,3) eq 'git');
          })) {
     answer("Unable to update: cannot fork to launch SPADS updater");
     return 0;
@@ -13074,7 +13106,7 @@ sub hVersion {
 
   if($conf{autoUpdateRelease}) {
     my ($autoUpdateStatus,$autoUpdateDelayString);
-    if($conf{autoUpdateDelay}) {
+    if($conf{autoUpdateDelay} && (substr($conf{autoUpdateRelease},0,4) ne 'git@' || substr($conf{autoUpdateRelease},4,7) eq 'branch=')) {
       my $autoUpdateCheckType;
       if(defined $periodicAutoUpdateLockAcquired) {
         $autoUpdateStatus=$periodicAutoUpdateLockAcquired?"$C{3}enabled$C{1}":"on $C{10}standby$C{1}";
@@ -13100,8 +13132,10 @@ sub hVersion {
       $autoUpdateRelease=$C{7};
     }elsif($conf{autoUpdateRelease} eq 'unstable') {
       $autoUpdateRelease=$C{4};
-    }else{
+    }elsif($conf{autoUpdateRelease} eq 'contrib') {
       $autoUpdateRelease=$C{6};
+    }else{
+      $autoUpdateRelease=$C{13};
     }
     $autoUpdateRelease.="$conf{autoUpdateRelease}$C{1}";
     

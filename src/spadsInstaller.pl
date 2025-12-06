@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.46 (2025/04/24)
+# Version 0.47 (2025/12/05)
 
 use strict;
 
@@ -129,10 +129,11 @@ sub invalidUsage {
   my $err=shift;
   slog('Invalid usage'.(defined $err ? " ($err)" : ''),1);
   print "Usage:\n";
-  print "  perl $0 [<release>] [--auto <templateNameOrUrl>]\n";
+  print "  perl $0 [<release>|git@<commitHash>] [--auto <templateNameOrUrl>]\n";
   print "  perl $0 --list-templates\n";
-  print "      release: \"stable\", \"testing\", \"unstable\" or \"contrib\"\n";
-  print "      templateNameOrUrl: auto-install template name or URL\n";
+  print "      <release>: \"stable\", \"testing\", \"unstable\" or \"contrib\"\n";
+  print "      <commitHash>: Git commit hash\n";
+  print "      <templateNameOrUrl>: auto-installation template name or URL\n";
   exit 1;
 }
 
@@ -146,6 +147,8 @@ sub getAvailableOnlineTemplates {
     exit 1;
   }
 }
+
+sub isValidSpadsReleaseOrGitRef { return (any {$_[0] eq $_} qw'stable testing unstable contrib') || $_[0] =~ /^git(?:\@(?:[\da-f]{4,40}|branch=[\w\-\.\/]+|tag=[\w\-\.\/]+))?$/ }
 
 if(any {$_ eq '--list-templates'} @ARGV) {
   invalidUsage('the --list-templates parameter cannot be used with other parameter') unless(@ARGV == 1);
@@ -186,7 +189,7 @@ my $releaseIsFromCmdLineParam;
       }else{
         $nextParamIsOnlineTemplate=1;
       }
-    }elsif(any {$installArg eq $_} qw'stable testing unstable contrib') {
+    }elsif(isValidSpadsReleaseOrGitRef($installArg)) {
       if(defined $conf{release}) {
         invalidUsage('duplicate installation release parameter');
       }else{
@@ -227,6 +230,8 @@ my (%autoInstallData,%confChangesData,%confTemplateUrl);
   my ($currentConfSection,$currentConfFile)=('');
   foreach my $autoInstallLine (@autoInstallLines) {
     next if($autoInstallLine =~ /^\s*(\#.*)?$/);
+    $autoInstallLine =~ s!\%ENV\{(\w+)\}\%!$ENV{$1}//''!eg;
+    $autoInstallLine =~ s!\%\(ENV\{(\w+)\}\|(.*?)\)\%!$ENV{$1}//$2!eg;
     if($autoInstallLine =~ /^\s*([^:{\[]*[^:\s])\s*:\s*((?:.*[^\s])?)\s*$/) {
       if(defined $currentConfFile) {
         $confChangesData{$currentConfFile}{$currentConfSection}{$1}=$2;
@@ -1122,9 +1127,12 @@ if(! exists $conf{release}) {
   print "You can stop this installation at any time by hitting Ctrl-c.\n";
   print "Note: if SPADS is already installed on the system, you don't need to reinstall it to run multiple autohosts. Instead, you can share SPADS binaries and use multiple configuration files and/or configuration macros.\n\n";
 
-  $conf{release}=promptChoice("[1/$nbSteps] Which SPADS release do you want to install",[qw'stable testing unstable contrib'],'testing',$autoInstallData{release});
+  $conf{release}=promptString("[1/$nbSteps] Which SPADS release do you want to install (stable,testing,unstable,contrib,git@<commitHash>)",'testing',$autoInstallData{release},\&isValidSpadsReleaseOrGitRef);
 }
 setLastRun('release',$conf{release});
+
+fatalError('Unable to perform installation from Git hash, required Perl module not found: IO::Socket::SSL')
+  if(substr($conf{release},0,3) eq 'git' && ! $sslAvailable);
 
 my $updaterLog=SimpleLog->new(logFiles => [''],
                               logLevels => [4],
@@ -1617,7 +1625,26 @@ $conf{preferencesData}=$sqliteUnavailableReason?'private':'shared';
 
 my @confFiles=qw'banLists.conf battlePresets.conf commands.conf hostingPresets.conf levels.conf mapBoxes.conf mapLists.conf spads.conf users.conf';
 slog('Downloading SPADS configuration templates',3);
-exit 1 unless(all {downloadFile($confTemplateUrl{$_}//"$URL_SPADS/conf/templates/$conf{release}/$_",catdir($conf{etcDir},'templates',$_))} @confFiles);
+my $confTemplatesBaseUrl;
+if(substr($conf{release},0,3) eq 'git') {
+  my $release=$conf{release};
+  if(substr($release,3,1) eq '@') {
+    if(substr($release,4,4) eq 'tag=') {
+      $confTemplatesBaseUrl='refs/tags/'.substr($release,8);
+    }elsif(substr($release,4,7) eq 'branch=') {
+      $confTemplatesBaseUrl='refs/heads/'.substr($release,11);
+    }else{
+      $confTemplatesBaseUrl=substr($release,4);
+    }
+  }else{
+    $confTemplatesBaseUrl='refs/heads/master';
+  }
+  $confTemplatesBaseUrl='https://raw.githubusercontent.com/Yaribz/SPADS/'.uriEscape($confTemplatesBaseUrl).'/etc/';
+}else{
+  $confTemplatesBaseUrl="$URL_SPADS/conf/templates/$conf{release}/";
+}
+exit 1 unless(all {downloadFile($confTemplateUrl{$_}//$confTemplateBaseUrl.$_,catdir($conf{etcDir},'templates',$_))} @confFiles);
+
 slog('Customizing SPADS configuration'.(%confChangesData ? ' (pass 1)' : ''),3);
 foreach my $confFile (@confFiles) {
   my $confFileTemplate=catfile($conf{etcDir},'templates',$confFile);
