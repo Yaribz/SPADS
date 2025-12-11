@@ -1396,6 +1396,7 @@ spadsInstaller.pl:
       use "recoil" engine subdirectory for both "beyond-all-reason/spring" and "beyond-all-reason/RecoilEngine" GitHub repositories
 0.47: allow providing a Git commit hash instead of a SPADS release name for immutable/reproducible deployment
       add support for environment variables in installation templates
+0.48: fix typo in code introduced in previous version which prevented execution of installer
 
 SpadsPluginApi.pm:
 =================
@@ -1550,6 +1551,7 @@ SpadsUpdater.pm:
 0.31: support renammed GitHub repository (with automatic import of corresponding releases cache)
 0.32: allow providing a Git commit hash instead of a SPADS release name for manual selection of specific version
       use internal URL escaping function
+0.33: add retries for GitHub HTTP requests to handle cases of transient GitHub servers unavailability
 
 springLobbyCertificates.dat:
 ===========================

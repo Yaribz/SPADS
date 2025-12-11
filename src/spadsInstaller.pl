@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.47 (2025/12/05)
+# Version 0.48 (2025/12/11)
 
 use strict;
 
@@ -1643,7 +1643,7 @@ if(substr($conf{release},0,3) eq 'git') {
 }else{
   $confTemplatesBaseUrl="$URL_SPADS/conf/templates/$conf{release}/";
 }
-exit 1 unless(all {downloadFile($confTemplateUrl{$_}//$confTemplateBaseUrl.$_,catdir($conf{etcDir},'templates',$_))} @confFiles);
+exit 1 unless(all {downloadFile($confTemplateUrl{$_}//$confTemplatesBaseUrl.$_,catdir($conf{etcDir},'templates',$_))} @confFiles);
 
 slog('Customizing SPADS configuration'.(%confChangesData ? ' (pass 1)' : ''),3);
 foreach my $confFile (@confFiles) {

@@ -36,7 +36,7 @@ use Time::HiRes;
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $archName=($win?'win':'linux').($Config{ptrsize} > 4 ? 64 : 32);
 
-our $VERSION='0.32';
+our $VERSION='0.33';
 
 my @constructorParams = qw'sLog repository release packages';
 my @optionalConstructorParams = qw'localDir springDir';
@@ -240,8 +240,14 @@ sub _resolveEngineReleaseNameToVersion {
   if(defined $r_githubInfo) {
     if(substr($release,0,3) eq 'bar') {
       my $enginePrefix = $release eq 'bar' ? 'stable' : 'testing';
-      my $httpRes=HTTP::Tiny->new(timeout => 10)->request('GET',$barLauncherConfigUrl);
+      my ($nbAttempts,$httpRes)=(0);
+      do{
+        sleep($nbAttempts) if($nbAttempts);
+        $httpRes=HTTP::Tiny->new(timeout => 10)->request('GET',$barLauncherConfigUrl);
+        $nbAttempts++;
+      }while($nbAttempts < 5 && ! $httpRes->{success} && $httpRes->{status} == 503);
       if($httpRes->{success}) {
+        $sl->log("$nbAttempts attempts were required to download Beyond All Reason JSON config file due to GitHub servers unavailability",2) if($nbAttempts > 1);
         my $r_barOnlineConfig;
         eval {
           $r_barOnlineConfig=decode_json($httpRes->{content});
@@ -290,8 +296,14 @@ sub _resolveEngineReleaseNameToVersion {
     my @tagRegexps=map {buildTagRegexp($_)} @{$r_githubInfo->{tags}};
     my $errMsg="Unable to retrieve engine version number for $release release";
     if($release eq 'stable') {
-      my $httpRes=HTTP::Tiny->new(timeout => 10)->request('GET',"https://github.com/$ghRepo/releases/latest");
+      my ($nbAttempts,$httpRes)=(0);
+      do{
+        sleep($nbAttempts) if($nbAttempts);
+        $httpRes=HTTP::Tiny->new(timeout => 10)->request('GET',"https://github.com/$ghRepo/releases/latest");
+        $nbAttempts++;
+      }while($nbAttempts < 5 && ! $httpRes->{success} && $httpRes->{status} == 503);
       if($httpRes->{success} && ref $httpRes->{redirects} eq 'ARRAY' && @{$httpRes->{redirects}} && defined $httpRes->{url}) {
+        $sl->log("$nbAttempts attempts were required to retrieve engine version number for $release release due to GitHub servers unavailability",2) if($nbAttempts > 1);
         my $redirectedUrl=_unescapeUrl($httpRes->{url});
         my $failureReason;
         if($redirectedUrl =~ /^https:\/\/github\.com\/([\w\.\-]+\/[\w\.\-]+)\/releases\/tag\/(.+)$/) {
@@ -407,7 +419,12 @@ sub _getHttpErrMsg {
 sub _getGithubRepositoryReleasesPage {
   my ($httpTiny,$ghRepo,$pageNb)=@_;
 
-  my $httpRes=$httpTiny->request('GET','https://github.com/'.$ghRepo.'/releases?page='.$pageNb);
+  my ($nbAttempts,$httpRes)=(0);
+  do{
+    sleep($nbAttempts) if($nbAttempts);
+    $httpRes=$httpTiny->request('GET','https://github.com/'.$ghRepo.'/releases?page='.$pageNb);
+    $nbAttempts++;
+  }while($nbAttempts < 5 && ! $httpRes->{success} && $httpRes->{status} == 503);
   return (undef,_getHttpErrMsg($httpRes)) unless($httpRes->{success});
   my $redirectedGhRepo;
   ($redirectedGhRepo,$ghRepo)=($1,$1)
@@ -422,7 +439,7 @@ sub _getGithubRepositoryReleasesPage {
     push(@results,[_unescapeUrl($htmlTagsAndDetails[$i*2]),\%labels]);
   }
 
-  return (\@results,undef,$redirectedGhRepo);
+  return (\@results,undef,$redirectedGhRepo,$nbAttempts);
 }
 
 sub _getGithubRepositoryReleases {
@@ -430,11 +447,12 @@ sub _getGithubRepositoryReleases {
   my $sl=$self->{sLog};
   
   my $httpTiny=HTTP::Tiny->new(timeout => 10);
-  my ($r_releases,$failureReason,$redirectedGhRepo)=_getGithubRepositoryReleasesPage($httpTiny,$ghRepo,1);
+  my ($r_releases,$failureReason,$redirectedGhRepo,$nbAttempts)=_getGithubRepositoryReleasesPage($httpTiny,$ghRepo,1);
   if(! defined $r_releases) {
     $sl->log("Failed to retrieve the list of latest releases for GitHub repository \"$ghRepo\": $failureReason",2);
     return undef;
   }
+  $sl->log("$nbAttempts attempts were required to retrieve the list of the latest releases for GitHub repository \"$ghRepo\" due to GitHub servers unavailability",2) if($nbAttempts > 2);
   if(defined $redirectedGhRepo) {
     $sl->log("GitHub repository \"$ghRepo\" has been renamed to \"$redirectedGhRepo\"",2);
     ($redirectedGhRepo,$ghRepo)=($ghRepo,$redirectedGhRepo);
@@ -494,7 +512,8 @@ sub _getGithubRepositoryReleases {
       close($ghReleasesCacheLockFh);
       return undef;
     }
-    ($r_releases,$failureReason)=_getGithubRepositoryReleasesPage($httpTiny,$ghRepo,$pageNb);
+    ($r_releases,$failureReason,undef,$nbAttempts)=_getGithubRepositoryReleasesPage($httpTiny,$ghRepo,$pageNb);
+    $sl->log("$nbAttempts attempts were required to retrieve page $pageNb of the releases list from GitHub repository \"$ghRepo\" due to GitHub servers unavailability",2) if($nbAttempts > 2);
     if(! defined $r_releases) {
       $sl->log("Failed to retrieve page $pageNb of the releases list from GitHub repository \"$ghRepo\": $failureReason",1);
       close($ghReleasesCacheLockFh);
