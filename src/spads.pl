@@ -218,6 +218,7 @@ my %SPADS_CORE_CMD_HANDLERS = (
   loadboxes => \&hLoadBoxes,
   lock => \&hLock,
   maplink => \&hMapLink,
+  mode => \&hMode,
   nextmap => \&hNextMap,
   nextpreset => \&hNextPreset,
   notify => \&hNotify,
@@ -8180,6 +8181,76 @@ sub hBSet {
     return 0;
   }
 
+}
+
+sub hMode {
+  my ($source,$user,$p_params,$checkOnly)=@_;
+
+  if($#{$p_params} < 0) {
+    invalidSyntax($user,"mode");
+    return 0;
+  }
+
+  my $modeKey=shift(@{$p_params});
+
+  # e.g. "Beyond All Reason test-27271-0ec467a" (from lobby battle data, or $targetMod global from config)
+  my $modName = $lobbyState >= LOBBY_STATE_BATTLE_OPENED ? $lobby->{battles}{$lobby->{battle}{battleId}}{mod} : $targetMod;
+  # hash ref of all mod option defs: { "sharemode" => {type=>"list", default=>"...", ...}, "unit_market_metal_cost" => {type=>"number", ...}, ... }
+  my $p_modOptions=getModOptions($modName);
+
+  my @settings;
+  foreach my $param (@{$p_params}) {
+    if($param =~ /^([^=]+)=(.*)$/) {
+      my ($bSetting,$val)=(lc($1),$2);
+      if(! exists $p_modOptions->{$bSetting}) {
+        answer("\"$bSetting\" is not a valid mod option for current mod");
+        return 0;
+      }
+      my $allowExternalValues=$conf{allowModOptionsValues};
+      my @allowedValues=getBSettingAllowedValues($bSetting,$p_modOptions,$allowExternalValues);
+      my $optionType = $p_modOptions->{$bSetting}{type};
+      if(! @allowedValues && $allowExternalValues) {
+        answer("\"$bSetting\" is a mod option of type \"$optionType\", it must be defined in current battle preset to be modifiable");
+        return 0;
+      }
+      my $allowed=0;
+      foreach my $allowedValue (@allowedValues) {
+        if(isRange($allowedValue)) {
+          $allowed=1 if(matchRange($allowedValue,$val));
+        }elsif($optionType eq 'string' && substr($allowedValue,0,1) eq '~') {
+          my $regexp=substr($allowedValue,1);
+          if(eval { qr/^$regexp$/ } && ! $@) {
+            $allowed=1 if($val =~ /^$regexp$/);
+          }
+        }elsif($val eq $allowedValue) {
+          $allowed=1;
+        }
+        last if($allowed);
+      }
+      if(! $allowed) {
+        answer("Value \"$val\" for mod option \"$bSetting\" is not allowed with current mod or battle preset");
+        return 0;
+      }
+      push(@settings,{key => $bSetting, val => $val});
+    }else{
+      answer("Invalid parameter format \"$param\" (expected key=value)");
+      return 0;
+    }
+  }
+
+  return 1 if($checkOnly);
+
+  my @changeDescs;
+  foreach my $setting (@settings) {
+    $spads->{bSettings}{$setting->{key}}=$setting->{val};
+    sendBattleSetting($setting->{key}) if($lobbyState >= LOBBY_STATE_BATTLE_OPENED);
+    push(@changeDescs,"$setting->{key}=$setting->{val}");
+  }
+  $timestamps{autoRestore}=time;
+  my $changesStr=join(', ',@changeDescs);
+  sayBattleAndGame("Mode \"$modeKey\" applied by $user ($changesStr)");
+  answer("Mode \"$modeKey\" applied ($changesStr)") if($source eq "pv");
+  return 1;
 }
 
 sub hCancelQuit {
