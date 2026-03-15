@@ -2,7 +2,7 @@
 #
 # SPADS: Spring Perl Autohost for Dedicated Server
 #
-# Copyright (C) 2008-2025  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2026  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -111,7 +111,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.48';
+our $SPADS_VERSION='0.13.49';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -6919,6 +6919,91 @@ sub getPresetBattleStructure {
   return ($nbTeams,$teamSize,$nbPlayerById);
 }
 
+# return -1: invalid setting, 0: value forbidden, 1: value allowed
+sub checkGlobalSettingValue {
+  my ($setting,$value)=@_;
+  if($setting eq 'map') {
+    return 1 if(any {$value eq $_} (values %{$spads->{maps}}));
+    return 1 if($conf{allowGhostMaps} && $springServerType eq 'dedicated' && exists $spads->{ghostMaps}{$value});
+    return 0;
+  }
+  return -1 unless(exists $spads->{values}{$setting});
+  foreach my $allowedValue (@{$spads->{values}{$setting}}) {
+    if(isRange($allowedValue)) {
+      return 1 if(matchRange($allowedValue,$value));
+    }elsif($value eq $allowedValue) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
+# return -1: invalid setting, 0: value forbidden, 1: value allowed
+sub checkHostingSettingValue {
+  my ($setting,$value)=@_;
+  return -1 unless(exists $spads->{hValues}{$setting});
+  foreach my $allowedValue (@{$spads->{hValues}{$setting}}) {
+    if(isRange($allowedValue)) {
+      return 1 if(matchRange($allowedValue,$value));
+    }elsif($value eq $allowedValue) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
+# return -1: invalid setting, 0: value forbidden, 1: value allowed
+#   additional return values for 0 return code when array is expected: <optionScope>[,<optionType>]
+#       (<optionType> is only provided if the value has been forbidden due to its type requiring declaration in the battle preset)
+#   additional return value for 1 return code when array is expected: [<defaultExternalValue>]
+#       (only provided for modoptions and mapoptions)
+sub checkBattleSettingValue {
+  my ($setting,$value)=@_;
+
+  my ($optionScope,$r_options,$allowExternalValues,$defaultExternalValue,$optionType);
+  if($setting eq 'startpostype') {
+    ($optionScope,$r_options,$allowExternalValues)=('engine',{},0);
+    $optionType='unknown';
+  }else{
+    my $modName = $lobbyState >= LOBBY_STATE_BATTLE_OPENED ? $lobby->{battles}{$lobby->{battle}{battleId}}{mod} : $targetMod;
+    my $r_modOptions=getModOptions($modName);
+    if(exists $r_modOptions->{$setting}) {
+      ($optionScope,$r_options,$allowExternalValues)=('mod',$r_modOptions,$conf{allowModOptionsValues});
+    }else{
+      my $r_mapOptions=getMapOptions($currentMap);
+      if(exists $r_mapOptions->{$setting}) {
+        ($optionScope,$r_options,$allowExternalValues)=('map',$r_mapOptions,$conf{allowMapOptionsValues});
+      }else{
+        return -1;
+      }
+    }
+    $optionType=$r_options->{$setting}{type};
+    $defaultExternalValue=$r_options->{$setting}{default};
+  }
+  
+  my @allowedValues=getBSettingAllowedValues($setting,$r_options,$allowExternalValues);
+  return wantarray() ? (0,$optionScope,$allowExternalValues ? $optionType : ()) : 0
+      unless(@allowedValues);
+  
+  foreach my $allowedValue (@allowedValues) {
+    if(isRange($allowedValue)) {
+      return wantarray() ? (1,$defaultExternalValue) : 1
+          if(matchRange($allowedValue,$value));
+    }elsif($optionType eq 'string' && substr($allowedValue,0,1) eq '~') {
+      my $regexp=substr($allowedValue,1);
+      if(eval { qr/^$regexp$/ } && ! $@) {
+        return 1 if($value =~ /^$regexp$/);
+      }else{
+        slog("Ignoring invalid regular expression \"$regexp\" when checking $setting battle setting allowed values (string $optionScope option)",2);
+      }
+    }elsif($value eq $allowedValue) {
+      return wantarray() ? (1,$defaultExternalValue) : 1;
+    }
+  }
+
+  return wantarray() ? (0,$optionScope) : 0;
+}
+
 sub getBSettingAllowedValues {
   my ($bSetting,$p_options,$allowExternalValues)=@_;
   my @allowedValues=();
@@ -8113,73 +8198,41 @@ sub hBSet {
   $val//='';
   $bSetting=lc($bSetting);
 
-  my $modName = $lobbyState >= LOBBY_STATE_BATTLE_OPENED ? $lobby->{battles}{$lobby->{battle}{battleId}}{mod} : $targetMod;
-  my $p_modOptions=getModOptions($modName);
-  my $p_mapOptions=getMapOptions($currentMap);
+  my ($allowed,$optionScopeOrDefaultExternalValue,$optionTypeRequiringDeclaration)=checkBattleSettingValue($bSetting,$val);
 
-  if($bSetting ne "startpostype" && ! exists $p_modOptions->{$bSetting} && ! exists $p_mapOptions->{$bSetting}) {
+  if($allowed < 0) {
     answer("\"$bSetting\" is not a valid battle setting for current mod and map (use \"!list bSettings\" to list available battle settings)");
     return 0;
   }
 
-  my $p_options={};
-  my $optionScope='engine';
-  my $allowExternalValues=0;
-  if(exists $p_modOptions->{$bSetting}) {
-    $optionScope='mod';
-    $p_options=$p_modOptions;
-    $allowExternalValues=$conf{allowModOptionsValues};
-  }elsif(exists $p_mapOptions->{$bSetting}) {
-    $optionScope='map';
-    $p_options=$p_mapOptions;
-    $allowExternalValues=$conf{allowMapOptionsValues};
-  }
-  my @allowedValues=getBSettingAllowedValues($bSetting,$p_options,$allowExternalValues);
-  my $optionType = $optionScope eq 'engine' ? 'unknown' : $p_options->{$bSetting}{type};
-  if(! @allowedValues && $allowExternalValues) {
-    answer("\"$bSetting\" is a $optionScope option of type \"$optionType\", it must be defined in current battle preset to be modifiable");
+  if(! $allowed) {
+    my $optionScope=$optionScopeOrDefaultExternalValue;
+    if(defined $optionTypeRequiringDeclaration) {
+      answer("\"$bSetting\" is a $optionScope option of type \"$optionTypeRequiringDeclaration\", it must be defined in current battle preset to be modifiable");
+    }else{
+      answer("Value \"$val\" for battle setting \"$bSetting\" is not allowed with current $optionScope or battle preset"); 
+    }
     return 0;
   }
-
-  my $allowed=0;
-  foreach my $allowedValue (@allowedValues) {
-    if(isRange($allowedValue)) {
-      $allowed=1 if(matchRange($allowedValue,$val));
-    }elsif($optionType eq 'string' && substr($allowedValue,0,1) eq '~') {
-      my $regexp=substr($allowedValue,1);
-      if(eval { qr/^$regexp$/ } && ! $@) {
-        $allowed=1 if($val =~ /^$regexp$/);
-      }else{
-        slog("Ignoring invalid regular expression \"$regexp\" when checking $bSetting battle setting allowed values (string $optionScope option)",2);
-      }
-    }elsif($val eq $allowedValue) {
-      $allowed=1;
-    }
-    last if($allowed);
-  }
-  if($allowed) {
-    if(exists $spads->{bSettings}{$bSetting}) {
-      if($spads->{bSettings}{$bSetting} eq $val) {
-        answer("Battle setting \"$bSetting\" is already set to value \"$val\"");
-        return 0;
-      }
-    }elsif($val eq $p_options->{$bSetting}{default}) {
+  
+  my $defaultExternalValue=$optionScopeOrDefaultExternalValue;
+  if(exists $spads->{bSettings}{$bSetting}) {
+    if($spads->{bSettings}{$bSetting} eq $val) {
       answer("Battle setting \"$bSetting\" is already set to value \"$val\"");
       return 0;
     }
-    return 1 if($checkOnly);
-    $spads->{bSettings}{$bSetting}=$val;
-    sendBattleSetting($bSetting) if($lobbyState >= LOBBY_STATE_BATTLE_OPENED);
-    $timestamps{autoRestore}=time;
-    sayBattleAndGame("Battle setting changed by $user ($bSetting=$val)");
-    answer("Battle setting changed ($bSetting=$val)") if($source eq "pv");
-    applyMapBoxes() if($bSetting eq "startpostype");
-    return 1;
-  }else{
-    answer("Value \"$val\" for battle setting \"$bSetting\" is not allowed with current $optionScope or battle preset"); 
+  }elsif($val eq $defaultExternalValue) {
+    answer("Battle setting \"$bSetting\" is already set to value \"$val\"");
     return 0;
   }
-
+  return 1 if($checkOnly);
+  $spads->{bSettings}{$bSetting}=$val;
+  sendBattleSetting($bSetting) if($lobbyState >= LOBBY_STATE_BATTLE_OPENED);
+  $timestamps{autoRestore}=time;
+  sayBattleAndGame("Battle setting changed by $user ($bSetting=$val)");
+  answer("Battle setting changed ($bSetting=$val)") if($source eq "pv");
+  applyMapBoxes() if($bSetting eq "startpostype");
+  return 1;
 }
 
 sub hCancelQuit {
@@ -9291,16 +9344,7 @@ sub hHSet {
   foreach my $hParam (keys %{$spads->{hValues}}) {
     next if($HIDDEN_HOSTING_SETTINGS{$hParam});
     if($hSetting eq lc($hParam)) {
-      my $allowed=0;
-      foreach my $allowedValue (@{$spads->{hValues}{$hParam}}) {
-        if(isRange($allowedValue)) {
-          $allowed=1 if(matchRange($allowedValue,$val));
-        }elsif($val eq $allowedValue) {
-          $allowed=1;
-        }
-        last if($allowed);
-      }
-      if($allowed) {
+      if(checkHostingSettingValue($hParam,$val)) {
         if($spads->{hSettings}{$hParam} eq $val) {
           answer("Hosting setting \"$hParam\" is already set to value \"$val\"");
           return 0;
@@ -11751,16 +11795,7 @@ sub hSet {
   foreach my $param (keys %{$spads->{values}}) {
     next if($HIDDEN_PRESET_SETTINGS{$param});
     if($setting eq lc($param)) {
-      my $allowed=0;
-      foreach my $allowedValue (@{$spads->{values}{$param}}) {
-        if(isRange($allowedValue)) {
-          $allowed=1 if(matchRange($allowedValue,$val));
-        }elsif($val eq $allowedValue) {
-          $allowed=1;
-        }
-        last if($allowed);
-      }
-      if($allowed) {
+      if(checkGlobalSettingValue($param,$val)) {
         if($conf{$param} eq $val) {
           answer("Global setting \"$param\" is already set to value \"$val\"");
           return 0;

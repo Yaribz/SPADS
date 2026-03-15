@@ -56,10 +56,10 @@ replay_upload.py:replay_upload_0.7.py
 sequentialSpadsUnitsyncProcess.pl:sequentialSpadsUnitsyncProcess_0.1.pl
 SimpleEvent.pm:SimpleEvent_0.17.pm
 SimpleLog.pm:SimpleLog_0.10.pm
-spads.pl:spads_0.13.48.pl
+spads.pl:spads_0.13.49.pl
 SpadsConf.pm:SpadsConf_0.13.16.pm
 spadsInstaller.pl:spadsInstaller_0.48.pl
-SpadsPluginApi.pm:SpadsPluginApi_0.42.pm
+SpadsPluginApi.pm:SpadsPluginApi_0.43.pm
 SpadsUpdater.pm:SpadsUpdater_0.33.pm
 SpringAutoHostInterface.pm:SpringAutoHostInterface_0.14.pm
 SpringLobbyInterface.pm:SpringLobbyInterface_0.56.pm
@@ -79,10 +79,10 @@ replay_upload.py:replay_upload_0.7.py
 sequentialSpadsUnitsyncProcess.pl:sequentialSpadsUnitsyncProcess_0.1.pl
 SimpleEvent.pm:SimpleEvent_0.17.pm
 SimpleLog.pm:SimpleLog_0.10.pm
-spads.pl:spads_0.13.48.pl
+spads.pl:spads_0.13.49.pl
 SpadsConf.pm:SpadsConf_0.13.16.pm
 spadsInstaller.pl:spadsInstaller_0.48.pl
-SpadsPluginApi.pm:SpadsPluginApi_0.42.pm
+SpadsPluginApi.pm:SpadsPluginApi_0.43.pm
 SpadsUpdater.pm:SpadsUpdater_0.33.pm
 SpringAutoHostInterface.pm:SpringAutoHostInterface_0.14.pm
 SpringLobbyInterface.pm:SpringLobbyInterface_0.56.pm

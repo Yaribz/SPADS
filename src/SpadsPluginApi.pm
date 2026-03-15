@@ -1,6 +1,6 @@
 # SpadsPluginApi: SPADS plugin API
 #
-# Copyright (C) 2013-2025  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2013-2026  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -22,9 +22,9 @@ use File::Spec::Functions qw'catdir';
 use List::Util qw'any none';
 
 use Exporter 'import';
-@EXPORT=qw/$spadsVersion $spadsDir loadPythonPlugin get_flag fix_string getBosses getLobbyState getSpringPid getSpringServerType getTimestamps getUserPref getRunningBattle getConfMacros getCurrentVote getPlugin getPluginList addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess forkCall removeProcessCallback createDetachedProcess addTimer removeTimer addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf slog updateSetting secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives LOBBY_STATE_DISCONNECTED LOBBY_STATE_CONNECTING LOBBY_STATE_CONNECTED LOBBY_STATE_LOGGED_IN LOBBY_STATE_SYNCHRONIZED LOBBY_STATE_OPENING_BATTLE LOBBY_STATE_BATTLE_OPENED/;
+@EXPORT=qw/$spadsVersion $spadsDir loadPythonPlugin get_flag fix_string getBosses getLobbyState getSpringPid getSpringServerType getTimestamps getUserPref getRunningBattle getConfMacros getCurrentVote getPlugin getPluginList addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess forkCall removeProcessCallback createDetachedProcess addTimer removeTimer addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf isSettingValueAllowed slog updateSetting secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives LOBBY_STATE_DISCONNECTED LOBBY_STATE_CONNECTING LOBBY_STATE_CONNECTED LOBBY_STATE_LOGGED_IN LOBBY_STATE_SYNCHRONIZED LOBBY_STATE_OPENING_BATTLE LOBBY_STATE_BATTLE_OPENED/;
 
-my $apiVersion='0.42';
+my $apiVersion='0.43';
 
 our $spadsVersion=$::SPADS_VERSION;
 our $spadsDir=$::CWD;
@@ -408,13 +408,36 @@ sub slog {
   ::slog($m,$l);
 }
 
+sub isSettingValueAllowed {
+  my ($type,$settingName,$value)=@_;
+  my $plugin=getCallerPlugin();
+  if($type eq 'set') {
+    if(! exists $::spads->{values}{$settingName}) {
+      ::slog("Invalid isSettingValueAllowed call from plugin $plugin: unknown setting \"$settingName\"",2);
+      return 0;
+    }
+    return ::checkGlobalSettingValue($settingName,$value);
+  }elsif($type eq 'bSet') {
+    my $allowed=::checkBattleSettingValue(lc($settingName),$value);
+    if($allowed < 0) {
+      ::slog("Invalid isSettingValueAllowed call from plugin $plugin: \"$settingName\" is not a valid battle setting for current mod and map",2);
+      return 0;
+    }
+    return $allowed;
+  }elsif($type eq 'hSet') {
+    if(! exists $::spads->{hValues}{$settingName}) {
+      ::slog("Invalid isSettingValueAllowed call from plugin $plugin: unknown hosting setting \"$settingName\"",2);
+      return 0;
+    }
+    return ::checkHostingSettingValue($settingName,$value);
+  }
+  ::slog("Invalid isSettingValueAllowed call from plugin $plugin: unknown setting type \"$type\"",2);
+  return 0;
+}
+
 sub updateSetting {
   my ($type,$name,$value)=@_;
   my $plugin=getCallerPlugin();
-  if(none {$type eq $_} (qw'set bSet hSet')) {
-    ::slog("Ignoring updateSetting call from plugin $plugin: unknown setting type \"$type\"",2);
-    return 0;
-  }
   if($type eq 'set') {
     if(! exists $::spads->{conf}{$name}) {
       ::slog("Ignoring updateSetting call from plugin $plugin: unknown setting \"$name\"",2);
@@ -438,6 +461,7 @@ sub updateSetting {
     $::spads->{hSettings}{$name}=$value;
     ::updateTargetMod() if($name eq 'modName');
   }else{
+    ::slog("Ignoring updateSetting call from plugin $plugin: unknown setting type \"$type\"",2);
     return 0;
   }
   $::timestamps{autoRestore}=time;
@@ -2088,6 +2112,18 @@ be prevented.
 
 =item C<getUserAccessLevel($user)>
 
+=item C<isSettingValueAllowed($type,$name,$value)>
+
+This function checks if a value is allowed for a specific setting. It returns
+C<1> if the value is allowed, or C<0> else.
+
+C<$type> is the type of the setting for which a value must checked (C<"set"> for
+preset setting, C<"hSet"> for hosting setting, or C<"bSet"> for battle setting)
+
+C<$name> is the name of the setting for which a value must checked
+
+C<$value> is the value that must be checked
+
 =item C<loadArchives()>
 
 =item C<queueLobbyCommand(\@lobbyCommand)>
@@ -2111,7 +2147,8 @@ C<$level> is the log level of the message: C<0> (critical), C<1> (error), C<2>
 This function updates current SPADS configuration in memory by changing the
 value of a setting and applying it immediatly. This function does not modify
 configuration files on disk. The new value provided by the plugin is not
-checked: the plugin is reponsible for providing only correct values.
+checked: the plugin is reponsible for providing only correct values (see
+C<isSettingValueAllowed> function).
 
 C<$type> is the type of setting to update (C<"set"> for preset setting,
 C<"hSet"> for hosting setting, or C<"bSet"> for battle setting)
@@ -2495,9 +2532,9 @@ recommended to use the accessors from the API instead:
 
 =head1 SEE ALSO
 
-L<SPADS plugin development tutorials (Perl)|http://springrts.com/wiki/SPADS_plugin_development>
+L<SPADS plugin development tutorials (Perl)|https://github.com/Yaribz/SPADS/wiki/SPADS-plugin-development>
 
-L<SPADS plugin development tutorials (Python)|http://springrts.com/wiki/SPADS_plugin_development_(Python)>
+L<SPADS plugin development tutorials (Python)|https://github.com/Yaribz/SPADS/wiki/SPADS-plugin-development-(Python)>
 
 Commented SPADS plugin templates (Perl): L<Simple plugin|http://planetspads.free.fr/spads/plugins/templates/commented/MySimplePlugin.pm>, L<Configurable plugin|http://planetspads.free.fr/spads/plugins/templates/commented/MyConfigurablePlugin.pm>, L<New command plugin|http://planetspads.free.fr/spads/plugins/templates/commented/MyNewCommandPlugin.pm>
 
@@ -2515,7 +2552,7 @@ Inline::Python Perl module (the bridge between Perl and Python): L<documentation
 
 =head1 COPYRIGHT
 
-Copyright (C) 2013-2025  Yann Riou <yaribzh@gmail.com>
+Copyright (C) 2013-2026  Yann Riou <yaribzh@gmail.com>
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
