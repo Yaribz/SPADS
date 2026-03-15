@@ -1271,6 +1271,18 @@ def getParams(pluginName):
 <dd>
 
 </dd>
+<dt id="isSettingValueAllowed-type-name-value"><code>isSettingValueAllowed($type,$name,$value)</code></dt>
+<dd>
+
+<p>This function checks if a value is allowed for a specific setting. It returns <code>1</code> if the value is allowed, or <code>0</code> else.</p>
+
+<p><code>$type</code> is the type of the setting for which a value must checked (<code>&quot;set&quot;</code> for preset setting, <code>&quot;hSet&quot;</code> for hosting setting, or <code>&quot;bSet&quot;</code> for battle setting)</p>
+
+<p><code>$name</code> is the name of the setting for which a value must checked</p>
+
+<p><code>$value</code> is the value that must be checked</p>
+
+</dd>
 <dt id="loadArchives"><code>loadArchives()</code></dt>
 <dd>
 
@@ -1300,7 +1312,7 @@ def getParams(pluginName):
 <dt id="updateSetting-type-name-value"><code>updateSetting($type,$name,$value)</code></dt>
 <dd>
 
-<p>This function updates current SPADS configuration in memory by changing the value of a setting and applying it immediatly. This function does not modify configuration files on disk. The new value provided by the plugin is not checked: the plugin is reponsible for providing only correct values.</p>
+<p>This function updates current SPADS configuration in memory by changing the value of a setting and applying it immediatly. This function does not modify configuration files on disk. The new value provided by the plugin is not checked: the plugin is reponsible for providing only correct values (see <code>isSettingValueAllowed</code> function).</p>
 
 <p><code>$type</code> is the type of setting to update (<code>&quot;set&quot;</code> for preset setting, <code>&quot;hSet&quot;</code> for hosting setting, or <code>&quot;bSet&quot;</code> for battle setting)</p>
 
@@ -1682,9 +1694,9 @@ def getParams(pluginName):
 
 <h1 id="SEE-ALSO">SEE ALSO</h1>
 
-<p><a href="http://springrts.com/wiki/SPADS_plugin_development">SPADS plugin development tutorials (Perl)</a></p>
+<p><a href="https://github.com/Yaribz/SPADS/wiki/SPADS-plugin-development">SPADS plugin development tutorials (Perl)</a></p>
 
-<p><a href="http://springrts.com/wiki/SPADS_plugin_development_(Python)">SPADS plugin development tutorials (Python)</a></p>
+<p><a href="https://github.com/Yaribz/SPADS/wiki/SPADS-plugin-development-(Python)">SPADS plugin development tutorials (Python)</a></p>
 
 <p>Commented SPADS plugin templates (Perl): <a href="http://planetspads.free.fr/spads/plugins/templates/commented/MySimplePlugin.pm">Simple plugin</a>, <a href="http://planetspads.free.fr/spads/plugins/templates/commented/MyConfigurablePlugin.pm">Configurable plugin</a>, <a href="http://planetspads.free.fr/spads/plugins/templates/commented/MyNewCommandPlugin.pm">New command plugin</a></p>
 
@@ -1702,7 +1714,7 @@ def getParams(pluginName):
 
 <h1 id="COPYRIGHT">COPYRIGHT</h1>
 
-<p>Copyright (C) 2013-2024 Yann Riou &lt;yaribzh@gmail.com&gt;</p>
+<p>Copyright (C) 2013-2026 Yann Riou &lt;yaribzh@gmail.com&gt;</p>
 
 <p>This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.</p>
 
