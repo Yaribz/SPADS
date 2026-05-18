@@ -8692,6 +8692,11 @@ sub hEndVote {
   }
 
   if(%currentVote && exists $currentVote{command}) {
+    my $command=lc(#currentVote{command}[0]);
+    if($command eq "unboss") {
+      answer("Unable to cancel vote (unboss cannot be canceled)");
+      return 0;
+    }
     return 1 if($checkOnly);
     sayBattleAndGame("Vote cancelled by $user");
     foreach my $pluginName (@pluginsOrder) {
