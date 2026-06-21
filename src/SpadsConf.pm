@@ -212,7 +212,8 @@ my %spadsSectionParameters = (description => ['notNull'],
                               freeSettings => ['settingList'],
                               allowModOptionsValues => ['bool'],
                               allowMapOptionsValues => ['bool'],
-                              allowGhostMaps =>['bool']);
+                              allowGhostMaps =>['bool'],
+                              allowGhostMods =>['bool']);
 
 my %hostingParameters = (description => ['notNull'],
                          battleName => ['notNull'],

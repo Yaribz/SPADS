@@ -1514,11 +1514,19 @@ sub updateTargetMod {
             unless($loadArchivesInProgress);
         return 2;
       }
+      if(! defined $modRegexp && canUseGhostMod($configuredModName)) {
+        $targetMod=$configuredModName;
+        return 1;
+      }
       slog('Unable to find mod '.(defined $modRegexp ? "matching regular expression \"$modRegexp\"" : "\"$configuredModName\""),1);
       $targetMod='';
       return 0;
     }
     if(! defined $modRegexp && defined $cachedMods{$configuredModName}) {
+      $targetMod=$configuredModName;
+      return 1;
+    }
+    if(! defined $modRegexp && canUseGhostMod($configuredModName)) {
       $targetMod=$configuredModName;
       return 1;
     }
@@ -1957,6 +1965,8 @@ sub loadArchivesPostActions {
             if($printModUpdateMsg && $lobbyState >= LOBBY_STATE_BATTLE_OPENED && $lobby->{battles}{$lobby->{battle}{battleId}}{mod} ne $newTargetMod);
         $targetMod=$newTargetMod;
       }
+    }elsif(canUseGhostMod($configuredModNameDuringReload)) {
+      $targetMod=$configuredModNameDuringReload;
     }else{
       $targetMod='';
     }
@@ -2032,6 +2042,17 @@ sub getModSides {
   return $cachedMods{$modName}{sides} if(exists $cachedMods{$modName});
   my $p_modInfo=$spads->getCachedModInfo($modName);
   return defined $p_modInfo ? $p_modInfo->{sides} : [];
+}
+
+# A configured mod whose archive is absent can still be hosted by a dedicated
+# server if its hash and full info (options+sides) were previously cached. Both
+# are required, so we never open a battle with incomplete mod metadata.
+sub canUseGhostMod {
+  my $modName=shift;
+  return 0 unless($conf{allowGhostMods} && $springServerType eq 'dedicated');
+  return 0 if($modName eq '');
+  return 0 unless($spads->getModHash($modName,$syncedSpringVersion));
+  return defined $spads->getCachedModInfo($modName) ? 1 : 0;
 }
 
 sub getMapOptions {
