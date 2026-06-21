@@ -201,6 +201,7 @@ my %SPADS_CORE_CMD_HANDLERS = (
   clearbox => \&hClearBox,
   closebattle => \&hCloseBattle,
   endvote => \&hEndVote,
+  exportmetadata => \&hExportMetadata,
   fixcolors => \&hFixColors,
   force => \&hForce,
   forcepreset => \&hForcePreset,
@@ -11587,6 +11588,40 @@ sub hSaveBoxes {
   $smfMapName.='.smf' unless($smfMapName =~ /\.smf$/);
   $spads->saveMapBoxes($smfMapName,$p_startRects,$conf{extraBox});
   answer("Start boxes saved for map $conf{map}");
+  return 1;
+}
+
+sub hExportMetadata {
+  my ($source,$user,$p_params,$checkOnly)=@_;
+
+  if($#{$p_params} > 0) {
+    invalidSyntax($user,"exportmetadata");
+    return 0;
+  }
+
+  return 1 if($checkOnly);
+
+  my $fileName=$p_params->[0] // 'metadataExport.json';
+  $fileName =~ s/.*[\/\\]//;
+  $fileName.='.json' unless($fileName =~ /\.json$/i);
+  my $filePath=catfile($conf{instanceDir},$fileName);
+
+  my $r_metadata=$spads->getMetadataForExport();
+  my $jsonString=eval { JSON::PP->new->canonical->pretty->encode($r_metadata) };
+  if(! defined $jsonString) {
+    answer("Unable to encode metadata for export");
+    return 0;
+  }
+  my $fh;
+  if(! open($fh,'>',$filePath)) {
+    answer("Unable to write metadata export file \"$filePath\" ($!)");
+    return 0;
+  }
+  print {$fh} $jsonString;
+  close($fh);
+  my $nbMaps=keys %{$r_metadata->{mapInfo}};
+  my $nbMods=keys %{$r_metadata->{modInfo}};
+  answer("Metadata exported to \"$fileName\" ($nbMaps maps, $nbMods mods)");
   return 1;
 }
 
