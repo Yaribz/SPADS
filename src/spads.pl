@@ -2013,17 +2013,25 @@ sub getMapHashAndArchive {
 
 sub getModHash {
   my $modName=shift;
-  return ($modName ne '' && exists $cachedMods{$modName}) ? $cachedMods{$modName}{hash} : 0;
+  return 0 if($modName eq '');
+  return $cachedMods{$modName}{hash} if(exists $cachedMods{$modName});
+  return $spads->getModHash($modName,$syncedSpringVersion);
 }
 
 sub getModOptions {
   my $modName=shift;
-  return ($modName ne '' && exists $cachedMods{$modName}) ? $cachedMods{$modName}{options} : {};
+  return {} if($modName eq '');
+  return $cachedMods{$modName}{options} if(exists $cachedMods{$modName});
+  my $p_modInfo=$spads->getCachedModInfo($modName);
+  return defined $p_modInfo ? $p_modInfo->{options} : {};
 }
 
 sub getModSides {
   my $modName=shift;
-  return ($modName ne '' && exists $cachedMods{$modName}) ? $cachedMods{$modName}{sides} : [];
+  return [] if($modName eq '');
+  return $cachedMods{$modName}{sides} if(exists $cachedMods{$modName});
+  my $p_modInfo=$spads->getCachedModInfo($modName);
+  return defined $p_modInfo ? $p_modInfo->{sides} : [];
 }
 
 sub getMapOptions {
