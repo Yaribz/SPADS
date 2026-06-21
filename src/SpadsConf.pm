@@ -138,7 +138,9 @@ my %globalParameters = (lobbyLogin => ['login'],
                         useWin32Process => ['useWin32ProcessType'],
                         autoLoadPlugins => ['pluginList','null'],
                         eventModel => ['eventModelType'],
-                        maxChildProcesses => ['integer']);
+                        maxChildProcesses => ['integer'],
+                        ghostMetadataSources => [],
+                        ghostMetadataRefreshDelay => ['integer']);
 
 my %spadsSectionParameters = (description => ['notNull'],
                               commandsFile => ['notNull'],

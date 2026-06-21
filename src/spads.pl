@@ -31,6 +31,7 @@ use FindBin;
 use IO::Uncompress::Gunzip '$GunzipError';
 use IPC::Cmd 'can_run';
 use JSON::PP;
+use HTTP::Tiny;
 use List::Util qw'first any all none notall shuffle reduce';
 use MIME::Base64;
 use POSIX qw'ceil uname';
@@ -2053,6 +2054,52 @@ sub canUseGhostMod {
   return 0 if($modName eq '');
   return 0 unless($spads->getModHash($modName,$syncedSpringVersion));
   return defined $spads->getCachedModInfo($modName) ? 1 : 0;
+}
+
+# Read a metadata dump from a local file or an http(s) URL, returning
+# ($r_decodedDump,$errMsg). No SPADS state is mutated, so this is safe to run in
+# a forked child for periodic refresh.
+sub fetchMetadataDump {
+  my $source=shift;
+  my $content;
+  if($source =~ /^https?:\/\//i) {
+    my $httpRes=HTTP::Tiny->new(timeout => 30)->request('GET',$source);
+    return (undef,"HTTP error ($httpRes->{status} $httpRes->{reason})") unless($httpRes->{success});
+    $content=$httpRes->{content};
+  }else{
+    if(! open(my $fh,'<',$source)) {
+      return (undef,"unable to open file ($!)");
+    }else{
+      local $/=undef;
+      $content=<$fh>;
+      close($fh);
+    }
+  }
+  my $r_dump=eval { decode_json($content) };
+  return (undef,'invalid JSON'.($@ ? " ($@)" : '')) unless(ref $r_dump eq 'HASH');
+  return ($r_dump,undef);
+}
+
+# Import ghost metadata from all configured sources into the local stores, then
+# rebuild the ghost map list so newly imported maps become selectable.
+sub importGhostMetadataFromSources {
+  my @sources=grep {$_ ne ''} split(/;/,$conf{ghostMetadataSources});
+  return unless(@sources);
+  my %total=(added => 0, updated => 0, skipped => 0);
+  foreach my $source (@sources) {
+    my ($r_dump,$errMsg)=fetchMetadataDump($source);
+    if(! defined $r_dump) {
+      slog("Unable to import ghost metadata from \"$source\": $errMsg",2);
+      next;
+    }
+    my $r_stats=$spads->importMetadataStructure($r_dump,$syncedSpringVersion);
+    $total{$_}+=$r_stats->{$_} foreach(keys %{$r_stats});
+    slog("Imported ghost metadata from \"$source\" (added=$r_stats->{added}, updated=$r_stats->{updated}, skipped=$r_stats->{skipped})",4);
+  }
+  if($total{added} + $total{updated} > 0) {
+    $spads->applyMapList(\@availableMaps,$syncedSpringVersion);
+    slog("Ghost metadata import complete (added=$total{added}, updated=$total{updated}, skipped=$total{skipped})",3);
+  }
 }
 
 sub getMapOptions {
@@ -15897,6 +15944,7 @@ if(! $abortSpadsStartForAutoUpdate) {
   }
   slog("Loading Spring archives using unitsync library version $syncedSpringVersion ...",3);
   fatalError('Unable to load Spring archives at startup') unless(loadArchives());
+  importGhostMetadataFromSources() if($conf{ghostMetadataSources} ne '');
   setDefaultMapOfMaplist() if($conf{map} eq '');
 
 # Init #################################
