@@ -392,6 +392,7 @@ my @levelsFields=(['level'],['description']);
 my @commandsFields=(['source','status','gameState'],['directLevel','voteLevel']);
 my @mapBoxesFields=(['mapName','nbTeams'],['boxes']);
 my @mapHashesFields=(['springMajorVersion','mapName'],['mapHash']);
+my @modHashesFields=(['springMajorVersion','modName'],['modHash']);
 my @userDataFieldsOld=(['accountId'],['country','cpu','lobbyClient','rank','timestamp','ips','names']);
 my @userDataFields=(['accountId'],['country','lobbyClient','rank','timestamp','ips','names']);
 my @springLobbyCertificatesFields=(['lobbyHost'],['certHashes']);
@@ -545,6 +546,13 @@ sub new {
     return 0;
   }
 
+  touch($p_conf->{''}{instanceDir}.'/modHashes.dat') unless(-f $p_conf->{''}{instanceDir}.'/modHashes.dat');
+  my $p_modHashes=loadFastTableFile($sLog,$p_conf->{''}{instanceDir}.'/modHashes.dat',\@modHashesFields,{});
+  if(! %{$p_modHashes}) {
+    $sLog->log('Unable to load mod hashes',1);
+    return 0;
+  }
+
   my $p_springLobbyCertificates={''=>{}};
   if(-f "$spadsDir/springLobbyCertificates.dat") {
     $p_springLobbyCertificates=loadFastTableFile($sLog,"$spadsDir/springLobbyCertificates.dat",\@springLobbyCertificatesFields,{});
@@ -586,6 +594,16 @@ sub new {
     return 0;
   }
 
+  my $p_modInfoCache={};
+  my $modInfoCacheFile=$p_conf->{''}{instanceDir}.'/modInfoCache.dat';
+  if(-f $modInfoCacheFile) {
+    $p_modInfoCache=retrieve($modInfoCacheFile);
+  }
+  if(! defined $p_modInfoCache) {
+    $sLog->log('Unable to load mod info cache',1);
+    return 0;
+  }
+
   my $p_trustedLobbyCertificates={};
   if($sharedDataTs{trustedLobbyCertificates}) {
     $p_trustedLobbyCertificates=initSharedData($sLog,$p_conf,\%sharedDataTs,'trustedLobbyCertificates',$sharedDataFiles{trustedLobbyCertificates});
@@ -615,6 +633,7 @@ sub new {
     mapBoxes => $p_mapBoxes->{''},
     savedBoxes => $p_savedBoxes->{''},
     mapHashes => $p_mapHashes->{''},
+    modHashes => $p_modHashes->{''},
     users => $p_users->{''},
     help => $p_help,
     helpSettings => $p_helpSettings,
@@ -631,6 +650,7 @@ sub new {
     ipIds => $p_ipIds,
     nameIds => $p_nameIds,
     mapInfoCache => $p_mapInfoCache,
+    modInfoCache => $p_modInfoCache,
     maps => {},
     orderedMaps => [],
     ghostMaps => {},
@@ -2815,6 +2835,7 @@ sub dumpDynamicData {
     $self->dumpFastTable($p_prunedPrefs,$self->{conf}{instanceDir}.'/preferences.dat',\@preferencesListsFields);
   }
   $self->dumpFastTable($self->{mapHashes},$self->{conf}{instanceDir}.'/mapHashes.dat',\@mapHashesFields);
+  $self->dumpFastTable($self->{modHashes},$self->{conf}{instanceDir}.'/modHashes.dat',\@modHashesFields);
   my $p_userData=flushUserDataCache($self);
   $self->dumpFastTable($p_userData,$self->{conf}{instanceDir}.'/userData.dat',\@userDataFields);
   my $dumpDuration=time-$startDumpTs;
@@ -2903,6 +2924,22 @@ sub cacheMapsInfo {
   $self->{log}->log('Unable to store map info cache',1) unless($res);
 }
 
+# Business functions - Dynamic data - Mod info cache ##########################
+
+sub getCachedModInfo {
+  my ($self,$mod)=@_;
+  return $self->{modInfoCache}{$mod} if(exists $self->{modInfoCache}{$mod});
+  return undef;
+}
+
+sub cacheModInfo {
+  my ($self,$mod,$p_modInfo)=@_;
+  $self->{modInfoCache}{$mod}=$p_modInfo;
+  my $res=nstore($self->{modInfoCache},$self->{conf}{instanceDir}.'/modInfoCache.dat');
+  $self->{log}->log('Unable to store mod info cache',1) unless($res);
+  return $res;
+}
+
 # Business functions - Dynamic data - Map boxes ###############################
 
 sub existSavedMapBoxes {
@@ -2981,6 +3018,23 @@ sub saveMapHash {
   $self->{mapHashes}{$springMajorVersion}{$map}={} unless(exists $self->{mapHashes}{$springMajorVersion}{$map});
   $self->{mapHashes}{$springMajorVersion}{$map}{mapHash}=$hash;
   $self->{log}->log("Hash saved for map \"$map\" (springMajorVersion=$springMajorVersion)",5);
+  return 1;
+}
+
+sub getModHash {
+  my ($self,$mod,$springMajorVersion)=@_;
+  if(exists $self->{modHashes}{$springMajorVersion} && exists $self->{modHashes}{$springMajorVersion}{$mod}) {
+    return $self->{modHashes}{$springMajorVersion}{$mod}{modHash};
+  }
+  return 0;
+}
+
+sub saveModHash {
+  my ($self,$mod,$springMajorVersion,$hash)=@_;
+  $self->{modHashes}{$springMajorVersion}={} unless(exists $self->{modHashes}{$springMajorVersion});
+  $self->{modHashes}{$springMajorVersion}{$mod}={} unless(exists $self->{modHashes}{$springMajorVersion}{$mod});
+  $self->{modHashes}{$springMajorVersion}{$mod}{modHash}=$hash;
+  $self->{log}->log("Hash saved for mod \"$mod\" (springMajorVersion=$springMajorVersion)",5);
   return 1;
 }
 

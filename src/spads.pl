@@ -1938,7 +1938,13 @@ sub loadArchivesPostActions {
     %rapidModResolutionCache=(substr($configuredModNameDuringReload,8) => $newTargetMod)
         if(substr($configuredModNameDuringReload,0,8) eq 'rapid://');
     my $r_modData=$r_loadArchivesResult->{modData};
-    $cachedMods{$newTargetMod}=$r_modData if(defined $r_modData); # modData is only defined when a new uncached mod is selected
+    if(defined $r_modData) { # modData is only defined when a new uncached mod is selected
+      $cachedMods{$newTargetMod}=$r_modData;
+      if($r_modData->{hash}) {
+        $spads->saveModHash($newTargetMod,$syncedSpringVersion,$r_modData->{hash});
+        $spads->cacheModInfo($newTargetMod,{options => $r_modData->{options}, sides => $r_modData->{sides}});
+      }
+    }
     $nbArchivesLoaded = $nbMapsLoaded + (scalar(%availableModsNameToNb) || 1);
   }else{
     $nbArchivesLoaded = ($nbMapsLoaded + %availableModsNameToNb) || 1;
