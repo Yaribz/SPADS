@@ -2102,6 +2102,43 @@ sub importGhostMetadataFromSources {
   }
 }
 
+# Periodic refresh: fetch all sources in a forked child (network I/O must not
+# block the main loop), then apply the results in the parent process where the
+# SPADS state lives. Imported/previously-imported entries are refreshed; local
+# archive-derived entries are never touched.
+sub refreshGhostMetadata {
+  my @sources=grep {$_ ne ''} split(/;/,$conf{ghostMetadataSources});
+  return unless(@sources);
+  if(! SimpleEvent::forkCall(
+        sub {
+          my @results;
+          foreach my $source (@sources) {
+            my ($r_dump,$errMsg)=fetchMetadataDump($source);
+            push(@results,{source => $source, dump => $r_dump, error => $errMsg});
+          }
+          return \@results;
+        },
+        sub {
+          my $r_results=shift;
+          return unless(ref $r_results eq 'ARRAY');
+          my %total=(added => 0, updated => 0, skipped => 0);
+          foreach my $r_result (@{$r_results}) {
+            if(! defined $r_result->{dump}) {
+              slog("Unable to refresh ghost metadata from \"$r_result->{source}\": $r_result->{error}",2);
+              next;
+            }
+            my $r_stats=$spads->importMetadataStructure($r_result->{dump},$syncedSpringVersion);
+            $total{$_}+=$r_stats->{$_} foreach(keys %{$r_stats});
+          }
+          if($total{added} + $total{updated} > 0) {
+            $spads->applyMapList(\@availableMaps,$syncedSpringVersion);
+            slog("Ghost metadata refresh complete (added=$total{added}, updated=$total{updated}, skipped=$total{skipped})",3);
+          }
+        })) {
+    slog('Unable to fork process for ghost metadata refresh',2);
+  }
+}
+
 sub getMapOptions {
   my $mapName=shift;
   my $p_mapInfo=$spads->getCachedMapInfo($mapName);
@@ -16007,6 +16044,8 @@ if(! $abortSpadsStartForAutoUpdate) {
       if($autoManagedEngineData{mode} eq 'release' && $autoManagedEngineData{delay});
   SimpleEvent::addTimer('RefreshSharedData',$conf{sharedDataRefreshDelay},$conf{sharedDataRefreshDelay},sub {$spads->refreshSharedDataIfNeeded()})
       if($conf{sharedDataRefreshDelay});
+  SimpleEvent::addTimer('RefreshGhostMetadata',$conf{ghostMetadataRefreshDelay}*60,$conf{ghostMetadataRefreshDelay}*60,\&refreshGhostMetadata)
+      if($conf{ghostMetadataRefreshDelay} && $conf{ghostMetadataSources} ne '');
   SimpleEvent::startLoop(\&postMainLoop);
 }
 
@@ -16224,6 +16263,7 @@ sub postMainLoop {
   SimpleEvent::removeTimer('SpadsMainLoop');
   SimpleEvent::removeTimer('EngineVersionAutoManagement') if($autoManagedEngineData{mode} eq 'release' && $autoManagedEngineData{delay});
   SimpleEvent::removeTimer('RefreshSharedData') if($conf{sharedDataRefreshDelay});
+  SimpleEvent::removeTimer('RefreshGhostMetadata') if($conf{ghostMetadataRefreshDelay} && $conf{ghostMetadataSources} ne '');
   SimpleEvent::removeFileLockRequest('unitsyncLock') if($timestamps{usLockRequestForGameStart});
 }
 
