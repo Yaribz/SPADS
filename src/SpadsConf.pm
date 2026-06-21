@@ -605,6 +605,16 @@ sub new {
     return 0;
   }
 
+  my $p_importedMetadata={};
+  my $importedMetadataFile=$p_conf->{''}{instanceDir}.'/importedMetadata.dat';
+  if(-f $importedMetadataFile) {
+    $p_importedMetadata=retrieve($importedMetadataFile);
+  }
+  if(! defined $p_importedMetadata) {
+    $sLog->log('Unable to load imported metadata registry',1);
+    return 0;
+  }
+
   my $p_trustedLobbyCertificates={};
   if($sharedDataTs{trustedLobbyCertificates}) {
     $p_trustedLobbyCertificates=initSharedData($sLog,$p_conf,\%sharedDataTs,'trustedLobbyCertificates',$sharedDataFiles{trustedLobbyCertificates});
@@ -652,6 +662,7 @@ sub new {
     nameIds => $p_nameIds,
     mapInfoCache => $p_mapInfoCache,
     modInfoCache => $p_modInfoCache,
+    importedMetadata => $p_importedMetadata,
     maps => {},
     orderedMaps => [],
     ghostMaps => {},
@@ -2914,6 +2925,7 @@ sub cacheMapsInfo {
   }
   foreach my $map (keys %{$p_mapsInfo}) {
     $self->{mapInfoCache}{$map}=$p_mapsInfo->{$map};
+    $self->_clearImported('mapInfo',$map);
   }
   my $res;
   if($self->{sharedDataTs}{mapInfoCache}) {
@@ -2936,9 +2948,133 @@ sub getCachedModInfo {
 sub cacheModInfo {
   my ($self,$mod,$p_modInfo)=@_;
   $self->{modInfoCache}{$mod}=$p_modInfo;
+  $self->_clearImported('modInfo',$mod);
   my $res=nstore($self->{modInfoCache},$self->{conf}{instanceDir}.'/modInfoCache.dat');
   $self->{log}->log('Unable to store mod info cache',1) unless($res);
   return $res;
+}
+
+# Business functions - Dynamic data - Metadata import/export ##################
+
+# Provenance registry ($self->{importedMetadata}): records which cached entries
+# came from an external import. Absence means the entry is local (archive-
+# derived) and authoritative. Types: 'mapHash'/'modHash' (keys: version,name),
+# 'mapInfo'/'modInfo' (key: name).
+
+sub _storeImportedMetadata {
+  my $self=shift;
+  my $res=nstore($self->{importedMetadata},$self->{conf}{instanceDir}.'/importedMetadata.dat');
+  $self->{log}->log('Unable to store imported metadata registry',1) unless($res);
+  return $res;
+}
+
+sub _isImportedMetadata {
+  my ($self,$type,@keys)=@_;
+  my $node=$self->{importedMetadata}{$type};
+  foreach my $key (@keys) {
+    return 0 unless(ref $node eq 'HASH' && exists $node->{$key});
+    $node=$node->{$key};
+  }
+  return 1;
+}
+
+sub _markImportedMetadata {
+  my ($self,$type,@keys)=@_;
+  my $leaf=pop(@keys);
+  my $node=($self->{importedMetadata}{$type}//={});
+  $node=($node->{$_}//={}) foreach(@keys);
+  $node->{$leaf}=1;
+}
+
+sub _clearImported {
+  my ($self,$type,@keys)=@_;
+  my $leaf=pop(@keys);
+  my $node=$self->{importedMetadata}{$type};
+  foreach my $key (@keys) {
+    return unless(ref $node eq 'HASH' && exists $node->{$key});
+    $node=$node->{$key};
+  }
+  delete $node->{$leaf} if(ref $node eq 'HASH');
+}
+
+sub getMetadataForExport {
+  my $self=shift;
+  my %mapHashes;
+  foreach my $ver (keys %{$self->{mapHashes}}) {
+    $mapHashes{$ver}{$_}=$self->{mapHashes}{$ver}{$_}{mapHash} foreach(keys %{$self->{mapHashes}{$ver}});
+  }
+  my %modHashes;
+  foreach my $ver (keys %{$self->{modHashes}}) {
+    $modHashes{$ver}{$_}=$self->{modHashes}{$ver}{$_}{modHash} foreach(keys %{$self->{modHashes}{$ver}});
+  }
+  return {
+    spadsMetadataVersion => 1,
+    mapHashes => \%mapHashes,
+    modHashes => \%modHashes,
+    mapInfo => $self->{mapInfoCache},
+    modInfo => $self->{modInfoCache},
+  };
+}
+
+# Merge an exported metadata structure into the local stores. Local (archive-
+# derived) entries are never overwritten; previously imported entries are
+# refreshed. Only hashes for the host's spring major version are imported (map
+# and mod info are version-independent). Returns counts {added,updated,skipped}.
+sub importMetadataStructure {
+  my ($self,$r_dump,$springMajorVersion)=@_;
+  my %stats=(added => 0, updated => 0, skipped => 0);
+  return \%stats unless(ref $r_dump eq 'HASH');
+
+  my %hashStores=(mapHashes => ['mapHash','mapHash'], modHashes => ['modHash','modHash']);
+  foreach my $dumpKey (qw'mapHashes modHashes') {
+    my ($selfKey,$hashField,$provType)=($dumpKey,@{$hashStores{$dumpKey}});
+    next unless(defined $springMajorVersion);
+    my $r_versionDump=$r_dump->{$dumpKey};
+    next unless(ref $r_versionDump eq 'HASH' && ref $r_versionDump->{$springMajorVersion} eq 'HASH');
+    my $r_entries=$r_versionDump->{$springMajorVersion};
+    foreach my $name (keys %{$r_entries}) {
+      my $exists=(ref $self->{$selfKey}{$springMajorVersion} eq 'HASH' && exists $self->{$selfKey}{$springMajorVersion}{$name});
+      if($exists && ! $self->_isImportedMetadata($provType,$springMajorVersion,$name)) {
+        $stats{skipped}++;
+        next;
+      }
+      $self->{$selfKey}{$springMajorVersion}//={};
+      $self->{$selfKey}{$springMajorVersion}{$name}={$hashField => $r_entries->{$name}};
+      $self->_markImportedMetadata($provType,$springMajorVersion,$name);
+      $exists ? $stats{updated}++ : $stats{added}++;
+    }
+  }
+
+  my $skipMapInfo=$self->{sharedDataTs}{mapInfoCache} ? 1 : 0;
+  $self->{log}->log('Map info import skipped (mapInfoCache is shared across instances)',2)
+      if($skipMapInfo && ref $r_dump->{mapInfo} eq 'HASH' && %{$r_dump->{mapInfo}});
+  my %infoStores=(mapInfo => ['mapInfoCache','mapInfo'], modInfo => ['modInfoCache','modInfo']);
+  foreach my $dumpKey (qw'mapInfo modInfo') {
+    next if($dumpKey eq 'mapInfo' && $skipMapInfo);
+    my ($selfKey,$provType)=@{$infoStores{$dumpKey}};
+    my $r_entries=$r_dump->{$dumpKey};
+    next unless(ref $r_entries eq 'HASH');
+    foreach my $name (keys %{$r_entries}) {
+      my $exists=exists $self->{$selfKey}{$name};
+      if($exists && ! $self->_isImportedMetadata($provType,$name)) {
+        $stats{skipped}++;
+        next;
+      }
+      $self->{$selfKey}{$name}=$r_entries->{$name};
+      $self->_markImportedMetadata($provType,$name);
+      $exists ? $stats{updated}++ : $stats{added}++;
+    }
+  }
+
+  if($stats{added} + $stats{updated} > 0) {
+    $self->dumpFastTable($self->{mapHashes},$self->{conf}{instanceDir}.'/mapHashes.dat',\@mapHashesFields);
+    $self->dumpFastTable($self->{modHashes},$self->{conf}{instanceDir}.'/modHashes.dat',\@modHashesFields);
+    nstore($self->{mapInfoCache},$self->{conf}{instanceDir}.'/mapInfoCache.dat') unless($skipMapInfo);
+    nstore($self->{modInfoCache},$self->{conf}{instanceDir}.'/modInfoCache.dat');
+    $self->_storeImportedMetadata();
+  }
+
+  return \%stats;
 }
 
 # Business functions - Dynamic data - Map boxes ###############################
@@ -3018,6 +3154,7 @@ sub saveMapHash {
   $self->{mapHashes}{$springMajorVersion}={} unless(exists $self->{mapHashes}{$springMajorVersion});
   $self->{mapHashes}{$springMajorVersion}{$map}={} unless(exists $self->{mapHashes}{$springMajorVersion}{$map});
   $self->{mapHashes}{$springMajorVersion}{$map}{mapHash}=$hash;
+  $self->_clearImported('mapHash',$springMajorVersion,$map);
   $self->{log}->log("Hash saved for map \"$map\" (springMajorVersion=$springMajorVersion)",5);
   return 1;
 }
@@ -3035,6 +3172,7 @@ sub saveModHash {
   $self->{modHashes}{$springMajorVersion}={} unless(exists $self->{modHashes}{$springMajorVersion});
   $self->{modHashes}{$springMajorVersion}{$mod}={} unless(exists $self->{modHashes}{$springMajorVersion}{$mod});
   $self->{modHashes}{$springMajorVersion}{$mod}{modHash}=$hash;
+  $self->_clearImported('modHash',$springMajorVersion,$mod);
   $self->{log}->log("Hash saved for mod \"$mod\" (springMajorVersion=$springMajorVersion)",5);
   return 1;
 }
