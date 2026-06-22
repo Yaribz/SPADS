@@ -2064,7 +2064,7 @@ sub fetchMetadataDump {
   my $source=shift;
   my $content;
   if($source =~ /^https?:\/\//i) {
-    my $httpRes=HTTP::Tiny->new(timeout => 30)->request('GET',$source);
+    my $httpRes=HTTP::Tiny->new(timeout => 30, verify_SSL => 1)->request('GET',$source);
     return (undef,"HTTP error ($httpRes->{status} $httpRes->{reason})") unless($httpRes->{success});
     $content=$httpRes->{content};
   }else{
@@ -2086,7 +2086,7 @@ sub fetchMetadataDump {
 sub importGhostMetadataFromSources {
   my @sources=grep {$_ ne ''} split(/;/,$conf{ghostMetadataSources});
   return unless(@sources);
-  my %total=(added => 0, updated => 0, skipped => 0);
+  my %total=(added => 0, updated => 0, skipped => 0, rejected => 0);
   foreach my $source (@sources) {
     my ($r_dump,$errMsg)=fetchMetadataDump($source);
     if(! defined $r_dump) {
@@ -2099,7 +2099,7 @@ sub importGhostMetadataFromSources {
   }
   if($total{added} + $total{updated} > 0) {
     $spads->applyMapList(\@availableMaps,$syncedSpringVersion);
-    slog("Ghost metadata import complete (added=$total{added}, updated=$total{updated}, skipped=$total{skipped})",3);
+    slog("Ghost metadata import complete (added=$total{added}, updated=$total{updated}, skipped=$total{skipped}, rejected=$total{rejected})",3);
   }
 }
 
@@ -2122,7 +2122,7 @@ sub refreshGhostMetadata {
         sub {
           my $r_results=shift;
           return unless(ref $r_results eq 'ARRAY');
-          my %total=(added => 0, updated => 0, skipped => 0);
+          my %total=(added => 0, updated => 0, skipped => 0, rejected => 0);
           foreach my $r_result (@{$r_results}) {
             if(! defined $r_result->{dump}) {
               slog("Unable to refresh ghost metadata from \"$r_result->{source}\": $r_result->{error}",2);
@@ -2133,7 +2133,7 @@ sub refreshGhostMetadata {
           }
           if($total{added} + $total{updated} > 0) {
             $spads->applyMapList(\@availableMaps,$syncedSpringVersion);
-            slog("Ghost metadata refresh complete (added=$total{added}, updated=$total{updated}, skipped=$total{skipped})",3);
+            slog("Ghost metadata refresh complete (added=$total{added}, updated=$total{updated}, skipped=$total{skipped}, rejected=$total{rejected})",3);
           }
         })) {
     slog('Unable to fork process for ghost metadata refresh',2);

@@ -3018,13 +3018,44 @@ sub getMetadataForExport {
   };
 }
 
+# Defensive validation for externally-imported metadata. Rejects control
+# characters (which could otherwise inject lines into the generated Spring start
+# script via option keys/values), unexpected reference types (e.g. code refs),
+# and pathologically deep nesting. decode_json only produces hashes, arrays,
+# scalars and JSON::PP::Boolean, so anything else is treated as hostile.
+sub _importedValueIsSafe {
+  my ($value,$depth)=@_;
+  return 0 if($depth > 8);
+  my $ref=ref $value;
+  if($ref eq '') {
+    return 1 if(! defined $value);
+    return $value =~ /[\x00-\x08\x0a-\x1f\x7f]/ ? 0 : 1;
+  }
+  return 1 if($ref eq 'JSON::PP::Boolean');
+  if($ref eq 'HASH') {
+    foreach my $key (keys %{$value}) {
+      return 0 if($key =~ /[\x00-\x08\x0a-\x1f\x7f]/);
+      return 0 unless(_importedValueIsSafe($value->{$key},$depth+1));
+    }
+    return 1;
+  }
+  if($ref eq 'ARRAY') {
+    foreach my $element (@{$value}) {
+      return 0 unless(_importedValueIsSafe($element,$depth+1));
+    }
+    return 1;
+  }
+  return 0;
+}
+
 # Merge an exported metadata structure into the local stores. Local (archive-
 # derived) entries are never overwritten; previously imported entries are
 # refreshed. Only hashes for the host's spring major version are imported (map
-# and mod info are version-independent). Returns counts {added,updated,skipped}.
+# and mod info are version-independent). Entries failing validation are counted
+# as rejected. Returns counts {added,updated,skipped,rejected}.
 sub importMetadataStructure {
   my ($self,$r_dump,$springMajorVersion)=@_;
-  my %stats=(added => 0, updated => 0, skipped => 0);
+  my %stats=(added => 0, updated => 0, skipped => 0, rejected => 0);
   return \%stats unless(ref $r_dump eq 'HASH');
 
   my %hashStores=(mapHashes => ['mapHash','mapHash'], modHashes => ['modHash','modHash']);
@@ -3035,6 +3066,10 @@ sub importMetadataStructure {
     next unless(ref $r_versionDump eq 'HASH' && ref $r_versionDump->{$springMajorVersion} eq 'HASH');
     my $r_entries=$r_versionDump->{$springMajorVersion};
     foreach my $name (keys %{$r_entries}) {
+      if($name =~ /[\x00-\x08\x0a-\x1f\x7f]/ || ref $r_entries->{$name} || $r_entries->{$name} !~ /^-?\d+$/) {
+        $stats{rejected}++;
+        next;
+      }
       my $exists=(ref $self->{$selfKey}{$springMajorVersion} eq 'HASH' && exists $self->{$selfKey}{$springMajorVersion}{$name});
       if($exists && ! $self->_isImportedMetadata($provType,$springMajorVersion,$name)) {
         $stats{skipped}++;
@@ -3057,6 +3092,10 @@ sub importMetadataStructure {
     my $r_entries=$r_dump->{$dumpKey};
     next unless(ref $r_entries eq 'HASH');
     foreach my $name (keys %{$r_entries}) {
+      if($name =~ /[\x00-\x08\x0a-\x1f\x7f]/ || ref $r_entries->{$name} ne 'HASH' || ! _importedValueIsSafe($r_entries->{$name},0)) {
+        $stats{rejected}++;
+        next;
+      }
       my $exists=exists $self->{$selfKey}{$name};
       if($exists && ! $self->_isImportedMetadata($provType,$name)) {
         $stats{skipped}++;
@@ -3075,6 +3114,9 @@ sub importMetadataStructure {
     nstore($self->{modInfoCache},$self->{conf}{instanceDir}.'/modInfoCache.dat');
     $self->_storeImportedMetadata();
   }
+
+  $self->{log}->log("Rejected $stats{rejected} unsafe or malformed imported metadata entrie(s)",2)
+      if($stats{rejected});
 
   return \%stats;
 }
