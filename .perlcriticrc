@@ -1,0 +1,10 @@
+# Perl::Critic configuration for SPADS.
+#
+# This codebase has not previously been linted, so the policy starts deliberately
+# lenient: only the most severe issues (severity 5) are reported. The threshold
+# can be lowered over time (toward severity 1) as findings are triaged.
+#
+# The accompanying CI job is advisory (non-blocking) for the same reason.
+
+severity = 5
+verbose  = 8
