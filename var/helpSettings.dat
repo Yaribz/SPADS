@@ -1123,6 +1123,16 @@ A map preset is a global preset defined in spads.conf which has the same name as
 -
 0
 
+[set:allowGhostMods]
+Allow ghost mods
+-
+If enabled and if a dedicated Spring server is used (see [global:springServerType]), the configured game (mod) can be hosted even when its archive isn't available locally, as long as its hash and full metadata (options and sides) have already been cached from a previous load. This mirrors [set:allowGhostMaps] for games.
+-
+0: disabled
+1: enabled
+-
+0
+
 [set:allowGhostMaps]
 Allow ghost maps
 -
