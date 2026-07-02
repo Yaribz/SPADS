@@ -1555,6 +1555,7 @@ SpadsUpdater.pm:
 0.32: allow providing a Git commit hash instead of a SPADS release name for manual selection of specific version
       use internal URL escaping function
 0.33: add retries for GitHub HTTP requests to handle cases of transient GitHub servers unavailability
+0.34: fix Perl warning on failure to download engine releases list from GitHub
 
 springLobbyCertificates.dat:
 ===========================

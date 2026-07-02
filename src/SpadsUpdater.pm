@@ -1,6 +1,6 @@
 # Perl module used for Spads auto-updating functionnality
 #
-# Copyright (C) 2008-2025  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2026  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -36,7 +36,7 @@ use Time::HiRes;
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $archName=($win?'win':'linux').($Config{ptrsize} > 4 ? 64 : 32);
 
-our $VERSION='0.33';
+our $VERSION='0.34';
 
 my @constructorParams = qw'sLog repository release packages';
 my @optionalConstructorParams = qw'localDir springDir';
@@ -513,12 +513,12 @@ sub _getGithubRepositoryReleases {
       return undef;
     }
     ($r_releases,$failureReason,undef,$nbAttempts)=_getGithubRepositoryReleasesPage($httpTiny,$ghRepo,$pageNb);
-    $sl->log("$nbAttempts attempts were required to retrieve page $pageNb of the releases list from GitHub repository \"$ghRepo\" due to GitHub servers unavailability",2) if($nbAttempts > 2);
     if(! defined $r_releases) {
       $sl->log("Failed to retrieve page $pageNb of the releases list from GitHub repository \"$ghRepo\": $failureReason",1);
       close($ghReleasesCacheLockFh);
       return undef;
     }
+    $sl->log("$nbAttempts attempts were required to retrieve page $pageNb of the releases list from GitHub repository \"$ghRepo\" due to GitHub servers unavailability",2) if($nbAttempts > 2);
     if(! @{$r_releases}) {
       $sl->log("The full list of releases was retrieved for GitHub repository \"$ghRepo\", but previously cached releases were NOT found (some releases might have been deleted from repository)",2)
           if(%{$r_alreadyKnownReleases});
