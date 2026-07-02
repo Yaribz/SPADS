@@ -1,0 +1,34 @@
+name: Automated tests
+
+on:
+  workflow_dispatch:
+
+jobs:
+  automated-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Install SPADS dependencies
+        run: >
+          sudo apt-get -y update
+          && sudo apt-get -y --no-install-recommends install
+          libio-socket-ssl-perl
+          libffi-platypus-perl
+          libdbd-sqlite3-perl
+          libanyevent-perl
+      - name: Download and extract SPADS installer
+        run: >
+          mkdir spads
+          && cd spads
+          && wget http://planetspads.free.fr/spads/installer/spadsInstaller.tar -qO - | tar x
+      - name: Overwrite SPADS installer files with files from current repository
+        run: cp src/spadsInstaller.pl src/SpadsUpdater.pm spads
+      - name: Launch SPADS installer
+        working-directory: spads
+        run: perl spadsInstaller.pl --auto Tests
+      - name: Overwrite SPADS files with files from current repository
+        run: cp src/* var/* spads
+      - name: Launch SPADS
+        working-directory: spads
+        run: perl spads.pl etc/spads.conf
