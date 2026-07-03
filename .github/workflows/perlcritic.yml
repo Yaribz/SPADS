@@ -1,19 +1,14 @@
 name: perlcritic
 
 on:
-  push:
-  pull_request:
+  workflow_dispatch:
 
 jobs:
   perlcritic:
     runs-on: ubuntu-latest
-    # Advisory only: this codebase has not previously been linted, so a finding
-    # must not fail the build. Remove continue-on-error once the policy is
-    # tightened and outstanding findings are addressed.
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - name: Install Perl::Critic
         run: sudo apt-get update && sudo apt-get install -y libperl-critic-perl
-      - name: Run perlcritic (advisory)
-        run: perlcritic --profile .perlcriticrc src/
+      - name: Run perlcritic
+        run: perlcritic --profile .perlcriticrc src/ plugins/

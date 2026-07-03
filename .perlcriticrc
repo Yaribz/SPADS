@@ -7,4 +7,7 @@
 # The accompanying CI job is advisory (non-blocking) for the same reason.
 
 severity = 5
-verbose  = 8
+verbose  = %F: [%p] %m at line %l, column %c.  (Severity: %s)\n
+
+[-InputOutput::ProhibitInteractiveTest]
+[-Subroutines::ProhibitExplicitReturnUndef]
