@@ -1,0 +1,15 @@
+name: compile-check
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show Perl version
+        run: perl --version
+      - name: Compile-check all sources
+        run: prove -v t/
