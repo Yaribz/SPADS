@@ -111,7 +111,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.49';
+our $SPADS_VERSION='0.13.50';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -614,19 +614,19 @@ my $updater = SpadsUpdater->new(sLog => $updaterSimpleLog,
 # Binaries update (Windows only) ##############################################
 
 if(MSWIN32) {
-  if(opendir(BINDIR,$spadsDir)) {
-    my @toBeDeletedFiles = grep {/\.toBeDeleted$/} readdir(BINDIR);
-    closedir(BINDIR);
+  if(opendir(my $binDirHdl,$spadsDir)) {
+    my @toBeDeletedFiles = grep {/\.toBeDeleted$/} readdir($binDirHdl);
+    closedir($binDirHdl);
     my @toBeDelAbsNames=map("$spadsDir/$_",@toBeDeletedFiles);
     unlink @toBeDelAbsNames;
   }
   my %updatedPackages;
   if(-f "$spadsDir/updateInfo.txt") {
-    if(open(UPDATE_INFO,"<$spadsDir/updateInfo.txt")) {
-      while(local $_ = <UPDATE_INFO>) {
+    if(open(my $updateInfoFh,'<',"$spadsDir/updateInfo.txt")) {
+      while(local $_ = <$updateInfoFh>) {
         $updatedPackages{$1}=$2 if(/^([^:]+):(.+)$/);
       }
-      close(UPDATE_INFO);
+      close($updateInfoFh);
     }else{
       fatalError("Unable to read \"$spadsDir/updateInfo.txt\" file",EXIT_SYSTEM);
     }
@@ -737,7 +737,8 @@ sub parseCmdLineArgs {
     if($arg =~ /^--tls-cert-(trust|revoke|list)(?:=(.+))?$/i) {
       return undef if(defined $parsedTlsAction);
       $parsedTlsAction=lc($1);
-      my $tlsParam=lc($2) if(defined $2);
+      my $tlsParam;
+      $tlsParam=lc($2) if(defined $2);
       if(defined $tlsParam) {
         if($parsedTlsAction eq 'list') {
           return undef unless($tlsParam =~ /^\w[\w\-\.]*$/);
@@ -2526,7 +2527,8 @@ sub applyMapBoxes {
   $smfMapName.='.smf' unless($smfMapName =~ /\.smf$/);
   my $p_boxes=$spads->getMapBoxes($smfMapName,$conf{nbTeams},$conf{extraBox});
   foreach my $pluginName (@pluginsOrder) {
-    my $overwritten=$plugins{$pluginName}->setMapStartBoxes($p_boxes,$conf{map},$conf{nbTeams},$conf{extraBox}) if($plugins{$pluginName}->can('setMapStartBoxes'));
+    my $overwritten;
+    $overwritten=$plugins{$pluginName}->setMapStartBoxes($p_boxes,$conf{map},$conf{nbTeams},$conf{extraBox}) if($plugins{$pluginName}->can('setMapStartBoxes'));
     if(ref $overwritten) {
       my $r_newBoxes;
       ($overwritten,$r_newBoxes)=@{$overwritten};
@@ -3010,7 +3012,8 @@ sub getUserAccessLevel {
   my $isAuthenticated=isUserAuthenticated($user);
   my $coreUserAccessLevel=$spads->getUserAccessLevel($user,$p_userData,$isAuthenticated);
   foreach my $pluginName (@pluginsOrder) {
-    my $newUserAccessLevel=$plugins{$pluginName}->changeUserAccessLevel($user,$p_userData,$isAuthenticated,$coreUserAccessLevel) if($plugins{$pluginName}->can('changeUserAccessLevel'));
+    my $newUserAccessLevel;
+    $newUserAccessLevel=$plugins{$pluginName}->changeUserAccessLevel($user,$p_userData,$isAuthenticated,$coreUserAccessLevel) if($plugins{$pluginName}->can('changeUserAccessLevel'));
     return $newUserAccessLevel if(defined $newUserAccessLevel);
   }
   return $coreUserAccessLevel;
@@ -3110,7 +3113,8 @@ sub parseSpadsCmd {
 sub getCmdAliases {
   my %cmdAliases=%SPADS_CORE_CMD_ALIASES;
   foreach my $pluginName (@pluginsOrder) {
-    my $r_newAliases=$plugins{$pluginName}->updateCmdAliases(\%cmdAliases) if($plugins{$pluginName}->can('updateCmdAliases'));
+    my $r_newAliases;
+    $r_newAliases=$plugins{$pluginName}->updateCmdAliases(\%cmdAliases) if($plugins{$pluginName}->can('updateCmdAliases'));
     (map {$cmdAliases{$_}=$r_newAliases->{$_}} (keys %{$r_newAliases})) if(ref $r_newAliases eq 'HASH');
   }
   return \%cmdAliases;
@@ -3944,13 +3948,13 @@ sub autoRestartForUpdateIfNeeded {
   $timestamps{autoRestartCheck}=time;
   my $updateTimestamp=0;
   if(-f "$spadsDir/updateInfo.txt") {
-    if(open(UPDATE_INFO,"<$spadsDir/updateInfo.txt")) {
-      while(local $_ = <UPDATE_INFO>) {
+    if(open(my $updateInfoFh,'<',"$spadsDir/updateInfo.txt")) {
+      while(local $_ = <$updateInfoFh>) {
         if(/^(\d+)$/) {
           $updateTimestamp=$1 if($1 > $updateTimestamp);
         }
       }
-      close(UPDATE_INFO);
+      close($updateInfoFh);
     }else{
       slog("Unable to read \"$spadsDir/updateInfo.txt\" file",1);
     }
@@ -5011,8 +5015,9 @@ sub balancePlayers {
       assignBot($bot,$groupNb,$p_bots,$p_groups);
     }
     if($optim3v3 && $p_groups->[$groupNb]{freeSlots} == 2) {
-      my $nextBestPlayerSkill=$p_players->{$sortedPlayers[0]}{skill} if(@sortedPlayers);
-      my $nextBestBotSkill=$p_bots->{$sortedBots[0]}{skill} if(@sortedBots);
+      my ($nextBestPlayerSkill,$nextBestBotSkill);
+      $nextBestPlayerSkill=$p_players->{$sortedPlayers[0]}{skill} if(@sortedPlayers);
+      $nextBestBotSkill=$p_bots->{$sortedBots[0]}{skill} if(@sortedBots);
       my $nextEntityIsPlayer;
       if(defined $nextBestPlayerSkill) {
         if(defined $nextBestBotSkill) {
@@ -5024,8 +5029,9 @@ sub balancePlayers {
         $nextEntityIsPlayer=0;
       }
       my $nextBestSkill=$nextEntityIsPlayer?$nextBestPlayerSkill:$nextBestBotSkill;
-      my $nextWorstPlayerSkill=$p_players->{$sortedPlayers[-1]}{skill} if(@sortedPlayers);
-      my $nextWorstBotSkill=$p_bots->{$sortedBots[-1]}{skill} if(@sortedBots);
+      my ($nextWorstPlayerSkill,$nextWorstBotSkill);
+      $nextWorstPlayerSkill=$p_players->{$sortedPlayers[-1]}{skill} if(@sortedPlayers);
+      $nextWorstBotSkill=$p_bots->{$sortedBots[-1]}{skill} if(@sortedBots);
       my $nextWorstSkill;
       if(defined $nextWorstPlayerSkill) {
         if(defined $nextWorstBotSkill) {
@@ -5246,7 +5252,8 @@ sub getFixedColorsOf {
   
   my %idColors;
   foreach my $pluginName (@pluginsOrder) {
-    my $r_idColors=$plugins{$pluginName}->fixColors($r_players,$r_bots,\%battleStructure) if($plugins{$pluginName}->can('fixColors'));
+    my $r_idColors;
+    $r_idColors=$plugins{$pluginName}->fixColors($r_players,$r_bots,\%battleStructure) if($plugins{$pluginName}->can('fixColors'));
     if(defined $r_idColors) {
       %idColors=%{$r_idColors};
       last;
@@ -5677,7 +5684,8 @@ sub launchGame {
   $additionalData{"game/MapHash"}=uint32($spads->getMapHash($currentMap,$syncedSpringVersion)) unless($mapIsAvailableLocally);
 
   foreach my $pluginName (@pluginsOrder) {
-    my $r_newStartScriptTags=$plugins{$pluginName}->addStartScriptTags(\%additionalData) if($plugins{$pluginName}->can('addStartScriptTags'));
+    my $r_newStartScriptTags;
+    $r_newStartScriptTags=$plugins{$pluginName}->addStartScriptTags(\%additionalData) if($plugins{$pluginName}->can('addStartScriptTags'));
     if(ref($r_newStartScriptTags) eq 'HASH') {
       foreach my $startScriptTag (keys %{$r_newStartScriptTags}) {
         if(exists $additionalData{$startScriptTag} && any {$startScriptTag eq $_} (qw'aiData playerData')) {
@@ -5776,11 +5784,11 @@ sub startGameServer {
     }
   }
   
-  open(SCRIPT,">$conf{instanceDir}/startscript.txt");
+  open(my $startScriptFh,'>',"$conf{instanceDir}/startscript.txt");
   for my $i (0..$#{$p_startData}) {
-    print SCRIPT $p_startData->[$i]."\n";
+    print $startScriptFh $p_startData->[$i]."\n";
   }
-  close(SCRIPT);
+  close($startScriptFh);
 
   $timestamps{autoForcePossible}=0;
   $timestamps{lastGameStart}=time;
@@ -6126,13 +6134,14 @@ sub logMsg {
       return;
     }
   }
-  if(! open(CHAT,'>>:encoding(utf-8)',"$conf{logDir}/chat/$file.log")) {
+  my $chatLogFh;
+  if(! open($chatLogFh,'>>:encoding(utf-8)',"$conf{logDir}/chat/$file.log")) {
     slog("Unable to log chat message into file \"$conf{logDir}/chat/$file.log\"",1);
     return;
   }
   my $dateTime=localtime();
-  print CHAT "[$dateTime] $msg\n";
-  close(CHAT);
+  print $chatLogFh "[$dateTime] $msg\n";
+  close($chatLogFh);
 }
 
 sub needRehost {
@@ -7256,13 +7265,13 @@ sub translateSideIfNeeded {
 sub getGameDataFromLog {
   my $logFile="$conf{instanceDir}/infolog.txt";
   my ($demoFile,$gameId);
-  if(open(SPRINGLOG,'<:encoding(utf-8)',$logFile)) {
-    while(local $_ = <SPRINGLOG>) {
+  if(open(my $springLogFh,'<:encoding(utf-8)',$logFile)) {
+    while(local $_ = <$springLogFh>) {
       $demoFile=$1 if(/recording demo: (.+)$/);
       $gameId=$1 if(/GameID: ([0-9a-f]+)$/);
       last if(defined $demoFile && defined $gameId);
     }
-    close(SPRINGLOG);
+    close($springLogFh);
     if(!defined $demoFile) {
       slog("Unable to find demo name in log file \"$logFile\"",2);
     }
@@ -8655,7 +8664,7 @@ sub hClearBox {
   }
 
   return 1 if($checkOnly);
-  foreach $teamNb (keys %{$lobby->{battle}{startRects}}) {
+  foreach my $teamNb (keys %{$lobby->{battle}{startRects}}) {
     next if($teamNb < $minNb);
     queueLobbyCommand(["REMOVESTARTRECT",$teamNb]);
   }
@@ -10335,7 +10344,8 @@ sub hLoadBoxes {
     $p_boxes=$spads->getMapBoxes($smfMapName,$nbTeams,$nbExtraBox);
   }
   foreach my $pluginName (@pluginsOrder) {
-    my $overwritten=$plugins{$pluginName}->setMapStartBoxes($p_boxes,$mapName,$nbTeams,$nbExtraBox) if($plugins{$pluginName}->can('setMapStartBoxes'));
+    my $overwritten;
+    $overwritten=$plugins{$pluginName}->setMapStartBoxes($p_boxes,$mapName,$nbTeams,$nbExtraBox) if($plugins{$pluginName}->can('setMapStartBoxes'));
     if(ref $overwritten) {
       my $r_newBoxes;
       ($overwritten,$r_newBoxes)=@{$overwritten};
@@ -13122,7 +13132,7 @@ sub hVersion {
   $versionedComponents{'DBD::SQLite'}="v$DBD::SQLite::VERSION $C{1}(SQLite $spads->{preferences}{sqlite_version})" if($spads->{sharedDataTs}{preferences});
   if(my $inlinePythonVer=getPerlModuleVersion('Inline::Python')) {
     my $inlinePythonVer="v$inlinePythonVer";
-    my $r_pythonVer=eval "Inline::Python::py_eval('[sys.version_info[i] for i in range(0,3)]',0)";
+    my $r_pythonVer=eval "Inline::Python::py_eval('[sys.version_info[i] for i in range(0,3)]',0)"; ## no critic (ProhibitStringyEval)
     if(! $@ && ref($r_pythonVer) eq 'ARRAY') {
       my $pythonVer=join('.',@{$r_pythonVer}[0,1,2]);
       $inlinePythonVer.=" $C{1}(Python $pythonVer)";
@@ -15337,7 +15347,7 @@ sub cancelPluginLoad {
 sub instantiatePlugin {
   my ($pluginName,$reason)=@_;
 
-  my $requiredSpadsVersion=eval "$pluginName->getRequiredSpadsVersion()";
+  my $requiredSpadsVersion=eval "$pluginName->getRequiredSpadsVersion()"; ## no critic (ProhibitStringyEval)
   if(hasEvalError()) {
     slog("Unable to instantiate plugin $pluginName, failed to call getRequiredSpadsVersion() function: $@",1);
     cancelPluginLoad($pluginName);
@@ -15349,10 +15359,10 @@ sub instantiatePlugin {
     return 0;
   }
 
-  my $hasDependencies=eval "$pluginName->can('getDependencies')";
+  my $hasDependencies=eval "$pluginName->can('getDependencies')"; ## no critic (ProhibitStringyEval)
   my @pluginDeps;
   if($hasDependencies) {
-    eval "\@pluginDeps=$pluginName->getDependencies()";
+    eval "\@pluginDeps=$pluginName->getDependencies()"; ## no critic (ProhibitStringyEval)
     if(hasEvalError()) {
       slog("Unable to instantiate plugin $pluginName, failed to call getDependencies() function: $@",1);
       cancelPluginLoad($pluginName);
@@ -15369,7 +15379,7 @@ sub instantiatePlugin {
     }
   }
 
-  my $plugin=eval "$pluginName->new(\$reason)";
+  my $plugin=eval "$pluginName->new(\$reason)"; ## no critic (ProhibitStringyEval)
   if(hasEvalError()) {
     slog("Unable to instantiate plugin $pluginName: $@",1);
     cancelPluginLoad($pluginName);
@@ -15456,8 +15466,8 @@ if($genDoc) {
   }
 
   my $genTime=gmtime();
-  open(CSS,">$conf{instanceDir}/spadsDoc.css");
-  print CSS <<EOF;
+  open(my $cssFh,'>',"$conf{instanceDir}/spadsDoc.css");
+  print $cssFh <<EOF;
 /* SPADS doc style sheet */
 
 /* Page background color */
@@ -15493,10 +15503,10 @@ h1 { font-size: 145% }
 
 .FormattedText  { font-family: monospace;}
 EOF
-  close(CSS);
+  close($cssFh);
 
-  open(HTML,">$conf{instanceDir}/spadsDoc.html");
-  print HTML <<EOF;
+  open(my $htmlFh,'>',"$conf{instanceDir}/spadsDoc.html");
+  print $htmlFh <<EOF;
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Frameset//EN" "http://www.w3.org/TR/html4/frameset.dtd">
 <!--NewPage-->
 <HTML>
@@ -15519,10 +15529,10 @@ This document is designed to be viewed using the frames feature. If you see this
 </FRAMESET>
 </HTML>
 EOF
-  close(HTML);
+  close($htmlFh);
 
-  open(HTML,">$conf{instanceDir}/spadsDoc_index.html");
-  print HTML <<EOF;
+  open($htmlFh,'>',"$conf{instanceDir}/spadsDoc_index.html");
+  print $htmlFh <<EOF;
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
 <!--NewPage-->
 <HTML>
@@ -15569,7 +15579,7 @@ Settings</FONT>
 </BODY>
 </HTML>
 EOF
-  close(HTML);
+  close($htmlFh);
 
   my %listContents = (All => ["All commands and settings","(command|global|set|hset|bset|pset)"],
                       Commands => ["All commands","command"],
@@ -15587,8 +15597,8 @@ EOF
                pset => ["preference","FramePreferenceFont","FFDD88"]);
 
   foreach my $listType (keys %listContents) {
-    open(HTML,">$conf{instanceDir}/spadsDoc_list$listType.html");
-    print HTML <<EOF;
+    open(my $htmlFh,'>',"$conf{instanceDir}/spadsDoc_list$listType.html");
+    print $htmlFh <<EOF;
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
 <!--NewPage-->
 <HTML>
@@ -15609,8 +15619,8 @@ EOF
 <TD NOWRAP>
 EOF
 
-    open(HTML2,">$conf{instanceDir}/spadsDoc_$listType.html");
-    print HTML2 <<EOF;
+    open(my $htmlFh2,'>',"$conf{instanceDir}/spadsDoc_$listType.html");
+    print $htmlFh2 <<EOF;
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
 <!--NewPage-->
 <HTML>
@@ -15627,8 +15637,8 @@ EOF
       next if($item eq "");
       foreach my $itemType (sort keys %{$allHelp{$item}}) {
         next unless($itemType =~ /^$listContents{$listType}[1]$/);
-        print HTML "<FONT CLASS=\"$items{$itemType}[1]\"><A HREF=\"spadsDoc_$listType.html\#$itemType:$item\" target=\"mainFrame\">$item</A></FONT><BR>\n";
-        print HTML2 <<EOF;
+        print $htmlFh "<FONT CLASS=\"$items{$itemType}[1]\"><A HREF=\"spadsDoc_$listType.html\#$itemType:$item\" target=\"mainFrame\">$item</A></FONT><BR>\n";
+        print $htmlFh2 <<EOF;
 <A NAME="$itemType:$item"></a>
 <TABLE BORDER="1" WIDTH="100%" CELLPADDING="3" CELLSPACING="0" SUMMARY="">
 <TR BGCOLOR="#$items{$itemType}[2]" ><TD COLSPAN=2><FONT SIZE="+2"><B>$item ($items{$itemType}[0])</B></FONT></TD></TR>
@@ -15636,46 +15646,46 @@ EOF
         if($itemType eq "command") {
           my $comSyntax=$allHelp{$item}{$itemType}{desc};
           $comSyntax=encodeHtmlEntities($comSyntax);
-          print HTML2 "<TR BGCOLOR=\"white\" CLASS=\"TableRowColor\"><TD WIDTH=\"15%\"><B>Syntax</B></TD><TD>$comSyntax</TD></TR>\n";
+          print $htmlFh2 "<TR BGCOLOR=\"white\" CLASS=\"TableRowColor\"><TD WIDTH=\"15%\"><B>Syntax</B></TD><TD>$comSyntax</TD></TR>\n";
           if(@{$allHelp{$item}{$itemType}{examples}}) {
-            print HTML2 "<TR BGCOLOR=\"white\" CLASS=\"TableRowColor\"><TD WIDTH=\"15%\"><B>Example(s)</B></TD><TD>";
+            print $htmlFh2 "<TR BGCOLOR=\"white\" CLASS=\"TableRowColor\"><TD WIDTH=\"15%\"><B>Example(s)</B></TD><TD>";
             foreach my $example (@{$allHelp{$item}{$itemType}{examples}}) {
               my $exampleString=encodeHtmlEntities($example);
-              print HTML2 "$exampleString<BR>";
+              print $htmlFh2 "$exampleString<BR>";
             }
-            print HTML2 "</TD></TR>\n";
+            print $htmlFh2 "</TD></TR>\n";
           }
         }else{
-          print HTML2 "<TR BGCOLOR=\"white\" CLASS=\"TableRowColor\"><TD WIDTH=\"15%\"><B>Explicit name</B></TD><TD>";
+          print $htmlFh2 "<TR BGCOLOR=\"white\" CLASS=\"TableRowColor\"><TD WIDTH=\"15%\"><B>Explicit name</B></TD><TD>";
           foreach my $helpLine (@{$allHelp{$item}{$itemType}{explicitName}}) {
             my $lineHtml=encodeHtmlHelp($helpLine);
-            print HTML2 "$lineHtml<BR>";
+            print $htmlFh2 "$lineHtml<BR>";
           }
-          print HTML2 "</TD></TR>\n";
-          print HTML2 "<TR BGCOLOR=\"white\" CLASS=\"TableRowColor\"><TD WIDTH=\"15%\"><B>Description</B></TD><TD>";
+          print $htmlFh2 "</TD></TR>\n";
+          print $htmlFh2 "<TR BGCOLOR=\"white\" CLASS=\"TableRowColor\"><TD WIDTH=\"15%\"><B>Description</B></TD><TD>";
           foreach my $helpLine (@{$allHelp{$item}{$itemType}{description}}) {
             my $lineHtml=encodeHtmlHelp($helpLine);
-            print HTML2 "$lineHtml<BR>";
+            print $htmlFh2 "$lineHtml<BR>";
           }
-          print HTML2 "</TD></TR>\n";
-          print HTML2 "<TR BGCOLOR=\"white\" CLASS=\"TableRowColor\"><TD WIDTH=\"15%\"><B>Format / Allowed values</B></TD><TD CLASS=\"FormattedText\">";
+          print $htmlFh2 "</TD></TR>\n";
+          print $htmlFh2 "<TR BGCOLOR=\"white\" CLASS=\"TableRowColor\"><TD WIDTH=\"15%\"><B>Format / Allowed values</B></TD><TD CLASS=\"FormattedText\">";
           foreach my $helpLine (@{$allHelp{$item}{$itemType}{format}}) {
             my $lineHtml=encodeHtmlHelp($helpLine);
-            print HTML2 "$lineHtml<BR>";
+            print $htmlFh2 "$lineHtml<BR>";
           }
-          print HTML2 "</TD></TR>\n";
-          print HTML2 "<TR BGCOLOR=\"white\" CLASS=\"TableRowColor\"><TD WIDTH=\"15%\"><B>Default value</B></TD><TD>";
+          print $htmlFh2 "</TD></TR>\n";
+          print $htmlFh2 "<TR BGCOLOR=\"white\" CLASS=\"TableRowColor\"><TD WIDTH=\"15%\"><B>Default value</B></TD><TD>";
           foreach my $helpLine (@{$allHelp{$item}{$itemType}{default}}) {
             my $lineHtml=encodeHtmlHelp($helpLine);
-            print HTML2 "$lineHtml<BR>";
+            print $htmlFh2 "$lineHtml<BR>";
           }
-          print HTML2 "</TD></TR>\n";
+          print $htmlFh2 "</TD></TR>\n";
         }
-        print HTML2 "</TABLE><P>\n";
+        print $htmlFh2 "</TABLE><P>\n";
       }
     }
 
-    print HTML <<EOF;
+    print $htmlFh <<EOF;
 </TD>
 </TR>
 </TABLE>
@@ -15683,13 +15693,13 @@ EOF
 </BODY>
 </HTML>
 EOF
-    close(HTML);
+    close($htmlFh);
 
-    print HTML2 <<EOF;
+    print $htmlFh2 <<EOF;
 </BODY>
 </HTML>
 EOF
-    close(HTML2);
+    close($htmlFh2);
   }
 
   exit EXIT_SUCCESS;

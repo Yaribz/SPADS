@@ -1065,6 +1065,7 @@ spads.pl:
 0.13.48: allow providing a Git commit hash in "autoUpdateRelease" global setting for manual selection of specific SPADS version
          the "!update" command now also accepts a Git commit hash as parameter
 0.13.49: reorganize setting value checking code to ease code factorization
+0.13.50: fixes for perlcritic severity 5
 
 SpadsConf.pm:
 ============
