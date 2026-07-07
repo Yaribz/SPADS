@@ -4,19 +4,14 @@ use strict;
 
 use SpadsPluginApi;
 
-use List::Util 'first';
+use List::Util qw'first any';
 use POSIX ':sys_wait_h';
 use Socket qw':DEFAULT :addrinfo';
 use Storable qw/store retrieve/;
 
 no warnings 'redefine';
 
-sub any (&@) {
-  my $code = shift;
-  return defined first {&{$code}} @_;
-}
-
-my $pluginVersion='0.3';
+my $pluginVersion='0.4';
 my $requiredSpadsVersion='0.11.31';
 
 my %globalPluginParams = ( dnsCacheTime => ['integer'],

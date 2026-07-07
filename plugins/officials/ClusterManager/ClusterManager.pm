@@ -19,7 +19,7 @@ use constant {
   EXIT_SOFTWARE => 33,     # software failure
 };
 
-my $pluginVersion='0.8';
+my $pluginVersion='0.9';
 my $requiredSpadsVersion='0.13.0';
 
 my %globalPluginParams = ( commandsFile => ['notNull'],
@@ -1175,7 +1175,8 @@ sub symLinkDir {
   if($^O eq 'MSWin32') {
     return 'invalid file name'
         if(any {/[\Q*?"<>|\E]/} ($targetDir,$link));
-    map {$_='"'.$_.'"' if(/[ \t]/)} ($targetDir,$link);
+    $targetDir='"'.$targetDir.'"' if($targetDir =~ /[ \t]/);
+    $link='"'.$link.'"' if($link =~ /[ \t]/);
     system {'cmd.exe'} ('cmd.exe','/c','mklink','/j',$link,$targetDir,'>NUL','2>&1');
     if($? == -1) {
       return 'failed to execute cmd.exe: '.$!;

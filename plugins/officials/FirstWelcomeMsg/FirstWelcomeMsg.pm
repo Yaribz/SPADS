@@ -8,7 +8,7 @@ use SpadsPluginApi;
 
 no warnings 'redefine';
 
-my $pluginVersion='0.4';
+my $pluginVersion='0.5';
 my $requiredSpadsVersion='0.11.2';
 
 my %globalPluginParams = ( commandsFile => ['notNull'],
@@ -59,13 +59,13 @@ sub updateWelcomeMsgIfNeeded {
   if($self->{welcomeMsgTs} != $msgModifTs) {
     $self->{welcomeMsgTs}=$msgModifTs;
     if($msgModifTs) {
-      if(open(WMSG,"<$welcomeMsgFile")) {
+      if(open(my $wMsgFh,'<',$welcomeMsgFile)) {
         my @newWelcomeMsg;
-        while(<WMSG>) {
+        while(<$wMsgFh>) {
           chomp($_);
           push(@newWelcomeMsg,$_) if($_ ne '');
         }
-        close(WMSG);
+        close($wMsgFh);
         $self->{welcomeMsg}=\@newWelcomeMsg;
       }else{
         slog("Unable to open welcome message file ($welcomeMsgFile)",2);
