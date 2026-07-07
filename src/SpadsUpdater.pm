@@ -36,7 +36,7 @@ use Time::HiRes;
 my $win=$^O eq 'MSWin32' ? 1 : 0;
 my $archName=($win?'win':'linux').($Config{ptrsize} > 4 ? 64 : 32);
 
-our $VERSION='0.34';
+our $VERSION='0.35';
 
 my @constructorParams = qw'sLog repository release packages';
 my @optionalConstructorParams = qw'localDir springDir';
@@ -587,7 +587,7 @@ sub getEngineDir {
   return catdir(@springDirPath,"$engineVersion-$archName");
 }
 
-sub _compareSpringVersions ($$) {
+sub _compareSpringVersions {
   my ($v1,$v2)=@_;
   my (@v1VersionNbs,$v1CommitNb,@v2VersionNbs,$v2CommitNb);
   if($v1 =~ /^(\d+(?:\.\d+)*)(.*)$/) {
@@ -774,11 +774,11 @@ sub _updateLockProtected {
   my %currentPackages;
   my $updateInfoFile=catfile($self->{localDir},'updateInfo.txt');
   if(-f $updateInfoFile) {
-    if(open(UPDATE_INFO,'<',$updateInfoFile)) {
-      while(local $_ = <UPDATE_INFO>) {
+    if(open(my $updateInfoFh,'<',$updateInfoFile)) {
+      while(local $_ = <$updateInfoFh>) {
         $currentPackages{$1}=$2 if(/^([^:]+):(.+)$/);
       }
-      close(UPDATE_INFO);
+      close($updateInfoFh);
     }else{
       $sl->log("Unable to read \"$updateInfoFile\" file",1);
       return -3;
@@ -791,9 +791,9 @@ sub _updateLockProtected {
     $sl->log("Unable to download package list",1);
     return -4;
   }
-  if(open(PACKAGES,"<packages.txt")) {
+  if(open(my $packagesFh,'<',"packages.txt")) {
     my $currentSection="";
-    while(local $_ = <PACKAGES>) {
+    while(local $_ = <$packagesFh>) {
       if(/^\s*\[([^\]]+)\]/) {
         $currentSection=$1;
         $allAvailablePackages{$currentSection}={} unless(exists $allAvailablePackages{$currentSection});
@@ -801,7 +801,7 @@ sub _updateLockProtected {
         $allAvailablePackages{$currentSection}->{$1}=$2;
       }
     }
-    close(PACKAGES);
+    close($packagesFh);
     unlink("packages.txt");
   }else{
     $sl->log("Unable to read downloaded package list",1);
@@ -892,12 +892,12 @@ sub _updateLockProtected {
     foreach my $updatedPackage (@updatedPackages) {
       $currentPackages{$updatedPackage}=$availablePackages{$updatedPackage};
     }
-    if(open(UPDATE_INFO,'>',$updateInfoFile)) {
-      print UPDATE_INFO time."\n";
+    if(open(my $updateInfoFh,'>',$updateInfoFile)) {
+      print $updateInfoFh time."\n";
       foreach my $currentPackage (keys %currentPackages) {
-        print UPDATE_INFO "$currentPackage:$currentPackages{$currentPackage}\n";
+        print $updateInfoFh "$currentPackage:$currentPackages{$currentPackage}\n";
       }
-      close(UPDATE_INFO);
+      close($updateInfoFh);
     }else{
       $sl->log("Unable to write update information to \"$updateInfoFile\" file",1);
       return -11;

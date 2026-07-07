@@ -48,7 +48,7 @@ update.pl:update_0.16.pl
 7za:7za-16.2
 7za.exe:7za-9.20.exe
 argparse.py:argparse-1.2.1.py
-getDefaultModOptions.pl:getDefaultModOptions_0.8.pl
+getDefaultModOptions.pl:getDefaultModOptions_0.9.pl
 help.dat:help_0.14.2.dat
 helpSettings.dat:helpSettings_0.7.10.dat
 PerlUnitSync.pm:PerlUnitSync-106.0b.pm
@@ -57,10 +57,10 @@ sequentialSpadsUnitsyncProcess.pl:sequentialSpadsUnitsyncProcess_0.1.pl
 SimpleEvent.pm:SimpleEvent_0.17.pm
 SimpleLog.pm:SimpleLog_0.10.pm
 spads.pl:spads_0.13.50.pl
-SpadsConf.pm:SpadsConf_0.13.16.pm
-spadsInstaller.pl:spadsInstaller_0.48.pl
-SpadsPluginApi.pm:SpadsPluginApi_0.43.pm
-SpadsUpdater.pm:SpadsUpdater_0.34.pm
+SpadsConf.pm:SpadsConf_0.13.17.pm
+spadsInstaller.pl:spadsInstaller_0.49.pl
+SpadsPluginApi.pm:SpadsPluginApi_0.44.pm
+SpadsUpdater.pm:SpadsUpdater_0.35.pm
 SpringAutoHostInterface.pm:SpringAutoHostInterface_0.14.pm
 SpringLobbyInterface.pm:SpringLobbyInterface_0.57.pm
 SpringLobbyProtocol.pm:SpringLobbyProtocol_0.18.pm
@@ -71,7 +71,7 @@ update.pl:update_0.17.pl
 7za:7za-16.2
 7za.exe:7za-9.20.exe
 argparse.py:argparse-1.2.1.py
-getDefaultModOptions.pl:getDefaultModOptions_0.8.pl
+getDefaultModOptions.pl:getDefaultModOptions_0.9.pl
 help.dat:help_0.14.2.dat
 helpSettings.dat:helpSettings_0.7.10.dat
 PerlUnitSync.pm:PerlUnitSync-106.0b.pm
@@ -80,10 +80,10 @@ sequentialSpadsUnitsyncProcess.pl:sequentialSpadsUnitsyncProcess_0.1.pl
 SimpleEvent.pm:SimpleEvent_0.17.pm
 SimpleLog.pm:SimpleLog_0.10.pm
 spads.pl:spads_0.13.50.pl
-SpadsConf.pm:SpadsConf_0.13.16.pm
-spadsInstaller.pl:spadsInstaller_0.48.pl
-SpadsPluginApi.pm:SpadsPluginApi_0.43.pm
-SpadsUpdater.pm:SpadsUpdater_0.34.pm
+SpadsConf.pm:SpadsConf_0.13.17.pm
+spadsInstaller.pl:spadsInstaller_0.49.pl
+SpadsPluginApi.pm:SpadsPluginApi_0.44.pm
+SpadsUpdater.pm:SpadsUpdater_0.35.pm
 SpringAutoHostInterface.pm:SpringAutoHostInterface_0.14.pm
 SpringLobbyInterface.pm:SpringLobbyInterface_0.57.pm
 SpringLobbyProtocol.pm:SpringLobbyProtocol_0.18.pm

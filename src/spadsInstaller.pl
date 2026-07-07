@@ -2,7 +2,7 @@
 #
 # This program installs SPADS in current directory from remote repository.
 #
-# Copyright (C) 2008-2025  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2026  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.48 (2025/12/11)
+# Version 0.49 (2026/07/07)
 
 use strict;
 
@@ -1648,17 +1648,19 @@ exit 1 unless(all {downloadFile($confTemplateUrl{$_}//$confTemplatesBaseUrl.$_,c
 slog('Customizing SPADS configuration'.(%confChangesData ? ' (pass 1)' : ''),3);
 foreach my $confFile (@confFiles) {
   my $confFileTemplate=catfile($conf{etcDir},'templates',$confFile);
-  fatalError("Unable to read configuration template \"$confFileTemplate\"") unless(open(TEMPLATE,"<$confFileTemplate"));
+  open(my $templateFh,'<',$confFileTemplate)
+      or fatalError("Unable to read configuration template \"$confFileTemplate\"");
   my $confFilePath=catfile($conf{etcDir},$confFile);
-  fatalError("Unable to write configuration file \"$confFilePath\"") unless(open(CONF,">$confFilePath"));
-  while(<TEMPLATE>) {
+  open(my $confFh,'>',$confFilePath)
+      or fatalError("Unable to write configuration file \"$confFilePath\"");
+  while(<$templateFh>) {
     foreach my $macroName (keys %conf) {
       s/\%$macroName\%/$conf{$macroName}/g;
     }
-    print CONF $_;
+    print $confFh $_;
   }
-  close(CONF);
-  close(TEMPLATE);
+  close($confFh);
+  close($templateFh);
 }
 
 if(defined $autoInstallData{autoInstallPlugins} && $autoInstallData{autoInstallPlugins} ne '') {

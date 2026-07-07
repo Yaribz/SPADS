@@ -3,7 +3,7 @@
 # This program prints the default mod options of each Spring mod installed,
 # using the unitsync library.
 #
-# Copyright (C) 2008-2023  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2026  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -31,7 +31,7 @@ use List::Util qw'any all none notall';
 
 use lib $FindBin::Bin;
 
-our $VERSION=0.8;
+our $VERSION=0.9;
 
 use constant {
   MSWIN32 => $^O eq 'MSWin32',
@@ -42,13 +42,14 @@ use constant {
   UNITSYNC_LIB_NAME => (MSWIN32 ? '' : 'lib').'unitsync.'.(MSWIN32 ? 'dll' : (DARWIN ? 'dylib' : 'so')),
 };
 
+BEGIN { require Win32 if(MSWIN32) }
+
 my @OPTION_TYPES=qw'error bool list number string section';
 
 my $PATH_SEP=MSWIN32?';':':';
 my $CWD=cwd();
 
 if(MSWIN32) {
-  eval 'use Win32';
   die "\nWin32::API module version 0.73 or superior is required.\nPlease update your Perl installation (Perl 5.16.2 or superior is recommended)\n"
       unless(eval { require Win32::API; Win32::API->VERSION(0.73); 1; });
   die 'Unable to import _putenv from msvcrt.dll ('.Win32::FormatMessage(Win32::GetLastError()).")\n"

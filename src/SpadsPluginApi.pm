@@ -18,13 +18,15 @@
 
 package SpadsPluginApi;
 
+use strict;
+
 use File::Spec::Functions qw'catdir';
 use List::Util qw'any none';
 
 use Exporter 'import';
-@EXPORT=qw/$spadsVersion $spadsDir loadPythonPlugin get_flag fix_string getBosses getLobbyState getSpringPid getSpringServerType getTimestamps getUserPref getRunningBattle getConfMacros getCurrentVote getPlugin getPluginList addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess forkCall removeProcessCallback createDetachedProcess addTimer removeTimer addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf isSettingValueAllowed slog updateSetting secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives LOBBY_STATE_DISCONNECTED LOBBY_STATE_CONNECTING LOBBY_STATE_CONNECTED LOBBY_STATE_LOGGED_IN LOBBY_STATE_SYNCHRONIZED LOBBY_STATE_OPENING_BATTLE LOBBY_STATE_BATTLE_OPENED/;
+our @EXPORT=qw/$spadsVersion $spadsDir loadPythonPlugin get_flag fix_string getBosses getLobbyState getSpringPid getSpringServerType getTimestamps getUserPref getRunningBattle getConfMacros getCurrentVote getPlugin getPluginList addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess forkCall removeProcessCallback createDetachedProcess addTimer removeTimer addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf isSettingValueAllowed slog updateSetting secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives LOBBY_STATE_DISCONNECTED LOBBY_STATE_CONNECTING LOBBY_STATE_CONNECTED LOBBY_STATE_LOGGED_IN LOBBY_STATE_SYNCHRONIZED LOBBY_STATE_OPENING_BATTLE LOBBY_STATE_BATTLE_OPENED/;
 
-my $apiVersion='0.43';
+my $apiVersion='0.44';
 
 our $spadsVersion=$::SPADS_VERSION;
 our $spadsDir=$::CWD;
@@ -57,7 +59,7 @@ sub hasEvalError {
 ################################
 
 my $pythonReloadPrefix;
-my $inlinePythonUseByteString;
+my %pythonApiFlags;
 sub initPythonInterpreter {
   my $spadsConf=shift;
   my $inlinePythonTmpDir=catdir($spadsConf->{conf}{instanceDir},'.InlinePython.tmp');
@@ -71,15 +73,24 @@ import sys,signal,perl
 sys.path.append(r'$escapedPluginsDir')
 signal.signal(signal.SIGINT,signal.SIG_DFL)
 PYTHON_BOOTSTRAP_END
-  eval "use Inline Python => \"$pythonBootstrap\", directory => \"$escapedInlinePythonTmpDir\"";
+  eval "use Inline Python => \"$pythonBootstrap\", directory => \"$escapedInlinePythonTmpDir\""; ## no critic (ProhibitStringyEval)
   if(hasEvalError()) {
     $spadsConf->{log}->log('Unable to initialize Python environement for plugin '.getCallerPlugin().": $@",1);
     return 0;
   }
-  $pythonApiFlags{can_fork}=$^O eq 'MSWin32' ? $Inline::Python::Boolean::false : $Inline::Python::Boolean::true;
-  $pythonApiFlags{can_add_socket}=$^O eq 'MSWin32' ? $Inline::Python::Boolean::false : $Inline::Python::Boolean::true;
-  $inlinePythonUseByteString=Inline::Python::py_eval('hasattr(perl.eval("$0"),"decode")',0)?$Inline::Python::Boolean::true:$Inline::Python::Boolean::false;
-  $spadsConf->{log}->log('The version of Inline::Python currently in use converts Perl strings to Python byte strings',2) if($inlinePythonUseByteString);
+  if($^O eq 'MSWin32') {
+    $pythonApiFlags{can_fork}=$Inline::Python::Boolean::false;
+    $pythonApiFlags{can_add_socket}=$Inline::Python::Boolean::false;
+  }else{
+    $pythonApiFlags{can_fork}=$Inline::Python::Boolean::true;
+    $pythonApiFlags{can_add_socket}=$Inline::Python::Boolean::true;
+  }
+  if(Inline::Python::py_eval('hasattr(perl.eval("$0"),"decode")',0)) {
+    $pythonApiFlags{use_byte_string}=$Inline::Python::Boolean::true;
+    $spadsConf->{log}->log('The version of Inline::Python currently in use converts Perl strings to Python byte strings',2);
+  }else{
+    $pythonApiFlags{use_byte_string}=$Inline::Python::Boolean::false;
+  }
   my $r_pythonVersion=Inline::Python::py_eval('[sys.version_info[i] for i in range(0,3)]',0);
   if(! defined $r_pythonVersion->[0] || ! defined $r_pythonVersion->[1]) {
     $spadsConf->{log}->log('Unable to initialize Python environement for plugin '.getCallerPlugin().': failed to determine Python version',1);
@@ -115,7 +126,7 @@ else:
     import $pythonModule
 PYTHON_LOADMODULE_END
   my $escapedInlinePythonTmpDir=quotemeta(catdir($spadsConf->{conf}{instanceDir},'.InlinePython.tmp'));
-  eval "use Inline Python => \"$pythonLoadModule\", directory => \"$escapedInlinePythonTmpDir\", force_build => 1";
+  eval "use Inline Python => \"$pythonLoadModule\", directory => \"$escapedInlinePythonTmpDir\", force_build => 1"; ## no critic (ProhibitStringyEval)
   if(hasEvalError()) {
     $spadsConf->{log}->log("Unable to load Python module for plugin $pluginName: $@",1);
     return 0;
@@ -135,14 +146,8 @@ PYTHON_LOADMODULE_END
 
 sub get_flag {
   my $flag=shift;
-  if($flag eq 'can_fork' || $flag eq 'can_add_socket') {
-    return $^O eq 'MSWin32' ? $Inline::Python::Boolean::false : $Inline::Python::Boolean::true;
-  }elsif($flag eq 'use_byte_string') {
-    return $inlinePythonUseByteString ? $Inline::Python::Boolean::true : $Inline::Python::Boolean::false;
-  }else{
-    ::slog("SpadsPluginApi::get_flag() called with unknown flag: $flag",2);
-    return undef;
-  }
+  ::slog("SpadsPluginApi::get_flag() called with unknown flag: $flag",2) unless(exists $pythonApiFlags{$flag});
+  return $pythonApiFlags{$flag};
 }
 
 sub fix_string { map {utf8::upgrade($_)} @_; return @_ }
@@ -228,7 +233,9 @@ sub getPluginList {
 sub addLobbyCommandHandler {
   my ($p_handlers,$priority,$isPreCallback)=@_;
   my $plugin=getCallerPlugin();
-  map {$_=SimpleEvent::encapsulateCallback($_,$plugin) unless(ref $_ eq 'CODE')} (values %{$p_handlers});
+  foreach my $r_handler (values %{$p_handlers}) {
+    $r_handler=SimpleEvent::encapsulateCallback($r_handler,$plugin) unless(ref $r_handler eq 'CODE');
+  }
   $priority//=$plugin;
   if($isPreCallback) {
     $::lobby->addPreCallbacks($p_handlers,$priority);
@@ -240,7 +247,9 @@ sub addLobbyCommandHandler {
 sub addSpadsCommandHandler {
   my ($p_handlers,$replace)=@_;
   my $plugin=getCallerPlugin();
-  map {$_=SimpleEvent::encapsulateCallback($_,$plugin) unless(ref $_ eq 'CODE')} (values %{$p_handlers});
+  foreach my $r_handler (values %{$p_handlers}) {
+    $r_handler=SimpleEvent::encapsulateCallback($r_handler,$plugin) unless(ref $r_handler eq 'CODE');
+  }
   $replace=0 unless(defined $replace);
   foreach my $commandName (keys %{$p_handlers}) {
     my $lcName=lc($commandName);
@@ -255,7 +264,9 @@ sub addSpadsCommandHandler {
 sub addSpringCommandHandler {
   my ($p_handlers,$priority)=@_;
   my $plugin=getCallerPlugin();
-  map {$_=SimpleEvent::encapsulateCallback($_,$plugin) unless(ref $_ eq 'CODE')} (values %{$p_handlers});
+  foreach my $r_handler (values %{$p_handlers}) {
+    $r_handler=SimpleEvent::encapsulateCallback($r_handler,$plugin) unless(ref $r_handler eq 'CODE');
+  }
   $priority//=$plugin;
   $::autohost->addCallbacks($p_handlers,0,$priority);
 }

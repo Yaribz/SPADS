@@ -25,6 +25,7 @@ getDefaultModOptions.pl:
 0.7: replace the basic list functions any/all/none/notall with those provided by the List::Util Perl module (requires Perl >= 5.19.5)
 0.8: use new object-oriented unitsync interface
      fix minor output misformatting when modoptions contain an empty section
+0.9: fixes for perlcritic severity 5
 
 help.dat:
 ========
@@ -1279,6 +1280,7 @@ SpadsConf.pm:
 0.13.15: add support for rapid tags in "modName" hosting setting (automatic rapid tag tracking)
 0.13.16: allow providing a Git commit hash in "autoUpdateRelease" global setting for manual selection of specific SPADS version
          add support for environment variables in configuration files
+0.13.17: fixes for perlcritic severity 5
 
 spadsInstaller.pl:
 =================
@@ -1399,6 +1401,7 @@ spadsInstaller.pl:
 0.47: allow providing a Git commit hash instead of a SPADS release name for immutable/reproducible deployment
       add support for environment variables in installation templates
 0.48: fix typo in code introduced in previous version which prevented execution of installer
+0.49: fixes for perlcritic severity 5
 
 SpadsPluginApi.pm:
 =================
@@ -1487,6 +1490,7 @@ SpadsPluginApi.pm:
 0.42: new plugin API customization callback "commandRightsOverride" (allows overriding access level requirements for calling SPADS commands)
 0.43: new plugin API function: "isSettingValueAllowed" (checks that a given value is allowed for a specific setting)
       fix links to tutorials in documentation
+0.44: fixes for perlcritic severity 5
 
 SpadsUpdater.pm:
 ===============
@@ -1557,6 +1561,7 @@ SpadsUpdater.pm:
       use internal URL escaping function
 0.33: add retries for GitHub HTTP requests to handle cases of transient GitHub servers unavailability
 0.34: fix Perl warning on failure to download engine releases list from GitHub
+0.35: fixes for perlcritic severity 5
 
 springLobbyCertificates.dat:
 ===========================

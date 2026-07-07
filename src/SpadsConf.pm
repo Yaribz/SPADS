@@ -1,6 +1,6 @@
 # Object-oriented Perl module handling SPADS configuration files
 #
-# Copyright (C) 2008-2025  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2026  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -39,7 +39,7 @@ use SimpleLog;
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.13.16';
+my $moduleVersion='0.13.17';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -473,7 +473,7 @@ sub new {
     $p_bans=initSharedData($sLog,$p_conf,\%sharedDataTs,'bans',$sharedDataFiles{bans});
   }else{
     my $bansFile=$p_conf->{''}{instanceDir}.'/bans.dat';
-    touch($bansFile) unless(-f $bansFile);
+    makeEmptyFile($bansFile) unless(-f $bansFile);
     $p_bans=loadTableFile($sLog,$bansFile,\@banListsFields,{});
   }
 
@@ -509,7 +509,7 @@ sub new {
     }
   }else{
     my $preferencesFile=$p_conf->{''}{instanceDir}.'/preferences.dat';
-    touch($preferencesFile) unless(-f $preferencesFile);
+    makeEmptyFile($preferencesFile) unless(-f $preferencesFile);
     $p_preferences=loadFastTableFile($sLog,$preferencesFile,\@preferencesListsFields,{});
     if(! %{$p_preferences}) {
       $sLog->log('Unable to load preferences',1);
@@ -530,7 +530,7 @@ sub new {
     $p_savedBoxes=initSharedData($sLog,$p_conf,\%sharedDataTs,'savedBoxes',$sharedDataFiles{'savedBoxes'});
   }else{
     my $savedBoxesFile=$p_conf->{''}{instanceDir}.'/savedBoxes.dat';
-    touch($savedBoxesFile) unless(-f $savedBoxesFile);
+    makeEmptyFile($savedBoxesFile) unless(-f $savedBoxesFile);
     $p_savedBoxes=loadFastTableFile($sLog,$savedBoxesFile,\@mapBoxesFields,{});
   }
   if(! %{$p_savedBoxes}) {
@@ -538,7 +538,7 @@ sub new {
     return 0;
   }
 
-  touch($p_conf->{''}{instanceDir}.'/mapHashes.dat') unless(-f $p_conf->{''}{instanceDir}.'/mapHashes.dat');
+  makeEmptyFile($p_conf->{''}{instanceDir}.'/mapHashes.dat') unless(-f $p_conf->{''}{instanceDir}.'/mapHashes.dat');
   my $p_mapHashes=loadFastTableFile($sLog,$p_conf->{''}{instanceDir}.'/mapHashes.dat',\@mapHashesFields,{});
   if(! %{$p_mapHashes}) {
     $sLog->log('Unable to load map hashes',1);
@@ -554,7 +554,7 @@ sub new {
     }
   }
 
-  touch($p_conf->{''}{instanceDir}.'/userData.dat') unless(-f $p_conf->{''}{instanceDir}.'/userData.dat');
+  makeEmptyFile($p_conf->{''}{instanceDir}.'/userData.dat') unless(-f $p_conf->{''}{instanceDir}.'/userData.dat');
   my $p_userData=loadFastTableFile($sLog,$p_conf->{''}{instanceDir}.'/userData.dat',\@userDataFieldsOld,{});
   if(! %{$p_userData}) {
     my $savExtension=1;
@@ -562,7 +562,7 @@ sub new {
       ++$savExtension;
     }
     move($p_conf->{''}{instanceDir}.'/userData.dat',$p_conf->{''}{instanceDir}."/userData.dat.sav$savExtension");
-    touch($p_conf->{''}{instanceDir}.'/userData.dat');
+    makeEmptyFile($p_conf->{''}{instanceDir}.'/userData.dat');
     $sLog->log("Unable to load user data, user data file reinitialized (old file renamed to \"userData.dat.sav.$savExtension\")",2);
     $p_userData=loadFastTableFile($sLog,$p_conf->{''}{instanceDir}.'/userData.dat',\@userDataFieldsOld,{});
     if(! %{$p_userData}) {
@@ -736,13 +736,13 @@ sub isAbsolutePath {
   return $fileSpecRes;
 }
 
-sub touch {
+sub makeEmptyFile {
   my $file=shift;
-  open(TMP,">$file");
-  close(TMP);
+  open(my $fileHdl,'>',$file);
+  close($fileHdl);
 }
 
-sub aindex (\@$;$) {
+sub aindex (\@$;$) { ## no critic (ProhibitSubroutinePrototypes)
   my ($aref, $val, $pos) = @_;
   for ($pos ||= 0; $pos < @$aref; $pos++) {
     return $pos if $aref->[$pos] eq $val;
@@ -829,7 +829,7 @@ sub findMatchingData {
             last;
           }
         }elsif($normalSearch && $fieldData =~ /^-?\d+(?:\.\d+)?$/ && $filterFieldValue =~ /^[<>]=?-?\d+(?:\.\d+)?$/) {
-          if(eval "$fieldData$filterFieldValue") {
+          if(eval "$fieldData$filterFieldValue") { ## no critic (ProhibitStringyEval)
             $matchedField=1;
             last;
           }
@@ -1337,6 +1337,8 @@ sub loadPluginModuleAndConf {
   return 0;
 }
 
+## no critic (ProhibitStringyEval)
+
 my @MANDATORY_PLUGIN_FUNCTIONS=qw'new getVersion getRequiredSpadsVersion';
 sub loadPluginModuleIfNeeded {
   my ($self,$pluginName)=@_;
@@ -1500,6 +1502,8 @@ sub loadPluginConf {
   return 1;
 }
 
+## use critic
+
 sub checkPluginConfig {
   my ($self,$pluginName,$p_conf,$p_globalParams,$p_presetParams)=@_;
   my $sLog=$self->{log};
@@ -1617,7 +1621,7 @@ sub checkSpadsConfig {
     if($shareableData{$shareableDataName}{type} eq 'sqlite') {
       $defaultDataFileExtension='.sqlite';
       if(! $sqliteChecked) {
-        eval 'use DBI';
+        eval {require DBI};
         if(hasEvalError()) {
           $sLog->log("Unable to share $shareableDataName data (failed to load Perl DBI module: $@)",1);
           return 0;
@@ -1851,25 +1855,26 @@ sub processPresetAttribs {
 sub dumpFastTable {
   my ($self,$p_data,$file,$p_fields)=@_;
 
-  if(! open(TABLEFILE,">$file")) {
+  my $tableFh;
+  if(! open($tableFh,'>',$file)) {
     $self->{log}->log("Unable to write to file \"$file\"",1);
     return 0;
   }
 
-  print TABLEFILE <<EOH;
+  print $tableFh <<EOH;
 # Warning, this file is updated automatically by SPADS.
 # Any modifications performed on this file while SPADS is running will be automatically erased.
   
 EOH
 
   my $templateLine=join(':',@{$p_fields->[0]}).'|'.join(':',@{$p_fields->[1]});
-  print TABLEFILE "#?$templateLine\n";
+  print $tableFh "#?$templateLine\n";
 
   my $p_rows=$self->printFastTable($p_data,$p_fields,1);
   foreach my $line (@{$p_rows}) {
-    print TABLEFILE "$line\n";
+    print $tableFh "$line\n";
   }
-  close TABLEFILE;
+  close $tableFh;
 
   $self->{log}->log("File \"$file\" dumped",4);
 
@@ -2045,7 +2050,7 @@ sub initSharedData {
         $sLog->log("A shared file has appeared meanwhile for shared $sharedData data, loading data from shared file instead",3);
       }else{
         if(my $exLock=_acquireLock($sharedFile,LOCK_EX)) {
-          touch($sharedFile);
+          makeEmptyFile($sharedFile);
           close($exLock);
         }else{
           $sLog->log("Failed to acquire exclusive lock on shared file to initialize $sharedData data",1);
@@ -2375,19 +2380,20 @@ sub removePrivateExpiredBans {
 sub dumpTable {
   my ($self,$p_data,$file,$p_fields)=@_;
 
-  if(! open(TABLEFILE,">$file")) {
+  my $tableFh;
+  if(! open($tableFh,'>',$file)) {
     $self->{log}->log("Unable to write to file \"$file\"",1);
     return 0;
   }
 
-  print TABLEFILE <<EOH;
+  print $tableFh <<EOH;
 # Warning, this file is updated automatically by SPADS.
 # Any modifications performed on this file while SPADS is running will be automatically erased.
   
 EOH
 
   my $templateLine=join(':',@{$p_fields->[0]}).'|'.join(':',@{$p_fields->[1]});
-  print TABLEFILE "#?$templateLine\n";
+  print $tableFh "#?$templateLine\n";
 
   for my $row (0..$#{$p_data}) {
     my $p_rowData=$p_data->[$row];
@@ -2417,10 +2423,10 @@ EOH
       $line.=':' if($fieldNb);
       $line.=$p_rowData->[1]{$field} if(exists $p_rowData->[1]{$field} && defined $p_rowData->[1]{$field});
     }
-    print TABLEFILE "$line\n";
+    print $tableFh "$line\n";
   }
     
-  close(TABLEFILE);
+  close($tableFh);
 
   $self->{log}->log("File \"$file\" dumped",4);
 
