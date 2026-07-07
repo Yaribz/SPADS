@@ -6,7 +6,7 @@ use File::Spec::Functions 'catfile';
 
 use SpadsPluginApi;
 
-my $pluginVersion='0.2';
+my $pluginVersion='0.3';
 my $requiredSpadsVersion='0.13.29';
 
 my %VALID_SIGNALS = map {$_ => 1} (qw'USR1 USR2 HUP');
@@ -103,6 +103,6 @@ sub onUnload {
 }
 
 # END block is executed in all forked processes...
-END { unlink($PID_FILE) if($$ == $SPADS_PID && defined $PID_FILE) }
+END { unlink($PID_FILE) if(defined $SPADS_PID && $$ == $SPADS_PID && defined $PID_FILE) }
 
 1;
