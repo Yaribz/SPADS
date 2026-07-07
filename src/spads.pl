@@ -6402,9 +6402,14 @@ sub sendPlayerSkill {
   }
   
   my $skillOrigin=$battleSkills{$player}{skillOrigin};
-  
+
   my $skill;
-  if($skillOrigin eq 'rank') {
+  if($conf{maskSkill}) {
+    # Skill masking is enabled: the script tag is broadcast identically to every
+    # client in the battle, so it cannot be made per-viewer. Send the masked
+    # value to all (balancing is unaffected, it reads %battleSkills directly).
+    $skill='~'.getMaskedSkill($battleSkills{$player}{skill});
+  }elsif($skillOrigin eq 'rank') {
     $skill="($battleSkills{$player}{skill})";
   }elsif($skillOrigin eq 'TrueSkill') {
     if(exists $battleSkills{$player}{skillPrivacy} && $battleSkills{$player}{skillPrivacy} == 0) {
@@ -12129,6 +12134,15 @@ sub getRoundedSkill {
   return $roundedSkill;
 }
 
+# Mask a skill value for non-privileged viewers: round down to the nearest 10,
+# with a floor of 10 (to avoid singling out the lowest-rated players).
+sub getMaskedSkill {
+  my $skill=shift;
+  my $maskedSkill=int($skill/10)*10;
+  $maskedSkill=10 if($maskedSkill < 10);
+  return $maskedSkill;
+}
+
 sub getGameStatus {
   my $user=shift;
   
@@ -12415,7 +12429,10 @@ sub getBattleLobbyStatus {
                   $skillSigma=' ?';
                 }
               }
-              if($skillOrigin eq 'rank') {
+              if($conf{maskSkill} && lc($player) ne lc($user) && $userLevel < $conf{privacyTrustLevel}) {
+                $skill='~'.getMaskedSkill($battleSkills{$player}{skill});
+                $skill="$C{6}$skill$skillSigma$C{1}";
+              }elsif($skillOrigin eq 'rank') {
                 $skill="($battleSkills{$player}{skill})";
               }elsif($skillOrigin eq 'TrueSkill') {
                 if(exists $battleSkills{$player}{skillPrivacy}
@@ -12515,7 +12532,10 @@ sub getBattleLobbyStatus {
             $skillSigma=' ?';
           }
         }
-        if($skillOrigin eq 'rank') {
+        if($conf{maskSkill} && lc($spec) ne lc($user) && $userLevel < $conf{privacyTrustLevel}) {
+          $skill='~'.getMaskedSkill($battleSkills{$spec}{skill});
+          $skill="$C{6}$skill$skillSigma$C{1}";
+        }elsif($skillOrigin eq 'rank') {
           $skill="($RANK_SKILL{$battleSkills{$spec}{rank}})";
         }elsif($skillOrigin eq 'TrueSkill') {
           if(exists $battleSkills{$spec}{skillPrivacy}
