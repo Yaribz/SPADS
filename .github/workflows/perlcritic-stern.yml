@@ -11,4 +11,4 @@ jobs:
       - name: Install Perl::Critic
         run: sudo apt-get update && sudo apt-get install -y libperl-critic-perl
       - name: Run perlcritic
-        run: perlcritic --profile .perlcriticrc --severity stern --quiet src/ plugins/
+        run: perlcritic --profile .perlcriticrc --stern --quiet src/ plugins/
