@@ -31,6 +31,7 @@ use FindBin;
 use IO::Uncompress::Gunzip '$GunzipError';
 use IPC::Cmd 'can_run';
 use JSON::PP;
+use HTTP::Tiny;
 use List::Util qw'first any all none notall shuffle reduce';
 use MIME::Base64;
 use POSIX qw'ceil uname';
@@ -200,6 +201,7 @@ my %SPADS_CORE_CMD_HANDLERS = (
   clearbox => \&hClearBox,
   closebattle => \&hCloseBattle,
   endvote => \&hEndVote,
+  exportmetadata => \&hExportMetadata,
   fixcolors => \&hFixColors,
   force => \&hForce,
   forcepreset => \&hForcePreset,
@@ -1515,11 +1517,19 @@ sub updateTargetMod {
             unless($loadArchivesInProgress);
         return 2;
       }
+      if(! defined $modRegexp && canUseGhostMod($configuredModName)) {
+        $targetMod=$configuredModName;
+        return 1;
+      }
       slog('Unable to find mod '.(defined $modRegexp ? "matching regular expression \"$modRegexp\"" : "\"$configuredModName\""),1);
       $targetMod='';
       return 0;
     }
     if(! defined $modRegexp && defined $cachedMods{$configuredModName}) {
+      $targetMod=$configuredModName;
+      return 1;
+    }
+    if(! defined $modRegexp && canUseGhostMod($configuredModName)) {
       $targetMod=$configuredModName;
       return 1;
     }
@@ -1939,7 +1949,13 @@ sub loadArchivesPostActions {
     %rapidModResolutionCache=(substr($configuredModNameDuringReload,8) => $newTargetMod)
         if(substr($configuredModNameDuringReload,0,8) eq 'rapid://');
     my $r_modData=$r_loadArchivesResult->{modData};
-    $cachedMods{$newTargetMod}=$r_modData if(defined $r_modData); # modData is only defined when a new uncached mod is selected
+    if(defined $r_modData) { # modData is only defined when a new uncached mod is selected
+      $cachedMods{$newTargetMod}=$r_modData;
+      if($r_modData->{hash}) {
+        $spads->saveModHash($newTargetMod,$syncedSpringVersion,$r_modData->{hash});
+        $spads->cacheModInfo($newTargetMod,{options => $r_modData->{options}, sides => $r_modData->{sides}});
+      }
+    }
     $nbArchivesLoaded = $nbMapsLoaded + (scalar(%availableModsNameToNb) || 1);
   }else{
     $nbArchivesLoaded = ($nbMapsLoaded + %availableModsNameToNb) || 1;
@@ -1952,6 +1968,8 @@ sub loadArchivesPostActions {
             if($printModUpdateMsg && $lobbyState >= LOBBY_STATE_BATTLE_OPENED && $lobby->{battles}{$lobby->{battle}{battleId}}{mod} ne $newTargetMod);
         $targetMod=$newTargetMod;
       }
+    }elsif(canUseGhostMod($configuredModNameDuringReload)) {
+      $targetMod=$configuredModNameDuringReload;
     }else{
       $targetMod='';
     }
@@ -2008,17 +2026,119 @@ sub getMapHashAndArchive {
 
 sub getModHash {
   my $modName=shift;
-  return ($modName ne '' && exists $cachedMods{$modName}) ? $cachedMods{$modName}{hash} : 0;
+  return 0 if($modName eq '');
+  return $cachedMods{$modName}{hash} if(exists $cachedMods{$modName});
+  return $spads->getModHash($modName,$syncedSpringVersion);
 }
 
 sub getModOptions {
   my $modName=shift;
-  return ($modName ne '' && exists $cachedMods{$modName}) ? $cachedMods{$modName}{options} : {};
+  return {} if($modName eq '');
+  return $cachedMods{$modName}{options} if(exists $cachedMods{$modName});
+  my $p_modInfo=$spads->getCachedModInfo($modName);
+  return defined $p_modInfo ? $p_modInfo->{options} : {};
 }
 
 sub getModSides {
   my $modName=shift;
-  return ($modName ne '' && exists $cachedMods{$modName}) ? $cachedMods{$modName}{sides} : [];
+  return [] if($modName eq '');
+  return $cachedMods{$modName}{sides} if(exists $cachedMods{$modName});
+  my $p_modInfo=$spads->getCachedModInfo($modName);
+  return defined $p_modInfo ? $p_modInfo->{sides} : [];
+}
+
+# A configured mod whose archive is absent can still be hosted by a dedicated
+# server if its hash and full info (options+sides) were previously cached. Both
+# are required, so we never open a battle with incomplete mod metadata.
+sub canUseGhostMod {
+  my $modName=shift;
+  return 0 unless($conf{allowGhostMods} && $springServerType eq 'dedicated');
+  return 0 if($modName eq '');
+  return 0 unless($spads->getModHash($modName,$syncedSpringVersion));
+  return defined $spads->getCachedModInfo($modName) ? 1 : 0;
+}
+
+# Read a metadata dump from a local file or an http(s) URL, returning
+# ($r_decodedDump,$errMsg). No SPADS state is mutated, so this is safe to run in
+# a forked child for periodic refresh.
+sub fetchMetadataDump {
+  my $source=shift;
+  my $content;
+  if($source =~ /^https?:\/\//i) {
+    my $httpRes=HTTP::Tiny->new(timeout => 30, verify_SSL => 1)->request('GET',$source);
+    return (undef,"HTTP error ($httpRes->{status} $httpRes->{reason})") unless($httpRes->{success});
+    $content=$httpRes->{content};
+  }else{
+    if(! open(my $fh,'<',$source)) {
+      return (undef,"unable to open file ($!)");
+    }else{
+      local $/=undef;
+      $content=<$fh>;
+      close($fh);
+    }
+  }
+  my $r_dump=eval { decode_json($content) };
+  return (undef,'invalid JSON'.($@ ? " ($@)" : '')) unless(ref $r_dump eq 'HASH');
+  return ($r_dump,undef);
+}
+
+# Import ghost metadata from all configured sources into the local stores, then
+# rebuild the ghost map list so newly imported maps become selectable.
+sub importGhostMetadataFromSources {
+  my @sources=grep {$_ ne ''} split(/;/,$conf{ghostMetadataSources});
+  return unless(@sources);
+  my %total=(added => 0, updated => 0, skipped => 0, rejected => 0);
+  foreach my $source (@sources) {
+    my ($r_dump,$errMsg)=fetchMetadataDump($source);
+    if(! defined $r_dump) {
+      slog("Unable to import ghost metadata from \"$source\": $errMsg",2);
+      next;
+    }
+    my $r_stats=$spads->importMetadataStructure($r_dump,$syncedSpringVersion);
+    $total{$_}+=$r_stats->{$_} foreach(keys %{$r_stats});
+    slog("Imported ghost metadata from \"$source\" (added=$r_stats->{added}, updated=$r_stats->{updated}, skipped=$r_stats->{skipped})",4);
+  }
+  if($total{added} + $total{updated} > 0) {
+    $spads->applyMapList(\@availableMaps,$syncedSpringVersion);
+    slog("Ghost metadata import complete (added=$total{added}, updated=$total{updated}, skipped=$total{skipped}, rejected=$total{rejected})",3);
+  }
+}
+
+# Periodic refresh: fetch all sources in a forked child (network I/O must not
+# block the main loop), then apply the results in the parent process where the
+# SPADS state lives. Imported/previously-imported entries are refreshed; local
+# archive-derived entries are never touched.
+sub refreshGhostMetadata {
+  my @sources=grep {$_ ne ''} split(/;/,$conf{ghostMetadataSources});
+  return unless(@sources);
+  if(! SimpleEvent::forkCall(
+        sub {
+          my @results;
+          foreach my $source (@sources) {
+            my ($r_dump,$errMsg)=fetchMetadataDump($source);
+            push(@results,{source => $source, dump => $r_dump, error => $errMsg});
+          }
+          return \@results;
+        },
+        sub {
+          my $r_results=shift;
+          return unless(ref $r_results eq 'ARRAY');
+          my %total=(added => 0, updated => 0, skipped => 0, rejected => 0);
+          foreach my $r_result (@{$r_results}) {
+            if(! defined $r_result->{dump}) {
+              slog("Unable to refresh ghost metadata from \"$r_result->{source}\": $r_result->{error}",2);
+              next;
+            }
+            my $r_stats=$spads->importMetadataStructure($r_result->{dump},$syncedSpringVersion);
+            $total{$_}+=$r_stats->{$_} foreach(keys %{$r_stats});
+          }
+          if($total{added} + $total{updated} > 0) {
+            $spads->applyMapList(\@availableMaps,$syncedSpringVersion);
+            slog("Ghost metadata refresh complete (added=$total{added}, updated=$total{updated}, skipped=$total{skipped}, rejected=$total{rejected})",3);
+          }
+        })) {
+    slog('Unable to fork process for ghost metadata refresh',2);
+  }
 }
 
 sub getMapOptions {
@@ -11481,6 +11601,40 @@ sub hSaveBoxes {
   return 1;
 }
 
+sub hExportMetadata {
+  my ($source,$user,$p_params,$checkOnly)=@_;
+
+  if($#{$p_params} > 0) {
+    invalidSyntax($user,"exportmetadata");
+    return 0;
+  }
+
+  return 1 if($checkOnly);
+
+  my $fileName=$p_params->[0] // 'metadataExport.json';
+  $fileName =~ s/.*[\/\\]//;
+  $fileName.='.json' unless($fileName =~ /\.json$/i);
+  my $filePath=catfile($conf{instanceDir},$fileName);
+
+  my $r_metadata=$spads->getMetadataForExport();
+  my $jsonString=eval { JSON::PP->new->canonical->pretty->encode($r_metadata) };
+  if(! defined $jsonString) {
+    answer("Unable to encode metadata for export");
+    return 0;
+  }
+  my $fh;
+  if(! open($fh,'>',$filePath)) {
+    answer("Unable to write metadata export file \"$filePath\" ($!)");
+    return 0;
+  }
+  print {$fh} $jsonString;
+  close($fh);
+  my $nbMaps=keys %{$r_metadata->{mapInfo}};
+  my $nbMods=keys %{$r_metadata->{modInfo}};
+  answer("Metadata exported to \"$fileName\" ($nbMaps maps, $nbMods mods)");
+  return 1;
+}
+
 sub hSay {
   my ($source,$user,$p_params,$checkOnly)=@_;
 
@@ -15872,6 +16026,7 @@ if(! $abortSpadsStartForAutoUpdate) {
   }
   slog("Loading Spring archives using unitsync library version $syncedSpringVersion ...",3);
   fatalError('Unable to load Spring archives at startup') unless(loadArchives());
+  importGhostMetadataFromSources() if($conf{ghostMetadataSources} ne '');
   setDefaultMapOfMaplist() if($conf{map} eq '');
 
 # Init #################################
@@ -15934,6 +16089,8 @@ if(! $abortSpadsStartForAutoUpdate) {
       if($autoManagedEngineData{mode} eq 'release' && $autoManagedEngineData{delay});
   SimpleEvent::addTimer('RefreshSharedData',$conf{sharedDataRefreshDelay},$conf{sharedDataRefreshDelay},sub {$spads->refreshSharedDataIfNeeded()})
       if($conf{sharedDataRefreshDelay});
+  SimpleEvent::addTimer('RefreshGhostMetadata',$conf{ghostMetadataRefreshDelay}*60,$conf{ghostMetadataRefreshDelay}*60,\&refreshGhostMetadata)
+      if($conf{ghostMetadataRefreshDelay} && $conf{ghostMetadataSources} ne '');
   SimpleEvent::startLoop(\&postMainLoop);
 }
 
@@ -16151,6 +16308,7 @@ sub postMainLoop {
   SimpleEvent::removeTimer('SpadsMainLoop');
   SimpleEvent::removeTimer('EngineVersionAutoManagement') if($autoManagedEngineData{mode} eq 'release' && $autoManagedEngineData{delay});
   SimpleEvent::removeTimer('RefreshSharedData') if($conf{sharedDataRefreshDelay});
+  SimpleEvent::removeTimer('RefreshGhostMetadata') if($conf{ghostMetadataRefreshDelay} && $conf{ghostMetadataSources} ne '');
   SimpleEvent::removeFileLockRequest('unitsyncLock') if($timestamps{usLockRequestForGameStart});
 }
 

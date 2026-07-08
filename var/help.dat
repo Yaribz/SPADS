@@ -117,6 +117,9 @@
 [endVote]
 !endVote - cancels current vote
 
+[exportMetadata]
+!exportMetadata [<fileName>] - exports cached map and mod metadata (hashes, options, sides) as JSON to the instance directory for sharing with other hosts
+
 [fixColors]
 !fixColors - tries to fix colors automatically
 

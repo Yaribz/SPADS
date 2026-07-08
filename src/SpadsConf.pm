@@ -138,7 +138,9 @@ my %globalParameters = (lobbyLogin => ['login'],
                         useWin32Process => ['useWin32ProcessType'],
                         autoLoadPlugins => ['pluginList','null'],
                         eventModel => ['eventModelType'],
-                        maxChildProcesses => ['integer']);
+                        maxChildProcesses => ['integer'],
+                        ghostMetadataSources => [],
+                        ghostMetadataRefreshDelay => ['integer']);
 
 my %spadsSectionParameters = (description => ['notNull'],
                               commandsFile => ['notNull'],
@@ -212,7 +214,8 @@ my %spadsSectionParameters = (description => ['notNull'],
                               freeSettings => ['settingList'],
                               allowModOptionsValues => ['bool'],
                               allowMapOptionsValues => ['bool'],
-                              allowGhostMaps =>['bool']);
+                              allowGhostMaps =>['bool'],
+                              allowGhostMods =>['bool']);
 
 my %hostingParameters = (description => ['notNull'],
                          battleName => ['notNull'],
@@ -392,6 +395,7 @@ my @levelsFields=(['level'],['description']);
 my @commandsFields=(['source','status','gameState'],['directLevel','voteLevel']);
 my @mapBoxesFields=(['mapName','nbTeams'],['boxes']);
 my @mapHashesFields=(['springMajorVersion','mapName'],['mapHash']);
+my @modHashesFields=(['springMajorVersion','modName'],['modHash']);
 my @userDataFieldsOld=(['accountId'],['country','cpu','lobbyClient','rank','timestamp','ips','names']);
 my @userDataFields=(['accountId'],['country','lobbyClient','rank','timestamp','ips','names']);
 my @springLobbyCertificatesFields=(['lobbyHost'],['certHashes']);
@@ -545,6 +549,13 @@ sub new {
     return 0;
   }
 
+  touch($p_conf->{''}{instanceDir}.'/modHashes.dat') unless(-f $p_conf->{''}{instanceDir}.'/modHashes.dat');
+  my $p_modHashes=loadFastTableFile($sLog,$p_conf->{''}{instanceDir}.'/modHashes.dat',\@modHashesFields,{});
+  if(! %{$p_modHashes}) {
+    $sLog->log('Unable to load mod hashes',1);
+    return 0;
+  }
+
   my $p_springLobbyCertificates={''=>{}};
   if(-f "$spadsDir/springLobbyCertificates.dat") {
     $p_springLobbyCertificates=loadFastTableFile($sLog,"$spadsDir/springLobbyCertificates.dat",\@springLobbyCertificatesFields,{});
@@ -586,6 +597,26 @@ sub new {
     return 0;
   }
 
+  my $p_modInfoCache={};
+  my $modInfoCacheFile=$p_conf->{''}{instanceDir}.'/modInfoCache.dat';
+  if(-f $modInfoCacheFile) {
+    $p_modInfoCache=retrieve($modInfoCacheFile);
+  }
+  if(! defined $p_modInfoCache) {
+    $sLog->log('Unable to load mod info cache',1);
+    return 0;
+  }
+
+  my $p_importedMetadata={};
+  my $importedMetadataFile=$p_conf->{''}{instanceDir}.'/importedMetadata.dat';
+  if(-f $importedMetadataFile) {
+    $p_importedMetadata=retrieve($importedMetadataFile);
+  }
+  if(! defined $p_importedMetadata) {
+    $sLog->log('Unable to load imported metadata registry',1);
+    return 0;
+  }
+
   my $p_trustedLobbyCertificates={};
   if($sharedDataTs{trustedLobbyCertificates}) {
     $p_trustedLobbyCertificates=initSharedData($sLog,$p_conf,\%sharedDataTs,'trustedLobbyCertificates',$sharedDataFiles{trustedLobbyCertificates});
@@ -615,6 +646,7 @@ sub new {
     mapBoxes => $p_mapBoxes->{''},
     savedBoxes => $p_savedBoxes->{''},
     mapHashes => $p_mapHashes->{''},
+    modHashes => $p_modHashes->{''},
     users => $p_users->{''},
     help => $p_help,
     helpSettings => $p_helpSettings,
@@ -631,6 +663,8 @@ sub new {
     ipIds => $p_ipIds,
     nameIds => $p_nameIds,
     mapInfoCache => $p_mapInfoCache,
+    modInfoCache => $p_modInfoCache,
+    importedMetadata => $p_importedMetadata,
     maps => {},
     orderedMaps => [],
     ghostMaps => {},
@@ -2821,6 +2855,7 @@ sub dumpDynamicData {
     $self->dumpFastTable($p_prunedPrefs,$self->{conf}{instanceDir}.'/preferences.dat',\@preferencesListsFields);
   }
   $self->dumpFastTable($self->{mapHashes},$self->{conf}{instanceDir}.'/mapHashes.dat',\@mapHashesFields);
+  $self->dumpFastTable($self->{modHashes},$self->{conf}{instanceDir}.'/modHashes.dat',\@modHashesFields);
   my $p_userData=flushUserDataCache($self);
   $self->dumpFastTable($p_userData,$self->{conf}{instanceDir}.'/userData.dat',\@userDataFields);
   my $dumpDuration=time-$startDumpTs;
@@ -2898,6 +2933,7 @@ sub cacheMapsInfo {
   }
   foreach my $map (keys %{$p_mapsInfo}) {
     $self->{mapInfoCache}{$map}=$p_mapsInfo->{$map};
+    $self->_clearImported('mapInfo',$map);
   }
   my $res;
   if($self->{sharedDataTs}{mapInfoCache}) {
@@ -2907,6 +2943,188 @@ sub cacheMapsInfo {
     $res=nstore($self->{mapInfoCache},$self->{conf}{instanceDir}.'/mapInfoCache.dat');
   }
   $self->{log}->log('Unable to store map info cache',1) unless($res);
+}
+
+# Business functions - Dynamic data - Mod info cache ##########################
+
+sub getCachedModInfo {
+  my ($self,$mod)=@_;
+  return $self->{modInfoCache}{$mod} if(exists $self->{modInfoCache}{$mod});
+  return undef;
+}
+
+sub cacheModInfo {
+  my ($self,$mod,$p_modInfo)=@_;
+  $self->{modInfoCache}{$mod}=$p_modInfo;
+  $self->_clearImported('modInfo',$mod);
+  my $res=nstore($self->{modInfoCache},$self->{conf}{instanceDir}.'/modInfoCache.dat');
+  $self->{log}->log('Unable to store mod info cache',1) unless($res);
+  return $res;
+}
+
+# Business functions - Dynamic data - Metadata import/export ##################
+
+# Provenance registry ($self->{importedMetadata}): records which cached entries
+# came from an external import. Absence means the entry is local (archive-
+# derived) and authoritative. Types: 'mapHash'/'modHash' (keys: version,name),
+# 'mapInfo'/'modInfo' (key: name).
+
+sub _storeImportedMetadata {
+  my $self=shift;
+  my $res=nstore($self->{importedMetadata},$self->{conf}{instanceDir}.'/importedMetadata.dat');
+  $self->{log}->log('Unable to store imported metadata registry',1) unless($res);
+  return $res;
+}
+
+sub _isImportedMetadata {
+  my ($self,$type,@keys)=@_;
+  my $node=$self->{importedMetadata}{$type};
+  foreach my $key (@keys) {
+    return 0 unless(ref $node eq 'HASH' && exists $node->{$key});
+    $node=$node->{$key};
+  }
+  return 1;
+}
+
+sub _markImportedMetadata {
+  my ($self,$type,@keys)=@_;
+  my $leaf=pop(@keys);
+  my $node=($self->{importedMetadata}{$type}//={});
+  $node=($node->{$_}//={}) foreach(@keys);
+  $node->{$leaf}=1;
+}
+
+sub _clearImported {
+  my ($self,$type,@keys)=@_;
+  my $leaf=pop(@keys);
+  my $node=$self->{importedMetadata}{$type};
+  foreach my $key (@keys) {
+    return unless(ref $node eq 'HASH' && exists $node->{$key});
+    $node=$node->{$key};
+  }
+  delete $node->{$leaf} if(ref $node eq 'HASH');
+}
+
+sub getMetadataForExport {
+  my $self=shift;
+  my %mapHashes;
+  foreach my $ver (keys %{$self->{mapHashes}}) {
+    $mapHashes{$ver}{$_}=$self->{mapHashes}{$ver}{$_}{mapHash} foreach(keys %{$self->{mapHashes}{$ver}});
+  }
+  my %modHashes;
+  foreach my $ver (keys %{$self->{modHashes}}) {
+    $modHashes{$ver}{$_}=$self->{modHashes}{$ver}{$_}{modHash} foreach(keys %{$self->{modHashes}{$ver}});
+  }
+  return {
+    spadsMetadataVersion => 1,
+    mapHashes => \%mapHashes,
+    modHashes => \%modHashes,
+    mapInfo => $self->{mapInfoCache},
+    modInfo => $self->{modInfoCache},
+  };
+}
+
+# Defensive validation for externally-imported metadata. Rejects control
+# characters (which could otherwise inject lines into the generated Spring start
+# script via option keys/values), unexpected reference types (e.g. code refs),
+# and pathologically deep nesting. decode_json only produces hashes, arrays,
+# scalars and JSON::PP::Boolean, so anything else is treated as hostile.
+sub _importedValueIsSafe {
+  my ($value,$depth)=@_;
+  return 0 if($depth > 8);
+  my $ref=ref $value;
+  if($ref eq '') {
+    return 1 if(! defined $value);
+    return $value =~ /[\x00-\x08\x0a-\x1f\x7f]/ ? 0 : 1;
+  }
+  return 1 if($ref eq 'JSON::PP::Boolean');
+  if($ref eq 'HASH') {
+    foreach my $key (keys %{$value}) {
+      return 0 if($key =~ /[\x00-\x08\x0a-\x1f\x7f]/);
+      return 0 unless(_importedValueIsSafe($value->{$key},$depth+1));
+    }
+    return 1;
+  }
+  if($ref eq 'ARRAY') {
+    foreach my $element (@{$value}) {
+      return 0 unless(_importedValueIsSafe($element,$depth+1));
+    }
+    return 1;
+  }
+  return 0;
+}
+
+# Merge an exported metadata structure into the local stores. Local (archive-
+# derived) entries are never overwritten; previously imported entries are
+# refreshed. Only hashes for the host's spring major version are imported (map
+# and mod info are version-independent). Entries failing validation are counted
+# as rejected. Returns counts {added,updated,skipped,rejected}.
+sub importMetadataStructure {
+  my ($self,$r_dump,$springMajorVersion)=@_;
+  my %stats=(added => 0, updated => 0, skipped => 0, rejected => 0);
+  return \%stats unless(ref $r_dump eq 'HASH');
+
+  my %hashStores=(mapHashes => ['mapHash','mapHash'], modHashes => ['modHash','modHash']);
+  foreach my $dumpKey (qw'mapHashes modHashes') {
+    my ($selfKey,$hashField,$provType)=($dumpKey,@{$hashStores{$dumpKey}});
+    next unless(defined $springMajorVersion);
+    my $r_versionDump=$r_dump->{$dumpKey};
+    next unless(ref $r_versionDump eq 'HASH' && ref $r_versionDump->{$springMajorVersion} eq 'HASH');
+    my $r_entries=$r_versionDump->{$springMajorVersion};
+    foreach my $name (keys %{$r_entries}) {
+      if($name =~ /[\x00-\x08\x0a-\x1f\x7f]/ || ref $r_entries->{$name} || $r_entries->{$name} !~ /^-?\d+$/) {
+        $stats{rejected}++;
+        next;
+      }
+      my $exists=(ref $self->{$selfKey}{$springMajorVersion} eq 'HASH' && exists $self->{$selfKey}{$springMajorVersion}{$name});
+      if($exists && ! $self->_isImportedMetadata($provType,$springMajorVersion,$name)) {
+        $stats{skipped}++;
+        next;
+      }
+      $self->{$selfKey}{$springMajorVersion}//={};
+      $self->{$selfKey}{$springMajorVersion}{$name}={$hashField => $r_entries->{$name}};
+      $self->_markImportedMetadata($provType,$springMajorVersion,$name);
+      $exists ? $stats{updated}++ : $stats{added}++;
+    }
+  }
+
+  my $skipMapInfo=$self->{sharedDataTs}{mapInfoCache} ? 1 : 0;
+  $self->{log}->log('Map info import skipped (mapInfoCache is shared across instances)',2)
+      if($skipMapInfo && ref $r_dump->{mapInfo} eq 'HASH' && %{$r_dump->{mapInfo}});
+  my %infoStores=(mapInfo => ['mapInfoCache','mapInfo'], modInfo => ['modInfoCache','modInfo']);
+  foreach my $dumpKey (qw'mapInfo modInfo') {
+    next if($dumpKey eq 'mapInfo' && $skipMapInfo);
+    my ($selfKey,$provType)=@{$infoStores{$dumpKey}};
+    my $r_entries=$r_dump->{$dumpKey};
+    next unless(ref $r_entries eq 'HASH');
+    foreach my $name (keys %{$r_entries}) {
+      if($name =~ /[\x00-\x08\x0a-\x1f\x7f]/ || ref $r_entries->{$name} ne 'HASH' || ! _importedValueIsSafe($r_entries->{$name},0)) {
+        $stats{rejected}++;
+        next;
+      }
+      my $exists=exists $self->{$selfKey}{$name};
+      if($exists && ! $self->_isImportedMetadata($provType,$name)) {
+        $stats{skipped}++;
+        next;
+      }
+      $self->{$selfKey}{$name}=$r_entries->{$name};
+      $self->_markImportedMetadata($provType,$name);
+      $exists ? $stats{updated}++ : $stats{added}++;
+    }
+  }
+
+  if($stats{added} + $stats{updated} > 0) {
+    $self->dumpFastTable($self->{mapHashes},$self->{conf}{instanceDir}.'/mapHashes.dat',\@mapHashesFields);
+    $self->dumpFastTable($self->{modHashes},$self->{conf}{instanceDir}.'/modHashes.dat',\@modHashesFields);
+    nstore($self->{mapInfoCache},$self->{conf}{instanceDir}.'/mapInfoCache.dat') unless($skipMapInfo);
+    nstore($self->{modInfoCache},$self->{conf}{instanceDir}.'/modInfoCache.dat');
+    $self->_storeImportedMetadata();
+  }
+
+  $self->{log}->log("Rejected $stats{rejected} unsafe or malformed imported metadata entrie(s)",2)
+      if($stats{rejected});
+
+  return \%stats;
 }
 
 # Business functions - Dynamic data - Map boxes ###############################
@@ -2986,7 +3204,26 @@ sub saveMapHash {
   $self->{mapHashes}{$springMajorVersion}={} unless(exists $self->{mapHashes}{$springMajorVersion});
   $self->{mapHashes}{$springMajorVersion}{$map}={} unless(exists $self->{mapHashes}{$springMajorVersion}{$map});
   $self->{mapHashes}{$springMajorVersion}{$map}{mapHash}=$hash;
+  $self->_clearImported('mapHash',$springMajorVersion,$map);
   $self->{log}->log("Hash saved for map \"$map\" (springMajorVersion=$springMajorVersion)",5);
+  return 1;
+}
+
+sub getModHash {
+  my ($self,$mod,$springMajorVersion)=@_;
+  if(exists $self->{modHashes}{$springMajorVersion} && exists $self->{modHashes}{$springMajorVersion}{$mod}) {
+    return $self->{modHashes}{$springMajorVersion}{$mod}{modHash};
+  }
+  return 0;
+}
+
+sub saveModHash {
+  my ($self,$mod,$springMajorVersion,$hash)=@_;
+  $self->{modHashes}{$springMajorVersion}={} unless(exists $self->{modHashes}{$springMajorVersion});
+  $self->{modHashes}{$springMajorVersion}{$mod}={} unless(exists $self->{modHashes}{$springMajorVersion}{$mod});
+  $self->{modHashes}{$springMajorVersion}{$mod}{modHash}=$hash;
+  $self->_clearImported('modHash',$springMajorVersion,$mod);
+  $self->{log}->log("Hash saved for mod \"$mod\" (springMajorVersion=$springMajorVersion)",5);
   return 1;
 }
 
