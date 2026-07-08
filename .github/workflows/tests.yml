@@ -24,12 +24,15 @@ jobs:
           && cd spads
           && wget http://planetspads.free.fr/spads/installer/spadsInstaller.tar -qO - | tar x
       - name: Overwrite SPADS installer files with files from current repository
-        run: cp src/spadsInstaller.pl src/SpadsUpdater.pm spads
+        run: cp src/spadsInstaller.pl src/SpadsUpdater.pm src/update.pl spads
+      - name: Pre-update SPADS files to avoid automatic updates during installation
+        working-directory: spads
+        run: perl update.pl unstable -a
+      - name: Overwrite updated SPADS files with files from current repository
+        run: cp src/* var/* spads
       - name: Launch SPADS installer
         working-directory: spads
         run: perl spadsInstaller.pl --auto Tests
-      - name: Overwrite SPADS files with files from current repository
-        run: cp src/* var/* spads
-      - name: Launch SPADS
+      - name: Launch SPADS and start tests
         working-directory: spads
         run: perl spads.pl etc/spads.conf
