@@ -1515,11 +1515,19 @@ sub updateTargetMod {
             unless($loadArchivesInProgress);
         return 2;
       }
+      if(! defined $modRegexp && canUseGhostMod($configuredModName)) {
+        $targetMod=$configuredModName;
+        return 1;
+      }
       slog('Unable to find mod '.(defined $modRegexp ? "matching regular expression \"$modRegexp\"" : "\"$configuredModName\""),1);
       $targetMod='';
       return 0;
     }
     if(! defined $modRegexp && defined $cachedMods{$configuredModName}) {
+      $targetMod=$configuredModName;
+      return 1;
+    }
+    if(! defined $modRegexp && canUseGhostMod($configuredModName)) {
       $targetMod=$configuredModName;
       return 1;
     }
@@ -1939,7 +1947,13 @@ sub loadArchivesPostActions {
     %rapidModResolutionCache=(substr($configuredModNameDuringReload,8) => $newTargetMod)
         if(substr($configuredModNameDuringReload,0,8) eq 'rapid://');
     my $r_modData=$r_loadArchivesResult->{modData};
-    $cachedMods{$newTargetMod}=$r_modData if(defined $r_modData); # modData is only defined when a new uncached mod is selected
+    if(defined $r_modData) { # modData is only defined when a new uncached mod is selected
+      $cachedMods{$newTargetMod}=$r_modData;
+      if($r_modData->{hash}) {
+        $spads->saveModHash($newTargetMod,$syncedSpringVersion,$r_modData->{hash});
+        $spads->cacheModInfo($newTargetMod,{options => $r_modData->{options}, sides => $r_modData->{sides}});
+      }
+    }
     $nbArchivesLoaded = $nbMapsLoaded + (scalar(%availableModsNameToNb) || 1);
   }else{
     $nbArchivesLoaded = ($nbMapsLoaded + %availableModsNameToNb) || 1;
@@ -1952,6 +1966,8 @@ sub loadArchivesPostActions {
             if($printModUpdateMsg && $lobbyState >= LOBBY_STATE_BATTLE_OPENED && $lobby->{battles}{$lobby->{battle}{battleId}}{mod} ne $newTargetMod);
         $targetMod=$newTargetMod;
       }
+    }elsif(canUseGhostMod($configuredModNameDuringReload)) {
+      $targetMod=$configuredModNameDuringReload;
     }else{
       $targetMod='';
     }
@@ -2008,17 +2024,36 @@ sub getMapHashAndArchive {
 
 sub getModHash {
   my $modName=shift;
-  return ($modName ne '' && exists $cachedMods{$modName}) ? $cachedMods{$modName}{hash} : 0;
+  return 0 if($modName eq '');
+  return $cachedMods{$modName}{hash} if(exists $cachedMods{$modName});
+  return $spads->getModHash($modName,$syncedSpringVersion);
 }
 
 sub getModOptions {
   my $modName=shift;
-  return ($modName ne '' && exists $cachedMods{$modName}) ? $cachedMods{$modName}{options} : {};
+  return {} if($modName eq '');
+  return $cachedMods{$modName}{options} if(exists $cachedMods{$modName});
+  my $p_modInfo=$spads->getCachedModInfo($modName);
+  return defined $p_modInfo ? $p_modInfo->{options} : {};
 }
 
 sub getModSides {
   my $modName=shift;
-  return ($modName ne '' && exists $cachedMods{$modName}) ? $cachedMods{$modName}{sides} : [];
+  return [] if($modName eq '');
+  return $cachedMods{$modName}{sides} if(exists $cachedMods{$modName});
+  my $p_modInfo=$spads->getCachedModInfo($modName);
+  return defined $p_modInfo ? $p_modInfo->{sides} : [];
+}
+
+# A configured mod whose archive is absent can still be hosted by a dedicated
+# server if its hash and full info (options+sides) were previously cached. Both
+# are required, so we never open a battle with incomplete mod metadata.
+sub canUseGhostMod {
+  my $modName=shift;
+  return 0 unless($conf{allowGhostMods} && $springServerType eq 'dedicated');
+  return 0 if($modName eq '');
+  return 0 unless($spads->getModHash($modName,$syncedSpringVersion));
+  return defined $spads->getCachedModInfo($modName) ? 1 : 0;
 }
 
 sub getMapOptions {
