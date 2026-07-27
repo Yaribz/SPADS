@@ -39,7 +39,7 @@ use SimpleLog;
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.13.17';
+my $moduleVersion='0.13.18';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -421,6 +421,11 @@ sub new {
     $sLog->log("Unable to process global presets attributes",1);
     return 0;
   }
+  
+  # Make map presets transparent by default
+  my @mapPresetsWithoutTransparentAttribute = grep {substr($_,-4) eq '.smf' && ! defined $p_conf->{$_}{preset} && ! (exists $r_presetAttribs->{$_} && defined $r_presetAttribs->{$_}{transparent})} (keys %{$p_conf});
+  $r_presetAttribs->{$_}{transparent}=1 foreach(@mapPresetsWithoutTransparentAttribute);
+  
   my @invalidTransparentPresets = grep {defined $p_conf->{$_}{preset} && $r_presetAttribs->{$_}{transparent}} (keys %{$r_presetAttribs});
   if(@invalidTransparentPresets) {
     $sLog->log('Invalid transparent preset'.(@invalidTransparentPresets>1?'s':'').': '.join(', ',@invalidTransparentPresets).' (transparent presets cannot contain "preset" setting definition)',1);

@@ -1281,6 +1281,7 @@ SpadsConf.pm:
 0.13.16: allow providing a Git commit hash in "autoUpdateRelease" global setting for manual selection of specific SPADS version
          add support for environment variables in configuration files
 0.13.17: fixes for perlcritic severity 5
+0.13.18: make map presets transparent by default
 
 spadsInstaller.pl:
 =================

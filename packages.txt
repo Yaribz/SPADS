@@ -57,7 +57,7 @@ sequentialSpadsUnitsyncProcess.pl:sequentialSpadsUnitsyncProcess_0.1.pl
 SimpleEvent.pm:SimpleEvent_0.17.pm
 SimpleLog.pm:SimpleLog_0.10.pm
 spads.pl:spads_0.13.50.pl
-SpadsConf.pm:SpadsConf_0.13.17.pm
+SpadsConf.pm:SpadsConf_0.13.18.pm
 spadsInstaller.pl:spadsInstaller_0.49.pl
 SpadsPluginApi.pm:SpadsPluginApi_0.44.pm
 SpadsUpdater.pm:SpadsUpdater_0.35.pm
@@ -80,7 +80,7 @@ sequentialSpadsUnitsyncProcess.pl:sequentialSpadsUnitsyncProcess_0.1.pl
 SimpleEvent.pm:SimpleEvent_0.17.pm
 SimpleLog.pm:SimpleLog_0.10.pm
 spads.pl:spads_0.13.50.pl
-SpadsConf.pm:SpadsConf_0.13.17.pm
+SpadsConf.pm:SpadsConf_0.13.18.pm
 spadsInstaller.pl:spadsInstaller_0.49.pl
 SpadsPluginApi.pm:SpadsPluginApi_0.44.pm
 SpadsUpdater.pm:SpadsUpdater_0.35.pm
