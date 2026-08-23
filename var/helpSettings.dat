@@ -1075,7 +1075,7 @@ This preset setting contains the name of the current battle preset.
 This is a special preset setting: it cannot be changed by using !set command (the !bPreset command must be used instead).
 In spads.conf, it allows AutoHost administrators to both associate a default battle preset to the preset being defined, and select which battle presets users are allowed to switch to.
 -
-Any battle preset name (defined in battlePresets.conf)
+Any battle preset name (defined in battlePresets.conf file)
 -
 default
 
@@ -1104,8 +1104,9 @@ Any map of current map list (defined in mapLists.conf).
 Auto-load map preset
 -
 If enabled, SPADS will automatically load map presets when map is changed. If the corresponding map preset is not found, the default map preset named "_DEFAULT_.smf" is loaded if it exists.
-A map preset is a global preset defined in spads.conf which has the same name as a map, with .smf suffix.
-Map presets can be useful to automatically adjust allowed team sizes according to the map for instance.
+A map preset is a global preset (defined in spads.conf file) or a battle preset (defined in battlePresets.conf file) that has the same name as a map, with ".smf" suffix.
+Map global presets can be useful to automatically adjust allowed team sizes according to the map for instance. Map battle presets can be useful to alter the default and allowed mapoptions for specific maps for instance.
+If both a map global preset and a map battle preset exist for a map, both are loaded (the global preset first and then the battle preset).
 -
 0: disabled
 1: enabled
@@ -1115,8 +1116,8 @@ Map presets can be useful to automatically adjust allowed team sizes according t
 [set:hideMapPresets]
 Hide map presets
 -
-If enabled, map presets will not be shown in "!list presets" output.
-A map preset is a global preset defined in spads.conf which has the same name as a map, with .smf suffix.
+If enabled, map presets will not be shown in "!list presets" and "!list bPresets" output.
+A map preset is a global preset (defined in spads.conf file) or a battle preset (defined in battlePresets.conf file) that has the same name as a map, with ".smf" suffix.
 -
 0: disabled
 1: enabled

@@ -24,9 +24,9 @@ use File::Spec::Functions qw'catdir';
 use List::Util qw'any none';
 
 use Exporter 'import';
-our @EXPORT=qw/$spadsVersion $spadsDir loadPythonPlugin get_flag fix_string getBosses getLobbyState getSpringPid getSpringServerType getTimestamps getUserPref getRunningBattle getConfMacros getCurrentVote getPlugin getPluginList addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess forkCall removeProcessCallback createDetachedProcess addTimer removeTimer addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf isSettingValueAllowed slog updateSetting secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyPreset quit cancelQuit closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives LOBBY_STATE_DISCONNECTED LOBBY_STATE_CONNECTING LOBBY_STATE_CONNECTED LOBBY_STATE_LOGGED_IN LOBBY_STATE_SYNCHRONIZED LOBBY_STATE_OPENING_BATTLE LOBBY_STATE_BATTLE_OPENED/;
+our @EXPORT=qw/$spadsVersion $spadsDir loadPythonPlugin get_flag fix_string getBosses getLobbyState getSpringPid getSpringServerType getTimestamps getUserPref getRunningBattle getConfMacros getCurrentVote getPlugin getPluginList addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess forkCall removeProcessCallback createDetachedProcess addTimer removeTimer addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf isSettingValueAllowed slog updateSetting secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyBattlePreset applyHostingPreset applyPreset quit cancelQuit closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives LOBBY_STATE_DISCONNECTED LOBBY_STATE_CONNECTING LOBBY_STATE_CONNECTED LOBBY_STATE_LOGGED_IN LOBBY_STATE_SYNCHRONIZED LOBBY_STATE_OPENING_BATTLE LOBBY_STATE_BATTLE_OPENED/;
 
-my $apiVersion='0.44';
+my $apiVersion='0.45';
 
 our $spadsVersion=$::SPADS_VERSION;
 our $spadsDir=$::CWD;
@@ -367,6 +367,14 @@ sub removeSocket {
 ################################
 # SPADS operations
 ################################
+
+sub applyBattlePreset {
+  ::applyBPreset(@_);
+}
+
+sub applyHostingPreset {
+  ::applyHPreset(@_);
+}
 
 sub applyPreset {
   ::applyPreset(@_);
@@ -857,6 +865,15 @@ This callback is called when the battle lobby of the autohost is closed.
 
 This callback is called when the battle lobby of the autohost is opened.
 
+=item C<onBattlePresetApplied($self,$oldBattlePresetName,$newBattlePresetName)>
+
+This callback is called each time a battle preset is applied (this doesn't
+include battle presets applied as part of global presets).
+
+C<$oldBattlePresetName> is the name of the previous battle preset
+
+C<$newBattlePresetName> is the name of the new battle preset
+
 =item C<onGameEnd($self,\%endGameData)>
 
 This callback is called each time a game hosted by the autohost ends.
@@ -866,6 +883,15 @@ stored by SPADS concerning the game that just ended. It is recommended to use a
 data printing function (such as the C<Dumper> function from the standard
 C<Data::Dumper> module included in Perl core) to check the content of this hash
 for the desired data.
+
+=item C<onHostingPresetApplied($self,$oldHostingPresetName,$newHostingPresetName)>
+
+This callback is called each time a hosting preset is applied (this doesn't
+include hosting presets applied as part of global presets).
+
+C<$oldHostingPresetName> is the name of the previous hosting preset
+
+C<$newHostingPresetName> is the name of the new hosting preset
 
 =item C<onJoinBattleRequest($self,$userName,$ipAddr)>
 
@@ -2104,7 +2130,32 @@ data managed by other handlers.
 
 =over 2
 
-=item C<applyPreset($presetName)>
+=item C<applyBattlePreset($battlePresetName)>
+
+This function loads a battle preset from SPADS configuration and applies it to
+the hosted lobby.
+
+=item C<applyHostingPreset($hostingPresetName)>
+
+This function loads a hosting preset from SPADS configuration and applies it to
+the hosted lobby.
+
+=item C<applyPreset($presetName,$r_settingsOverrides=undef,$bPresetOverride=undef)>
+
+This function loads a global preset from SPADS configuration and applies it to
+the hosted lobby, with optional overrides.
+
+C<$presetName> is the name of the global preset that must be loaded
+
+C<$r_settingsOverrides> is a reference to a hash containing the overrides to
+apply to the global preset just after it is loaded, before applying it to the
+lobby. The keys are the names of the preset settings that must be overridden and
+the values are the new values to apply. This parameter is optional.
+
+C<$bPresetOverride> is the battle preset override to apply to the global preset
+just after it is loaded, before applying it to the lobby. It contains the name
+of the battle preset that must be loaded (on top of the default battle preset if
+any). This parameter is optional.
 
 =item C<cancelCloseBattle()>
 

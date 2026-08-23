@@ -111,7 +111,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.50';
+our $SPADS_VERSION='0.13.51';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -4055,67 +4055,41 @@ sub rotatePreset {
   }
 
   my @allowedPresets=@{$spads->{values}{preset}};
-  my %presetsBs;
+  my (@compatiblePresets,%presetsBs,$nextPresetIndex);
+  my $isRandomRotation = $rotationMode eq 'random';
   foreach my $allowedPreset (@allowedPresets) {
+    if($allowedPreset eq $conf{preset}) {
+      $nextPresetIndex=$#compatiblePresets+1 unless(defined $nextPresetIndex);
+      next;
+    }
+    next unless($isRandomRotation || ! exists $spads->{presetsAttributes}{$allowedPreset} || ! $spads->{presetsAttributes}{$allowedPreset}{transparent});
     my ($nbTeams,$teamSize,$nbPlayerById)=getPresetBattleStructure($allowedPreset,$nbPlayers);
-    $presetsBs{$allowedPreset}=[$nbTeams,$teamSize,$nbPlayerById] if($nbTeams*$teamSize*$nbPlayerById != 0);
+    next if($nbTeams*$teamSize*$nbPlayerById == 0);
+    push(@compatiblePresets,$allowedPreset);
+    $presetsBs{$allowedPreset}={nbTeams => $nbTeams, teamSize => $teamSize, nbPlayerById => $nbPlayerById};
   }
-  my @presets=keys %presetsBs;
-  if(! @presets) {
-    slog("Unable to find any allowed preset compatible with current number of players ($nbPlayers), keeping current preset",2);
-    sayBattleAndGame("No allowed preset compatible with current number of player, preset rotation cancelled") if($verbose);
-    return;
-  }elsif($#presets == 0 && $presets[0] eq $conf{preset}) {
+  if(! @compatiblePresets) {
     slog("Unable to find any other allowed preset compatible with current number of players ($nbPlayers), keeping current preset",2);
-    sayBattleAndGame("No other allowed preset compatible with current number of player, preset rotation cancelled") if($verbose);
+    sayBattleAndGame('No other allowed preset compatible with current number of players, preset rotation cancelled') if($verbose);
     return;
   }
 
-  my ($oldPreset,$preset)=($conf{preset},$conf{preset});
-  my $rotationMsg;
-  if($rotationMode eq "random") {
-    my $presetIndex=int(rand($#presets+1));
-    if($#presets > 0) {
-      while($conf{preset} eq $presets[$presetIndex]) {
-        $presetIndex=int(rand($#presets+1));
-      }
-    }
-    $preset=$presets[$presetIndex];
-    $rotationMsg="Automatic random preset rotation: next preset is \"$preset\"";
+  my ($nextPreset,$rotationMsg);
+  if($isRandomRotation) {
+    $nextPresetIndex=int(rand(@compatiblePresets));
   }else{
-    my $nextPresetIndex=-1;
-    for my $presetIndex (0..$#presets) {
-      if($conf{preset} eq $presets[$presetIndex]) {
-        $nextPresetIndex=$presetIndex+1;
-        $nextPresetIndex=0 if($nextPresetIndex > $#presets);
-        last;
-      }
+    if(defined $nextPresetIndex) {
+      $nextPresetIndex=0 if($nextPresetIndex > $#compatiblePresets);
+    }else{
+      slog("Unable to find current preset for preset rotation, using first preset",2);
+      $nextPresetIndex=0;
     }
-    if($nextPresetIndex == -1) {
-      if(@presets) {
-        slog("Unable to find current preset for preset rotation, using first preset",2);
-        $nextPresetIndex=0;
-      }else{
-        slog("Unable to find current preset for preset rotation, keeping current preset",2);
-        return;
-      }
-    }
-    $preset=$presets[$nextPresetIndex];
-    $rotationMsg="Automatic preset rotation: next preset is \"$preset\"";
   }
-  $spads->applyPreset($preset);
-  $spads->{conf}{nbTeams}=$presetsBs{$preset}[0];
-  $spads->{conf}{teamSize}=$presetsBs{$preset}[1];
-  $spads->{conf}{nbPlayerById}=$presetsBs{$preset}[2];
-  $timestamps{mapLearned}=0;
-  $spads->applyMapList(\@availableMaps,$syncedSpringVersion);
-  setDefaultMapOfMaplist() if($spads->{conf}{map} eq '');
-  %conf=%{$spads->{conf}};
-  applyAllSettings();
-  updateTargetMod();
-  $rotationMsg.=" (some pending settings need rehosting to be applied)" if(needRehost());
+  $nextPreset=$compatiblePresets[$nextPresetIndex];
+  applyPreset($nextPreset,$presetsBs{$nextPreset});
+  $rotationMsg='Automatic '.($isRandomRotation ? 'random ' : '')."preset rotation: next preset is \"$nextPreset\"";
+  $rotationMsg.=' (some pending settings need rehosting to be applied)' if(needRehost());
   sayBattleAndGame($rotationMsg) if($verbose);
-  pluginsOnPresetApplied($oldPreset,$preset);
 }
 
 sub rotateMap {
@@ -4156,7 +4130,7 @@ sub rotateMap {
         }elsif(! exists $badMapPresets{$mapPreset}) {
           my ($nbTeams,$teamSize,$nbPlayerById)=getPresetBattleStructure($mapPreset,$nbPlayers);
           if($nbTeams*$teamSize*$nbPlayerById != 0) {
-            $mapsBs{$mapPreset}=[$nbTeams,$teamSize,$nbPlayerById];
+            $mapsBs{$mapPreset}={nbTeams => $nbTeams, teamSize => $teamSize, nbPlayerById => $nbPlayerById};
             push(@{$p_filteredMaps},$mapName);
           }else{
             $badMapPresets{$mapPreset}=1;
@@ -4223,22 +4197,19 @@ sub rotateMap {
     my $mapPreset;
     if(exists $spads->{presets}{$smfMapName}) {
       $mapPreset=$smfMapName;
-    }elsif(exists $spads->{presets}{"_DEFAULT_.smf"}) {
-      $mapPreset="_DEFAULT_.smf";
+    }elsif(exists $spads->{presets}{'_DEFAULT_.smf'}) {
+      $mapPreset='_DEFAULT_.smf';
+    }
+    my $mapBPreset;
+    if(exists $spads->{bPresets}{$smfMapName}) {
+      $mapBPreset=$smfMapName;
+    }elsif(exists $spads->{bPresets}{'_DEFAULT_.smf'}) {
+      $mapBPreset='_DEFAULT_.smf';
     }
     if(defined $mapPreset) {
-      my $oldPreset=$conf{preset};
-      $spads->applyPreset($mapPreset);
-      $spads->{conf}{nbTeams}=$mapsBs{$mapPreset}[0];
-      $spads->{conf}{teamSize}=$mapsBs{$mapPreset}[1];
-      $spads->{conf}{nbPlayerById}=$mapsBs{$mapPreset}[2];
-      $timestamps{mapLearned}=0;
-      $spads->applyMapList(\@availableMaps,$syncedSpringVersion);
-      setDefaultMapOfMaplist() if($spads->{conf}{map} eq '');
-      %conf=%{$spads->{conf}};
-      applyAllSettings();
-      updateTargetMod();
-      pluginsOnPresetApplied($oldPreset,$mapPreset);
+      applyPreset($mapPreset,$mapsBs{$mapPreset},$mapBPreset);
+    }elsif(defined $mapBPreset) {
+      applyBPreset($mapBPreset);
     }
   }
 }
@@ -6587,16 +6558,42 @@ sub applyAllSettings {
 }
 
 sub applyPreset {
-  my $preset=shift;
+  my ($preset,$r_settingsOverrides,$bPresetOverride)=@_;
   my $oldPreset=$conf{preset};
   $spads->applyPreset($preset);
+  if(defined $r_settingsOverrides) {
+    $spads->{conf}{$_}=$r_settingsOverrides->{$_} foreach(keys %{$r_settingsOverrides});
+  }
+  my $oldBPreset=$spads->{conf}{battlePreset};
+  $spads->applyBPreset($bPresetOverride)
+      if(defined $bPresetOverride);
   $timestamps{mapLearned}=0;
   $spads->applyMapList(\@availableMaps,$syncedSpringVersion);
   setDefaultMapOfMaplist() if($spads->{conf}{map} eq '');
   %conf=%{$spads->{conf}};
   applyAllSettings();
   updateTargetMod();
-  pluginsOnPresetApplied($oldPreset,$preset)
+  pluginsOnPresetApplied($oldPreset,$preset);
+  pluginsOnBattlePresetApplied($oldBPreset,$bPresetOverride)
+      if(defined $bPresetOverride);
+}
+
+sub applyBPreset {
+  my $bPreset=shift;
+  my $oldBPreset=$conf{battlePreset};
+  $spads->applyBPreset($bPreset);
+  %conf=%{$spads->{conf}};
+  sendBattleSettings() if($lobbyState >= LOBBY_STATE_BATTLE_OPENED);
+  pluginsOnBattlePresetApplied($oldBPreset,$bPreset);
+}
+
+sub applyHPreset {
+  my $hPreset=shift;
+  my $oldHPreset=$conf{hostingPreset};
+  $spads->applyHPreset($hPreset);
+  %conf=%{$spads->{conf}};
+  updateTargetMod();
+  pluginsOnHostingPresetApplied($oldHPreset,$hPreset);
 }
 
 sub autoManageBattle {
@@ -8188,9 +8185,7 @@ sub hBPreset {
   return 1 if($checkOnly);
 
   $timestamps{autoRestore}=time;
-  $spads->applyBPreset($bPreset);
-  %conf=%{$spads->{conf}};
-  sendBattleSettings() if($lobbyState >= LOBBY_STATE_BATTLE_OPENED);
+  applyBPreset($bPreset);
   sayBattleAndGame("Battle preset \"$bPreset\" ($spads->{bSettings}{description}) applied by $user");
   return 1;
 }
@@ -9329,9 +9324,8 @@ sub hHPreset {
   return 1 if($checkOnly);
 
   $timestamps{autoRestore}=time;
-  $spads->applyHPreset($hPreset);
-  %conf=%{$spads->{conf}};
-  updateTargetMod();
+  applyHPreset($hPreset);
+
   my $msg="Hosting preset \"$hPreset\" ($spads->{hSettings}{description}) applied by $user";
   $msg.=" (some pending settings need rehosting to be applied)" if(needRehost());
   sayBattleAndGame($msg);
@@ -9751,6 +9745,8 @@ sub hList {
         $presetString="[*] $C{12}";
       }elsif(any {$preset eq $_} @{$spads->{values}{preset}}) {
         $presetString = (exists $spads->{presetsAttributes}{$preset} && $spads->{presetsAttributes}{$preset}{transparent}) ? ' o  ' : '[ ] ';
+      }elsif(exists $spads->{presetsAttributes}{$preset} && $spads->{presetsAttributes}{$preset}{hidden}) {
+        next;
       }
       $presetString.=$B if($preset eq $conf{defaultPreset});
       $presetString.=$preset;
@@ -9768,11 +9764,14 @@ sub hList {
     sayPrivate($user,"$B********** Available battle presets **********");
     foreach my $bPreset (sort keys %{$spads->{bPresets}}) {
       next unless($bPreset);
+      next if($bPreset =~ /\.smf$/ && $conf{hideMapPresets});
       my $presetString="    $C{14}";
       if($bPreset eq $conf{battlePreset}) {
         $presetString="[*] $C{12}";
       }elsif(any {$bPreset eq $_} @{$spads->{values}{battlePreset}}) {
         $presetString = (exists $spads->{bPresetsAttributes}{$bPreset} && $spads->{bPresetsAttributes}{$bPreset}{transparent}) ? ' o  ' : '[ ] ';
+      }elsif(exists $spads->{bPresetsAttributes}{$bPreset} && $spads->{bPresetsAttributes}{$bPreset}{hidden}) {
+        next;
       }
       $presetString.=$bPreset;
       $presetString.=" ($spads->{bPresets}{$bPreset}{description}[0])" if(exists $spads->{bPresets}{$bPreset}{description});
@@ -9793,6 +9792,8 @@ sub hList {
         $presetString="[*] $C{12}";
       }elsif(any {$hPreset eq $_} @{$spads->{values}{hostingPreset}}) {
         $presetString = (exists $spads->{hPresetsAttributes}{$hPreset} && $spads->{hPresetsAttributes}{$hPreset}{transparent}) ? ' o  ' : '[ ] ';
+      }elsif(exists $spads->{hPresetsAttributes}{$hPreset} && $spads->{hPresetsAttributes}{$hPreset}{hidden}) {
+        next;
       }
       $presetString.=$hPreset;
       $presetString.=" ($spads->{hPresets}{$hPreset}{description}[0])" if(exists $spads->{hPresets}{$hPreset}{description});
@@ -11789,12 +11790,23 @@ sub hSet {
     if($conf{autoLoadMapPreset}) {
       my $smfMapName=$conf{map};
       $smfMapName.='.smf' unless($smfMapName =~ /\.smf$/);
+      my $mapPreset;
       if(exists $spads->{presets}{$smfMapName}) {
-        applyPreset($smfMapName);
-        $msg.=" (some pending settings need rehosting to be applied)" if(needRehost());
-      }elsif(exists $spads->{presets}{"_DEFAULT_.smf"}) {
-        applyPreset("_DEFAULT_.smf");
-        $msg.=" (some pending settings need rehosting to be applied)" if(needRehost());
+        $mapPreset=$smfMapName;
+      }elsif(exists $spads->{presets}{'_DEFAULT_.smf'}) {
+        $mapPreset='_DEFAULT_.smf';
+      }
+      my $mapBPreset;
+      if(exists $spads->{bPresets}{$smfMapName}) {
+        $mapBPreset=$smfMapName;
+      }elsif(exists $spads->{bPresets}{'_DEFAULT_.smf'}) {
+        $mapBPreset='_DEFAULT_.smf';
+      }
+      if(defined $mapPreset) {
+        applyPreset($mapPreset,undef,$mapBPreset);
+        $msg.=' (some pending settings need rehosting to be applied)' if(needRehost());
+      }elsif(defined $mapBPreset) {
+        applyBPreset($mapBPreset);
       }
     }
     sayBattleAndGame($msg);
@@ -15409,6 +15421,20 @@ sub pluginsOnPresetApplied {
   my ($oldPreset,$newPreset)=@_;
   foreach my $pluginName (@pluginsOrder) {
     $plugins{$pluginName}->onPresetApplied($oldPreset,$newPreset) if($plugins{$pluginName}->can('onPresetApplied'));
+  }
+}
+
+sub pluginsOnBattlePresetApplied {
+  my ($oldPreset,$newPreset)=@_;
+  foreach my $pluginName (@pluginsOrder) {
+    $plugins{$pluginName}->onBattlePresetApplied($oldPreset,$newPreset) if($plugins{$pluginName}->can('onBattlePresetApplied'));
+  }
+}
+
+sub pluginsOnHostingPresetApplied {
+  my ($oldPreset,$newPreset)=@_;
+  foreach my $pluginName (@pluginsOrder) {
+    $plugins{$pluginName}->onHostingPresetApplied($oldPreset,$newPreset) if($plugins{$pluginName}->can('onHostingPresetApplied'));
   }
 }
 

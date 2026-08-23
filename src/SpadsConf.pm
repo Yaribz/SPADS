@@ -39,7 +39,7 @@ use SimpleLog;
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.13.18';
+my $moduleVersion='0.13.19';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -458,6 +458,10 @@ sub new {
     return 0;
   }
 
+  # Make map battle presets transparent by default
+  my @mapBPresetsWithoutTransparentAttribute = grep {substr($_,-4) eq '.smf' && ! (exists $r_bPresetAttribs->{$_} && defined $r_bPresetAttribs->{$_}{transparent})} (keys %{$p_bConf});
+  $r_bPresetAttribs->{$_}{transparent}=1 foreach(@mapBPresetsWithoutTransparentAttribute);
+  
   my $p_banLists=loadTableFile($sLog,$p_conf->{''}{etcDir}.'/banLists.conf',\@banListsFields,$p_macros);
   my $p_mapLists=loadSimpleTableFile($sLog,$p_conf->{''}{etcDir}.'/mapLists.conf',$p_macros);
   if(!checkConfigLists($sLog,$p_conf,$p_banLists,$p_mapLists)) {
@@ -1015,6 +1019,7 @@ sub loadSettingsFile {
     $attribs{$sectionName} = delete $attribs{$section} if(exists $attribs{$section});
   }
 
+  my $isMainSpadsConfFile = defined $overwriteMacrosPrefix && $overwriteMacrosPrefix eq 'set';
   foreach my $section (keys %inheritedSections) {
     my $r_inherits=flattenSectionInheritance(\%inheritedSections,$section);
     shift(@{$r_inherits});
@@ -1025,7 +1030,7 @@ sub loadSettingsFile {
         next;
       }
       foreach my $param (keys %{$newConf{$inheritedSection}}) {
-        $newConf{$section}{$param}//=$newConf{$inheritedSection}{$param};
+        $newConf{$section}{$param}//=$newConf{$inheritedSection}{$param} unless($isMainSpadsConfFile && $param eq 'preset');
       }
     }
     if(@invalidInheritedSections) {
@@ -1841,7 +1846,7 @@ sub processPresetAttribs {
   return 0 unless(processAttribs($sLog,$type,$r_presetAttribs));
   foreach my $preset (keys %{$r_presetAttribs}) {
     foreach my $attr (keys %{$r_presetAttribs->{$preset}}) {
-      if($attr ne 'transparent') {
+      if($attr ne 'transparent' && $attr ne 'hidden') {
         $sLog->log("Invalid $type attribute \"$attr\" declared for $type \"$preset\"",1);
         return 0;
       }

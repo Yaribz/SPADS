@@ -263,12 +263,32 @@ def getParams(pluginName):
 <p>This callback is called when the battle lobby of the autohost is opened.</p>
 
 </dd>
+<dt id="onBattlePresetApplied-self-oldBattlePresetName-newBattlePresetName"><code>onBattlePresetApplied($self,$oldBattlePresetName,$newBattlePresetName)</code></dt>
+<dd>
+
+<p>This callback is called each time a battle preset is applied (this doesn&#39;t include battle presets applied as part of global presets).</p>
+
+<p><code>$oldBattlePresetName</code> is the name of the previous battle preset</p>
+
+<p><code>$newBattlePresetName</code> is the name of the new battle preset</p>
+
+</dd>
 <dt id="onGameEnd-self-endGameData"><code>onGameEnd($self,\%endGameData)</code></dt>
 <dd>
 
 <p>This callback is called each time a game hosted by the autohost ends.</p>
 
 <p>The <code>\%endGameData</code> parameter is a reference to a hash containing all the data stored by SPADS concerning the game that just ended. It is recommended to use a data printing function (such as the <code>Dumper</code> function from the standard <code>Data::Dumper</code> module included in Perl core) to check the content of this hash for the desired data.</p>
+
+</dd>
+<dt id="onHostingPresetApplied-self-oldHostingPresetName-newHostingPresetName"><code>onHostingPresetApplied($self,$oldHostingPresetName,$newHostingPresetName)</code></dt>
+<dd>
+
+<p>This callback is called each time a hosting preset is applied (this doesn&#39;t include hosting presets applied as part of global presets).</p>
+
+<p><code>$oldHostingPresetName</code> is the name of the previous hosting preset</p>
+
+<p><code>$newHostingPresetName</code> is the name of the new hosting preset</p>
 
 </dd>
 <dt id="onJoinBattleRequest-self-userName-ipAddr"><code>onJoinBattleRequest($self,$userName,$ipAddr)</code></dt>
@@ -1245,8 +1265,28 @@ def getParams(pluginName):
 
 <dl>
 
-<dt id="applyPreset-presetName"><code>applyPreset($presetName)</code></dt>
+<dt id="applyBattlePreset-battlePresetName"><code>applyBattlePreset($battlePresetName)</code></dt>
 <dd>
+
+<p>This function loads a battle preset from SPADS configuration and applies it to the hosted lobby.</p>
+
+</dd>
+<dt id="applyHostingPreset-hostingPresetName"><code>applyHostingPreset($hostingPresetName)</code></dt>
+<dd>
+
+<p>This function loads a hosting preset from SPADS configuration and applies it to the hosted lobby.</p>
+
+</dd>
+<dt id="applyPreset-presetName-r_settingsOverrides-undef-bPresetOverride-undef"><code>applyPreset($presetName,$r_settingsOverrides=undef,$bPresetOverride=undef)</code></dt>
+<dd>
+
+<p>This function loads a global preset from SPADS configuration and applies it to the hosted lobby, with optional overrides.</p>
+
+<p><code>$presetName</code> is the name of the global preset that must be loaded</p>
+
+<p><code>$r_settingsOverrides</code> is a reference to a hash containing the overrides to apply to the global preset just after it is loaded, before applying it to the lobby. The keys are the names of the preset settings that must be overridden and the values are the new values to apply. This parameter is optional.</p>
+
+<p><code>$bPresetOverride</code> is the battle preset override to apply to the global preset just after it is loaded, before applying it to the lobby. It contains the name of the battle preset that must be loaded (on top of the default battle preset if any). This parameter is optional.</p>
 
 </dd>
 <dt id="cancelCloseBattle"><code>cancelCloseBattle()</code></dt>

@@ -201,6 +201,7 @@ helpSettings.dat:
 0.7.8: update GitHub repository name for Recoil engine (renamed from "spring" to "RecoilEngine")
 0.7.9: the "modName" hosting setting now supports rapid tag values (automatic rapid tag tracking)
 0.7.10: the "autoUpdateRelease" global setting now also accepts a Git commit hash for manual selection of specific SPADS version
+0.7.11: update "autoLoadMapPreset" and "hideMapPresets" preset settings documentation (map battle presets are now also supported, in addition to map global presets)
 
 PerlUnitSync.pm:
 ===============
@@ -1067,6 +1068,11 @@ spads.pl:
          the "!update" command now also accepts a Git commit hash as parameter
 0.13.49: reorganize setting value checking code to ease code factorization
 0.13.50: fixes for perlcritic severity 5
+0.13.51: add support for map battle presets (works similarly as map global presets, both can be used simultaneously)
+         new preset attribute "hidden" (hide the preset from "!list [bh]presets" output when unavailable from current global preset)
+         new plugin API event-based callbacks: "onBattlePresetApplied" and "onHostingPresetApplied"
+         minor fixes for preset rotation functionality (edge cases + sequential rotation algorithm)
+         factorization of preset loading code
 
 SpadsConf.pm:
 ============
@@ -1282,6 +1288,9 @@ SpadsConf.pm:
          add support for environment variables in configuration files
 0.13.17: fixes for perlcritic severity 5
 0.13.18: make map presets transparent by default
+0.13.19: add support for map battle presets (make them transparent by default)
+         prevent inheritance for "preset" setting (this makes it possible to have presets that do not alter the list of allowed presets but still inherit from other presets for other settings)
+         new preset attribute "hidden"
 
 spadsInstaller.pl:
 =================
@@ -1492,6 +1501,10 @@ SpadsPluginApi.pm:
 0.43: new plugin API function: "isSettingValueAllowed" (checks that a given value is allowed for a specific setting)
       fix links to tutorials in documentation
 0.44: fixes for perlcritic severity 5
+0.45: new plugin API event-based callbacks: "onBattlePresetApplied" and "onHostingPresetApplied"
+      new plugin API functions: "applyBattlePreset" and "applyHostingPreset"
+      the "applyPreset" plugin API function can now take two additional parameters for optional overrides
+      add documentation for "applyPreset" plugin API function
 
 SpadsUpdater.pm:
 ===============
