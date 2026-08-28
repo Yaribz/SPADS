@@ -301,7 +301,7 @@ my %paramTypes = (login => '[\w\[\]]{2,20}',
                     }
                     if(substr($_[0],0,8) eq 'rapid://') {
                       my $rapidTag=substr($_[0],8);
-                      return $rapidTag =~ /^[\w\-]+:\w+$/;
+                      return $rapidTag =~ /^[\w\-]+:[^\s,]+$/;
                     }
                     return $_[0] ne '';
                   },

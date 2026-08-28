@@ -1759,7 +1759,7 @@ sub loadArchivesBlocking {
     slog("Unable to find mod matching regular expression \"$modRegexp\"",1) unless(defined $newTargetMod);
   }else{
     my $resolvedModName;
-    if($configuredModName =~ /^rapid:\/\/([\w\-]+):(\w+)$/) {
+    if($configuredModName =~ /^rapid:\/\/([\w\-]+):([^\s,]+)$/) {
       my ($rapidIdent,$rapidRelease)=($1,$2);
       my $rapidTag=substr($configuredModName,8);
       my $rapidTagAndComma=$rapidTag.',';
