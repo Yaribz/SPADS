@@ -297,6 +297,25 @@ Any writable directory
 -
 spring
 
+[global:ghostMetadataSources]
+Ghost metadata sources
+-
+Semicolon-separated list of metadata sources (local file paths and/or http(s) URLs) from which map and game metadata (hashes, options, sides and start positions) is imported at startup. This populates the ghost map and ghost game caches, so that maps and games whose archives aren't available locally can still be hosted (refer to [set:allowGhostMaps] and [set:allowGhostMods]). Imported metadata never overrides metadata derived from locally available archives.
+-
+<null> (metadata import disabled)
+Semicolon-separated list of file paths and/or http(s) URLs
+-
+<null>
+
+[global:ghostMetadataRefreshDelay]
+Ghost metadata refresh delay
+-
+Delay in minutes between automatic refreshes of the metadata imported from the sources defined in [global:ghostMetadataSources]. On each refresh the sources are re-fetched and previously imported entries are updated, while metadata derived from local archives is left untouched. A value of 0 disables periodic refresh.
+-
+Integer
+-
+0
+
 [global:springConfig]
 Spring config file path
 -
