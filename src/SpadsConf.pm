@@ -39,7 +39,7 @@ use SimpleLog;
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.13.20';
+my $moduleVersion='0.13.21';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -180,7 +180,7 @@ my %spadsSectionParameters = (description => ['notNull'],
                               skillMode => ['skillMode'],
                               shareId => ['password','null'],
                               autoCallvote => ['bool'],
-                              autoLoadMapPreset => ['bool'],
+                              autoLoadMapPreset => ['bool2'],
                               hideMapPresets => ['bool'],
                               balanceMode => ['balanceModeType'],
                               clanMode => ['clanModeType'],

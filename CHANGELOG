@@ -203,6 +203,7 @@ helpSettings.dat:
 0.7.10: the "autoUpdateRelease" global setting now also accepts a Git commit hash for manual selection of specific SPADS version
 0.7.11: update "autoLoadMapPreset" and "hideMapPresets" preset settings documentation (map battle presets are now also supported, in addition to map global presets)
 0.7.12: update "autoLoadMapPreset" preset setting documentation (map presets are now also automatically loaded on preset change under certain conditions)
+0.7.13: new allowed value for "autoLoadMapPreset" preset setting: "2" (sticky mode map presets)
 
 PerlUnitSync.pm:
 ===============
@@ -1080,6 +1081,7 @@ spads.pl:
          make the regular expression validating the release part of the rapid tag for the "modName" hosting setting more permissive (thanks Marek)
          add debug logs for map and preset rotations
          factorize map lists and map presets handling code
+0.13.53: add support for sticky mode map presets
 
 SpadsConf.pm:
 ============
@@ -1306,6 +1308,7 @@ SpadsConf.pm:
          prevent description of "transparent" presets from overriding current preset description
          add debug logs for preset loading
          split the "applyMapList" function to make the map list computing functionality available separately (makes it possible to compute map lists without altering current configuration)
+0.13.21: new allowed value for "autoLoadMapPreset" preset setting: "2" (sticky mode map presets)
 
 spadsInstaller.pl:
 =================

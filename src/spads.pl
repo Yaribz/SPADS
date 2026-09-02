@@ -111,7 +111,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.52';
+our $SPADS_VERSION='0.13.53';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -6589,7 +6589,9 @@ sub applyPreset {
   my $mapListApplied=$conf{mapList};
   $spads->applyPreset($preset);
   my ($mapPreset,$preMapPreset,$mapBPreset,$preMapBPreset);
-  if($preset !~ /\.smf$/ && $spads->{conf}{autoLoadMapPreset} && (! $conf{autoLoadMapPreset} || exists $spads->{presets}{$preset}{map})) {
+  if( $preset !~ /\.smf$/
+      && ( $spads->{conf}{autoLoadMapPreset} == 2
+           || ( $spads->{conf}{autoLoadMapPreset} && (! $conf{autoLoadMapPreset} || exists $spads->{presets}{$preset}{map}) ) ) ) {
     $mapListApplied=applyMapList() if($mapListApplied ne $spads->{conf}{mapList});
     setDefaultMapOfMaplist() if($spads->{conf}{map} eq '');
     ($mapPreset,$mapBPreset)=getPresetsForMap($spads->{conf}{map});
@@ -6626,9 +6628,19 @@ sub applyBPreset {
   my $bPreset=shift;
   my $oldBPreset=$conf{battlePreset};
   $spads->applyBPreset($bPreset);
+  my ($mapBPreset,$preMapBPreset);
+  if($bPreset !~ /\.smf$/ && $conf{autoLoadMapPreset} == 2) {
+    (undef,$mapBPreset)=getPresetsForMap($conf{map});
+    if(defined $mapBPreset) {
+      $preMapBPreset=$spads->{conf}{battlePreset};
+      $spads->applyBPreset($mapBPreset);
+    }
+  }
   %conf=%{$spads->{conf}};
   sendBattleSettings() if($lobbyState >= LOBBY_STATE_BATTLE_OPENED);
   pluginsOnBattlePresetApplied($oldBPreset,$bPreset);
+  pluginsOnBattlePresetApplied($preMapBPreset,$mapBPreset)
+      if(defined $mapBPreset);
 }
 
 sub applyHPreset {
@@ -6950,8 +6962,11 @@ sub getPresetBattleStructure {
     return (0,0,0);
   }
   my $r_presetConf=$spads->{presets}{$preset};
+  my $presetAutoLoadMapPreset=getPresetSetting($r_presetConf,'autoLoadMapPreset');
   my ($nbTeams,$maxNbTeams,$teamSize,$maxTeamSize,$nbPlayerById,$maxNbPlayerById);
-  if($preset !~ /\.smf$/ && getPresetSetting($r_presetConf,'autoLoadMapPreset') && (! $conf{autoLoadMapPreset} || exists $r_presetConf->{map})) {
+  if( $preset !~ /\.smf$/
+      && ( $presetAutoLoadMapPreset == 2
+           || ( $presetAutoLoadMapPreset && (! $conf{autoLoadMapPreset} || exists $r_presetConf->{map}) ) ) ) {
     my $presetMap=getPresetSetting($r_presetConf,'map');
     if($presetMap eq '') {
       my (undef,$r_orderedMaps,undef,$r_orderedGhostMaps)=$spads->processMapList(\@availableMaps,$syncedSpringVersion,getPresetSetting($r_presetConf,'mapList'));

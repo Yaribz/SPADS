@@ -1103,14 +1103,17 @@ Any map of current map list (defined in mapLists.conf).
 [set:autoLoadMapPreset]
 Auto-load map preset
 -
-If enabled, SPADS will automatically load map presets whenever map is changed (whether manually, via automatic rotation, or through a preset). Map presets will also be automatically loaded when a preset is loaded that enables this setting if it was disabled before.
+If enabled, SPADS will automatically load map presets whenever the map is changed (whether manually, via automatic rotation, or through a global preset).
 A map preset is a global preset (defined in spads.conf file) or a battle preset (defined in battlePresets.conf file) that has the same name as a map, with ".smf" suffix.
 For each type of map preset (map global preset and map battle preset), if the map preset bearing the name of the map is not found, the default map preset named "_DEFAULT_.smf" is loaded instead if it exists.
 If both a map global preset and a map battle preset are found, both are loaded (the global preset first, followed by the battle preset).
+Map presets will also be automatically loaded when a global preset is loaded that enables autoLoadMapPreset if it was disabled before, or on every global preset load if "sticky" mode is selected.
+Additionally, when "sticky" mode is selected, battle map presets are also automatically loaded after every battle preset load.
 Map global presets can be useful to automatically adjust allowed team sizes according to the selected map for instance, while map battle presets can be useful to alter the default and allowed mapoptions for specific maps.
 -
 0: disabled
 1: enabled
+2: enabled (sticky)
 -
 0
 
