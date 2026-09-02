@@ -39,7 +39,7 @@ use SimpleLog;
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.13.19';
+my $moduleVersion='0.13.20';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -1582,7 +1582,9 @@ sub checkSpadsConfig {
     $sLog->log("Incomplete SPADS configuration (missing parameter(s) in default preset: $mParams)",1);
     return 0;
   }
+  my @invalidMapPresets;
   foreach my $preset (keys %{$p_conf}) {
+    push(@invalidMapPresets,$preset) if($preset =~ /\.smf$/ && exists $p_conf->{$preset}{map});
     next if($preset eq '' || ! exists $p_conf->{$preset}{preset});
     if($p_conf->{$preset}{preset}[0] ne $preset) {
       $sLog->log("Invalid global preset configuration: the default value for \"preset\" parameter ($p_conf->{$preset}{preset}[0]) must be the name of the preset ($preset)",1);
@@ -1590,6 +1592,11 @@ sub checkSpadsConfig {
     }
     my @unknownPresets = grep {! exists $p_conf->{$_}} @{$p_conf->{$preset}{preset}};
     $sLog->log('Invalid global preset'.($#unknownPresets>0?'s':'').' ('.join(',',@unknownPresets).") referenced by global preset \"$preset\"",2) if(@unknownPresets);
+  }
+
+  if(@invalidMapPresets) {
+    $sLog->log('Following map preset'.(@invalidMapPresets>1?'s are':' is').' invalid (map presets cannot alter the "map" setting): '.join(', ',@invalidMapPresets),1);
+    return 0;
   }
 
   my @relDirParams=(['etcDir'],
@@ -1762,20 +1769,40 @@ sub checkBConfig {
 sub checkConfigLists {
   my ($sLog,$p_conf,$p_banLists,$p_mapLists)=@_;
 
-  my $defaultPreset=$p_conf->{''}{defaultPreset};
-  my $banList=$p_conf->{$defaultPreset}{banList}[0];
-  my $mapList=$p_conf->{$defaultPreset}{mapList}[0];
-
-  if(! exists $p_banLists->{$banList}) {
-    $sLog->log("Invalid banList configuration: default banList \"$banList\" does not exist",1);
-    return 0;
+  foreach my $preset (keys %{$p_conf}) {
+    next if($preset eq '');
+    my @invalidValues;
+    if(exists $p_conf->{$preset}{banList}) {
+      foreach my $banList (@{$p_conf->{$preset}{banList}}) {
+        push(@invalidValues,$banList) unless(exists $p_banLists->{$banList});
+      }
+      if(@invalidValues) {
+        $sLog->log('Invalid ban list configuration, following undeclared ban list'.(@invalidValues>1?'s are':' is')." referenced in the \"banList\" setting of the \"$preset\" preset: ".join(', ',@invalidValues),1);
+        return 0;
+      }
+    }
+    if(exists $p_conf->{$preset}{mapList}) {
+      foreach my $mapList (@{$p_conf->{$preset}{mapList}}) {
+        push(@invalidValues,$mapList) unless(exists $p_mapLists->{$mapList});
+      }
+      if(@invalidValues) {
+        $sLog->log('Invalid map list configuration, following undeclared map list'.(@invalidValues>1?'s are':' is')." referenced in the \"mapList\" setting of the \"$preset\" preset: ".join(', ',@invalidValues),1);
+        return 0;
+      }
+    }
+    if(exists $p_conf->{$preset}{rotationType}) {
+      foreach my $rotationType (@{$p_conf->{$preset}{rotationType}}) {
+        next unless(substr($rotationType,0,4) eq 'map;');
+        my $mapList=substr($rotationType,4);
+        push(@invalidValues,$mapList) unless(exists $p_mapLists->{$mapList});
+      }
+      if(@invalidValues) {
+        $sLog->log('Invalid map list configuration, following undeclared map list'.(@invalidValues>1?'s are':' is')." referenced in the \"rotationType\" setting of the \"$preset\" preset: ".join(', ',@invalidValues),1);
+        return 0;
+      }
+    }
   }
-
-  if(! exists $p_mapLists->{$mapList}) {
-    $sLog->log("Invalid mapList configuration: default mapList \"$mapList\" does not exist",1);
-    return 0;
-  }
-
+  
   return 1;
 }
 
@@ -2536,8 +2563,11 @@ sub reloadMapLists {
 sub applyPreset {
   my ($self,$preset,$commandsAlreadyLoaded)=@_;
   $commandsAlreadyLoaded//=0;
+  my $sLog=$self->{log};
+  $sLog->log("Loading configuration preset \"$preset\"",5);
   my %settings=%{$self->{presets}{$preset}};
   foreach my $param (keys %settings) {
+    next if($param eq 'description' && exists $self->{presetsAttributes}{$preset} && $self->{presetsAttributes}{$preset}{transparent});
     my $val=$settings{$param}[0];
     next if($param eq 'battlePreset' && defined $self->{conf}{battlePreset} && exists $self->{bPresetsAttributes}{$val} && $self->{bPresetsAttributes}{$val}{transparent});
     next if($param eq 'hostingPreset' && defined $self->{conf}{hostingPreset} && exists $self->{hPresetsAttributes}{$val} && $self->{hPresetsAttributes}{$val}{transparent});
@@ -2546,16 +2576,16 @@ sub applyPreset {
   }
   $self->{conf}{preset}=$preset unless(exists $self->{presetsAttributes}{$preset} && $self->{presetsAttributes}{$preset}{transparent});
   if(! $commandsAlreadyLoaded && exists $settings{commandsFile}) {
-    my ($p_commands,$r_cmdAttribs)=loadTableFile($self->{log},$self->{conf}{etcDir}.'/'.$self->{conf}{commandsFile},\@commandsFields,$self->{macros},1);
+    my ($p_commands,$r_cmdAttribs)=loadTableFile($sLog,$self->{conf}{etcDir}.'/'.$self->{conf}{commandsFile},\@commandsFields,$self->{macros},1);
     if(%{$p_commands}) {
-      if(processCmdAttribs($self->{log},$r_cmdAttribs)) {
+      if(processCmdAttribs($sLog,$r_cmdAttribs)) {
         $self->{commands}=$p_commands;
         $self->{commandsAttributes}=$r_cmdAttribs;
       }else{
-        $self->{log}->log('Unable to process commands attributes',1);
+        $sLog->log('Unable to process commands attributes',1);
       }
     }else{
-      $self->{log}->log("Unable to load commands file \"$self->{conf}{commandsFile}\"",1);
+      $sLog->log("Unable to load commands file \"$self->{conf}{commandsFile}\"",1);
     }
   }
   $self->applyHPreset($settings{hostingPreset}[0]) if(exists $settings{hostingPreset});
@@ -2577,6 +2607,7 @@ sub applyPluginPreset {
 
 sub applyHPreset {
   my ($self,$preset)=@_;
+  $self->{log}->log("Loading hosting configuration preset \"$preset\"",5);
   my %settings=%{$self->{hPresets}{$preset}};
   foreach my $param (keys %settings) {
     $self->{hSettings}{$param}=$settings{$param}[0];
@@ -2587,6 +2618,7 @@ sub applyHPreset {
 
 sub applyBPreset {
   my ($self,$preset)=@_;
+  $self->{log}->log("Loading battle configuration preset \"$preset\"",5);
   my %settings=%{$self->{bPresets}{$preset}};
   if(exists $settings{resetoptions} && $settings{resetoptions}[0]) {
     foreach my $bSetKey (keys %{$self->{bSettings}}) {
@@ -2624,11 +2656,21 @@ sub applyBPreset {
 
 sub applyMapList {
   my ($self,$p_availableMaps,$springMajorVersion)=@_;
-  my $p_mapFilters=$self->{mapLists}{$self->{conf}{mapList}};
-  $self->{maps}={};
-  $self->{orderedMaps}=[];
-  $self->{ghostMaps}={};
-  $self->{orderedGhostMaps}=[];
+  my ($r_maps,$r_orderedMaps,$r_ghostMaps,$r_orderedGhostMaps)=$self->processMapList($p_availableMaps,$springMajorVersion);
+  return 0 unless(defined $r_maps);
+  @{$self}{qw'maps orderedMaps ghostMaps orderedGhostMaps'}=($r_maps,$r_orderedMaps,$r_ghostMaps,$r_orderedGhostMaps);
+  return 1;
+}
+
+sub processMapList {
+  my ($self,$p_availableMaps,$springMajorVersion,$mapList)=@_;
+  $mapList//=$self->{conf}{mapList};
+  my $p_mapFilters=$self->{mapLists}{$mapList};
+  if(! defined $p_mapFilters) {
+    $self->{log}->log("Unable to apply map list \"$mapList\" (unknown map list)",1);
+    return;
+  }
+  my (%maps,@orderedMaps,%ghostMaps,@orderedGhostMaps);
   my %alreadyTestedMaps;
   for my $i (0..$#{$p_availableMaps}) {
     $alreadyTestedMaps{$p_availableMaps->[$i]{name}}=1;
@@ -2638,9 +2680,9 @@ sub applyMapList {
         my $realMapFilter=$1;
         last if($p_availableMaps->[$i]{name} =~ /^$realMapFilter$/);
       }elsif($p_availableMaps->[$i]{name} =~ /^$mapFilter$/) {
-        $self->{maps}{$i}=$p_availableMaps->[$i]{name};
-        $self->{orderedMaps}[$j]//=[];
-        push(@{$self->{orderedMaps}[$j]},$p_availableMaps->[$i]{name});
+        $maps{$i}=$p_availableMaps->[$i]{name};
+        $orderedMaps[$j]//=[];
+        push(@{$orderedMaps[$j]},$p_availableMaps->[$i]{name});
         last;
       }
     }
@@ -2654,13 +2696,14 @@ sub applyMapList {
         my $realMapFilter=$1;
         last if($realMapFilter eq '_GHOSTMAPS_' || $ghostMapName =~ /^$realMapFilter$/);
       }elsif($mapFilter eq '_GHOSTMAPS_' || $ghostMapName =~ /^$mapFilter$/) {
-        $self->{ghostMaps}{$ghostMapName}=$p_availableGhostMaps->{$ghostMapName};
-        $self->{orderedGhostMaps}[$j]//=[];
-        push(@{$self->{orderedGhostMaps}[$j]},$ghostMapName);
+        $ghostMaps{$ghostMapName}=$p_availableGhostMaps->{$ghostMapName};
+        $orderedGhostMaps[$j]//=[];
+        push(@{$orderedGhostMaps[$j]},$ghostMapName);
         last;
       }
     }
   }
+  return (\%maps,\@orderedMaps,\%ghostMaps,\@orderedGhostMaps);
 }
 
 sub applySubMapList {
@@ -2673,7 +2716,11 @@ sub applySubMapList {
   }else{
     $p_orderedMaps=mergeMapArrays($self->{orderedMaps});
   }
-  return $p_orderedMaps unless($mapList && exists $self->{mapLists}{$mapList});
+  return $p_orderedMaps if($mapList eq '');
+  if(! exists $self->{mapLists}{$mapList}) {
+    $self->{log}->log("Unable to apply map sub-list \"$mapList\" (unknown map list)",1);
+    return $p_orderedMaps;
+  }
 
   my @filteredMaps;
   my $p_mapFilters=$self->{mapLists}{$mapList};
@@ -3445,7 +3492,8 @@ sub getUserBan {
   push(@allBans,@{$p_bansAuto});
 
   my $p_bansSpecific=[];
-  $p_bansSpecific=findMatchingData($p_userData,$self->{banLists}{$self->{conf}{banList}}) if($self->{conf}{banList});
+  my $banList=$self->{conf}{banList};
+  $p_bansSpecific=findMatchingData($p_userData,$self->{banLists}{$banList}) if($banList ne '' && exists $self->{banLists}{$banList});
   push(@allBans,$p_bansSpecific->[0]) if(@{$p_bansSpecific});
 
   foreach my $p_ban (@allBans) {

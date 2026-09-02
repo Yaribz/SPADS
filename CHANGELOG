@@ -202,6 +202,7 @@ helpSettings.dat:
 0.7.9: the "modName" hosting setting now supports rapid tag values (automatic rapid tag tracking)
 0.7.10: the "autoUpdateRelease" global setting now also accepts a Git commit hash for manual selection of specific SPADS version
 0.7.11: update "autoLoadMapPreset" and "hideMapPresets" preset settings documentation (map battle presets are now also supported, in addition to map global presets)
+0.7.12: update "autoLoadMapPreset" preset setting documentation (map presets are now also automatically loaded on preset change under certain conditions)
 
 PerlUnitSync.pm:
 ===============
@@ -1073,6 +1074,12 @@ spads.pl:
          new plugin API event-based callbacks: "onBattlePresetApplied" and "onHostingPresetApplied"
          minor fixes for preset rotation functionality (edge cases + sequential rotation algorithm)
          factorization of preset loading code
+0.13.52: map presets are now also automatically loaded on preset change (when "autoLoadMapPreset" is enabled in new preset, and only if map is set by new preset or if "autoLoadMapPreset" was not enabled in previous preset)
+         take map presets into account when filtering maps or presets based on current number of players during automatic rotation
+         fix target battle structure computation algorithm for presets rotation
+         make the regular expression validating the release part of the rapid tag for the "modName" hosting setting more permissive (thanks Marek)
+         add debug logs for map and preset rotations
+         factorize map lists and map presets handling code
 
 SpadsConf.pm:
 ============
@@ -1291,6 +1298,14 @@ SpadsConf.pm:
 0.13.19: add support for map battle presets (make them transparent by default)
          prevent inheritance for "preset" setting (this makes it possible to have presets that do not alter the list of allowed presets but still inherit from other presets for other settings)
          new preset attribute "hidden"
+0.13.20: ensure all declared map presets are valid, i.e. not containing a "map" setting (a map preset changing current map does not make sense)
+         ensure all the ban lists and map lists referenced in spads.conf are valid, i.e. declared in the banLists.conf and mapLists.conf files (only the default lists were checked previously)
+         add an error message when an attempt to apply an invalid map list as sub map list is performed
+         fix Perl errors occurring when an invalid ban list is selected
+         make the regular expression validating the release part of the rapid tag for the "modName" hosting setting more permissive (thanks Marek)
+         prevent description of "transparent" presets from overriding current preset description
+         add debug logs for preset loading
+         split the "applyMapList" function to make the map list computing functionality available separately (makes it possible to compute map lists without altering current configuration)
 
 spadsInstaller.pl:
 =================

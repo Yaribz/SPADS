@@ -111,7 +111,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.51';
+our $SPADS_VERSION='0.13.52';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -1759,8 +1759,8 @@ sub loadArchivesBlocking {
     slog("Unable to find mod matching regular expression \"$modRegexp\"",1) unless(defined $newTargetMod);
   }else{
     my $resolvedModName;
-    if($configuredModName =~ /^rapid:\/\/([\w\-]+):([^\s,]+)$/) {
-      my ($rapidIdent,$rapidRelease)=($1,$2);
+    if($configuredModName =~ /^rapid:\/\/([\w\-]+):[^\s,]+$/) {
+      my $rapidIdent=$1;
       my $rapidTag=substr($configuredModName,8);
       my $rapidTagAndComma=$rapidTag.',';
       my $lengthOfRapidTagAndComma=length($rapidTag)+1;
@@ -1925,8 +1925,7 @@ sub loadArchivesPostActions {
       $spads->cacheMapsInfo($r_newCachedMaps) if(%{$r_newCachedMaps});
     }
 
-    $timestamps{mapLearned}=0;
-    $spads->applyMapList(\@availableMaps,$syncedSpringVersion);
+    applyMapList();
 
   }
 
@@ -1989,6 +1988,22 @@ sub setDefaultMapOfMaplist {
     $spads->{conf}{map}=$p_maps->[0];
     $conf{map}=$p_maps->[0];
   }
+}
+
+sub loadMapPresets {
+  my ($mapPreset,$mapBPreset)=getPresetsForMap($conf{map});
+  my $spadsConfModified;
+  if(defined $mapPreset) {
+    $spads->applyPreset($mapPreset);
+    $spads->applyMapList(\@availableMaps,$syncedSpringVersion)
+        if($spads->{conf}{mapList} ne $conf{mapList}); # a map preset altering map list is quite dubious but let's handle it anyway
+    $spadsConfModified=1;
+  }
+  if(defined $mapBPreset) {
+    $spads->applyBPreset($mapBPreset);
+    $spadsConfModified=1;
+  }
+  %conf=%{$spads->{conf}} if($spadsConfModified);
 }
 
 sub getMapHash {
@@ -3858,11 +3873,9 @@ sub checkAutoReloadArchives {
 }
 
 sub checkCurrentMapListForLearnedMaps {
-  if($timestamps{mapLearned} && time - $timestamps{mapLearned} > 5) {
-    slog("Applying current map list for new maps learned automatically",5);
-    $timestamps{mapLearned}=0;
-    $spads->applyMapList(\@availableMaps,$syncedSpringVersion);
-  }
+  return unless($timestamps{mapLearned} && time - $timestamps{mapLearned} > 5);
+  slog("Applying current map list for new maps learned automatically",5);
+  applyMapList();
 }
 
 sub checkAntiFloodDataPurge {
@@ -4074,7 +4087,6 @@ sub rotatePreset {
     return;
   }
 
-  my ($nextPreset,$rotationMsg);
   if($isRandomRotation) {
     $nextPresetIndex=int(rand(@compatiblePresets));
   }else{
@@ -4085,11 +4097,38 @@ sub rotatePreset {
       $nextPresetIndex=0;
     }
   }
-  $nextPreset=$compatiblePresets[$nextPresetIndex];
-  applyPreset($nextPreset,$presetsBs{$nextPreset});
-  $rotationMsg='Automatic '.($isRandomRotation ? 'random ' : '')."preset rotation: next preset is \"$nextPreset\"";
+  
+  my $nextPreset=$compatiblePresets[$nextPresetIndex];
+  $rotationMode='sequential' if($rotationMode eq 'order');
+  
+  my $rotationMsg="Automatic $rotationMode preset rotation: next preset is \"$nextPreset\"";
   $rotationMsg.=' (some pending settings need rehosting to be applied)' if(needRehost());
   sayBattleAndGame($rotationMsg) if($verbose);
+  
+  slog("Automatic $rotationMode preset rotation (\"$conf{preset}\" --> \"$nextPreset\")",5);
+  applyPreset($nextPreset,$presetsBs{$nextPreset});
+}
+
+sub getPresetsForMap {
+  my $smfMapName=shift;
+  $smfMapName.='.smf' unless($smfMapName =~ /\.smf$/);
+  
+  my $mapPreset;
+  if(exists $spads->{presets}{$smfMapName}) {
+    $mapPreset=$smfMapName;
+  }elsif(exists $spads->{presets}{'_DEFAULT_.smf'}) {
+    $mapPreset='_DEFAULT_.smf';
+  }
+  return $mapPreset unless(wantarray());
+  
+  my $mapBPreset;
+  if(exists $spads->{bPresets}{$smfMapName}) {
+    $mapBPreset=$smfMapName;
+  }elsif(exists $spads->{bPresets}{'_DEFAULT_.smf'}) {
+    $mapBPreset='_DEFAULT_.smf';
+  }
+  
+  return ($mapPreset,$mapBPreset);
 }
 
 sub rotateMap {
@@ -4116,14 +4155,7 @@ sub rotateMap {
   if($conf{autoLoadMapPreset}) {
     my %badMapPresets;
     foreach my $mapName (@{$p_maps}) {
-      my $smfMapName=$mapName;
-      $smfMapName.='.smf' unless($smfMapName =~ /\.smf$/);
-      my $mapPreset;
-      if(exists $spads->{presets}{$smfMapName}) {
-        $mapPreset=$smfMapName;
-      }elsif(exists $spads->{presets}{"_DEFAULT_.smf"}) {
-        $mapPreset="_DEFAULT_.smf";
-      }
+      my $mapPreset=getPresetsForMap($mapName);
       if(defined $mapPreset) {
         if(exists $mapsBs{$mapPreset}) {
           push(@{$p_filteredMaps},$mapName);
@@ -4162,19 +4194,16 @@ sub rotateMap {
     return;
   }
 
+  my $nextMapIndex;
   if($rotationMode eq "random") {
-    my $mapIndex=int(rand($#{$p_filteredMaps}+1));
+    $nextMapIndex=int(rand($#{$p_filteredMaps}+1));
     if($#{$p_filteredMaps} > 0) {
-      while($conf{map} eq $p_filteredMaps->[$mapIndex]) {
-        $mapIndex=int(rand($#{$p_filteredMaps}+1));
+      while($conf{map} eq $p_filteredMaps->[$nextMapIndex]) {
+        $nextMapIndex=int(rand($#{$p_filteredMaps}+1));
       }
     }
-    $spads->{conf}{map}=$p_filteredMaps->[$mapIndex];
-    %conf=%{$spads->{conf}};
-    applySettingChange("map");
-    sayBattleAndGame("Automatic random map rotation: next map is \"$conf{map}\"") if($verbose);
   }else{
-    my $nextMapIndex=-1;
+    $nextMapIndex=-1;
     for my $mapIndex (0..$#{$p_filteredMaps}) {
       if($p_filteredMaps->[$mapIndex] eq $conf{map}) {
         $nextMapIndex=$mapIndex+1;
@@ -4186,26 +4215,19 @@ sub rotateMap {
       slog("Unable to find current map for map rotation, using first map",3);
       $nextMapIndex=0;
     }
-    $spads->{conf}{map}=$p_filteredMaps->[$nextMapIndex];
-    %conf=%{$spads->{conf}};
-    applySettingChange("map");
-    sayBattleAndGame("Automatic map rotation: next map is \"$conf{map}\"") if($verbose);
   }
+  
+  $spads->{conf}{map}=$p_filteredMaps->[$nextMapIndex];
+  $rotationMode='sequential' if($rotationMode eq 'order');
+  
+  sayBattleAndGame("Automatic $rotationMode map rotation: next map is \"$spads->{conf}{map}\"") if($verbose);
+  slog("Automatic $rotationMode map rotation (\"$conf{map}\" --> \"$spads->{conf}{map}\")",5);
+  
+  %conf=%{$spads->{conf}};
+  applySettingChange("map");
+  
   if($conf{autoLoadMapPreset}) {
-    my $smfMapName=$conf{map};
-    $smfMapName.='.smf' unless($smfMapName =~ /\.smf$/);
-    my $mapPreset;
-    if(exists $spads->{presets}{$smfMapName}) {
-      $mapPreset=$smfMapName;
-    }elsif(exists $spads->{presets}{'_DEFAULT_.smf'}) {
-      $mapPreset='_DEFAULT_.smf';
-    }
-    my $mapBPreset;
-    if(exists $spads->{bPresets}{$smfMapName}) {
-      $mapBPreset=$smfMapName;
-    }elsif(exists $spads->{bPresets}{'_DEFAULT_.smf'}) {
-      $mapBPreset='_DEFAULT_.smf';
-    }
+    my ($mapPreset,$mapBPreset)=getPresetsForMap($conf{map});
     if(defined $mapPreset) {
       applyPreset($mapPreset,$mapsBs{$mapPreset},$mapBPreset);
     }elsif(defined $mapBPreset) {
@@ -6482,10 +6504,7 @@ sub getBattleSkill {
 
 sub applySettingChange {
   my $settingRegExp=shift;
-  if('maplist' =~ /^$settingRegExp$/) {
-    $timestamps{mapLearned}=0;
-    $spads->applyMapList(\@availableMaps,$syncedSpringVersion);
-  }
+  applyMapList() if('maplist' =~ /^$settingRegExp$/);
   $timestamps{battleChange}=time;
   updateBattleInfoIfNeeded();
   updateBattleStates();
@@ -6553,27 +6572,52 @@ sub checkBattleBansForPlayer {
 
 sub applyAllSettings {
   return unless($lobbyState > LOBBY_STATE_OPENING_BATTLE);
+  # "mapList" is the only setting that could be applied while battle is empty, but applyMapList is already called before applyAllSettings
   applySettingChange(".*");
   sendBattleSettings();
+}
+
+sub applyMapList {
+  $timestamps{mapLearned}=0;
+  $spads->applyMapList(\@availableMaps,$syncedSpringVersion);
+  return $spads->{conf}{mapList};
 }
 
 sub applyPreset {
   my ($preset,$r_settingsOverrides,$bPresetOverride)=@_;
   my $oldPreset=$conf{preset};
+  my $mapListApplied=$conf{mapList};
   $spads->applyPreset($preset);
+  my ($mapPreset,$preMapPreset,$mapBPreset,$preMapBPreset);
+  if($preset !~ /\.smf$/ && $spads->{conf}{autoLoadMapPreset} && (! $conf{autoLoadMapPreset} || exists $spads->{presets}{$preset}{map})) {
+    $mapListApplied=applyMapList() if($mapListApplied ne $spads->{conf}{mapList});
+    setDefaultMapOfMaplist() if($spads->{conf}{map} eq '');
+    ($mapPreset,$mapBPreset)=getPresetsForMap($spads->{conf}{map});
+    if(defined $mapPreset) {
+      $preMapPreset=$spads->{conf}{preset};
+      $spads->applyPreset($mapPreset);
+    }
+    if(defined $mapBPreset) {
+      $preMapBPreset=$spads->{conf}{battlePreset};
+      $spads->applyBPreset($mapBPreset);
+    }
+  }
   if(defined $r_settingsOverrides) {
     $spads->{conf}{$_}=$r_settingsOverrides->{$_} foreach(keys %{$r_settingsOverrides});
   }
   my $oldBPreset=$spads->{conf}{battlePreset};
   $spads->applyBPreset($bPresetOverride)
       if(defined $bPresetOverride);
-  $timestamps{mapLearned}=0;
-  $spads->applyMapList(\@availableMaps,$syncedSpringVersion);
+  applyMapList() if($mapListApplied ne $spads->{conf}{mapList});
   setDefaultMapOfMaplist() if($spads->{conf}{map} eq '');
   %conf=%{$spads->{conf}};
   applyAllSettings();
   updateTargetMod();
   pluginsOnPresetApplied($oldPreset,$preset);
+  pluginsOnPresetApplied($preMapPreset,$mapPreset)
+      if(defined $mapPreset);
+  pluginsOnBattlePresetApplied($preMapBPreset,$mapBPreset)
+      if(defined $mapBPreset);
   pluginsOnBattlePresetApplied($oldBPreset,$bPresetOverride)
       if(defined $bPresetOverride);
 }
@@ -6871,7 +6915,7 @@ sub getDefaultAndMaxAllowedValues {
       slog("Unable to find allowed values for setting \"$setting\", preset \"$preset\" does not exist",1);
       return (0,0);
     }
-    return ("undefined","undefined") if(! exists $spads->{presets}{$preset}{$setting});
+    return (undef,undef) if(! exists $spads->{presets}{$preset}{$setting});
     @allowedValues=@{$spads->{presets}{$preset}{$setting}};
   }else{
     if(! exists $spads->{values}{$setting}) {
@@ -6894,34 +6938,67 @@ sub getDefaultAndMaxAllowedValues {
   return ($defaultValue,$maxAllowedValue);
 }
 
+sub getPresetSetting {
+  my ($r_presetConf,$setting)=@_;
+  return exists $r_presetConf->{$setting} ? $r_presetConf->{$setting}[0] : $conf{$setting};
+}
+
 sub getPresetBattleStructure {
   my ($preset,$nbPlayers)=@_;
   if(! exists $spads->{presets}{$preset}) {
     slog("Unable to test \"$preset\" compatibility with current number of players, it does not exist",1);
     return (0,0,0);
   }
-  my ($nbTeams,$maxNbTeams)=getDefaultAndMaxAllowedValues($preset,"nbTeams");
-  if($nbTeams eq "undefined") {
-    $nbTeams=$conf{nbTeams};
-    (undef,$maxNbTeams)=getDefaultAndMaxAllowedValues("","nbTeams");
+  my $r_presetConf=$spads->{presets}{$preset};
+  my ($nbTeams,$maxNbTeams,$teamSize,$maxTeamSize,$nbPlayerById,$maxNbPlayerById);
+  if($preset !~ /\.smf$/ && getPresetSetting($r_presetConf,'autoLoadMapPreset') && (! $conf{autoLoadMapPreset} || exists $r_presetConf->{map})) {
+    my $presetMap=getPresetSetting($r_presetConf,'map');
+    if($presetMap eq '') {
+      my (undef,$r_orderedMaps,undef,$r_orderedGhostMaps)=$spads->processMapList(\@availableMaps,$syncedSpringVersion,getPresetSetting($r_presetConf,'mapList'));
+      my @orderedPresetMaps=($r_orderedMaps);
+      push(@orderedPresetMaps,$r_orderedGhostMaps) if(getPresetSetting($r_presetConf,'allowGhostMaps'));
+      $presetMap=SpadsConf::mergeMapArrays(@orderedPresetMaps)->[0];
+    }
+    if(defined $presetMap) {
+      my $mapPreset=getPresetsForMap($presetMap);
+      if(defined $mapPreset) {
+        ($nbTeams,$maxNbTeams)=getDefaultAndMaxAllowedValues($mapPreset,'nbTeams');
+        ($teamSize,$maxTeamSize)=getDefaultAndMaxAllowedValues($mapPreset,'teamSize');
+        ($nbPlayerById,$maxNbPlayerById)=getDefaultAndMaxAllowedValues($mapPreset,'nbPlayerById');
+      }
+    }
   }
-  my ($teamSize,$maxTeamSize)=getDefaultAndMaxAllowedValues($preset,"teamSize");
-  if($teamSize eq "undefined") {
-    $teamSize=$conf{teamSize};
-    (undef,$maxTeamSize)=getDefaultAndMaxAllowedValues("","teamSize");
+  if(! defined $nbTeams) {
+    ($nbTeams,$maxNbTeams)=getDefaultAndMaxAllowedValues($preset,'nbTeams');
+    ($nbTeams,$maxNbTeams)=($conf{nbTeams},(getDefaultAndMaxAllowedValues('','nbTeams'))[1])
+        unless(defined $nbTeams);
   }
-  my ($nbPlayerById,$maxNbPlayerById)=getDefaultAndMaxAllowedValues($preset,"nbPlayerById");
-  if($nbPlayerById eq "undefined") {
-    $nbPlayerById=$conf{nbPlayerById};
-    (undef,$maxNbPlayerById)=getDefaultAndMaxAllowedValues("","nbPlayerById");
+  if(! defined $teamSize) {
+    ($teamSize,$maxTeamSize)=getDefaultAndMaxAllowedValues($preset,'teamSize');
+    ($teamSize,$maxTeamSize)=($conf{teamSize},(getDefaultAndMaxAllowedValues('','teamSize'))[1])
+        unless(defined $teamSize);
   }
-  return (0,0,0) if($nbPlayers > $maxNbTeams*$maxTeamSize*$maxNbPlayerById);
+  if(! defined $nbPlayerById) {
+    ($nbPlayerById,$maxNbPlayerById)=getDefaultAndMaxAllowedValues($preset,'nbPlayerById');
+    ($nbPlayerById,$maxNbPlayerById)=($conf{nbPlayerById},(getDefaultAndMaxAllowedValues('','nbPlayerById'))[1])
+        unless(defined $nbPlayerById);
+  }
+  
+  if($nbPlayers > $maxNbTeams*$maxTeamSize*$maxNbPlayerById) {
+    slog("Preset \"$preset\" is incompatible with \"$nbPlayers\" players (maxNbTeams=$maxNbTeams, maxTeamSize=$maxTeamSize, maxNbPlayerById=$maxNbPlayerById)",5);
+    return (0,0,0);
+  }
+  
   while($nbPlayers > $nbTeams*$teamSize*$nbPlayerById) {
-    $teamSize++ unless($teamSize == $maxTeamSize);
-    $nbTeams++ unless($nbTeams == $maxNbTeams);
-    $nbPlayerById++ unless($nbPlayerById == $maxNbPlayerById);
+    if($teamSize < $maxTeamSize) {
+      $teamSize++;
+    }elsif($nbTeams < $maxNbTeams) {
+      $nbTeams++;
+    }else{
+      $nbPlayerById++;
+    }
   }
-  slog("Battle structure for preset \"$preset\" with \"$nbPlayers\" players (current structure: $conf{nbTeams}x$conf{teamSize}x$conf{nbPlayerById}) is: (${nbTeams}x${teamSize}x$nbPlayerById)",5);
+  slog("Battle structure for preset \"$preset\" with \"$nbPlayers\" players is: ${nbTeams}x${teamSize}x$nbPlayerById (current structure: $conf{nbTeams}x$conf{teamSize}x$conf{nbPlayerById})",5);
   return ($nbTeams,$teamSize,$nbPlayerById);
 }
 
@@ -9642,8 +9719,7 @@ sub hLearnMaps {
   foreach my $map (keys %seenMaps) {
     $spads->saveMapHash($map,$syncedSpringVersion,$seenMaps{$map});
   }
-  $timestamps{mapLearned}=0;
-  $spads->applyMapList(\@availableMaps,$syncedSpringVersion);
+  applyMapList();
   
   my @addedMaps=keys %seenMaps;
   my $addedMapsString=join(",",@addedMaps);
@@ -11062,11 +11138,11 @@ sub hReloadConf {
   if($keepSettings) {
     postReloadConfActions($p_answerFunction,$keepSettings);
   }else{
-    $spads->applyMapList(\@availableMaps,$syncedSpringVersion);
+    applyMapList();
 
     my $previousMap=$conf{map};
     %conf=%{$spads->{conf}};
-    $conf{map}=$previousMap if($conf{map} eq '');
+    $conf{map}=$previousMap if($conf{map} eq ''); # keep current map while reloading archives below
 
     $lobbySimpleLog->setLevels([$conf{lobbyInterfaceLogLevel}]);
     $autohostSimpleLog->setLevels([$conf{autoHostInterfaceLogLevel}]);
@@ -11089,7 +11165,8 @@ sub hReloadConf {
       sub {
         my $nbArchives=shift;
         quitAfterGame('Unable to reload Spring archives') unless($nbArchives);
-        setDefaultMapOfMaplist() if($spads->{conf}{map} eq '');
+        setDefaultMapOfMaplist() if($spads->{conf}{map} eq ''); # (new) map list is already re-applied for (new) maps by loadArchivesPostActions
+        loadMapPresets() if($conf{autoLoadMapPreset});
         applyAllSettings();
         postReloadConfActions($r_asyncAnswerFunction,$keepSettings,\%newlyInstantiatedPlugins);
       } );
@@ -11788,20 +11865,7 @@ sub hSet {
     applySettingChange("map");
     my $msg="Map changed by $user: $realVal";
     if($conf{autoLoadMapPreset}) {
-      my $smfMapName=$conf{map};
-      $smfMapName.='.smf' unless($smfMapName =~ /\.smf$/);
-      my $mapPreset;
-      if(exists $spads->{presets}{$smfMapName}) {
-        $mapPreset=$smfMapName;
-      }elsif(exists $spads->{presets}{'_DEFAULT_.smf'}) {
-        $mapPreset='_DEFAULT_.smf';
-      }
-      my $mapBPreset;
-      if(exists $spads->{bPresets}{$smfMapName}) {
-        $mapBPreset=$smfMapName;
-      }elsif(exists $spads->{bPresets}{'_DEFAULT_.smf'}) {
-        $mapBPreset='_DEFAULT_.smf';
-      }
+      my ($mapPreset,$mapBPreset)=getPresetsForMap($conf{map});
       if(defined $mapPreset) {
         applyPreset($mapPreset,undef,$mapBPreset);
         $msg.=' (some pending settings need rehosting to be applied)' if(needRehost());
@@ -15897,8 +15961,10 @@ if(! $abortSpadsStartForAutoUpdate) {
     }
   }
   slog("Loading Spring archives using unitsync library version $syncedSpringVersion ...",3);
-  fatalError('Unable to load Spring archives at startup') unless(loadArchives());
+  loadArchives()
+    or fatalError('Unable to load Spring archives at startup');
   setDefaultMapOfMaplist() if($conf{map} eq '');
+  loadMapPresets() if($conf{autoLoadMapPreset});
 
 # Init #################################
 
