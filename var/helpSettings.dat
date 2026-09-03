@@ -914,6 +914,16 @@ Duration of the ban applied when using !kickBan command (expressed in seconds, o
 -
 300
 
+[global:maskSkill]
+Mask skill
+-
+If enabled, exact skill values are hidden from other players: in the battle lobby and in command outputs (such as !status) skill values are rounded down to the nearest 10 (with a floor of 10) for everyone except the player himself and privileged users (access level >= privacyTrustLevel). This is meant to prevent lower-skilled players from being singled out. The masked value has no effect on team balance, which always uses the real skill internally.
+-
+0: disabled
+1: enabled
+-
+0
+
 [global:privacyTrustLevel]
 Privacy trust level
 -
