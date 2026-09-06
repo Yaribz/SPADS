@@ -1594,6 +1594,7 @@ SpadsUpdater.pm:
 0.33: add retries for GitHub HTTP requests to handle cases of transient GitHub servers unavailability
 0.34: fix Perl warning on failure to download engine releases list from GitHub
 0.35: fixes for perlcritic severity 5
+0.36: use backup URL for Spring engine download (official Spring buildbot URL is down)
 
 springLobbyCertificates.dat:
 ===========================
