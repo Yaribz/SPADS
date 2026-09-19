@@ -1088,6 +1088,7 @@ spads.pl:
          add "team" (lobby team number) and "teamEngine" (in-game team number) fields in team statistics data
          add "inconsistencyTeamStats" flag in end-game data
          workaround for dedicated engine not writing team statistics in demo/replay file
+0.13.55: only apply team statistics workaround when dedicated engine is in use
 
 SpadsConf.pm:
 ============

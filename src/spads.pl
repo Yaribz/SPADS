@@ -113,7 +113,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.54';
+our $SPADS_VERSION='0.13.55';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -7441,7 +7441,7 @@ sub endGameProcessing {
     (undef,$gameId)=getGameDataFromLog();
   }
 
-  if(defined $demoFile) {
+  if(defined $demoFile && $springServerType eq 'dedicated') {
     $demoFile=catfile($conf{instanceDir},$demoFile) unless(file_name_is_absolute($demoFile));
     if(%teamStats && ! $inconsistentTeamStats) {
       my ($nextExpectedTeamNb,$incompleteTeamStats,@packedTeamStats)=(0);
