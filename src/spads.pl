@@ -27,8 +27,10 @@ use Digest::MD5 'md5_base64';
 use Fcntl qw':DEFAULT :flock';
 use File::Copy;
 use File::Spec::Functions qw'catdir catfile file_name_is_absolute';
+use File::Temp ();
 use FindBin;
-use IO::Uncompress::Gunzip '$GunzipError';
+use IO::Compress::Gzip qw'gzip $GzipError';
+use IO::Uncompress::Gunzip qw'gunzip $GunzipError';
 use IPC::Cmd 'can_run';
 use JSON::PP;
 use List::Util qw'first any all none notall shuffle reduce';
@@ -111,7 +113,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.53';
+our $SPADS_VERSION='0.13.54';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -502,6 +504,7 @@ my $gdrLobbyBot='SpringLobbyMonitor';
 my $sldbLobbyBot='SLDB';
 my $gdrEnabled=0;
 my %teamStats;
+my $inconsistentTeamStats=0;
 my %lastSentMessages;
 my @messageQueue=();
 my @lowPriorityMessageQueue=();
@@ -5796,6 +5799,7 @@ sub startGameServer {
   }
   %gdrIPs=();
   %teamStats=();
+  $inconsistentTeamStats=0;
   if($lobbyState > LOBBY_STATE_LOGGED_IN && exists $lobby->{users}{$gdrLobbyBot}) {
     $gdrEnabled=1;
   }else{
@@ -7439,6 +7443,28 @@ sub endGameProcessing {
 
   if(defined $demoFile) {
     $demoFile=catfile($conf{instanceDir},$demoFile) unless(file_name_is_absolute($demoFile));
+    if(%teamStats && ! $inconsistentTeamStats) {
+      my ($nextExpectedTeamNb,$incompleteTeamStats,@packedTeamStats)=(0);
+      foreach my $k (sort {$teamStats{$a}{teamEngine} <=> $teamStats{$b}{teamEngine}} (keys %teamStats)) {
+        if($teamStats{$k}{teamEngine} != $nextExpectedTeamNb) {
+          $incompleteTeamStats=1;
+          last;
+        }
+        $nextExpectedTeamNb++;
+        push(@packedTeamStats,pack('l< f12 l7',@{$teamStats{$k}}{qw'frameNb metalUsed energyUsed metalProduced energyProduced metalExcess energyExcess metalReceived energyReceived metalSent energySent damageDealt damageReceived unitsProduced unitsDied unitsReceived unitsSent unitsCaptured unitsOutCaptured unitsKilled'}));
+      }
+      if($incompleteTeamStats) {
+        slog('Skipping team statistics integration due to incomplete data',5);
+      }else{
+        if(eval { addTeamStatsToDemoFile($demoFile,\@packedTeamStats); 1 }) {
+          slog('Team statistics have been successfully integrated into demo file',5);
+        }else{
+          my $failureReason=$@;
+          chomp($failureReason);
+          slog("Failed to integrate team statistics into demo file - $failureReason",5);
+        }
+      }
+    }
   }else{
     $demoFile='UNKNOWN';
   }
@@ -7548,6 +7574,107 @@ sub endGameProcessing {
   }else{
     slog("Unable to fork to launch endGameCommand",2);
   }
+}
+
+sub _readChunk {
+  my ($hdl,undef,$length,$errorMsg)=@_;
+  if($length < 1) {
+    die "$errorMsg (internal error: null read)\n";
+    return 0;
+  }
+  my $bytesRead=read($hdl,$_[1],$length);
+  if(! defined $bytesRead) {
+    die "$errorMsg ($!)\n";
+    return 0;
+  }
+  if($bytesRead != $length) {
+    die "$errorMsg (unexpected end of file)\n";
+    return 0;
+  }
+  return 1;
+}
+
+sub addTeamStatsToDemoFile {
+  my ($demoFile,$r_teamStats)=@_;
+
+  return unless(@{$r_teamStats});
+  
+  die "Demo file \"$demoFile\" not found\n"
+      unless(-f $demoFile);
+  die "Demo file is empty\n"
+      unless(-s $demoFile);
+
+  # Uncompress original demo file
+  my $demoFh = File::Temp->new()
+      or die "Failed to create temporary file for demo file decompression\n";
+  $demoFh->binmode(':raw');
+  gunzip($demoFile,$demoFh)
+      or die 'Failed to uncompress demo file to temporary file'.($GunzipError?": $GunzipError\n":"\n");
+  seek($demoFh,0,Fcntl::SEEK_SET)
+      or die "Failed to reset demo file handle position\n";
+
+  my $buffer;
+
+  # Check magic string
+  _readChunk($demoFh,$buffer,16,'Unable to read first 16 bytes from demo file for magic string check');
+  die "File could not be recognized as a Spring demo file (magic string mismatch)\n"
+      unless(unpack('Z16',$buffer) eq 'spring demofile');
+
+  # Check demo file format version
+  {
+    _readChunk($demoFh,$buffer,4,'Unable to read demo file format version field');
+    my $demoFileFormatVersion=unpack('L<',$buffer);
+    die "Unsupported demo file format version \"$demoFileFormatVersion\"\n"
+        unless($demoFileFormatVersion == 5);
+  }
+
+  # Check team stats data consistency
+  my ($nbTeams,$teamStatSize,$teamStatElemSize);
+  {
+    seek($demoFh,332,Fcntl::SEEK_SET)
+        or die "Failed to set demo file handle position to read header\n";
+    _readChunk($demoFh,$buffer,12,'Unable to read team statistics info from demo file header');
+    my $numTeams;
+    ($numTeams,$teamStatSize,$teamStatElemSize)=unpack('L<3',$buffer);
+    die "Team statistics data already present in demo file\n"
+        if($teamStatSize > 4 * $numTeams);
+    die "Inconsistency in header fields: teamStatSize ($teamStatSize) < 4 * numTeams ($numTeams)\n"
+        if($teamStatSize < 4 * $numTeams);
+    $nbTeams=@{$r_teamStats};
+    die "Number of teams in demo file ($numTeams) inconsistent with number of teams in statistics that must be added ($nbTeams)\n"
+        unless($numTeams == $nbTeams || $numTeams == $nbTeams-1);
+    my $teamStatsSize=length($r_teamStats->[0]);
+    die "Team statistics size in demo file ($teamStatElemSize) inconsistent with size of team statistics that must be added ($teamStatsSize)\n"
+        unless($teamStatElemSize == $teamStatsSize);
+  }
+
+  # Patch demo file
+  seek($demoFh,332,Fcntl::SEEK_SET)
+      or die "Failed to set demo file handle position to write in header\n";
+  print $demoFh pack('L<2',$nbTeams,$nbTeams * (4 + $teamStatElemSize))
+      or die "Failed to write NumTeams and TeamStatsSize in demo file header: $!\n";
+  seek($demoFh,-$teamStatSize,Fcntl::SEEK_END)
+      or die "Failed to set demo file handle position to write team statistics\n";
+  print $demoFh pack("L<$nbTeams",(1) x $nbTeams)
+      or die "Failed to write team statistics history sizes in demo file: $!\n";
+  foreach my $teamStats (@{$r_teamStats}) {
+    print $demoFh $teamStats
+        or die "Failed to write team statistics in demo file: $!\n";
+  }
+
+  # Recompress patched demo file
+  seek($demoFh,0,Fcntl::SEEK_SET)
+      or die "Failed to reset pacthed demo file handle position\n";
+  my $compressedDemoFh = File::Temp->new()
+      or die "Failed to create temporary file for demo compression\n";
+  gzip($demoFh,$compressedDemoFh)
+      or die 'Failed to compress demo file to temporary file'.($GzipError?": $GzipError\n":"\n");
+  $demoFh->close();
+  $compressedDemoFh->close();
+
+  # Overwrite original compressed demo file
+  File::Copy::move($compressedDemoFh->filename(),$demoFile)
+      or die "Failed to overwrite original demo file with patched demo file: $!\n";
 }
 
 sub getCmdVoteSettings {
@@ -12204,6 +12331,8 @@ sub hStats {
   foreach my $statsLine (@{$p_statsLines}) {
     sayPrivate($user,$statsLine);
   }
+
+  sayPrivate($user,'Inconsistent team statistics have been received from clients, data are unreliable') if($inconsistentTeamStats);
 }
 
 sub getRoundedSkill {
@@ -14903,14 +15032,14 @@ sub cbAhGameTeamStat {
   my $lobbyTeam=$runningBattleReversedMapping{teams}{$teamNb};
   my $lobbyAllyTeam;
   my @names;
-  foreach my $player (keys %{$p_runningBattle->{users}}) {
+  foreach my $player (sort keys %{$p_runningBattle->{users}}) {
     if(defined $p_runningBattle->{users}{$player}{battleStatus} && $p_runningBattle->{users}{$player}{battleStatus}{mode}
        && $p_runningBattle->{users}{$player}{battleStatus}{id} == $lobbyTeam) {
       $lobbyAllyTeam=$p_runningBattle->{users}{$player}{battleStatus}{team};
       push(@names,$player);
     }
   }
-  foreach my $bot (keys %{$p_runningBattle->{bots}}) {
+  foreach my $bot (sort keys %{$p_runningBattle->{bots}}) {
     if($p_runningBattle->{bots}{$bot}{battleStatus}{id} == $lobbyTeam) {
       $lobbyAllyTeam=$p_runningBattle->{bots}{$bot}{battleStatus}{team};
       push(@names,"$bot (bot)");
@@ -14922,27 +15051,38 @@ sub cbAhGameTeamStat {
   }
   my $nameString=join(',',@names);
 
-  $teamStats{$nameString}={allyTeam => $lobbyAllyTeam,
-                           frameNb => $frameNb,
-                           metalUsed => $metalUsed,
-                           energyUsed => $energyUsed,
-                           metalProduced => $metalProduced,
-                           energyProduced => $energyProduced,
-                           metalExcess => $metalExcess,
-                           energyExcess => $energyExcess,
-                           metalReceived => $metalReceived,
-                           energyReceived => $energyReceived,
-                           metalSent => $metalSent,
-                           energySent => $energySent,
-                           damageDealt => $damageDealt,
-                           damageReceived => $damageReceived,
-                           unitsProduced => $unitsProduced,
-                           unitsDied => $unitsDied,
-                           unitsReceived => $unitsReceived,
-                           unitsSent => $unitsSent,
-                           unitsCaptured => $unitsCaptured,
-                           unitsOutCaptured => $unitsOutCaptured,
-                           unitsKilled => $unitsKilled};
+  my $r_teamStats={allyTeam => $lobbyAllyTeam,
+                   team => $lobbyTeam,
+                   teamEngine => $teamNb,
+                   frameNb => $frameNb,
+                   metalUsed => $metalUsed,
+                   energyUsed => $energyUsed,
+                   metalProduced => $metalProduced,
+                   energyProduced => $energyProduced,
+                   metalExcess => $metalExcess,
+                   energyExcess => $energyExcess,
+                   metalReceived => $metalReceived,
+                   energyReceived => $energyReceived,
+                   metalSent => $metalSent,
+                   energySent => $energySent,
+                   damageDealt => $damageDealt,
+                   damageReceived => $damageReceived,
+                   unitsProduced => $unitsProduced,
+                   unitsDied => $unitsDied,
+                   unitsReceived => $unitsReceived,
+                   unitsSent => $unitsSent,
+                   unitsCaptured => $unitsCaptured,
+                   unitsOutCaptured => $unitsOutCaptured,
+                   unitsKilled => $unitsKilled};
+  
+  if(exists $teamStats{$nameString}) {
+    # engine only sends the gameover teamstats snapshot so any inconsistency is suspicious, regardless of frameNb
+    if(! $inconsistentTeamStats && (any {$r_teamStats->{$_} != $teamStats{$nameString}{$_}} (keys %{$r_teamStats}))) {
+      sayBattleAndGame('Warning: inconsistent team statistics data received from clients');
+      $inconsistentTeamStats=1;
+    }
+  }
+  $teamStats{$nameString}=$r_teamStats;
 }
 
 sub cbAhServerGameOver {
@@ -15058,49 +15198,53 @@ sub cbAhServerQuit {
   }
   my $nbTeamStats=$#teamStatsNames+1;
   if(($nbTeamStats > 2 && $conf{endGameAwards}) || ($nbTeamStats == 2 && $conf{endGameAwards} > 1)) {
-    my %awardStats;
-    foreach my $name (@teamStatsNames) {
-      $awardStats{$name}={damage => $teamStats{$name}{damageDealt},
-                          eco => 50 * $teamStats{$name}{metalProduced} + $teamStats{$name}{energyProduced},
-                          micro => $teamStats{$name}{damageDealt}/($teamStats{$name}{damageReceived} ? $teamStats{$name}{damageReceived} : 1)};
+    if($inconsistentTeamStats) {
+      sayBattle('Skipping awards due to inconsistent team statistics received from clients');
+    }else{
+      my %awardStats;
+      foreach my $name (@teamStatsNames) {
+        $awardStats{$name}={damage => $teamStats{$name}{damageDealt},
+                            eco => 50 * $teamStats{$name}{metalProduced} + $teamStats{$name}{energyProduced},
+                            micro => $teamStats{$name}{damageDealt}/($teamStats{$name}{damageReceived} ? $teamStats{$name}{damageReceived} : 1)};
+      }
+      my @sortedDamages=sort {$awardStats{$b}{damage} <=> $awardStats{$a}{damage}} (keys %awardStats);
+      my @sortedEcos=sort {$awardStats{$b}{eco} <=> $awardStats{$a}{eco}} (keys %awardStats);
+      my @bestDamages;
+      for my $i (0..($nbTeamStats == 2 ? 1 : int($nbTeamStats/2-0.5))) {
+        push(@bestDamages,$sortedDamages[$i]);
+      }
+      my @sortedMicros=sort {$awardStats{$b}{micro} <=> $awardStats{$a}{micro}} (@bestDamages);
+
+      my ($damageWinner,$ecoWinner,$microWinner)=($sortedDamages[0],$sortedEcos[0],$sortedMicros[0]);
+      my ($bestDamage,$bestEco,$bestMicro)=($awardStats{$damageWinner}{damage},$awardStats{$ecoWinner}{eco},$awardStats{$microWinner}{micro});
+      my ($secondBestDamage,$secondBestEco,$secondBestMicro)=($awardStats{$sortedDamages[1]}{damage},$awardStats{$sortedEcos[1]}{eco},$awardStats{$sortedMicros[1]}{micro});
+      my $maxLength=length($damageWinner);
+      $maxLength=length($ecoWinner) if(length($ecoWinner) > $maxLength);
+      $maxLength=length($microWinner) if(length($microWinner) > $maxLength);
+      $damageWinner=rightPadString($damageWinner,$maxLength);
+      $ecoWinner=rightPadString($ecoWinner,$maxLength);
+      $microWinner=rightPadString($microWinner,$maxLength);
+
+      my $formattedDamage=formatInteger(int($bestDamage));
+      my $formattedResources=formatInteger(int($bestEco));
+
+      my $damageAwardMsg="  Damage award:  $damageWinner  (total damage: $formattedDamage)";
+      my $ecoAwardMsg="  Eco award:     $ecoWinner  (resources produced: $formattedResources)";
+      my $microAwardMsg="  Micro award:   $microWinner  (damage efficiency: ".int($bestMicro*100).'%)';
+      
+      $maxLength=length($damageAwardMsg);
+      $maxLength=length($ecoAwardMsg) if(length($ecoAwardMsg) > $maxLength);
+      $maxLength=length($microAwardMsg) if(length($microAwardMsg) > $maxLength);
+      $damageAwardMsg=rightPadString($damageAwardMsg,$maxLength);
+      $ecoAwardMsg=rightPadString($ecoAwardMsg,$maxLength);
+      $microAwardMsg=rightPadString($microAwardMsg,$maxLength);
+      $damageAwardMsg.='  [ OWNAGE! ]' if($bestDamage >= 2*$secondBestDamage);
+      $ecoAwardMsg.='  [ OWNAGE! ]' if($bestEco >= 2*$secondBestEco);
+      $microAwardMsg.='  [ OWNAGE! ]' if($bestMicro >= $secondBestMicro+0.5);
+      sayBattle($damageAwardMsg) if($bestDamage > $secondBestDamage);
+      sayBattle($ecoAwardMsg) if($bestEco > $secondBestEco);
+      sayBattle($microAwardMsg) if($bestMicro > $secondBestMicro);
     }
-    my @sortedDamages=sort {$awardStats{$b}{damage} <=> $awardStats{$a}{damage}} (keys %awardStats);
-    my @sortedEcos=sort {$awardStats{$b}{eco} <=> $awardStats{$a}{eco}} (keys %awardStats);
-    my @bestDamages;
-    for my $i (0..($nbTeamStats == 2 ? 1 : int($nbTeamStats/2-0.5))) {
-      push(@bestDamages,$sortedDamages[$i]);
-    }
-    my @sortedMicros=sort {$awardStats{$b}{micro} <=> $awardStats{$a}{micro}} (@bestDamages);
-
-    my ($damageWinner,$ecoWinner,$microWinner)=($sortedDamages[0],$sortedEcos[0],$sortedMicros[0]);
-    my ($bestDamage,$bestEco,$bestMicro)=($awardStats{$damageWinner}{damage},$awardStats{$ecoWinner}{eco},$awardStats{$microWinner}{micro});
-    my ($secondBestDamage,$secondBestEco,$secondBestMicro)=($awardStats{$sortedDamages[1]}{damage},$awardStats{$sortedEcos[1]}{eco},$awardStats{$sortedMicros[1]}{micro});
-    my $maxLength=length($damageWinner);
-    $maxLength=length($ecoWinner) if(length($ecoWinner) > $maxLength);
-    $maxLength=length($microWinner) if(length($microWinner) > $maxLength);
-    $damageWinner=rightPadString($damageWinner,$maxLength);
-    $ecoWinner=rightPadString($ecoWinner,$maxLength);
-    $microWinner=rightPadString($microWinner,$maxLength);
-
-    my $formattedDamage=formatInteger(int($bestDamage));
-    my $formattedResources=formatInteger(int($bestEco));
-
-    my $damageAwardMsg="  Damage award:  $damageWinner  (total damage: $formattedDamage)";
-    my $ecoAwardMsg="  Eco award:     $ecoWinner  (resources produced: $formattedResources)";
-    my $microAwardMsg="  Micro award:   $microWinner  (damage efficiency: ".int($bestMicro*100).'%)';
-    
-    $maxLength=length($damageAwardMsg);
-    $maxLength=length($ecoAwardMsg) if(length($ecoAwardMsg) > $maxLength);
-    $maxLength=length($microAwardMsg) if(length($microAwardMsg) > $maxLength);
-    $damageAwardMsg=rightPadString($damageAwardMsg,$maxLength);
-    $ecoAwardMsg=rightPadString($ecoAwardMsg,$maxLength);
-    $microAwardMsg=rightPadString($microAwardMsg,$maxLength);
-    $damageAwardMsg.='  [ OWNAGE! ]' if($bestDamage >= 2*$secondBestDamage);
-    $ecoAwardMsg.='  [ OWNAGE! ]' if($bestEco >= 2*$secondBestEco);
-    $microAwardMsg.='  [ OWNAGE! ]' if($bestMicro >= $secondBestMicro+0.5);
-    sayBattle($damageAwardMsg) if($bestDamage > $secondBestDamage);
-    sayBattle($ecoAwardMsg) if($bestEco > $secondBestEco);
-    sayBattle($microAwardMsg) if($bestMicro > $secondBestMicro);
   }
 
   my %teamCounts;
@@ -15217,7 +15361,8 @@ sub cbAhServerQuit {
                  players => dclone(\@gdrPlayers),
                  bots => dclone(\@gdrBots),
                  teamStats => dclone(\%teamStats),
-                 battleContext => dclone($p_runningBattle));
+                 battleContext => dclone($p_runningBattle),
+                 inconsistentTeamStats => $inconsistentTeamStats);
   if($timestamps{lastGameStartPlaying} > 0) {
     if($timestamps{gameOver} > 0) {
       $endGameData{gameDuration}=$timestamps{gameOver} - $timestamps{lastGameStartPlaying};

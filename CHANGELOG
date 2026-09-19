@@ -1082,6 +1082,12 @@ spads.pl:
          add debug logs for map and preset rotations
          factorize map lists and map presets handling code
 0.13.53: add support for sticky mode map presets
+0.13.54: fix duplicates in team statistics data when using ID share mode (aka coop)
+         detect inconsistent team statistics data received from clients and print a warning about it
+         skip awards in case of inconsistent team statistics
+         add "team" (lobby team number) and "teamEngine" (in-game team number) fields in team statistics data
+         add "inconsistencyTeamStats" flag in end-game data
+         workaround for dedicated engine not writing team statistics in demo/replay file
 
 SpadsConf.pm:
 ============
