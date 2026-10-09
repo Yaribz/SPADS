@@ -1530,6 +1530,7 @@ SpadsPluginApi.pm:
       new plugin API functions: "applyBattlePreset" and "applyHostingPreset"
       the "applyPreset" plugin API function can now take two additional parameters for optional overrides
       add documentation for "applyPreset" plugin API function
+0.46: update POD for syntax highlighting
 
 SpadsUpdater.pm:
 ===============

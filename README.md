@@ -85,14 +85,18 @@ Documentation
   spads.conf):
   
       perl spads.pl etc/spads.conf --doc
-    
+  
 * The SPADS plugin API documentation is available online
   [here](http://planetspads.free.fr/spads/doc/spadsPluginApiDoc.html). It can
   be generated from any SPADS installation directory by using following
   command (the pod2html.css file can be found [here](doc/pod2html.css)):
   
       pod2html -css=pod2html.css --infile=SpadsPluginApi.pm --outfile=spadsPluginApiDoc.html --title="SPADS Plugin API Doc"
-    
+  
+  A specific [pod2html.pl](doc/pod2html.pl) script is also provided to generate
+  HTML with link anchors (AnchorJS), syntax highlighting (Prism) and responsive
+  TOC placement. This script requires the `MetaCPAN::Pod::HTML` Perl module.
+
 * Additional documentation can be found on [SPADS wiki](http://springrts.com/wiki/SPADS).
 
 Licensing

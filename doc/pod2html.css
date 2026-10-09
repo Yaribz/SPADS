@@ -1,22 +1,62 @@
-HTML {
+html {
   background: #002b44;
 }
 
-BODY {
+body {
   background: white;
   color: black;
   font-family: arial,sans-serif;
-  padding: 2ex;
+  padding: 16px;
   min-width: 900px;
   max-width: 1200px;
-  margin: 5px auto;
+  margin: 8px auto;
 }
 
-CODE {
+/* TOC */
+
+ul#index, body>nav {
+  position: fixed;
+  top: 8px;
+  right: calc(50% + 625px);
+  width: max-content;
+}
+
+ul#index, nav>ul {
+  display: inline-block;
+  border: 1px solid lightgray;
+  padding: 1em;
+  margin: 0;
+  background: lightyellow;
+}
+
+li {
+  list-style-type: none;
+}
+
+ul#index ul, nav>ul ul {
+  padding-left: 1em;
+}
+
+/* links */
+
+a {
+  color: #3366cc;
+  text-decoration: none;
+}
+
+a:not(.anchorjs-link):hover {
+  text-decoration: underline;
+}
+
+/* inline code */
+
+code {
   background: #e3e3e3;
 }
 
-PRE     {
+/* code blocks */
+
+pre {
   background: #dddddd;
   border: 1px solid black;
   color: black;
@@ -29,11 +69,41 @@ PRE     {
   width: 800px;
 }
 
-PRE CODE {
+pre code {
   background: #dddddd;
 }
 
-H1      {
+/* language label on code blocks */
+
+div.language-label {
+  margin-left: 40px;
+  padding-left: 10px;
+  padding-right: 10px;
+  padding: 0.1em 0.6em;
+  display: inline-block;
+  font-size: 0.6em;
+  font-weight: bold;
+  background: LightGreen;
+  border: 1px solid black;
+  border-bottom: 0;
+  border-radius: 4px 4px 0 0;
+}
+
+div.language-perl {
+  background: LightSkyBlue;
+}
+
+div.language-python {
+  background: #FFEE66;
+}
+
+.language-label + pre {
+  margin-top: 0;
+}
+
+/* headings */
+
+h1 {
   background: #ADEBFF;
   color: #006699;
   font-size: large;
@@ -41,51 +111,111 @@ H1      {
   margin-top: 60px;
 }
 
-H2      {
+ul#index + h1, nav + h1 {
+  margin-top: 3px;
+}
+
+h2 {
   background: transparent;
   color: #006699;
   font-size: medium;
   margin-top: 40px;
 }
 
-LI {
-  line-height: 1.2em;
-  list-style-type: none;
-}
- 
-UL#index {
-  width: 300px;
-  margin: 16px 0 30px 20px;
-  padding: 10px 0px 10px 40px;
-  background: #FFFFC0;
-  -moz-border-radius: 20px;
-  -webkit-border-radius: 20px;
-  border-radius: 20px;
-  -moz-box-shadow: 2px 2px 4px #297CCF;
-  -webkit-box-shadow: 2px 2px 4px #297CCF;
-  box-shadow: 2px 2px 4px #297CCF;
-}
+/* special formatting to use description list terms as h3 equivalent */
 
-DT {
+dt {
   margin-top: 1em;
   width: 95%;
   margin-left: 10px;
   padding: 4px 5px 6px 12px;
-  -moz-border-radius: 15px;
-  -webkit-border-radius: 15px;
   border-radius: 15px;
   background: #D0F8C8;
   font-weight: bold;
 }
 
-DT CODE {
+dt code {
   background: #D0F8C8;
 }
 
-DD {
+dd {
   margin-bottom: 30px;
 }
 
+/* top margin when URL is targeting a specific element */
 :target {
   scroll-margin-top: 2ex;
+}
+
+/* Syntax Highlighting */
+
+.token.comment,
+.token.prolog,
+.token.doctype,
+.token.cdata {
+  color: slategray;
+}
+
+.token.punctuation {
+  color: #555;
+}
+
+.token.namespace {
+  opacity: .7;
+}
+
+.token.property,
+.token.tag,
+.token.boolean,
+.token.number,
+.token.constant,
+.token.symbol,
+.token.deleted {
+  color: #803;
+}
+
+.token.selector,
+.token.attr-name,
+.token.string,
+.token.char,
+.token.builtin,
+.token.inserted {
+  color: #470;
+}
+
+.token.operator,
+.token.entity,
+.token.url,
+.language-css .token.string,
+.style .token.string {
+  color: #555;
+}
+
+.token.atrule,
+.token.attr-value,
+.token.keyword {
+  color: #04b;
+}
+
+.token.function,
+.token.class-name {
+  color: #DD4A68;
+}
+
+.token.regex,
+.token.important,
+.token.variable {
+  color: #b60;
+}
+
+.token.important,
+.token.bold {
+  font-weight: bold;
+}
+.token.italic {
+  font-style: italic;
+}
+
+.token.entity {
+  cursor: help;
 }

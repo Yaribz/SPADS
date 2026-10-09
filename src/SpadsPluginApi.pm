@@ -26,7 +26,7 @@ use List::Util qw'any none';
 use Exporter 'import';
 our @EXPORT=qw/$spadsVersion $spadsDir loadPythonPlugin get_flag fix_string getBosses getLobbyState getSpringPid getSpringServerType getTimestamps getUserPref getRunningBattle getConfMacros getCurrentVote getPlugin getPluginList addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess forkCall removeProcessCallback createDetachedProcess addTimer removeTimer addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf isSettingValueAllowed slog updateSetting secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyBattlePreset applyHostingPreset applyPreset quit cancelQuit closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives LOBBY_STATE_DISCONNECTED LOBBY_STATE_CONNECTING LOBBY_STATE_CONNECTED LOBBY_STATE_LOGGED_IN LOBBY_STATE_SYNCHRONIZED LOBBY_STATE_OPENING_BATTLE LOBBY_STATE_BATTLE_OPENED/;
 
-my $apiVersion='0.45';
+my $apiVersion='0.46';
 
 our $spadsVersion=$::SPADS_VERSION;
 our $spadsDir=$::CWD;
@@ -573,8 +573,6 @@ SpadsPluginApi - SPADS Plugin API
 
 =head1 SYNOPSIS
 
-Perl:
-
   package MyPlugin;
 
   use SpadsPluginApi;
@@ -595,7 +593,7 @@ Perl:
 
   1;
 
-Python:
+=for highlighter python
 
   import perl
   spads=perl.MyPlugin
@@ -614,6 +612,8 @@ Python:
 
       def __init__(self,context):
           spads.slog("MyPlugin plugin loaded (version %s)" % pluginVersion,3)
+
+=for highlighter
 
 =head1 DESCRIPTION
 
@@ -663,6 +663,8 @@ functions of the plugin API, refer to the L<API FUNCTIONS - Python specific|/"Py
 section. Python plugins can also choose to implement their own pure Python function which
 fixes strings coming from SPADS if needed like this for example:
 
+=for highlighter python
+
   def fix_spads_string(spads_string):
       if hasattr(spads_string,'decode'):
           return spads_string.decode('utf-8')
@@ -673,6 +675,8 @@ fixes strings coming from SPADS if needed like this for example:
       for spads_string in spads_strings:
           fixed_strings.append(fix_spads_string(spads_string))
       return fixed_strings
+
+=for highlighter
 
 =head2 Windows limitations
 
@@ -786,7 +790,7 @@ Preset settings are impacted by preset changes. Preset settings should be used
 for settings that need to be visible by end users and/or modifiable easily at
 runtime.
 
-Example of implementation in Perl:
+Example of implementation:
 
   my %globalPluginParams = ( MyGlobalSetting1 => ['integer'],
                              MyGlobalSetting2 => ['ipAddr']);
@@ -800,7 +804,7 @@ Example of implementation in Perl:
 
   sub getParams { return [\%globalPluginParams,\%presetPluginParams] }
 
-Example of implementation in Python:
+=for highlighter python
 
   def myCustomSettingValueCheck(settingValue,isDefault):
       return settingValue == 'true' or settingValue == 'false'
@@ -812,6 +816,8 @@ Example of implementation in Python:
 
   def getParams(pluginName):
       return [ globalPluginParams , presetPluginParams ]
+
+=for highlighter
 
 In these examples, the preset setting C<MyPresetSetting2> is declared as
 supporting both the values of the predefined type "bool" and the values allowed
@@ -839,14 +845,16 @@ dependencies is unloaded.
 
 This callback must return the plugin dependencies (list of plugin names).
 
-Example of implementation in Perl:
+Example of implementation:
 
   sub getDependencies { return ('SpringForumInterface','MailAlerts'); }
 
-Example of implementation in Python:
+=for highlighter python
 
   def getDependencies(pluginName):
       return ('SpringForumInterface','MailAlerts')
+
+=for highlighter
 
 =back
 
@@ -1864,7 +1872,7 @@ bonus)
 =item * C<sync>: synchronization status (C<0>: unsynchronized, C<1>:
 synchronized)
 
-=item * C<team> (ally team number, starting at C<0>)
+=item * C<team>: ally team number (starting at C<0>)
 
 =back
 
@@ -1922,8 +1930,12 @@ example:
 
 Python plugins must call them as SPADS functions, like this for example:
 
+=for highlighter python
+
   if spads.getLobbyState() >= spads.LOBBY_STATE_CONNECTED():
       spads.slog("SPADS is connected to lobby server",3)
+
+=for highlighter
 
 =item C<getPluginList()>
 
@@ -2186,7 +2198,7 @@ C<$name> is the name of the setting for which a value must checked
 
 C<$value> is the value that must be checked
 
-=item C<loadArchives()>
+=item C<loadArchives(\&callback,$printModUpdateMsg,$mode)>
 
 =item C<queueLobbyCommand(\@lobbyCommand)>
 
@@ -2485,6 +2497,8 @@ needed (parameters which are already normal strings are returned without any
 modification). Refer to section L<PYTHON SPECIFIC NOTES - Perl strings conversions|/"Perl strings conversions">
 for the use case of this function. Here is an example of usage:
 
+=for highlighter python
+
   import perl
   spads=perl.ExamplePlugin
   
@@ -2503,6 +2517,8 @@ for the use case of this function. Here is an example of usage:
       user=spads.fix_string(user)
       for i in range(len(params)):
           params[i]=spads.fix_string(params[i])
+
+=for highlighter
 
 =item C<get_flag(flag_name)>
 
@@ -2524,6 +2540,8 @@ Currently 3 flags are supported:
 
 Here is an example of usage:
 
+=for highlighter python
+
   import perl
   spads=perl.ExamplePlugin
   
@@ -2534,6 +2552,8 @@ Here is an example of usage:
       else:
           spads.slog("This plugin requires the addSocket function",1)
           return False
+
+=for highlighter
 
 =back
 

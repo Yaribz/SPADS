@@ -1,18 +1,17 @@
-<?xml version="1.0" ?>
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml">
+<!DOCTYPE html>
+<html>
 <head>
-<title>SPADS Plugin API Doc</title>
-<link rel="stylesheet" href="pod2html.css" type="text/css" />
-<meta http-equiv="content-type" content="text/html; charset=utf-8" />
-<link rev="made" href="mailto:" />
-</head>
-
-<body>
+<title>SPADS Plugin API Documentation</title>
+<meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1" />
 <script src="https://cdn.jsdelivr.net/npm/anchor-js/anchor.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.30.0/components/prism-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.30.0/plugins/autoloader/prism-autoloader.min.js"></script>
+<link rel="stylesheet" href="pod2html.css" type="text/css">
+</head>
+<body>
 
 
-<ul id="index">
+<nav><ul>
   <li><a href="#NAME">NAME</a></li>
   <li><a href="#SYNOPSIS">SYNOPSIS</a></li>
   <li><a href="#DESCRIPTION">DESCRIPTION</a></li>
@@ -56,15 +55,13 @@
   </li>
   <li><a href="#SEE-ALSO">SEE ALSO</a></li>
   <li><a href="#COPYRIGHT">COPYRIGHT</a></li>
-</ul>
+</ul></nav>
 
 <h1 id="NAME">NAME</h1>
 
 <p>SpadsPluginApi - SPADS Plugin API</p>
 
 <h1 id="SYNOPSIS">SYNOPSIS</h1>
-
-<p>Perl:</p>
 
 <pre><code>package MyPlugin;
 
@@ -86,9 +83,7 @@ sub new {
 
 1;</code></pre>
 
-<p>Python:</p>
-
-<pre><code>import perl
+<pre><code class="language-python">import perl
 spads=perl.MyPlugin
 
 pluginVersion = &#39;0.1&#39;
@@ -114,46 +109,46 @@ class MyPlugin:
 
 <p>Plugins can be coded in Perl (since SPADS 0.11) or Python (since SPADS 0.12.29).</p>
 
-<h1 id="PYTHON-SPECIFIC-NOTES">PYTHON SPECIFIC NOTES</h1>
+<h1 id="PYTHON-SPECIFIC-NOTES"><a id="PYTHON"></a>PYTHON SPECIFIC NOTES</h1>
 
-<h2 id="How-to-read-the-documentation">How to read the documentation</h2>
+<h2 id="How-to-read-the-documentation"><a id="How"></a>How to read the documentation</h2>
 
 <p>This documentation was written when SPADS was only supporting plugins coded in Perl, so types for function parameters and return values are described using Perl terminology, with Perl sigils (<code>%</code> for hash, <code>@</code> for array, <code>$</code> for scalars). Python plugins just need to ignore these sigils and use their equivalent internal Python types instead (Python dictionaries instead of Perl hashes, Python lists instead of Perl arrays, Python tuples instead of Perl lists, Python None value instead of Perl undef value...).</p>
 
 <p>In order to call functions from the plugin API, Python plugin modules must first import the special <code>perl</code> module, and then use the global variable of this module named after the plugin name to call the functions (refer to the SYNOPSYS for an example of a Python plugin named <code>MyPlugin</code> calling the <code>slog</code> API function).</p>
 
-<h2 id="Perl-strings-conversions">Perl strings conversions</h2>
+<h2 id="Perl-strings-conversions"><a id="Perl"></a>Perl strings conversions</h2>
 
 <p>SPADS uses the <code>Inline::Python</code> Perl module to interface Perl code with Python code. Unfortunately, some versions of this module don&#39;t auto-convert Perl strings entirely when used with Python 3 (Python 2 is unaffected): depending on the version of Python and the version of the <code>Inline::Python</code> Perl module used by your system, it is possible that the Python plugin callbacks receive Python byte strings as parameters instead of normal Python strings. In order to mitigate this problem, the plugin API offers both a way to detect from the Python plugin code if current system is affected (by calling the <code>get_flag</code> function with parameter <code>&#39;use_byte_string&#39;</code>), and a way to workaround the problem by calling a dedicated <code>fix_string</code> function which fixes the string values if needed. For additional information regarding these Python specific functions of the plugin API, refer to the <a href="#Python-specific">API FUNCTIONS - Python specific</a> section. Python plugins can also choose to implement their own pure Python function which fixes strings coming from SPADS if needed like this for example:</p>
 
-<pre><code> def fix_spads_string(spads_string):
-     if hasattr(spads_string,&#39;decode&#39;):
-         return spads_string.decode(&#39;utf-8&#39;)
-     return spads_string
- 
- def fix_spads_strings(*spads_strings):
-     fixed_strings=[]
-     for spads_string in spads_strings:
-         fixed_strings.append(fix_spads_string(spads_string))
-     return fixed_strings</code></pre>
+<pre><code class="language-python">def fix_spads_string(spads_string):
+    if hasattr(spads_string,&#39;decode&#39;):
+        return spads_string.decode(&#39;utf-8&#39;)
+    return spads_string
 
-<h2 id="Windows-limitations">Windows limitations</h2>
+def fix_spads_strings(*spads_strings):
+    fixed_strings=[]
+    for spads_string in spads_strings:
+        fixed_strings.append(fix_spads_string(spads_string))
+    return fixed_strings</code></pre>
+
+<h2 id="Windows-limitations"><a id="Windows"></a>Windows limitations</h2>
 
 <p>On Windows systems, Perl emulates the <code>fork</code> functionality using threads. As the <code>Inline::Python</code> Perl module used by SPADS to interface with Python code isn&#39;t thread-safe, the fork functions of the plugin API (<code>forkProcess</code> and <code>forkCall</code>) aren&#39;t available from Python plugins when running on a Windows system. On Windows systems, using native Win32 processes for parallel processing is recommended anyway. Plugins can check if the fork functions of the plugin API are available by calling the <code>get_flag</code> Python specific plugin API function with parameter <code>&#39;can_fork&#39;</code>, instead of checking by themselves if the current system is Windows. Refer to the <a href="#Python-specific">API FUNCTIONS - Python specific</a> section for more information regarding this function.</p>
 
 <p>Automatic asynchronous socket management (<code>addSocket</code> plugin API function) is also unavailable for Python plugins on Windows systems (this is due to the file descriptor numbers being thread-specific on Windows, preventing SPADS from accessing sockets opened in Python interpreter scope). However, it is still possible to manage asynchronous sockets manually, for example by hooking the SPADS event loop (<code>eventLoop</code> plugin callback) to perform non-blocking <code>select</code> with 0 timeout (refer to <a href="https://docs.python.org/3/library/select.html#select.select">Python select documentation</a>). Plugins can check if the <code>addSocket</code> function of the plugin API is available by calling the <code>get_flag</code> Python specific plugin API function with parameter <code>&#39;can_add_socket&#39;</code>, instead of checking by themselves if the current system is Windows. Refer to the <a href="#Python-specific">API FUNCTIONS - Python specific</a> section for more information regarding this function.</p>
 
-<h1 id="CALLBACK-FUNCTIONS">CALLBACK FUNCTIONS</h1>
+<h1 id="CALLBACK-FUNCTIONS"><a id="CALLBACK"></a>CALLBACK FUNCTIONS</h1>
 
 <p>The callback functions are called from SPADS core and implemented by SPADS plugins. SPADS plugins are actually Perl or Python classes instanciated as objects. So most callback functions are called as object methods and receive a reference to the plugin object as first parameter. The exceptions are the constructor (Perl: <code>new</code> receives the class/plugin name as first parameter, Python: <code>__init__</code> receives the plugin object being created as first parameter), and a few other callbacks which are called/checked before the plugin object is actually created: <code>getVersion</code> and <code>getRequiredSpadsVersion</code> (mandatory callbacks), <code>getParams</code> and <code>getDependencies</code> (optional callbacks).</p>
 
-<h2 id="Mandatory-callbacks">Mandatory callbacks</h2>
+<h2 id="Mandatory-callbacks"><a id="Mandatory"></a>Mandatory callbacks</h2>
 
 <p>To be valid, a SPADS plugin must implement at least these 3 callbacks:</p>
 
 <dl>
 
-<dt id="Perl-new-pluginName-context-.-.-.-.-Python-__init__-self-context">[Perl] <code>new($pluginName,$context)</code> . . . . [Python] <code>__init__(self,context)</code></dt>
+<dt id="[Perl]-new($pluginName,$context)-.-.-.-.-[Python]-__init__(self,context)"><a id="Perl-new-pluginName-context-.-.-.-.-Python-__init__-self-context"></a>[Perl] <code>new($pluginName,$context)</code> . . . . [Python] <code>__init__(self,context)</code></dt>
 <dd>
 
 <p>This is the plugin constructor, it is called when SPADS (re)loads the plugin.</p>
@@ -161,13 +156,13 @@ class MyPlugin:
 <p>The <code>$context</code> parameter is a string which indicates in which context the plugin constructor has been called: <code>&quot;autoload&quot;</code> means the plugin is being loaded automatically at startup, <code>&quot;load&quot;</code> means the plugin is being loaded manually using <code>!plugin &lt;pluginName&gt; load</code> command, <code>&quot;reload&quot;</code> means the plugin is being reloaded manually using <code>!plugin &lt;pluginName&gt; reload</code> command.</p>
 
 </dd>
-<dt id="getVersion-self"><code>getVersion($self)</code></dt>
+<dt id="getVersion($self)"><a id="getVersion"></a><a id="getVersion-self"></a><code>getVersion($self)</code></dt>
 <dd>
 
 <p>returns the plugin version number (example: <code>&quot;0.1&quot;</code>).</p>
 
 </dd>
-<dt id="getRequiredSpadsVersion-pluginName"><code>getRequiredSpadsVersion($pluginName)</code></dt>
+<dt id="getRequiredSpadsVersion($pluginName)"><a id="getRequiredSpadsVersion"></a><a id="getRequiredSpadsVersion-pluginName"></a><code>getRequiredSpadsVersion($pluginName)</code></dt>
 <dd>
 
 <p>returns the required minimum SPADS version number (example: <code>&quot;0.11&quot;</code>).</p>
@@ -175,13 +170,13 @@ class MyPlugin:
 </dd>
 </dl>
 
-<h2 id="Configuration-callback">Configuration callback</h2>
+<h2 id="Configuration-callback"><a id="Configuration"></a>Configuration callback</h2>
 
 <p>SPADS plugins can use the core SPADS configuration system to manage their own configuration parameters. This way, all configuration management tools in place (parameter values checking, <code>!reloadconf</code> etc.) can be reused by the plugins. To do so, the plugin must implement following configuration callback:</p>
 
 <dl>
 
-<dt id="getParams-pluginName"><code>getParams($pluginName)</code></dt>
+<dt id="getParams($pluginName)"><a id="getParams"></a><a id="getParams-pluginName"></a><code>getParams($pluginName)</code></dt>
 <dd>
 
 <p>This callback must return a reference to an array containing 2 elements. The first element is a reference to a hash containing the plugin global settings declarations, the second one is the same but for plugin preset settings declarations. These hashes use setting names as keys, and references to array of allowed types as values. The types must be either strings that match the keys of the <code>%paramTypes</code> hash defined in SpadsConf.pm file, or custom functions to implement custom value checks. Such custom value checking functions take 2 parameters: the value to check as first parameter and a boolean specifying if the value is the default value (i.e. first value declared in the definition, for preset settings) as second parameter. The function must return <code>true</code> if the value is valid, or <code>false</code> if it is invalid (refer to examples below).</p>
@@ -190,7 +185,7 @@ class MyPlugin:
 
 <p>As for SPADS core preset settings, the preset settings of the plugin can be changed dynamically (using the <code>!plugin &lt;pluginName&gt; set &lt;settingName&gt; &lt;settingValue&gt;</code> command for example, or simply by changing current global preset). The preset settings are defined in the preset definition sections of the plugin configuration file, after the global plugin settings. The preset settings can be defined multiple times (once in each preset declaration section). Multiple values can be configured in each preset setting definition (values are separated by pipe character <code>|</code>, the first value is the default value applied when loading the preset and the remaining values are the other allowed values). Preset settings are impacted by preset changes. Preset settings should be used for settings that need to be visible by end users and/or modifiable easily at runtime.</p>
 
-<p>Example of implementation in Perl:</p>
+<p>Example of implementation:</p>
 
 <pre><code>my %globalPluginParams = ( MyGlobalSetting1 =&gt; [&#39;integer&#39;],
                            MyGlobalSetting2 =&gt; [&#39;ipAddr&#39;]);
@@ -204,9 +199,7 @@ sub myCustomSettingValueCheck {
 
 sub getParams { return [\%globalPluginParams,\%presetPluginParams] }</code></pre>
 
-<p>Example of implementation in Python:</p>
-
-<pre><code>def myCustomSettingValueCheck(settingValue,isDefault):
+<pre><code class="language-python">def myCustomSettingValueCheck(settingValue,isDefault):
     return settingValue == &#39;true&#39; or settingValue == &#39;false&#39;
 
 globalPluginParams = { &#39;MyGlobalSetting1&#39;: [&#39;integer&#39;],
@@ -222,48 +215,46 @@ def getParams(pluginName):
 </dd>
 </dl>
 
-<h2 id="Dependencies-callback">Dependencies callback</h2>
+<h2 id="Dependencies-callback"><a id="Dependencies"></a>Dependencies callback</h2>
 
 <p>SPADS plugins can use data and functions from other plugins (dependencies). But this can only work if the plugin dependencies are loaded before the plugin itself. That&#39;s why following callback should be used by such dependent plugins to declare their dependencies, which will allow SPADS to perform the check for them. Also, SPADS will automatically unload dependent plugins when one of their dependencies is unloaded.</p>
 
 <dl>
 
-<dt id="getDependencies-pluginName"><code>getDependencies($pluginName)</code></dt>
+<dt id="getDependencies($pluginName)"><a id="getDependencies"></a><a id="getDependencies-pluginName"></a><code>getDependencies($pluginName)</code></dt>
 <dd>
 
 <p>This callback must return the plugin dependencies (list of plugin names).</p>
 
-<p>Example of implementation in Perl:</p>
+<p>Example of implementation:</p>
 
 <pre><code>sub getDependencies { return (&#39;SpringForumInterface&#39;,&#39;MailAlerts&#39;); }</code></pre>
 
-<p>Example of implementation in Python:</p>
-
-<pre><code>def getDependencies(pluginName):
+<pre><code class="language-python">def getDependencies(pluginName):
     return (&#39;SpringForumInterface&#39;,&#39;MailAlerts&#39;)</code></pre>
 
 </dd>
 </dl>
 
-<h2 id="Event-based-callbacks">Event-based callbacks</h2>
+<h2 id="Event-based-callbacks"><a id="Event"></a>Event-based callbacks</h2>
 
 <p>Following callbacks are triggered by events from various sources (SPADS, Spring lobby, Spring server...):</p>
 
 <dl>
 
-<dt id="onBattleClosed-self"><code>onBattleClosed($self)</code></dt>
+<dt id="onBattleClosed($self)"><a id="onBattleClosed"></a><a id="onBattleClosed-self"></a><code>onBattleClosed($self)</code></dt>
 <dd>
 
 <p>This callback is called when the battle lobby of the autohost is closed.</p>
 
 </dd>
-<dt id="onBattleOpened-self"><code>onBattleOpened($self)</code></dt>
+<dt id="onBattleOpened($self)"><a id="onBattleOpened"></a><a id="onBattleOpened-self"></a><code>onBattleOpened($self)</code></dt>
 <dd>
 
 <p>This callback is called when the battle lobby of the autohost is opened.</p>
 
 </dd>
-<dt id="onBattlePresetApplied-self-oldBattlePresetName-newBattlePresetName"><code>onBattlePresetApplied($self,$oldBattlePresetName,$newBattlePresetName)</code></dt>
+<dt id="onBattlePresetApplied($self,$oldBattlePresetName,$newBattlePresetName)"><a id="onBattlePresetApplied"></a><a id="onBattlePresetApplied-self-oldBattlePresetName-newBattlePresetName"></a><code>onBattlePresetApplied($self,$oldBattlePresetName,$newBattlePresetName)</code></dt>
 <dd>
 
 <p>This callback is called each time a battle preset is applied (this doesn&#39;t include battle presets applied as part of global presets).</p>
@@ -273,7 +264,7 @@ def getParams(pluginName):
 <p><code>$newBattlePresetName</code> is the name of the new battle preset</p>
 
 </dd>
-<dt id="onGameEnd-self-endGameData"><code>onGameEnd($self,\%endGameData)</code></dt>
+<dt id="onGameEnd($self,\%endGameData)"><a id="onGameEnd"></a><a id="onGameEnd-self-endGameData"></a><code>onGameEnd($self,\%endGameData)</code></dt>
 <dd>
 
 <p>This callback is called each time a game hosted by the autohost ends.</p>
@@ -281,7 +272,7 @@ def getParams(pluginName):
 <p>The <code>\%endGameData</code> parameter is a reference to a hash containing all the data stored by SPADS concerning the game that just ended. It is recommended to use a data printing function (such as the <code>Dumper</code> function from the standard <code>Data::Dumper</code> module included in Perl core) to check the content of this hash for the desired data.</p>
 
 </dd>
-<dt id="onHostingPresetApplied-self-oldHostingPresetName-newHostingPresetName"><code>onHostingPresetApplied($self,$oldHostingPresetName,$newHostingPresetName)</code></dt>
+<dt id="onHostingPresetApplied($self,$oldHostingPresetName,$newHostingPresetName)"><a id="onHostingPresetApplied"></a><a id="onHostingPresetApplied-self-oldHostingPresetName-newHostingPresetName"></a><code>onHostingPresetApplied($self,$oldHostingPresetName,$newHostingPresetName)</code></dt>
 <dd>
 
 <p>This callback is called each time a hosting preset is applied (this doesn&#39;t include hosting presets applied as part of global presets).</p>
@@ -291,7 +282,7 @@ def getParams(pluginName):
 <p><code>$newHostingPresetName</code> is the name of the new hosting preset</p>
 
 </dd>
-<dt id="onJoinBattleRequest-self-userName-ipAddr"><code>onJoinBattleRequest($self,$userName,$ipAddr)</code></dt>
+<dt id="onJoinBattleRequest($self,$userName,$ipAddr)"><a id="onJoinBattleRequest"></a><a id="onJoinBattleRequest-self-userName-ipAddr"></a><code>onJoinBattleRequest($self,$userName,$ipAddr)</code></dt>
 <dd>
 
 <p>This callback is called each time a client requests to join the battle lobby managed by the autohost.</p>
@@ -309,7 +300,7 @@ def getParams(pluginName):
 <p><code>&quot;&lt;explicit reason string&gt;&quot;</code> if the user isn&#39;t allowed to join the battle, with explicit reason</p>
 
 </dd>
-<dt id="onJoinedBattle-self-userName"><code>onJoinedBattle($self,$userName)</code></dt>
+<dt id="onJoinedBattle($self,$userName)"><a id="onJoinedBattle"></a><a id="onJoinedBattle-self-userName"></a><code>onJoinedBattle($self,$userName)</code></dt>
 <dd>
 
 <p>This callback is called each time a user joins the battle lobby of the autohost.</p>
@@ -317,7 +308,7 @@ def getParams(pluginName):
 <p><code>$userName</code> is the name of the user who just joined the battle lobby</p>
 
 </dd>
-<dt id="onLeftBattle-self-userName"><code>onLeftBattle($self,$userName)</code></dt>
+<dt id="onLeftBattle($self,$userName)"><a id="onLeftBattle"></a><a id="onLeftBattle-self-userName"></a><code>onLeftBattle($self,$userName)</code></dt>
 <dd>
 
 <p>This callback is called each time a user leaves the battle lobby of the autohost.</p>
@@ -325,7 +316,7 @@ def getParams(pluginName):
 <p><code>$userName</code> is the name of the user who just left the battle lobby</p>
 
 </dd>
-<dt id="onLobbyConnected-self-lobbyInterface"><code>onLobbyConnected($self,$lobbyInterface)</code></dt>
+<dt id="onLobbyConnected($self,$lobbyInterface)"><a id="onLobbyConnected"></a><a id="onLobbyConnected-self-lobbyInterface"></a><code>onLobbyConnected($self,$lobbyInterface)</code></dt>
 <dd>
 
 <p>/!\ RENAMED TO <code>onLobbySynchronized</code> /!\</p>
@@ -335,13 +326,13 @@ def getParams(pluginName):
 <p>The <code>$lobbyInterface</code> parameter is the instance of the <a href="https://github.com/Yaribz/SpringLobbyInterface">SpringLobbyInterface</a> module used by SPADS.</p>
 
 </dd>
-<dt id="onLobbyDisconnected-self"><code>onLobbyDisconnected($self)</code></dt>
+<dt id="onLobbyDisconnected($self)"><a id="onLobbyDisconnected"></a><a id="onLobbyDisconnected-self"></a><code>onLobbyDisconnected($self)</code></dt>
 <dd>
 
 <p>This callback is called each time the autohost is disconnected from the lobby server.</p>
 
 </dd>
-<dt id="onLobbyLoggedIn-self-lobbyInterface"><code>onLobbyLoggedIn($self,$lobbyInterface)</code></dt>
+<dt id="onLobbyLoggedIn($self,$lobbyInterface)"><a id="onLobbyLoggedIn"></a><a id="onLobbyLoggedIn-self-lobbyInterface"></a><code>onLobbyLoggedIn($self,$lobbyInterface)</code></dt>
 <dd>
 
 <p>This callback is called each time the autohost successfully logins on the lobby server. It is one of the three callbacks triggered when a new connection to the lobby server is established. These callbacks are called in following order:</p>
@@ -364,7 +355,7 @@ def getParams(pluginName):
 <p>Note: This callback is the ideal place for a plugin to register its lobby command handlers using the <code>addLobbyCommandHandler</code> function of the plugin API, if this plugin needs to process the commands sent by the lobby server during the initial lobby state synchronization phase (i.e. commands sent before the <code>LOGININFOEND</code> command). For plugins that do not require being called back during the initial lobby state synchronization phase, the <code>onLobbySynchronized</code> callback should be used instead to register the lobby command handlers.</p>
 
 </dd>
-<dt id="onLobbyLogin-self-lobbyInterface"><code>onLobbyLogin($self,$lobbyInterface)</code></dt>
+<dt id="onLobbyLogin($self,$lobbyInterface)"><a id="onLobbyLogin"></a><a id="onLobbyLogin-self-lobbyInterface"></a><code>onLobbyLogin($self,$lobbyInterface)</code></dt>
 <dd>
 
 <p>This callback is called each time the autohost tries to login on the lobby server. It is one of the three callbacks triggered when a new connection to the lobby server is established. These callbacks are called in following order:</p>
@@ -385,7 +376,7 @@ def getParams(pluginName):
 <p>The <code>$lobbyInterface</code> parameter is the instance of the <a href="https://github.com/Yaribz/SpringLobbyInterface">SpringLobbyInterface</a> module used by SPADS.</p>
 
 </dd>
-<dt id="onLobbySynchronized-self-lobbyInterface"><code>onLobbySynchronized($self,$lobbyInterface)</code></dt>
+<dt id="onLobbySynchronized($self,$lobbyInterface)"><a id="onLobbySynchronized"></a><a id="onLobbySynchronized-self-lobbyInterface"></a><code>onLobbySynchronized($self,$lobbyInterface)</code></dt>
 <dd>
 
 <p>This callback is called each time the autohost completes the lobby state synchronization phase, which occurs after successfully logging in. It is one of the three callbacks triggered when a new connection to the lobby server is established. These callbacks are called in following order:</p>
@@ -408,7 +399,7 @@ def getParams(pluginName):
 <p>Note: This callback is the ideal place for a plugin to register its lobby command handlers using the <code>addLobbyCommandHandler</code> function of the plugin API, as long as this plugin does not need to process the commands sent by the lobby server during the initial lobby state synchronization phase (i.e. commands sent before the <code>LOGININFOEND</code> command). For plugins that require being called back during the initial lobby state synchronization phase, the <code>onLobbyLoggedIn</code> callback must be used instead to register the lobby command handlers.</p>
 
 </dd>
-<dt id="onPresetApplied-self-oldPresetName-newPresetName"><code>onPresetApplied($self,$oldPresetName,$newPresetName)</code></dt>
+<dt id="onPresetApplied($self,$oldPresetName,$newPresetName)"><a id="onPresetApplied"></a><a id="onPresetApplied-self-oldPresetName-newPresetName"></a><code>onPresetApplied($self,$oldPresetName,$newPresetName)</code></dt>
 <dd>
 
 <p>This callback is called each time a global preset is applied.</p>
@@ -418,7 +409,7 @@ def getParams(pluginName):
 <p><code>$newPresetName</code> is the name of the new global preset</p>
 
 </dd>
-<dt id="onPrivateMsg-self-userName-message"><code>onPrivateMsg($self,$userName,$message)</code></dt>
+<dt id="onPrivateMsg($self,$userName,$message)"><a id="onPrivateMsg"></a><a id="onPrivateMsg-self-userName-message"></a><code>onPrivateMsg($self,$userName,$message)</code></dt>
 <dd>
 
 <p>This callback is called each time the autohost receives a private message.</p>
@@ -434,7 +425,7 @@ def getParams(pluginName):
 <p><code>1</code> if the message must not be processed by other plugins and SPADS core (this prevents logging)</p>
 
 </dd>
-<dt id="onReloadConf-self-keepSettings"><code>onReloadConf($self,$keepSettings)</code></dt>
+<dt id="onReloadConf($self,$keepSettings)"><a id="onReloadConf"></a><a id="onReloadConf-self-keepSettings"></a><code>onReloadConf($self,$keepSettings)</code></dt>
 <dd>
 
 <p>This callback is called each time the SPADS configuration is reloaded.</p>
@@ -448,7 +439,7 @@ def getParams(pluginName):
 <p><code>1</code> if the plugin configuration has been reloaded correctly</p>
 
 </dd>
-<dt id="onSettingChange-self-settingName-oldValue-newValue"><code>onSettingChange($self,$settingName,$oldValue,$newValue)</code></dt>
+<dt id="onSettingChange($self,$settingName,$oldValue,$newValue)"><a id="onSettingChange"></a><a id="onSettingChange-self-settingName-oldValue-newValue"></a><code>onSettingChange($self,$settingName,$oldValue,$newValue)</code></dt>
 <dd>
 
 <p>This callback is called each time a setting of the plugin configuration is changed (using <code>!plugin &lt;pluginName&gt; set ...</code> command).</p>
@@ -460,7 +451,7 @@ def getParams(pluginName):
 <p><code>$newValue</code> is the new value of the setting</p>
 
 </dd>
-<dt id="onSpringStart-self-springPid"><code>onSpringStart($self,$springPid)</code></dt>
+<dt id="onSpringStart($self,$springPid)"><a id="onSpringStart"></a><a id="onSpringStart-self-springPid"></a><code>onSpringStart($self,$springPid)</code></dt>
 <dd>
 
 <p>This callback is called each time a Spring process is launched to host a game.</p>
@@ -468,7 +459,7 @@ def getParams(pluginName):
 <p><code>$springPid</code> is the PID of the Spring process that has just been launched.</p>
 
 </dd>
-<dt id="onSpringStop-self-springPid"><code>onSpringStop($self,$springPid)</code></dt>
+<dt id="onSpringStop($self,$springPid)"><a id="onSpringStop"></a><a id="onSpringStop-self-springPid"></a><code>onSpringStop($self,$springPid)</code></dt>
 <dd>
 
 <p>This callback is called each time the Spring process ends.</p>
@@ -476,7 +467,7 @@ def getParams(pluginName):
 <p><code>$springPid</code> is the PID of the Spring process that just ended.</p>
 
 </dd>
-<dt id="onUnload-self-context"><code>onUnload($self,$context)</code></dt>
+<dt id="onUnload($self,$context)"><a id="onUnload"></a><a id="onUnload-self-context"></a><code>onUnload($self,$context)</code></dt>
 <dd>
 
 <p>This callback is called when the plugin is unloaded. If the plugin has added handlers for SPADS command, lobby commands, or Spring commands, then they must be removed here. If the plugin has added timers or forked process callbacks, they should also be removed here. If the plugin handles persistent data, then these data must be serialized and written to persistent storage here.</p>
@@ -484,7 +475,7 @@ def getParams(pluginName):
 <p>The <code>$context</code> parameter is a string which indicates in which context the callback has been called: <code>&quot;exiting&quot;</code> means the plugin is being unloaded because SPADS is exiting, <code>&quot;restarting&quot;</code> means the plugin is being unloaded because SPADS is restarting, <code>&quot;unload&quot;</code> means the plugin is being unloaded manually using <code>!plugin &lt;pluginName&gt; unload</code> command, <code>&quot;reload&quot;</code> means the plugin is being reloaded manually using <code>!plugin &lt;pluginName&gt; reload</code> command.</p>
 
 </dd>
-<dt id="onVoteRequest-self-source-user-command-remainingVoters"><code>onVoteRequest($self,$source,$user,\@command,\%remainingVoters)</code></dt>
+<dt id="onVoteRequest($self,$source,$user,\@command,\%remainingVoters)"><a id="onVoteRequest"></a><a id="onVoteRequest-self-source-user-command-remainingVoters"></a><code>onVoteRequest($self,$source,$user,\@command,\%remainingVoters)</code></dt>
 <dd>
 
 <p>This callback is called each time a vote is requested by a player.</p>
@@ -500,7 +491,7 @@ def getParams(pluginName):
 <p>This callback must return <code>0</code> to prevent the vote call from happening, or <code>1</code> to allow it without changing the remaining voters list, or an array reference containing the player names that should be removed from the remaining voters list.</p>
 
 </dd>
-<dt id="onVoteStart-self-user-command"><code>onVoteStart($self,$user,\@command)</code></dt>
+<dt id="onVoteStart($self,$user,\@command)"><a id="onVoteStart"></a><a id="onVoteStart-self-user-command"></a><code>onVoteStart($self,$user,\@command)</code></dt>
 <dd>
 
 <p>This callback is called each time a new vote poll is started.</p>
@@ -510,7 +501,7 @@ def getParams(pluginName):
 <p><code>\@command</code> is an array reference containing the command for which a vote is started</p>
 
 </dd>
-<dt id="onVoteStop-self-voteResult"><code>onVoteStop($self,$voteResult)</code></dt>
+<dt id="onVoteStop($self,$voteResult)"><a id="onVoteStop"></a><a id="onVoteStop-self-voteResult"></a><code>onVoteStop($self,$voteResult)</code></dt>
 <dd>
 
 <p>This callback is called each time a vote poll is stoped.</p>
@@ -518,7 +509,7 @@ def getParams(pluginName):
 <p><code>$voteResult</code> indicates the result of the vote: <code>-1</code> (vote failed), <code>0</code> (vote cancelled), <code>1</code> (vote passed)</p>
 
 </dd>
-<dt id="postSpadsCommand-self-command-source-user-params-commandResult"><code>postSpadsCommand($self,$command,$source,$user,\@params,$commandResult)</code></dt>
+<dt id="postSpadsCommand($self,$command,$source,$user,\@params,$commandResult)"><a id="postSpadsCommand"></a><a id="postSpadsCommand-self-command-source-user-params-commandResult"></a><code>postSpadsCommand($self,$command,$source,$user,\@params,$commandResult)</code></dt>
 <dd>
 
 <p>This callback is called each time a SPADS command has been called.</p>
@@ -534,7 +525,7 @@ def getParams(pluginName):
 <p><code>$commandResult</code> indicates the result of the command (if it is defined and set to <code>0</code> then the command failed, in all other cases the command succeeded)</p>
 
 </dd>
-<dt id="preGameCheck-self-force-checkOnly-automatic"><code>preGameCheck($self,$force,$checkOnly,$automatic)</code></dt>
+<dt id="preGameCheck($self,$force,$checkOnly,$automatic)"><a id="preGameCheck"></a><a id="preGameCheck-self-force-checkOnly-automatic"></a><code>preGameCheck($self,$force,$checkOnly,$automatic)</code></dt>
 <dd>
 
 <p>This callback is called each time a game is going to be launched, to allow plugins to perform pre-game checks and prevent the game from starting if needed.</p>
@@ -548,7 +539,7 @@ def getParams(pluginName):
 <p>The return value must be the reason for preventing the game from starting (for example <code>&quot;too many players for current map&quot;</code>), or <code>1</code> if no reason can be given, or undef to allow the game to start.</p>
 
 </dd>
-<dt id="preSpadsCommand-self-command-source-user-params"><code>preSpadsCommand($self,$command,$source,$user,\@params)</code></dt>
+<dt id="preSpadsCommand($self,$command,$source,$user,\@params)"><a id="preSpadsCommand"></a><a id="preSpadsCommand-self-command-source-user-params"></a><code>preSpadsCommand($self,$command,$source,$user,\@params)</code></dt>
 <dd>
 
 <p>This callback is called each time a SPADS command is called, just before it is actually executed. This callback is called after the <code>commandRightsOverride</code> callback.</p>
@@ -566,13 +557,13 @@ def getParams(pluginName):
 </dd>
 </dl>
 
-<h2 id="Customization-callbacks">Customization callbacks</h2>
+<h2 id="Customization-callbacks"><a id="Customization"></a>Customization callbacks</h2>
 
 <p>Following callbacks are called by SPADS during specific operations to allow plugins to customize features (more callbacks can be added on request):</p>
 
 <dl>
 
-<dt id="addStartScriptTags-self-additionalData"><code>addStartScriptTags($self,\%additionalData)</code></dt>
+<dt id="addStartScriptTags($self,\%additionalData)"><a id="addStartScriptTags"></a><a id="addStartScriptTags-self-additionalData"></a><code>addStartScriptTags($self,\%additionalData)</code></dt>
 <dd>
 
 <p>This callback is called when a Spring start script is generated, just before launching the game. It allows plugins to declare additional scrip tags which will be written in the start script.</p>
@@ -582,7 +573,7 @@ def getParams(pluginName):
 <p>Note for Python plugins: As Python plugins cannot modify the data structures passed as parameters to the callbacks, an alternate way to implement this callback is offered. Instead of modifying the <code>additionnalData</code> dictionary directly, the callback can return a new dictionary containing the entries which must be added. For example a Python plugin can add a tag named <code>CommanderLevel</code> set to value <code>8</code> in the player section of the player whose account ID is <code>1234</code> like this: <code>return {&#39;playerData&#39;: { &#39;1234&#39;: { &#39;CommanderLevel&#39;: 8 } } }</code></p>
 
 </dd>
-<dt id="balanceBattle-self-players-bots-clanMode-nbTeams-teamSize"><code>balanceBattle($self,\%players,\%bots,$clanMode,$nbTeams,$teamSize)</code></dt>
+<dt id="balanceBattle($self,\%players,\%bots,$clanMode,$nbTeams,$teamSize)"><a id="balanceBattle"></a><a id="balanceBattle-self-players-bots-clanMode-nbTeams-teamSize"></a><code>balanceBattle($self,\%players,\%bots,$clanMode,$nbTeams,$teamSize)</code></dt>
 <dd>
 
 <p>This callback is called each time SPADS needs to balance a battle and evaluate the resulting balance quality. It allows plugins to replace the built-in balance algorithm.</p>
@@ -604,13 +595,13 @@ def getParams(pluginName):
 <p>The second method consists in returning an array reference containing the balance information instead of directly editing the <code>\%players</code> and <code>\%bots</code> parameters. The returned array must contain 3 items: the unbalance indicator (as defined in first method description above), the player assignation hash and the bot assignation hash. The player assignation hash and the bot assignation hash have exactly the same structure: the keys are the player/bot names and the values are hashes containing <code>team</code> and <code>id</code> items with the corresponding values for the balanced battle.</p>
 
 </dd>
-<dt id="canBalanceNow-self"><code>canBalanceNow($self)</code></dt>
+<dt id="canBalanceNow($self)"><a id="canBalanceNow"></a><a id="canBalanceNow-self"></a><code>canBalanceNow($self)</code></dt>
 <dd>
 
 <p>This callback allows plugins to delay the battle balance operation. It is called each time a battle balance operation is required (either automatic if autoBalance is enabled, either manual if <code>!balance</code> command is called). If the plugin is ready for balance, it must return <code>1</code>. Else, it can delay the operation by returning <code>0</code> (the balance algorithm won&#39;t be launched as long as the plugin didn&#39;t return <code>1</code>).</p>
 
 </dd>
-<dt id="changeUserAccessLevel-self-userName-userData-isAuthenticated-currentAccessLevel"><code>changeUserAccessLevel($self,$userName,\%userData,$isAuthenticated,$currentAccessLevel)</code></dt>
+<dt id="changeUserAccessLevel($self,$userName,\%userData,$isAuthenticated,$currentAccessLevel)"><a id="changeUserAccessLevel"></a><a id="changeUserAccessLevel-self-userName-userData-isAuthenticated-currentAccessLevel"></a><code>changeUserAccessLevel($self,$userName,\%userData,$isAuthenticated,$currentAccessLevel)</code></dt>
 <dd>
 
 <p>This callback is called by SPADS each time it needs to get the access level of a user. It allows plugins to overwrite this level. Don&#39;t call the <code>getUserAccessLevel($user)</code> function from this callback, or the program will be locked in recursive loop! (and it would give you the same value as <code>$currentAccessLevel</code> anyway).</p>
@@ -622,7 +613,7 @@ def getParams(pluginName):
 <p>The callback must return the new access level value if changed, or undef if not changed.</p>
 
 </dd>
-<dt id="commandRightsOverride-self-lowerCaseCommandName-command-source-user-effectiveUserAccessLevel-userAccessLevel-requiredAccessLevels"><code>commandRightsOverride($self,$lowerCaseCommandName,\@command,$source,$user,$effectiveUserAccessLevel,$userAccessLevel,\%requiredAccessLevels)</code></dt>
+<dt id="commandRightsOverride($self,$lowerCaseCommandName,\@command,$source,$user,$effectiveUserAccessLevel,$userAccessLevel,\%requiredAccessLevels)"><a id="commandRightsOverride"></a><a id="commandRightsOverride-self-lowerCaseCommandName-command-source-user-effectiveUserAccessLevel-userAccessLevel-requiredAccessLevels"></a><code>commandRightsOverride($self,$lowerCaseCommandName,\@command,$source,$user,$effectiveUserAccessLevel,$userAccessLevel,\%requiredAccessLevels)</code></dt>
 <dd>
 
 <p>This callback is called each time a SPADS command is called by a user, just before checking the user access level requirements. It allows plugins to bypass this check and implement their own logic to allow or disallow the command execution. This callback is called before the <code>preSpadsCommand</code> callback, which can still be used to prevent the command execution later in the workflow even though the <code>commandRightsOverride</code> callback allowed it.</p>
@@ -644,7 +635,7 @@ def getParams(pluginName):
 <p>The return value of the callback determines whether the default access level requirements for the command must be bypassed. If an undefined value is returned, the default behavior is applied (no bypass of access level requirements). If a true value is returned, the access level requirements are bypassed and the user is allowed to call the command directly. If a false value is returned, the user is denied the right to call the command directly, regardless of his access level.</p>
 
 </dd>
-<dt id="delayShutdown-self"><code>delayShutdown($self)</code></dt>
+<dt id="delayShutdown($self)"><a id="delayShutdown"></a><a id="delayShutdown-self"></a><code>delayShutdown($self)</code></dt>
 <dd>
 
 <p>This callback is called by SPADS each time it needs to quit or restart. It allows plugins to delay the shutdown operation, which can be useful to prevent SPADS from exiting before a process forked by the plugin ends for example.</p>
@@ -652,7 +643,7 @@ def getParams(pluginName):
 <p>The callback must return a false value if SPADS can quit right now, or a true value if SPADS must wait before exiting.</p>
 
 </dd>
-<dt id="filterRotationMaps-self-rotationMaps"><code>filterRotationMaps($self,\@rotationMaps)</code></dt>
+<dt id="filterRotationMaps($self,\@rotationMaps)"><a id="filterRotationMaps"></a><a id="filterRotationMaps-self-rotationMaps"></a><code>filterRotationMaps($self,\@rotationMaps)</code></dt>
 <dd>
 
 <p>This callback is called by SPADS each time a new map must be picked up for rotation. It allows plugins to remove some maps from the rotation maps list just before the new map is picked up.</p>
@@ -662,7 +653,7 @@ def getParams(pluginName):
 <p>The callback must return a reference to a new array containing the filtered map names.</p>
 
 </dd>
-<dt id="fixColors-self-players-bots-battleStructure"><code>fixColors($self,\%players,\%bots,\%battleStructure)</code></dt>
+<dt id="fixColors($self,\%players,\%bots,\%battleStructure)"><a id="fixColors"></a><a id="fixColors-self-players-bots-battleStructure"></a><code>fixColors($self,\%players,\%bots,\%battleStructure)</code></dt>
 <dd>
 
 <p>This callback is called each time SPADS needs to fix the teams colors. It allows plugins to replace the built-in color fixing algorithm.</p>
@@ -678,7 +669,7 @@ def getParams(pluginName):
 <p>If the plugin is able to fix the players and AI bots colors, then it must return a reference to a hash containing all colors assignations, indexed by ID numbers. The keys must be the ID numbers and the values are references to hash whose keys are <code>&quot;red&quot;</code>, <code>&quot;green&quot;</code> and <code>&quot;blue&quot;</code> and values are the corresponding RGB values (between 0 and 255 included) of the color assigned to the ID.</p>
 
 </dd>
-<dt id="setMapStartBoxes-self-boxes-mapName-nbTeams-nbExtraBox"><code>setMapStartBoxes($self,\@boxes,$mapName,$nbTeams,$nbExtraBox)</code></dt>
+<dt id="setMapStartBoxes($self,\@boxes,$mapName,$nbTeams,$nbExtraBox)"><a id="setMapStartBoxes"></a><a id="setMapStartBoxes-self-boxes-mapName-nbTeams-nbExtraBox"></a><code>setMapStartBoxes($self,\@boxes,$mapName,$nbTeams,$nbExtraBox)</code></dt>
 <dd>
 
 <p>This callback allows plugins to set map start boxes (for &quot;Choose in game&quot; start position type).</p>
@@ -700,7 +691,7 @@ def getParams(pluginName):
 <p>The second method consists in returning an array reference containing the new start box definitions instead of directly updating the <code>\@boxes</code> parameter. The returned array must contain 2 items: the normal return value as first item (<code>0</code> to allow other plugins to replace the start boxes, or <code>1</code> else), and an array reference containg the new start box definitions as second item.</p>
 
 </dd>
-<dt id="setVoteMsg-self-reqYesVotes-maxReqYesVotes-reqNoVotes-maxReqNoVotes-nbRequiredManualVotes"><code>setVoteMsg($self,$reqYesVotes,$maxReqYesVotes,$reqNoVotes,$maxReqNoVotes,$nbRequiredManualVotes)</code></dt>
+<dt id="setVoteMsg($self,$reqYesVotes,$maxReqYesVotes,$reqNoVotes,$maxReqNoVotes,$nbRequiredManualVotes)"><a id="setVoteMsg"></a><a id="setVoteMsg-self-reqYesVotes-maxReqYesVotes-reqNoVotes-maxReqNoVotes-nbRequiredManualVotes"></a><code>setVoteMsg($self,$reqYesVotes,$maxReqYesVotes,$reqNoVotes,$maxReqNoVotes,$nbRequiredManualVotes)</code></dt>
 <dd>
 
 <p>This callback allows plugins to customize the vote status messages.</p>
@@ -718,7 +709,7 @@ def getParams(pluginName):
 <p>The callback must return a list containing following 2 elements: the lobby vote message, and the in-game vote message (undef values can be used to keep default messages).</p>
 
 </dd>
-<dt id="updateCmdAliases-self-aliases"><code>updateCmdAliases($self,\%aliases)</code></dt>
+<dt id="updateCmdAliases($self,\%aliases)"><a id="updateCmdAliases"></a><a id="updateCmdAliases-self-aliases"></a><code>updateCmdAliases($self,\%aliases)</code></dt>
 <dd>
 
 <p>This callback allows plugins to add new SPADS command aliases by adding new entries in the <code>\%aliases</code> hash reference. This hash is indexed by alias names and the values are references to an array containing the associated command. For example, a Perl plugin can add an alias &quot;<code>!cvmap ...</code>&quot; for &quot;<code>!callVote map ...</code>&quot; like this: <code>$aliases-&gt;{cvmap}=[&#39;callVote&#39;,&#39;map&#39;]</code></p>
@@ -728,7 +719,7 @@ def getParams(pluginName):
 <p>Note for Python plugins: As Python plugins cannot modify the data structures passed as parameters to the callbacks, an alternate way to implement this callback is offered. Instead of modifying the <code>aliases</code> dictionary directly, the callback can return a new dictionary containing the alias entries which must be added.</p>
 
 </dd>
-<dt id="updatePlayerSkill-self-playerSkill-accountId-modName-gameType"><code>updatePlayerSkill($self,\%playerSkill,$accountId,$modName,$gameType)</code></dt>
+<dt id="updatePlayerSkill($self,\%playerSkill,$accountId,$modName,$gameType)"><a id="updatePlayerSkill"></a><a id="updatePlayerSkill-self-playerSkill-accountId-modName-gameType"></a><code>updatePlayerSkill($self,\%playerSkill,$accountId,$modName,$gameType)</code></dt>
 <dd>
 
 <p>This callback is called by SPADS each time it needs to get or update the skill of a player (on battle join, on game type change...). This allows plugins to replace the built-in skill estimations (rank, TrueSkill...) with custom skill estimations (ELO, Glicko ...).</p>
@@ -746,7 +737,7 @@ def getParams(pluginName):
 <p>Note for Python plugins: As Python plugins cannot modify the data structures passed as parameters to the callbacks, an alternate way to implement this callback is offered. Instead of modifying the <code>playerSkill</code> dictionary directly, the callback can return a list containing the normal return value as first item (described above), the new skill value as second item, and optionally the new skill uncertainty value as third item.</p>
 
 </dd>
-<dt id="updateGameStatusInfo-self-playerStatus-accessLevel"><code>updateGameStatusInfo($self,\%playerStatus,$accessLevel)</code></dt>
+<dt id="updateGameStatusInfo($self,\%playerStatus,$accessLevel)"><a id="updateGameStatusInfo"></a><a id="updateGameStatusInfo-self-playerStatus-accessLevel"></a><code>updateGameStatusInfo($self,\%playerStatus,$accessLevel)</code></dt>
 <dd>
 
 <p>This callback is called by SPADS for each player in game when the <code>!status</code> command is called, to allow plugins to update and/or add data which will be presented to the user issuing the command.</p>
@@ -760,7 +751,7 @@ def getParams(pluginName):
 <p>Note for Python plugins: As Python plugins cannot modify the data structures passed as parameters to the callbacks, an alternate way to implement this callback is offered. Instead of modifying the <code>playerStatus</code> dictionary directly, the callback can return a new dictionary containing the data to add/modify in the <code>playerStatus</code> dictionary.</p>
 
 </dd>
-<dt id="updateStatusInfo-self-playerStatus-accountId-modName-gameType-accessLevel"><code>updateStatusInfo($self,\%playerStatus,$accountId,$modName,$gameType,$accessLevel)</code></dt>
+<dt id="updateStatusInfo($self,\%playerStatus,$accountId,$modName,$gameType,$accessLevel)"><a id="updateStatusInfo"></a><a id="updateStatusInfo-self-playerStatus-accountId-modName-gameType-accessLevel"></a><code>updateStatusInfo($self,\%playerStatus,$accountId,$modName,$gameType,$accessLevel)</code></dt>
 <dd>
 
 <p>This callback is called by SPADS for each player in the battle lobby when the <code>!status</code> command is called, to allow plugins to update and/or add data which will be presented to the user issuing the command.</p>
@@ -782,13 +773,13 @@ def getParams(pluginName):
 </dd>
 </dl>
 
-<h2 id="Event-loop-callback">Event loop callback</h2>
+<h2 id="Event-loop-callback"><a id="Event1"></a>Event loop callback</h2>
 
 <p>SPADS uses the asynchronous programming paradigm, so it is based on a main event loop. The following callback is called during each iteration of this event loop:</p>
 
 <dl>
 
-<dt id="eventLoop-self"><code>eventLoop($self)</code></dt>
+<dt id="eventLoop($self)"><a id="eventLoop"></a><a id="eventLoop-self"></a><code>eventLoop($self)</code></dt>
 <dd>
 
 <p>Warning: this callback is called very frequently (during each iteration of SPADS main event loop), so performing complex operations here can be very intensive on the CPU. It is recommended to use timers (<code>addTimer</code>/<code>removeTimer</code> functions) instead for all time related operations (timeouts, scheduled actions, regular serialization of persistent data to avoid data loss...). This callback shouldn&#39;t be blocking, otherwise SPADS may become unstable.</p>
@@ -796,7 +787,7 @@ def getParams(pluginName):
 </dd>
 </dl>
 
-<h1 id="API-FUNCTIONS">API FUNCTIONS</h1>
+<h1 id="API-FUNCTIONS"><a id="API"></a>API FUNCTIONS</h1>
 
 <p>The API functions are implemented by SPADS core and can be called by SPADS plugins (directly from Perl plugins, or via <code>spads.[...]</code> from Python plugins).</p>
 
@@ -804,19 +795,19 @@ def getParams(pluginName):
 
 <dl>
 
-<dt id="getBosses"><code>getBosses()</code></dt>
+<dt id="getBosses()"><a id="getBosses"></a><code>getBosses()</code></dt>
 <dd>
 
 <p>This accessor returns a reference to the hash containing the names of the bosses in the battle lobby (if the hash is empty, the boss mode is disabled).</p>
 
 </dd>
-<dt id="getConfMacros"><code>getConfMacros()</code></dt>
+<dt id="getConfMacros()"><a id="getConfMacros"></a><code>getConfMacros()</code></dt>
 <dd>
 
 <p>This accessor returns a reference to the hash containing the configuration macros used to (re)start SPADS.</p>
 
 </dd>
-<dt id="getCurrentVote"><code>getCurrentVote()</code></dt>
+<dt id="getCurrentVote()"><a id="getCurrentVote"></a><code>getCurrentVote()</code></dt>
 <dd>
 
 <p>This accessor returns a reference to a hash containing information regarding votes.</p>
@@ -877,7 +868,7 @@ def getParams(pluginName):
 <p>Note: An easy way to check if a vote is currently in progress consists in calling <code>getCurrentVote()</code> and checking if the returned hash contains the <code>command</code> key. If the hash contains the <code>command</code> key then it means a vote is in progress, else it means no vote is in progress.</p>
 
 </dd>
-<dt id="getLobbyInterface"><code>getLobbyInterface()</code></dt>
+<dt id="getLobbyInterface()"><a id="getLobbyInterface"></a><code>getLobbyInterface()</code></dt>
 <dd>
 
 <p>This accessor returns the instance of the <a href="https://github.com/Yaribz/SpringLobbyInterface">SpringLobbyInterface</a> module used by SPADS.</p>
@@ -1047,7 +1038,7 @@ def getParams(pluginName):
 <li><p><code>sync</code>: synchronization status (<code>0</code>: unsynchronized, <code>1</code>: synchronized)</p>
 
 </li>
-<li><p><code>team</code> (ally team number, starting at <code>0</code>)</p>
+<li><p><code>team</code>: ally team number (starting at <code>0</code>)</p>
 
 </li>
 </ul>
@@ -1073,7 +1064,7 @@ def getParams(pluginName):
 </ul>
 
 </dd>
-<dt id="getLobbyState"><code>getLobbyState()</code></dt>
+<dt id="getLobbyState()"><a id="getLobbyState"></a><code>getLobbyState()</code></dt>
 <dd>
 
 <p>This accessor returns an integer describing the current lobby state. The corresponding constants are provided to ease lobby state handling/comparisons, as listed below:</p>
@@ -1111,17 +1102,17 @@ def getParams(pluginName):
 
 <p>Python plugins must call them as SPADS functions, like this for example:</p>
 
-<pre><code>if spads.getLobbyState() &gt;= spads.LOBBY_STATE_CONNECTED():
+<pre><code class="language-python">if spads.getLobbyState() &gt;= spads.LOBBY_STATE_CONNECTED():
     spads.slog(&quot;SPADS is connected to lobby server&quot;,3)</code></pre>
 
 </dd>
-<dt id="getPluginList"><code>getPluginList()</code></dt>
+<dt id="getPluginList()"><a id="getPluginList"></a><code>getPluginList()</code></dt>
 <dd>
 
 <p>This accessor returns a reference to an array containing the names of the plugins currently loaded (in load order).</p>
 
 </dd>
-<dt id="getRunningBattle"><code>getRunningBattle()</code></dt>
+<dt id="getRunningBattle()"><a id="getRunningBattle"></a><code>getRunningBattle()</code></dt>
 <dd>
 
 <p>This accessor returns a reference to a hash representing the state of the battle lobby hosted by SPADS when the game currently running was launched. This is useful to find the actual characteristics of the currently running game (battle structure, settings...), because things might have changed in the battle lobby since the game started (players joined/left, map changed...) so the current battle lobby data aren&#39;t necessarily consistent with the game currently running.</p>
@@ -1131,31 +1122,31 @@ def getParams(pluginName):
 <p>If a game is in progress, the hash contains the same data as the data returned by the <code>getBattle()</code> and <code>getBattles()</code> methods of the <code>SpringLobbyInterface</code> object (see <code>getLobbyInterface()</code> accessor) when the game was launched. Concerning the <code>getBattles()</code> data, only the data related to the battle lobby hosted by SPADS are included in the hash.</p>
 
 </dd>
-<dt id="getSpadsConf"><code>getSpadsConf()</code></dt>
+<dt id="getSpadsConf()"><a id="getSpadsConf"></a><code>getSpadsConf()</code></dt>
 <dd>
 
 </dd>
-<dt id="getSpadsConfFull"><code>getSpadsConfFull()</code></dt>
+<dt id="getSpadsConfFull()"><a id="getSpadsConfFull"></a><code>getSpadsConfFull()</code></dt>
 <dd>
 
 </dd>
-<dt id="getSpringInterface"><code>getSpringInterface()</code></dt>
+<dt id="getSpringInterface()"><a id="getSpringInterface"></a><code>getSpringInterface()</code></dt>
 <dd>
 
 </dd>
-<dt id="getSpringPid"><code>getSpringPid()</code></dt>
+<dt id="getSpringPid()"><a id="getSpringPid"></a><code>getSpringPid()</code></dt>
 <dd>
 
 </dd>
-<dt id="getSpringServerType"><code>getSpringServerType()</code></dt>
+<dt id="getSpringServerType()"><a id="getSpringServerType"></a><code>getSpringServerType()</code></dt>
 <dd>
 
 </dd>
-<dt id="getTimestamps"><code>getTimestamps()</code></dt>
+<dt id="getTimestamps()"><a id="getTimestamps"></a><code>getTimestamps()</code></dt>
 <dd>
 
 </dd>
-<dt id="getUserPref-userName-prefName"><code>getUserPref($userName,$prefName)</code></dt>
+<dt id="getUserPref($userName,$prefName)"><a id="getUserPref"></a><a id="getUserPref-userName-prefName"></a><code>getUserPref($userName,$prefName)</code></dt>
 <dd>
 
 <p>This accessor returns the current value of a user&#39;s preference.</p>
@@ -1163,17 +1154,17 @@ def getParams(pluginName):
 </dd>
 </dl>
 
-<h2 id="Plugin-management">Plugin management</h2>
+<h2 id="Plugin-management"><a id="Plugin"></a>Plugin management</h2>
 
 <dl>
 
-<dt id="getPlugin-pluginName-caller"><code>getPlugin($pluginName=caller())</code></dt>
+<dt id="getPlugin($pluginName=caller())"><a id="getPlugin"></a><a id="getPlugin-pluginName-caller"></a><code>getPlugin($pluginName=caller())</code></dt>
 <dd>
 
 <p>This function returns the plugin object matching the plugin name given as parameter <code>$pluginName</code>. If no parameter is provided, the plugin name of the plugin calling the function is used.</p>
 
 </dd>
-<dt id="getPluginConf-pluginName-caller"><code>getPluginConf($pluginName=caller())</code></dt>
+<dt id="getPluginConf($pluginName=caller())"><a id="getPluginConf"></a><a id="getPluginConf-pluginName-caller"></a><code>getPluginConf($pluginName=caller())</code></dt>
 <dd>
 
 <p>This function returns the plugin configuration for the plugin named <code>$pluginName</code>. If no parameter is provided, the plugin name of the plugin calling the function is used. The return value is a reference to a hash using plugin settings names as keys and plugin settings values as values.</p>
@@ -1181,11 +1172,11 @@ def getParams(pluginName):
 </dd>
 </dl>
 
-<h2 id="Handlers-management">Handlers management</h2>
+<h2 id="Handlers-management"><a id="Handlers"></a>Handlers management</h2>
 
 <dl>
 
-<dt id="addLobbyCommandHandler-handlers-priority-caller-isPreCallback"><code>addLobbyCommandHandler(\%handlers,$priority=caller(),$isPreCallback)</code></dt>
+<dt id="addLobbyCommandHandler(\%handlers,$priority=caller(),$isPreCallback)"><a id="addLobbyCommandHandler"></a><a id="addLobbyCommandHandler-handlers-priority-caller-isPreCallback"></a><code>addLobbyCommandHandler(\%handlers,$priority=caller(),$isPreCallback)</code></dt>
 <dd>
 
 <p>This function allows plugins to set up their own handlers for Spring lobby commands received by SPADS from lobby server.</p>
@@ -1199,7 +1190,7 @@ def getParams(pluginName):
 <p>Note: As all lobby command handlers are automatically removed by SPADS when it is disconnected from the lobby server (due to network problems for example), plugins should always re-set up their lobby command handlers each time SPADS successfully reconnects. This can be done automatically by doing the <code>addLobbyCommandHandler</code> call in the <code>onLobbySynchronized</code> event-based callback (for plugins that don&#39;t need to process the commands sent by the lobby server during the initial lobby state synchronization phase) or in the <code>onLobbyLoggedIn</code> event-based callback (for plugins that need to process the commands sent by the lobby server during the initial lobby state synchronization phase).</p>
 
 </dd>
-<dt id="addSpadsCommandHandler-handlers-replace-0"><code>addSpadsCommandHandler(\%handlers,$replace=0)</code></dt>
+<dt id="addSpadsCommandHandler(\%handlers,$replace=0)"><a id="addSpadsCommandHandler"></a><a id="addSpadsCommandHandler-handlers-replace-0"></a><code>addSpadsCommandHandler(\%handlers,$replace=0)</code></dt>
 <dd>
 
 <p>This function allows plugins to add or replace SPADS command handlers.</p>
@@ -1219,7 +1210,7 @@ def getParams(pluginName):
 <p><code>$replace</code> indicates if the handlers provided can replace existing ones: <code>0</code> means add handlers only if there is no handler for the given command (default), <code>1</code> means add or replace if existing.</p>
 
 </dd>
-<dt id="addSpringCommandHandler-handlers-priority-caller"><code>addSpringCommandHandler(\%handlers,$priority=caller())</code></dt>
+<dt id="addSpringCommandHandler(\%handlers,$priority=caller())"><a id="addSpringCommandHandler"></a><a id="addSpringCommandHandler-handlers-priority-caller"></a><code>addSpringCommandHandler(\%handlers,$priority=caller())</code></dt>
 <dd>
 
 <p>This function allows plugins to set up their own handlers for Spring AutoHost commands received by SPADS from Spring server.</p>
@@ -1229,7 +1220,7 @@ def getParams(pluginName):
 <p><code>$priority</code> is the priority of the handlers. Lowest priority number actually means higher priority. If not provided, the plugin name is used as priority, which means it is executed after handlers having priority &lt; 1000, and before handlers having priority &gt; 1000. Usually you don&#39;t need to provide priority, unless you use data managed by other handlers.</p>
 
 </dd>
-<dt id="removeLobbyCommandHandler-commands-priority-caller-isPreCallback"><code>removeLobbyCommandHandler(\@commands,$priority=caller(),$isPreCallback)</code></dt>
+<dt id="removeLobbyCommandHandler(\@commands,$priority=caller(),$isPreCallback)"><a id="removeLobbyCommandHandler"></a><a id="removeLobbyCommandHandler-commands-priority-caller-isPreCallback"></a><code>removeLobbyCommandHandler(\@commands,$priority=caller(),$isPreCallback)</code></dt>
 <dd>
 
 <p>This function must be called by plugins which added lobby command handlers previously using <code>addLobbyCommandHandler</code> function, when these handlers are no longer required (for example in the <code>onUnload</code> callback, when the plugin is unloaded).</p>
@@ -1241,7 +1232,7 @@ def getParams(pluginName):
 <p><code>$isPreCallback</code> specifies the type of command handlers to remove (must match the value used for the <code>addLobbyCommandHandler</code> function call for these handlers)</p>
 
 </dd>
-<dt id="removeSpadsCommandHandler-commands"><code>removeSpadsCommandHandler(\@commands)</code></dt>
+<dt id="removeSpadsCommandHandler(\@commands)"><a id="removeSpadsCommandHandler"></a><a id="removeSpadsCommandHandler-commands"></a><code>removeSpadsCommandHandler(\@commands)</code></dt>
 <dd>
 
 <p>This function must be called by plugins which added SPADS command handlers previously using <code>addSpadsCommandHandler</code> function, when these handlers are no longer required (for example in the <code>onUnload</code> callback, when the plugin is unloaded).</p>
@@ -1249,7 +1240,7 @@ def getParams(pluginName):
 <p><code>\@commands</code> is a reference to an array containing the SPADS command names (in uppercase) for which the handlers must be removed.</p>
 
 </dd>
-<dt id="removeSpringCommandHandler-commands-priority-caller"><code>removeSpringCommandHandler(\@commands,$priority=caller())</code></dt>
+<dt id="removeSpringCommandHandler(\@commands,$priority=caller())"><a id="removeSpringCommandHandler"></a><a id="removeSpringCommandHandler-commands-priority-caller"></a><code>removeSpringCommandHandler(\@commands,$priority=caller())</code></dt>
 <dd>
 
 <p>This function must be called by plugins which added Spring AutoHost command handlers previously using <code>addSpringCommandHandler</code> function, when these handlers are no longer required (for example in the <code>onUnload</code> callback, when the plugin is unloaded).</p>
@@ -1261,23 +1252,23 @@ def getParams(pluginName):
 </dd>
 </dl>
 
-<h2 id="SPADS-operations">SPADS operations</h2>
+<h2 id="SPADS-operations"><a id="SPADS"></a>SPADS operations</h2>
 
 <dl>
 
-<dt id="applyBattlePreset-battlePresetName"><code>applyBattlePreset($battlePresetName)</code></dt>
+<dt id="applyBattlePreset($battlePresetName)"><a id="applyBattlePreset"></a><a id="applyBattlePreset-battlePresetName"></a><code>applyBattlePreset($battlePresetName)</code></dt>
 <dd>
 
 <p>This function loads a battle preset from SPADS configuration and applies it to the hosted lobby.</p>
 
 </dd>
-<dt id="applyHostingPreset-hostingPresetName"><code>applyHostingPreset($hostingPresetName)</code></dt>
+<dt id="applyHostingPreset($hostingPresetName)"><a id="applyHostingPreset"></a><a id="applyHostingPreset-hostingPresetName"></a><code>applyHostingPreset($hostingPresetName)</code></dt>
 <dd>
 
 <p>This function loads a hosting preset from SPADS configuration and applies it to the hosted lobby.</p>
 
 </dd>
-<dt id="applyPreset-presetName-r_settingsOverrides-undef-bPresetOverride-undef"><code>applyPreset($presetName,$r_settingsOverrides=undef,$bPresetOverride=undef)</code></dt>
+<dt id="applyPreset($presetName,$r_settingsOverrides=undef,$bPresetOverride=undef)"><a id="applyPreset"></a><a id="applyPreset-presetName-r_settingsOverrides-undef-bPresetOverride-undef"></a><code>applyPreset($presetName,$r_settingsOverrides=undef,$bPresetOverride=undef)</code></dt>
 <dd>
 
 <p>This function loads a global preset from SPADS configuration and applies it to the hosted lobby, with optional overrides.</p>
@@ -1289,15 +1280,15 @@ def getParams(pluginName):
 <p><code>$bPresetOverride</code> is the battle preset override to apply to the global preset just after it is loaded, before applying it to the lobby. It contains the name of the battle preset that must be loaded (on top of the default battle preset if any). This parameter is optional.</p>
 
 </dd>
-<dt id="cancelCloseBattle"><code>cancelCloseBattle()</code></dt>
+<dt id="cancelCloseBattle()"><a id="cancelCloseBattle"></a><code>cancelCloseBattle()</code></dt>
 <dd>
 
 </dd>
-<dt id="cancelQuit-reason"><code>cancelQuit($reason)</code></dt>
+<dt id="cancelQuit($reason)"><a id="cancelQuit"></a><a id="cancelQuit-reason"></a><code>cancelQuit($reason)</code></dt>
 <dd>
 
 </dd>
-<dt id="closeBattle-reason-silentMode-0"><code>closeBattle($reason,$silentMode=0)</code></dt>
+<dt id="closeBattle($reason,$silentMode=0)"><a id="closeBattle"></a><a id="closeBattle-reason-silentMode-0"></a><code>closeBattle($reason,$silentMode=0)</code></dt>
 <dd>
 
 <p>This function makes SPADS close current battle lobby.</p>
@@ -1307,11 +1298,11 @@ def getParams(pluginName):
 <p>The <code>$silentMode</code> parameter is an optional boolean parameter specifying if the broadcast message (which is normally sent when the battle lobby is closed) must be prevented.</p>
 
 </dd>
-<dt id="getUserAccessLevel-user"><code>getUserAccessLevel($user)</code></dt>
+<dt id="getUserAccessLevel($user)"><a id="getUserAccessLevel"></a><a id="getUserAccessLevel-user"></a><code>getUserAccessLevel($user)</code></dt>
 <dd>
 
 </dd>
-<dt id="isSettingValueAllowed-type-name-value"><code>isSettingValueAllowed($type,$name,$value)</code></dt>
+<dt id="isSettingValueAllowed($type,$name,$value)"><a id="isSettingValueAllowed"></a><a id="isSettingValueAllowed-type-name-value"></a><code>isSettingValueAllowed($type,$name,$value)</code></dt>
 <dd>
 
 <p>This function checks if a value is allowed for a specific setting. It returns <code>1</code> if the value is allowed, or <code>0</code> else.</p>
@@ -1323,23 +1314,23 @@ def getParams(pluginName):
 <p><code>$value</code> is the value that must be checked</p>
 
 </dd>
-<dt id="loadArchives"><code>loadArchives()</code></dt>
+<dt id="loadArchives(\&amp;callback,$printModUpdateMsg,$mode)"><a id="loadArchives"></a><a id="loadArchives-callback-printModUpdateMsg-mode"></a><code>loadArchives(\&amp;callback,$printModUpdateMsg,$mode)</code></dt>
 <dd>
 
 </dd>
-<dt id="queueLobbyCommand-lobbyCommand"><code>queueLobbyCommand(\@lobbyCommand)</code></dt>
+<dt id="queueLobbyCommand(\@lobbyCommand)"><a id="queueLobbyCommand"></a><a id="queueLobbyCommand-lobbyCommand"></a><code>queueLobbyCommand(\@lobbyCommand)</code></dt>
 <dd>
 
 </dd>
-<dt id="quit-type-reason-exitCode-0"><code>quit($type,$reason,$exitCode=0)</code></dt>
+<dt id="quit($type,$reason,$exitCode=0)"><a id="quit"></a><a id="quit-type-reason-exitCode-0"></a><code>quit($type,$reason,$exitCode=0)</code></dt>
 <dd>
 
 </dd>
-<dt id="rehost-reason"><code>rehost($reason)</code></dt>
+<dt id="rehost($reason)"><a id="rehost"></a><a id="rehost-reason"></a><code>rehost($reason)</code></dt>
 <dd>
 
 </dd>
-<dt id="slog-message-level"><code>slog($message,$level)</code></dt>
+<dt id="slog($message,$level)"><a id="slog"></a><a id="slog-message-level"></a><code>slog($message,$level)</code></dt>
 <dd>
 
 <p>This function uses SPADS logging system to write a message in main SPADS log file.</p>
@@ -1349,7 +1340,7 @@ def getParams(pluginName):
 <p><code>$level</code> is the log level of the message: <code>0</code> (critical), <code>1</code> (error), <code>2</code> (warning), <code>3</code> (notice), <code>4</code> (info), <code>5</code> (debug)</p>
 
 </dd>
-<dt id="updateSetting-type-name-value"><code>updateSetting($type,$name,$value)</code></dt>
+<dt id="updateSetting($type,$name,$value)"><a id="updateSetting"></a><a id="updateSetting-type-name-value"></a><code>updateSetting($type,$name,$value)</code></dt>
 <dd>
 
 <p>This function updates current SPADS configuration in memory by changing the value of a setting and applying it immediatly. This function does not modify configuration files on disk. The new value provided by the plugin is not checked: the plugin is reponsible for providing only correct values (see <code>isSettingValueAllowed</code> function).</p>
@@ -1363,23 +1354,23 @@ def getParams(pluginName):
 </dd>
 </dl>
 
-<h2 id="AutoHost-messaging-system">AutoHost messaging system</h2>
+<h2 id="AutoHost-messaging-system"><a id="AutoHost"></a>AutoHost messaging system</h2>
 
 <dl>
 
-<dt id="answer-message"><code>answer($message)</code></dt>
+<dt id="answer($message)"><a id="answer"></a><a id="answer-message"></a><code>answer($message)</code></dt>
 <dd>
 
 <p>This function must only be called from a SPADS command handler. It sends a message to the user who issued the command, using the same communication channel that has been used to send the command to SPADS: a private message, a message in battle lobby, a message in game or a message in a lobby chat channel.</p>
 
 </dd>
-<dt id="broadcastMsg-message"><code>broadcastMsg($message)</code></dt>
+<dt id="broadcastMsg($message)"><a id="broadcastMsg"></a><a id="broadcastMsg-message"></a><code>broadcastMsg($message)</code></dt>
 <dd>
 
 <p>This function sends a message simultaneously in the battle lobby (if open), in the game (if running) and in the broadcast channels (as configured by the <code>broadcastChannels</code> global setting).</p>
 
 </dd>
-<dt id="invalidSyntax-user-commandName-cause"><code>invalidSyntax($user,$commandName,$cause=&#39;&#39;)</code></dt>
+<dt id="invalidSyntax($user,$commandName,$cause=&#39;&#39;)"><a id="invalidSyntax"></a><a id="invalidSyntax-user-commandName-cause"></a><code>invalidSyntax($user,$commandName,$cause=&#39;&#39;)</code></dt>
 <dd>
 
 <p>This function must only be called from a SPADS command handler. It triggers the default SPADS behavior when a user calls a command using invalid syntax, as detailed below:</p>
@@ -1393,37 +1384,37 @@ def getParams(pluginName):
 <p><code>$cause</code> is the detailed reason explaining why the command usage is invalid (optional)</p>
 
 </dd>
-<dt id="sayBattle-message"><code>sayBattle($message)</code></dt>
+<dt id="sayBattle($message)"><a id="sayBattle"></a><a id="sayBattle-message"></a><code>sayBattle($message)</code></dt>
 <dd>
 
 <p>This functions sends a message in the battle lobby (if open).</p>
 
 </dd>
-<dt id="sayBattleAndGame-message"><code>sayBattleAndGame($message)</code></dt>
+<dt id="sayBattleAndGame($message)"><a id="sayBattleAndGame"></a><a id="sayBattleAndGame-message"></a><code>sayBattleAndGame($message)</code></dt>
 <dd>
 
 <p>This function sends a message simultaneously in the battle lobby (if open) and in the game (if running).</p>
 
 </dd>
-<dt id="sayBattleUser-user-message"><code>sayBattleUser($user,$message)</code></dt>
+<dt id="sayBattleUser($user,$message)"><a id="sayBattleUser"></a><a id="sayBattleUser-user-message"></a><code>sayBattleUser($user,$message)</code></dt>
 <dd>
 
 <p>This function sends a message in the battle lobby (if open) to a specific user: only this user will receive the message, but for this user the message will appear in the battle lobby instead of being a private chat message.</p>
 
 </dd>
-<dt id="sayChan-channel-message"><code>sayChan($channel,$message)</code></dt>
+<dt id="sayChan($channel,$message)"><a id="sayChan"></a><a id="sayChan-channel-message"></a><code>sayChan($channel,$message)</code></dt>
 <dd>
 
 <p>This functions sends a message in a specific lobby chat channel (if already joined by SPADS).</p>
 
 </dd>
-<dt id="sayGame-message"><code>sayGame($message)</code></dt>
+<dt id="sayGame($message)"><a id="sayGame"></a><a id="sayGame-message"></a><code>sayGame($message)</code></dt>
 <dd>
 
 <p>This functions sends a message in the game (if running).</p>
 
 </dd>
-<dt id="sayPrivate-user-message"><code>sayPrivate($user,$message)</code></dt>
+<dt id="sayPrivate($user,$message)"><a id="sayPrivate"></a><a id="sayPrivate-user-message"></a><code>sayPrivate($user,$message)</code></dt>
 <dd>
 
 <p>This function sends a private message to a user.</p>
@@ -1431,25 +1422,25 @@ def getParams(pluginName):
 </dd>
 </dl>
 
-<h2 id="Time-utils">Time utils</h2>
+<h2 id="Time-utils"><a id="Time"></a>Time utils</h2>
 
 <dl>
 
-<dt id="getDirModifTime-directory"><code>getDirModifTime($directory)</code></dt>
+<dt id="getDirModifTime($directory)"><a id="getDirModifTime"></a><a id="getDirModifTime-directory"></a><code>getDirModifTime($directory)</code></dt>
 <dd>
 
 </dd>
-<dt id="secToDayAge-seconds"><code>secToDayAge($seconds)</code></dt>
+<dt id="secToDayAge($seconds)"><a id="secToDayAge"></a><a id="secToDayAge-seconds"></a><code>secToDayAge($seconds)</code></dt>
 <dd>
 
 </dd>
-<dt id="secToTime-seconds"><code>secToTime($seconds)</code></dt>
+<dt id="secToTime($seconds)"><a id="secToTime"></a><a id="secToTime-seconds"></a><code>secToTime($seconds)</code></dt>
 <dd>
 
 </dd>
 </dl>
 
-<h2 id="Data-formatting">Data formatting</h2>
+<h2 id="Data-formatting"><a id="Data"></a>Data formatting</h2>
 
 <dl>
 
@@ -1457,11 +1448,11 @@ def getParams(pluginName):
 <dd>
 
 </dd>
-<dt id="formatFloat-float"><code>formatFloat($float)</code></dt>
+<dt id="formatFloat($float)"><a id="formatFloat"></a><a id="formatFloat-float"></a><code>formatFloat($float)</code></dt>
 <dd>
 
 </dd>
-<dt id="formatInteger-integer"><code>formatInteger($integer)</code></dt>
+<dt id="formatInteger($integer)"><a id="formatInteger"></a><a id="formatInteger-integer"></a><code>formatInteger($integer)</code></dt>
 <dd>
 
 </dd>
@@ -1471,11 +1462,11 @@ def getParams(pluginName):
 </dd>
 </dl>
 
-<h2 id="Forking-processes">Forking processes</h2>
+<h2 id="Forking-processes"><a id="Forking"></a>Forking processes</h2>
 
 <dl>
 
-<dt id="createDetachedProcess-applicationPath-commandParams-workingDirectory-createNewConsole"><code>createDetachedProcess($applicationPath,\@commandParams,$workingDirectory,$createNewConsole)</code></dt>
+<dt id="createDetachedProcess($applicationPath,\@commandParams,$workingDirectory,$createNewConsole)"><a id="createDetachedProcess"></a><a id="createDetachedProcess-applicationPath-commandParams-workingDirectory-createNewConsole"></a><code>createDetachedProcess($applicationPath,\@commandParams,$workingDirectory,$createNewConsole)</code></dt>
 <dd>
 
 <p>This function allows plugins to create a new detached/daemon process, which can keep running even if the main SPADS process exits. It returns <code>1</code> if the new process has correctly been created, <code>0</code> else.</p>
@@ -1489,7 +1480,7 @@ def getParams(pluginName):
 <p><code>$createNewConsole</code> indicates if a console must be created for the detached process: <code>0</code> means no console is created for the process (daemon mode) <code>1</code> means a new console will be created for the detached process (this mode is only available on Windows system)</p>
 
 </dd>
-<dt id="forkProcess-processFunction-endProcessCallback-preventQueuing-1"><code>forkProcess(\&amp;processFunction,\&amp;endProcessCallback,$preventQueuing=1)</code></dt>
+<dt id="forkProcess(\&amp;processFunction,\&amp;endProcessCallback,$preventQueuing=1)"><a id="forkProcess"></a><a id="forkProcess-processFunction-endProcessCallback-preventQueuing-1"></a><code>forkProcess(\&amp;processFunction,\&amp;endProcessCallback,$preventQueuing=1)</code></dt>
 <dd>
 
 <p>This function allows plugins to fork a process from main SPADS process, for parallel processing. In scalar context it returns the PID of the forked process on success, <code>-1</code> if the fork request has been queued, or <code>0</code> if the fork request failed. In list context it returns the PID as first parameter and a handle as second parameter. This handle can be passed as parameter to the <code>removeProcessCallback</code> function to remove the <code>endProcessCallback</code> callback.</p>
@@ -1503,7 +1494,7 @@ def getParams(pluginName):
 <p><code>$preventQueuing</code> is an optional boolean parameter (default value: 1) indicating if the fork request must not be queued (i.e., the fork request will fail instead of being queued if too many forked processes are already running)</p>
 
 </dd>
-<dt id="forkCall-processFunction-endProcessCallback-preventQueuing-0"><code>forkCall(\&amp;processFunction,\&amp;endProcessCallback,$preventQueuing=0)</code></dt>
+<dt id="forkCall(\&amp;processFunction,\&amp;endProcessCallback,$preventQueuing=0)"><a id="forkCall"></a><a id="forkCall-processFunction-endProcessCallback-preventQueuing-0"></a><code>forkCall(\&amp;processFunction,\&amp;endProcessCallback,$preventQueuing=0)</code></dt>
 <dd>
 
 <p>This function allows plugins to call a function asynchronously and retrieve the data returned by this function (this is done internally by forking a process to execute the function and use a socketpair to transmit the result back to the parent process). In scalar context it returns the PID of the forked process on success, <code>-1</code> if the fork request has been queued, or <code>0</code> on error. In list context it returns the PID as first parameter and a handle as second parameter. This handle can be passed as parameter to the <code>removeProcessCallback</code> function to remove the <code>endProcessCallback</code> callback.</p>
@@ -1517,7 +1508,7 @@ def getParams(pluginName):
 <p><code>$preventQueuing</code> is an optional boolean parameter (default value: 0) indicating if the fork request must not be queued (i.e., the fork request will fail instead of being queued if too many forked processes are already running)</p>
 
 </dd>
-<dt id="removeProcessCallback-processHandle"><code>removeProcessCallback($processHandle)</code></dt>
+<dt id="removeProcessCallback($processHandle)"><a id="removeProcessCallback"></a><a id="removeProcessCallback-processHandle"></a><code>removeProcessCallback($processHandle)</code></dt>
 <dd>
 
 <p>This function can be used by plugins to remove the callbacks on forked processes added beforehand with the <code>forkProcess</code> and <code>forkCall</code> functions, if the callback hasn&#39;t been called yet (i.e. the corresponding forked process didn&#39;t exit yet). It returns <code>1</code> if the callback could be removed, <code>0</code> else.</p>
@@ -1527,11 +1518,11 @@ def getParams(pluginName):
 </dd>
 </dl>
 
-<h2 id="Timers-management">Timers management</h2>
+<h2 id="Timers-management"><a id="Timers"></a>Timers management</h2>
 
 <dl>
 
-<dt id="addTimer-name-delay-interval-callback"><code>addTimer($name,$delay,$interval,\&amp;callback)</code></dt>
+<dt id="addTimer($name,$delay,$interval,\&amp;callback)"><a id="addTimer"></a><a id="addTimer-name-delay-interval-callback"></a><code>addTimer($name,$delay,$interval,\&amp;callback)</code></dt>
 <dd>
 
 <p>This function allows plugins to add timed events (timers) in order to delay and/or repeat code execution. It returns <code>1</code> if the timer has correctly been added, <code>0</code> else.</p>
@@ -1545,7 +1536,7 @@ def getParams(pluginName):
 <p><code>\&amp;callback</code> is a reference to a function containing the code to be executed when the timed event occurs. This callback must not be blocking, otherwise SPADS may become unstable.</p>
 
 </dd>
-<dt id="removeTimer-name"><code>removeTimer($name)</code></dt>
+<dt id="removeTimer($name)"><a id="removeTimer"></a><a id="removeTimer-name"></a><code>removeTimer($name)</code></dt>
 <dd>
 
 <p>This function must be used by plugins to remove timed events (timers) added previously with the <code>addTimer</code> function. It returns <code>1</code> if the timer could be removed, <code>0</code> else. Note: Non-repeating timers (i.e. having null interval value) are automatically removed once they are triggered.</p>
@@ -1555,11 +1546,11 @@ def getParams(pluginName):
 </dd>
 </dl>
 
-<h2 id="Sockets-management">Sockets management</h2>
+<h2 id="Sockets-management"><a id="Sockets"></a>Sockets management</h2>
 
 <dl>
 
-<dt id="addSocket-socketObject-readCallback"><code>addSocket(\$socketObject,\&amp;readCallback)</code></dt>
+<dt id="addSocket(\$socketObject,\&amp;readCallback)"><a id="addSocket"></a><a id="addSocket-socketObject-readCallback"></a><code>addSocket(\$socketObject,\&amp;readCallback)</code></dt>
 <dd>
 
 <p>This function allows plugins to add sockets to SPADS asynchronous network system. It returns <code>1</code> if the socket has correctly been added, <code>0</code> else.</p>
@@ -1571,7 +1562,7 @@ def getParams(pluginName):
 <p><code>\&amp;readCallback</code> is a reference to a plugin function containing the code to read the data received on the socket. This function will be called automatically every time data are received on the socket, with the socket object as unique parameter. It must not block, and only unbuffered functions must be used to read data from the socket (<code>sysread()</code> or <code>recv()</code> for example).</p>
 
 </dd>
-<dt id="removeSocket-socketObject"><code>removeSocket(\$socketObject)</code></dt>
+<dt id="removeSocket(\$socketObject)"><a id="removeSocket"></a><a id="removeSocket-socketObject"></a><code>removeSocket(\$socketObject)</code></dt>
 <dd>
 
 <p>This function allows plugins to remove sockets from SPADS asynchronous network system. It returns <code>1</code> if the socket has correctly been removed, <code>0</code> else.</p>
@@ -1581,36 +1572,36 @@ def getParams(pluginName):
 </dd>
 </dl>
 
-<h2 id="Python-specific">Python specific</h2>
+<h2 id="Python-specific"><a id="Python"></a>Python specific</h2>
 
 <dl>
 
-<dt id="fix_string-spads_string"><code>fix_string(spads_string[,...])</code></dt>
+<dt id="fix_string(spads_string[,...])"><a id="fix_string"></a><a id="fix_string-spads_string"></a><code>fix_string(spads_string[,...])</code></dt>
 <dd>
 
 <p>This function allows Python plugins to automatically convert byte strings to normal strings if needed. The function takes any number of byte strings or normal strings as parameters, and returns them converted to normal strings if needed (parameters which are already normal strings are returned without any modification). Refer to section <a href="#Perl-strings-conversions">PYTHON SPECIFIC NOTES - Perl strings conversions</a> for the use case of this function. Here is an example of usage:</p>
 
-<pre><code> import perl
- spads=perl.ExamplePlugin
- 
- [...]
- 
- class ExamplePlugin:
+<pre><code class="language-python">import perl
+spads=perl.ExamplePlugin
 
- [...]
- 
-     def onPrivateMsg(self,userName,message):
-         (userName,message)=spads.fix_string(userName,message)
+[...]
 
- [...]
- 
- def hMyCommand(source,user,params,checkOnly):
-     user=spads.fix_string(user)
-     for i in range(len(params)):
-         params[i]=spads.fix_string(params[i])</code></pre>
+class ExamplePlugin:
+
+[...]
+
+    def onPrivateMsg(self,userName,message):
+        (userName,message)=spads.fix_string(userName,message)
+
+[...]
+
+def hMyCommand(source,user,params,checkOnly):
+    user=spads.fix_string(user)
+    for i in range(len(params)):
+        params[i]=spads.fix_string(params[i])</code></pre>
 
 </dd>
-<dt id="get_flag-flag_name"><code>get_flag(flag_name)</code></dt>
+<dt id="get_flag(flag_name)"><a id="get_flag"></a><a id="get_flag-flag_name"></a><code>get_flag(flag_name)</code></dt>
 <dd>
 
 <p>This function allows Python plugins to retrieve indicators (boolean flags) regarding the behavior of the plugin API and the availability of functionalities on current system.</p>
@@ -1632,21 +1623,21 @@ def getParams(pluginName):
 
 <p>Here is an example of usage:</p>
 
-<pre><code> import perl
- spads=perl.ExamplePlugin
- 
- [...]
- 
-     if spads.get_flag(&#39;can_add_socket&#39;):
-         spads.addSocket(socket,readSocketCallback)
-     else:
-         spads.slog(&quot;This plugin requires the addSocket function&quot;,1)
-         return False</code></pre>
+<pre><code class="language-python">import perl
+spads=perl.ExamplePlugin
+
+[...]
+
+    if spads.get_flag(&#39;can_add_socket&#39;):
+        spads.addSocket(socket,readSocketCallback)
+    else:
+        spads.slog(&quot;This plugin requires the addSocket function&quot;,1)
+        return False</code></pre>
 
 </dd>
 </dl>
 
-<h1 id="SHARED-DATA">SHARED DATA</h1>
+<h1 id="SHARED-DATA"><a id="SHARED"></a>SHARED DATA</h1>
 
 <h2 id="Constants">Constants</h2>
 
@@ -1654,11 +1645,11 @@ def getParams(pluginName):
 
 <dl>
 
-<dt id="spadsVersion"><code>$spadsVersion</code></dt>
+<dt id="$spadsVersion"><a id="spadsVersion"></a><code>$spadsVersion</code></dt>
 <dd>
 
 </dd>
-<dt id="spadsDir"><code>$spadsDir</code></dt>
+<dt id="$spadsDir"><a id="spadsDir"></a><code>$spadsDir</code></dt>
 <dd>
 
 </dd>
@@ -1670,69 +1661,69 @@ def getParams(pluginName):
 
 <dl>
 
-<dt id="autohost"><code>$::autohost</code></dt>
+<dt id="$::autohost"><a id="autohost"></a><code>$::autohost</code></dt>
 <dd>
 
 </dd>
-<dt id="conf"><code>%::conf</code></dt>
+<dt id="%::conf"><a id="conf"></a><code>%::conf</code></dt>
 <dd>
 
 </dd>
-<dt id="confMacros"><code>%::confMacros</code></dt>
+<dt id="%::confMacros"><a id="confMacros"></a><code>%::confMacros</code></dt>
 <dd>
 
 </dd>
-<dt id="currentVote"><code>%::currentVote</code></dt>
+<dt id="%::currentVote"><a id="currentVote"></a><code>%::currentVote</code></dt>
 <dd>
 
 </dd>
-<dt id="lobby"><code>$::lobby</code></dt>
+<dt id="$::lobby"><a id="lobby"></a><code>$::lobby</code></dt>
 <dd>
 
 </dd>
-<dt id="lobbyState"><code>$::lobbyState</code></dt>
+<dt id="$::lobbyState"><a id="lobbyState"></a><code>$::lobbyState</code></dt>
 <dd>
 
 </dd>
-<dt id="p_runningBattle"><code>$::p_runningBattle</code></dt>
+<dt id="$::p_runningBattle"><a id="p_runningBattle"></a><code>$::p_runningBattle</code></dt>
 <dd>
 
 </dd>
-<dt id="plugins"><code>%::plugins</code></dt>
+<dt id="%::plugins"><a id="plugins"></a><code>%::plugins</code></dt>
 <dd>
 
 </dd>
-<dt id="pluginsOrder"><code>@::pluginsOrder</code></dt>
+<dt id="@::pluginsOrder"><a id="pluginsOrder"></a><code>@::pluginsOrder</code></dt>
 <dd>
 
 </dd>
-<dt id="spads"><code>$::spads</code></dt>
+<dt id="$::spads"><a id="spads"></a><code>$::spads</code></dt>
 <dd>
 
 </dd>
-<dt id="spadsCmdHandlers"><code>%::spadsCmdHandlers</code></dt>
+<dt id="%::spadsCmdHandlers"><a id="spadsCmdHandlers"></a><code>%::spadsCmdHandlers</code></dt>
 <dd>
 
 </dd>
-<dt id="springPid"><code>$::springPid</code></dt>
+<dt id="$::springPid"><a id="springPid"></a><code>$::springPid</code></dt>
 <dd>
 
 </dd>
-<dt id="springServerType"><code>$::springServerType</code></dt>
+<dt id="$::springServerType"><a id="springServerType"></a><code>$::springServerType</code></dt>
 <dd>
 
 </dd>
-<dt id="timestamps"><code>%::timestamps</code></dt>
+<dt id="%::timestamps"><a id="timestamps"></a><code>%::timestamps</code></dt>
 <dd>
 
 </dd>
-<dt id="bosses"><code>%::bosses</code></dt>
+<dt id="%::bosses"><a id="bosses"></a><code>%::bosses</code></dt>
 <dd>
 
 </dd>
 </dl>
 
-<h1 id="SEE-ALSO">SEE ALSO</h1>
+<h1 id="SEE-ALSO"><a id="SEE"></a>SEE ALSO</h1>
 
 <p><a href="https://github.com/Yaribz/SPADS/wiki/SPADS-plugin-development">SPADS plugin development tutorials (Perl)</a></p>
 
@@ -1758,13 +1749,74 @@ def getParams(pluginName):
 
 <p>This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.</p>
 
-
 <script>
   anchors.options.placement = 'left';
   anchors.add('h1,h2,dt');
+
+  const codeBlocks = document.querySelectorAll('pre > code');
+
+  let hasNonPerl = false;
+  codeBlocks.forEach(function (code) {
+    if (!/(?:^|\s)language-\S+/.test(code.className)) {
+      code.classList.add('language-perl');
+      return;
+    }
+
+    if (hasNonPerl)
+      return;
+
+    const languageClass = Array.from(code.classList).find(c => c.startsWith('language-'));
+    const language = languageClass.substring('language-'.length);
+    if (language !== 'perl')
+      hasNonPerl = true;
+  });
+
+  if(hasNonPerl) {
+    const languageNames = {
+      perl: 'Perl',
+      python: 'Python',
+      bash: 'Bash'
+    };
+    codeBlocks.forEach(function (code) {
+      const languageClass = Array.from(code.classList).find(c => c.startsWith('language-'));
+      const language = languageClass.substring('language-'.length);
+      const label = document.createElement('div');
+      label.className = 'language-label language-' + language;
+      label.textContent = languageNames[language] || language;
+      code.parentElement.before(label);
+    });
+  }
+
+  const toc = document.querySelector('body > nav');
+  if(toc) {
+    const totalTocWidth = toc.getBoundingClientRect().width + 17;
+    const bodyMaxWidth = 1200 + 2 * 16;
+    const threshold1 = totalTocWidth * 2 + bodyMaxWidth + 16;
+    const threshold2 = totalTocWidth + bodyMaxWidth + 16;
+    const style = document.createElement('style');
+    style.textContent = `
+@media (min-width: ${threshold2}px) and (max-width: ${threshold1}px) {
+  body>nav {
+    left: 8px;
+    right: auto;
+  }
+  body {
+    margin-left: ${totalTocWidth}px;
+  }
+}
+@media (max-width: ${threshold2}px) {
+  body>nav {
+    position: static;
+    margin-bottom: 40px;
+  }
+  body {
+    margin-left: auto;
+  }
+}`;
+    document.head.appendChild(style);
+  }
 </script>
 </body>
-
 </html>
 
 
