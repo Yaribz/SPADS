@@ -97,7 +97,7 @@ Documentation
   HTML with link anchors (AnchorJS), syntax highlighting (Prism) and responsive
   TOC placement. This script requires the `MetaCPAN::Pod::HTML` Perl module.
 
-* Additional documentation can be found on [SPADS wiki](http://springrts.com/wiki/SPADS).
+* Additional documentation can be found on [SPADS wiki](https://github.com/Yaribz/SPADS/wiki).
 
 Licensing
 ---------
