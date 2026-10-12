@@ -37,6 +37,12 @@ ul#index ul, nav>ul ul {
   padding-left: 1em;
 }
 
+nav a.current {
+  text-decoration-line: underline;
+  text-shadow: 0.4px 0 currentColor, -0.4px 0 currentColor;
+  color: #2916e5;
+}
+
 /* links */
 
 a {
@@ -144,7 +150,7 @@ dd {
 
 /* top margin when URL is targeting a specific element */
 :target {
-  scroll-margin-top: 2ex;
+  scroll-margin-top: 10vh;
 }
 
 /* Syntax Highlighting */

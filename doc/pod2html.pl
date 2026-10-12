@@ -88,9 +88,13 @@ HEADER_TAGS
 
 $parser->html_footer(<<'JAVASCRIPT');
 <script>
+
+  // Deep anchor links (AnchorJS)
   anchors.options.placement = 'left';
   anchors.add('h1,h2,dt');
 
+
+  // Syntax highlighting (Prism)
   const codeBlocks = document.querySelectorAll('pre > code');
 
   let hasNonPerl = false;
@@ -153,6 +157,63 @@ $parser->html_footer(<<'JAVASCRIPT');
 }`;
     document.head.appendChild(style);
   }
+
+
+  // Update current section in TOC
+  const headings = Array.from(document.querySelectorAll('h1[id],h2[id]'));
+  const tocLinks = Array.from(document.querySelectorAll('body > nav a[href^="#"]'));
+
+  if (headings.length > 0) {
+    let currentHeading = null;
+    let currentLink = null;
+    let scheduled = false;
+
+    function updateCurrentHeading() {
+      const activationLine = window.innerHeight / 7;
+      let newHeading;
+
+      const atTop = window.scrollY <= 1;
+      const atBottom = window.scrollY + window.innerHeight >=  document.documentElement.scrollHeight - 1;
+      if (atTop) {
+        newHeading = headings[0];
+      } else if (atBottom) {
+        newHeading = headings[headings.length - 1];
+      } else {
+        newHeading = headings[0];
+        for (const heading of headings) {
+          if (heading.getBoundingClientRect().top > activationLine)
+            break;
+          newHeading = heading;
+        }
+      }
+
+      if (newHeading !== currentHeading) {
+        currentHeading = newHeading;
+        const newLink = tocLinks.find(link => link.hash === '#' + currentHeading.id);
+        if (currentLink)
+          currentLink.classList.remove('current');
+        if (newLink)
+          newLink.classList.add('current');
+        currentLink = newLink;
+      }
+    }
+
+    function onScroll() {
+      if (scheduled)
+        return;
+      scheduled = true;
+      requestAnimationFrame(function () {
+        scheduled = false;
+        updateCurrentHeading();
+      });
+    }
+
+    window.addEventListener('scroll', onScroll);
+    window.addEventListener('resize', updateCurrentHeading);
+
+    updateCurrentHeading();
+  }
+
 </script>
 </body>
 </html>
