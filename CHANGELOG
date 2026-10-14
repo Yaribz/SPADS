@@ -1316,6 +1316,7 @@ SpadsConf.pm:
          add debug logs for preset loading
          split the "applyMapList" function to make the map list computing functionality available separately (makes it possible to compute map lists without altering current configuration)
 0.13.21: new allowed value for "autoLoadMapPreset" preset setting: "2" (sticky mode map presets)
+0.13.22: detect invalid types returned by "getParams" plugin callback
 
 spadsInstaller.pl:
 =================

@@ -39,7 +39,7 @@ use SimpleLog;
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.13.21';
+my $moduleVersion='0.13.22';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -1470,6 +1470,16 @@ sub loadPluginConf {
   $p_globalParams//={};
   $p_presetParams//={};
   return 1 unless(%{$p_globalParams} || %{$p_presetParams});
+  my @invalidTypes;
+  foreach my $r_params ($p_globalParams,$p_presetParams) {
+    foreach my $setting (keys %{$r_params}) {
+      push(@invalidTypes,grep {! ref $_ && ! exists $paramTypes{$_}} @{$r_params->{$setting}});
+    }
+  }
+  if(@invalidTypes) {
+    $self->{log}->log("Unable to load configuration for plugin \"$pluginName\" : getParams() returned invalid type".(@invalidTypes>1?'s':'').' ('.join(', ',@invalidTypes).')',1);
+    return 0;
+  }
   my $p_pluginPresets = loadSettingsFile($self->{log},catfile($self->{conf}{etcDir},"$pluginName.conf"),$p_globalParams,$p_presetParams,$self->{macros});
   if(%{$p_presetParams} && exists $p_pluginPresets->{'_DEFAULT_'}) {
     my $defaultPreset=$self->{conf}{defaultPreset};
