@@ -208,7 +208,10 @@ dd {
   color: #DD4A68;
 }
 
-.token.regex,
+.token.regex {
+  color: #179;
+}
+
 .token.important,
 .token.variable {
   color: #b60;
