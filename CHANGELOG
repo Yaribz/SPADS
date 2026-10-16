@@ -1541,6 +1541,11 @@ SpadsPluginApi.pm:
       use log level constants in code examples
       update documentation for syntax highlighting
       other minor documentation fixes and improvements
+0.47: new generic Lua message management system: custom messages registry, optimized message recognition, and support for most commonly used compression and serialization formats
+      new plugin API functions dedicated to Lua message management: registerLuaMsg, unregisterLuaMsg, addLuaMsgHandler, removeLuaMsgHandler
+      fix "loadArchives" plugin API function not encapsulating callback functions in Python
+      add documentation for "loadArchives" plugin API function
+      minor documentation improvements
 
 SpadsUpdater.pm:
 ===============
