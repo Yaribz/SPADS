@@ -22,6 +22,7 @@
       <li><a href="#Windows-limitations">Windows limitations</a></li>
     </ul>
   </li>
+  <li><a href="#LOGGING-SYSTEM">LOGGING SYSTEM</a></li>
   <li><a href="#CALLBACK-FUNCTIONS">CALLBACK FUNCTIONS</a>
     <ul>
       <li><a href="#Mandatory-callbacks">Mandatory callbacks</a></li>
@@ -65,19 +66,20 @@
 
 <pre><code>package MyPlugin;
 
+use SimpleLog &#39;:logLevel&#39;;
 use SpadsPluginApi;
 
 my $pluginVersion=&#39;0.1&#39;;
 my $requiredSpadsVersion=&#39;0.11&#39;;
 
-sub getVersion { return $pluginVersion; }
-sub getRequiredSpadsVersion { return $requiredSpadsVersion; }
+sub getVersion { return $pluginVersion }
+sub getRequiredSpadsVersion { return $requiredSpadsVersion }
 
 sub new {
   my $class=shift;
   my $self = {};
   bless($self,$class);
-  slog(&quot;MyPlugin plugin loaded (version $pluginVersion)&quot;,3);
+  slog(&quot;Plugin loaded (version $pluginVersion)&quot;,L_NOTICE);
   return $self;
 }
 
@@ -99,7 +101,8 @@ def getRequiredSpadsVersion(pluginName):
 class MyPlugin:
 
     def __init__(self,context):
-        spads.slog(&quot;MyPlugin plugin loaded (version %s)&quot; % pluginVersion,3)</code></pre>
+        spads.import_constants(&#39;SimpleLog&#39;,&#39;:logLevel&#39;)
+        spads.slog(&quot;Plugin loaded (version %s)&quot; % pluginVersion,L_NOTICE)</code></pre>
 
 <h1 id="DESCRIPTION">DESCRIPTION</h1>
 
@@ -113,9 +116,12 @@ class MyPlugin:
 
 <h2 id="How-to-read-the-documentation"><a id="How"></a>How to read the documentation</h2>
 
-<p>This documentation was written when SPADS was only supporting plugins coded in Perl, so types for function parameters and return values are described using Perl terminology, with Perl sigils (<code>%</code> for hash, <code>@</code> for array, <code>$</code> for scalars). Python plugins just need to ignore these sigils and use their equivalent internal Python types instead (Python dictionaries instead of Perl hashes, Python lists instead of Perl arrays, Python tuples instead of Perl lists, Python None value instead of Perl undef value...).</p>
+<p>This documentation was mostly written when SPADS was only supporting plugins coded in Perl, so types for function parameters and return values are described using Perl terminology, with Perl sigils (<code>%</code> for hash, <code>@</code> for array, <code>$</code> for scalars). Python plugins just need to ignore these sigils and use their equivalent internal Python types instead (Python dictionaries instead of Perl hashes, Python lists instead of Perl arrays, Python tuples instead of Perl lists, Python None value instead of Perl undef value...).</p>
 
-<p>In order to call functions from the plugin API, Python plugin modules must first import the special <code>perl</code> module, and then use the global variable of this module named after the plugin name to call the functions (refer to the SYNOPSYS for an example of a Python plugin named <code>MyPlugin</code> calling the <code>slog</code> API function).</p>
+<p>In order to call functions from the plugin API, Python plugins must first import the special package named <code>perl</code>. The plugin API is then available from the module of this package that is named after the plugin. The convention is to assign this module to the global variable <code>spads</code> within the local namespace (refer to the SYNOPSYS for an example of a Python plugin named <code>MyPlugin</code> calling the <code>slog</code> function of the API). Therefore, it is assumed in the plugin API documentation that Python plugins always start with these two lines (replacing <code>MyPlugin</code> by the actual plugin name):</p>
+
+<pre><code class="language-python">import perl
+spads=perl.MyPlugin</code></pre>
 
 <h2 id="Perl-strings-conversions"><a id="Perl"></a>Perl strings conversions</h2>
 
@@ -137,6 +143,63 @@ def fix_spads_strings(*spads_strings):
 <p>On Windows systems, Perl emulates the <code>fork</code> functionality using threads. As the <code>Inline::Python</code> Perl module used by SPADS to interface with Python code isn&#39;t thread-safe, the fork functions of the plugin API (<code>forkProcess</code> and <code>forkCall</code>) aren&#39;t available from Python plugins when running on a Windows system. On Windows systems, using native Win32 processes for parallel processing is recommended anyway. Plugins can check if the fork functions of the plugin API are available by calling the <code>get_flag</code> Python specific plugin API function with parameter <code>&#39;can_fork&#39;</code>, instead of checking by themselves if the current system is Windows. Refer to the <a href="#Python-specific">API FUNCTIONS - Python specific</a> section for more information regarding this function.</p>
 
 <p>Automatic asynchronous socket management (<code>addSocket</code> plugin API function) is also unavailable for Python plugins on Windows systems (this is due to the file descriptor numbers being thread-specific on Windows, preventing SPADS from accessing sockets opened in Python interpreter scope). However, it is still possible to manage asynchronous sockets manually, for example by hooking the SPADS event loop (<code>eventLoop</code> plugin callback) to perform non-blocking <code>select</code> with 0 timeout (refer to <a href="https://docs.python.org/3/library/select.html#select.select">Python select documentation</a>). Plugins can check if the <code>addSocket</code> function of the plugin API is available by calling the <code>get_flag</code> Python specific plugin API function with parameter <code>&#39;can_add_socket&#39;</code>, instead of checking by themselves if the current system is Windows. Refer to the <a href="#Python-specific">API FUNCTIONS - Python specific</a> section for more information regarding this function.</p>
+
+<h1 id="LOGGING-SYSTEM"><a id="LOGGING"></a>LOGGING SYSTEM</h1>
+
+<p>SPADS logging system is based on the <a href="https://github.com/Yaribz/SimpleLog">SimpleLog</a> Perl module. This system is made available for plugins through the <code>slog</code> function of the plugin API:</p>
+
+<dl>
+
+<dt id="slog($message,$level)"><a id="slog"></a><a id="slog-message-level"></a><code>slog($message,$level)</code></dt>
+<dd>
+
+<p>This function uses SPADS logging system to write a message in main SPADS log file.</p>
+
+<p><code>$message</code> is the log message</p>
+
+<p><code>$level</code> is the log level of the message: <code>0</code> (critical), <code>1</code> (error), <code>2</code> (warning), <code>3</code> (notice), <code>4</code> (info), <code>5</code> (debug)</p>
+
+</dd>
+</dl>
+
+<p>Three sets of log level constants are available to avoid using the hard-coded numbers listed above:</p>
+
+<ul>
+
+<li><p>Full length constants (export tag <code>:logLevel</code>): <code>L_CRITICAL</code>, <code>L_ERROR</code>, <code>L_WARNING</code>, <code>L_NOTICE</code>, <code>L_INFO</code>, <code>L_DEBUG</code></p>
+
+</li>
+<li><p>Short length constants (export tag <code>:logLvl</code>): <code>L_CRIT</code>, <code>L_ERR</code>, <code>L_WARN</code>, <code>L_NOTC</code>, <code>L_INFO</code>, <code>L_DBG</code></p>
+
+</li>
+<li><p>Constants with 3-character level (export tag <code>:logLvl3</code>): <code>L_CRI</code>, <code>L_ERR</code>, <code>L_WRN</code>, <code>L_NTC</code>, <code>L_INF</code>, <code>L_DBG</code></p>
+
+</li>
+</ul>
+
+<p>Plugin developers should choose one (or several) of them and import the corresponding export tag(s) from the <code>SimpleLog</code> module, like this for example (for Python plugins, refer to the <a href="#import_constants">import_constants</a> function for more details about how imports work):</p>
+
+<pre><code># Import the log level constants at start of the plugin module
+use SimpleLog &#39;:logLevel&#39;;
+
+[...]
+
+  # Use the log level constants anywhere in the plugin code
+  slog(&quot;Example of log message&quot;,L_NOTICE);</code></pre>
+
+<pre><code class="language-python">class MyPlugin:
+
+    def __init__(self,context):
+
+        # Import the log level constants from the plugin constructor
+        spads.import_constants(&#39;SimpleLog&#39;,&#39;:logLevel&#39;)
+
+[...]
+
+    # Use the log level constants anywhere in the plugin code
+    spads.slog(&quot;Example of log message&quot;,L_NOTICE)</code></pre>
+
+<p>Note: For clarity in the plugin API documentation, log level constants are always used when calling the <code>slog</code> function. However, the import code shown above is not repeated in each code example. It is always assumed that the log level constants have already been imported by the plugin. The documentation uses the full length form of the constants, but this is just a convention. You can choose the constants that best suit your coding style.</p>
 
 <h1 id="CALLBACK-FUNCTIONS"><a id="CALLBACK"></a>CALLBACK FUNCTIONS</h1>
 
@@ -189,7 +252,7 @@ def fix_spads_strings(*spads_strings):
 
 <pre><code>my %globalPluginParams = ( MyGlobalSetting1 =&gt; [&#39;integer&#39;],
                            MyGlobalSetting2 =&gt; [&#39;ipAddr&#39;]);
-my %presetPluginParams = ( MyPresetSetting1 =&gt; [&#39;readableDir&#39;,&#39;null&#39;],
+my %presetPluginParams = ( MyPresetSetting1 =&gt; [&#39;readableFile&#39;,&#39;null&#39;],
                            MyPresetSetting2 =&gt; [&#39;bool&#39;, \&amp;myCustomSettingValueCheck] );
 
 sub myCustomSettingValueCheck {
@@ -204,7 +267,7 @@ sub getParams { return [\%globalPluginParams,\%presetPluginParams] }</code></pre
 
 globalPluginParams = { &#39;MyGlobalSetting1&#39;: [&#39;integer&#39;],
                        &#39;MyGlobalSetting2&#39;: [&#39;ipAddr&#39;] }
-presetPluginParams = { &#39;MyPresetSetting1&#39;: [&#39;readableDir&#39;,&#39;null&#39;],
+presetPluginParams = { &#39;MyPresetSetting1&#39;: [&#39;readableFile&#39;,&#39;null&#39;],
                        &#39;MyPresetSetting2&#39;: [&#39;bool&#39;, myCustomSettingValueCheck], };
 
 def getParams(pluginName):
@@ -228,7 +291,7 @@ def getParams(pluginName):
 
 <p>Example of implementation:</p>
 
-<pre><code>sub getDependencies { return (&#39;SpringForumInterface&#39;,&#39;MailAlerts&#39;); }</code></pre>
+<pre><code>sub getDependencies { return (&#39;SpringForumInterface&#39;,&#39;MailAlerts&#39;) }</code></pre>
 
 <pre><code class="language-python">def getDependencies(pluginName):
     return (&#39;SpringForumInterface&#39;,&#39;MailAlerts&#39;)</code></pre>
@@ -1097,13 +1160,20 @@ def getParams(pluginName):
 <p>Perl plugins can use these constants directly in the plugin code, like this for example:</p>
 
 <pre><code>if(getLobbyState() &gt;= LOBBY_STATE_CONNECTED) {
-  slog(&quot;SPADS is connected to lobby server&quot;,3);
+  slog(&quot;SPADS is connected to lobby server&quot;,L_NOTICE);
 }</code></pre>
 
-<p>Python plugins must call them as SPADS functions, like this for example:</p>
+<p>Python plugins must import them using the <code>:lobbyState</code> export tag from main SPADS namespace, like this for example (refer to the <a href="#import_constants">import_constants</a> function for more details):</p>
 
-<pre><code class="language-python">if spads.getLobbyState() &gt;= spads.LOBBY_STATE_CONNECTED():
-    spads.slog(&quot;SPADS is connected to lobby server&quot;,3)</code></pre>
+<pre><code class="language-python">class MyPlugin:
+
+    def __init__(self,context):
+        spads.import_constants(&#39;main&#39;,&#39;:lobbyState&#39;)
+
+[...]
+
+    if spads.getLobbyState() &gt;= LOBBY_STATE_CONNECTED:
+        spads.slog(&quot;SPADS is connected to lobby server&quot;,L_NOTICE)</code></pre>
 
 </dd>
 <dt id="getPluginList()"><a id="getPluginList"></a><code>getPluginList()</code></dt>
@@ -1132,6 +1202,203 @@ def getParams(pluginName):
 </dd>
 <dt id="getSpringInterface()"><a id="getSpringInterface"></a><code>getSpringInterface()</code></dt>
 <dd>
+
+<p>This accessor returns the instance of the <a href="https://github.com/Yaribz/SpringAutoHostInterface">SpringAutoHostInterface</a> module used by SPADS.</p>
+
+<p>Following methods, called on the <code>SpringAutoHostInterface</code> object, can be useful for plugins to retrieve various data about the game in progress:</p>
+
+<ul>
+
+<li><p>- <code>getState()</code></p>
+
+<p>This accessor returns an integer describing the current game server state. The corresponding constants are provided to ease game state handling/comparisons, as listed below:</p>
+
+<ul>
+
+<li><p><code>0</code> - <code>SRV_STATE_NOT_RUNNING</code> (server is not running)</p>
+
+</li>
+<li><p><code>1</code> - <code>SRV_STATE_SERVER_STARTED</code> (server is running but game has not started)</p>
+
+</li>
+<li><p><code>2</code> - <code>SRV_STATE_GAME_STARTED</code> (game has started)</p>
+
+</li>
+<li><p><code>3</code> - <code>SRV_STATE_GAME_OVER</code> (game is over but server is still running)</p>
+
+</li>
+</ul>
+
+<p>To use these constants, plugins must import the <code>:srvState</code> export tag from the <code>SpringAutoHostInterface</code> module, like this for example:</p>
+
+<pre><code>use SpringAutoHostInterface &#39;:srvState&#39;;
+
+[...]
+
+  if(getSpringInterface()-&gt;getState() == SRV_STATE_GAME_STARTED) {
+    slog(&quot;A game is in progress&quot;,L_NOTICE);
+  }</code></pre>
+
+<pre><code class="language-python">class MyPlugin:
+
+    def __init__(self,context):
+        spads.import_constants(&#39;SpringAutoHostInterface&#39;,&#39;:srvState&#39;)
+
+[...]
+
+    if spads.getSpringInterface().getState() == SRV_STATE_GAME_STARTED:
+        spads.slog(&quot;A game is in progress&quot;,L_NOTICE)</code></pre>
+
+</li>
+<li><p>- <code>getPlayerName($playerNum)</code></p>
+
+<p>This methods retrieves the player name corresponding to the player number <code>$playerNum</code>, or <code>undef</code> if the player number is not attributed to any in-game player.</p>
+
+<p>Player numbers are the internal identifiers used at game server side. Most of the network messages passing through the autohost interface use these identifiers rather than player names, so this accessor can be useful to resolve them back to player names (as shown in the documentation of the <a href="#addSpringCommandHandler">addSpringCommandHandler</a> handler management function).</p>
+
+</li>
+<li><p>- <code>getPlayer($playerName)</code></p>
+
+<p>This methods retrieves a reference to a hash containing the internal in-game data associated with the player whose name is <code>$playerName</code>, or a reference to an empty hash if the player is not found.</p>
+
+<p>The returned hash contains following key/value pairs if the player is found:</p>
+
+<ul>
+
+<li><p><code>name</code>: the name of the player</p>
+
+</li>
+<li><p><code>playerNb</code>: the internal player number used by the game server to identify the player</p>
+
+</li>
+<li><p><code>disconnectCause</code>: a numerical value describing the state of the player&#39;s connection (see &quot;<code>disconnectCause</code> values&quot; below)</p>
+
+</li>
+<li><p><code>ready</code>: a numerical value describing the ready state of the player (see &quot;<code>ready</code> values&quot; below)</p>
+
+</li>
+<li><p><code>lost</code>: a boolean indicating whether the player has lost/resigned or is still playing</p>
+
+</li>
+<li><p><code>version</code>: a string containing the engine version used by the player</p>
+
+</li>
+<li><p><code>address</code>: a string containing the IP address of the player</p>
+
+</li>
+<li><p><code>winningAllyTeams</code>: a reference to an array containing the list of the ally team numbers the player has declared as winning in his game over message, or <code>undef</code> if the player has not sent any game over message yet.</p>
+
+</li>
+</ul>
+
+<p>Note: Special care must be taken to not modify the returned data, as doing so would likely compromise the consistency of the object&#39;s internal state and lead to instability.</p>
+
+<p><code>disconnectCause</code> values:</p>
+
+<ul>
+
+<li><p><code>-2</code> - <code>CLI_STATE_LOADING</code> (client is connecting and/or catching-up a game in progress)</p>
+
+</li>
+<li><p><code>-1</code> - <code>CLI_STATE_CONNECTED</code> (client is connected)</p>
+
+</li>
+<li><p><code>0</code> - <code>CLI_STATE_CONNECTION_LOST</code> (client connection lost / timeout)</p>
+
+</li>
+<li><p><code>1</code> - <code>CLI_STATE_LEFT</code> (client has disconnected)</p>
+
+</li>
+<li><p><code>2</code> - <code>CLI_STATE_KICKED</code> (client has been kicked)</p>
+
+<p>The corresponding constants are provided to ease player connection status handling/comparisons. To use these constants, plugins must import the <code>:cliState</code> export tag from the <code>SpringAutoHostInterface</code> module, like this for example:</p>
+
+<pre><code>use SpringAutoHostInterface &#39;:cliState&#39;;
+
+[...]
+
+  my $r_playerData=getSpringInterface()-&gt;getPlayer(&#39;joe&#39;);
+  if(%{$r_playerData} &amp;&amp; $r_playerData-&gt;{disconnectCause} == CLI_STATE_KICKED) {
+    slog(&quot;Joe has been kicked !&quot;,L_NOTICE);
+  }</code></pre>
+
+<pre><code class="language-python">class MyPlugin:
+
+    def __init__(self,context):
+        spads.import_constants(&#39;SpringAutoHostInterface&#39;,&#39;:cliState&#39;)
+
+[...]
+
+    playerData = spads.getSpringInterface().getPlayer(&#39;joe&#39;)
+    if playerData and playerData[&quot;disconnectCause&quot;] == CLI_STATE_KICKED:
+        spads.slog(&quot;Joe has been kicked !&quot;,L_NOTICE)</code></pre>
+
+</li>
+</ul>
+
+<p><code>ready</code> values:</p>
+
+<ul>
+
+<li><p><code>-1</code> - <code>RDY_STATE_NOT_PLACED</code> (player has not selected start position yet)</p>
+
+</li>
+<li><p><code>0</code> - <code>RDY_STATE_PLACED</code> (player has selected a start position but is not ready yet)</p>
+
+</li>
+<li><p><code>1</code> - <code>RDY_STATE_READY_BY_ENGINE</code> (player has been set ready by the generic code from game engine)</p>
+
+</li>
+<li><p><code>2</code> - <code>RDY_STATE_READY_BY_LUA</code> (player has been set ready by the game-specific Lua code)</p>
+
+<p>The corresponding constants are provided to ease player ready status handling/comparisons. To use these constants, plugins must import the <code>:rdyState</code> export tag from the <code>SpringAutoHostInterface</code> module, like this for example:</p>
+
+<pre><code>use SpringAutoHostInterface &#39;:rdyState&#39;;
+
+[...]
+
+  my $r_playerData=getSpringInterface()-&gt;getPlayer(&#39;joe&#39;);
+  if(%{$r_playerData} &amp;&amp; $r_playerData-&gt;{ready} &gt; RDY_STATE_PLACED) {
+    slog(&quot;Joe is ready !&quot;,L_NOTICE);
+  }</code></pre>
+
+<pre><code class="language-python">class MyPlugin:
+
+    def __init__(self,context):
+        spads.import_constants(&#39;SpringAutoHostInterface&#39;,&#39;:rdyState&#39;)
+
+[...]
+
+    playerData = spads.getSpringInterface().getPlayer(&#39;joe&#39;)
+    if playerData and playerData[&quot;ready&quot;] &gt; RDY_STATE_PLACED:
+        spads.slog(&quot;Joe is ready !&quot;,L_NOTICE)</code></pre>
+
+</li>
+</ul>
+
+</li>
+<li><p>- <code>getPlayerByNum($playerNum)</code></p>
+
+<p>This methods returns exactly the same data as the <code>getPlayer($playerName)</code> method, but it takes a player number as parameter instead of a player name.</p>
+
+<p>Note: Special care must be taken to not modify the returned data, as doing so would likely compromise the consistency of the object&#39;s internal state and lead to instability.</p>
+
+</li>
+<li><p>- <code>getPlayers()</code></p>
+
+<p>This method returns a reference to a hash containing the data regarding all the players in the game (including spectators). The hash is indexed by player numbers and the values are references to hashes containing the same data as returned by the <code>getPlayer($playerName)</code> method.</p>
+
+<p>Note: this method performs a deep copy of the data to prevent external code from corrupting internal data. However it is also possible to read the same data directly without triggering a deep copy by accessing the <code>players</code> field of the <code>SpringAutoHostInterface</code> object.</p>
+
+</li>
+<li><p>- <code>getPlayersByNames()</code></p>
+
+<p>This method returns the same data as the <code>getPlayers()</code> method, except it is indexed by player names instead of player numbers.</p>
+
+<p>Note: this method performs a deep copy of the data to prevent external code from corrupting internal data.</p>
+
+</li>
+</ul>
 
 </dd>
 <dt id="getSpringPid()"><a id="getSpringPid"></a><code>getSpringPid()</code></dt>
@@ -1215,9 +1482,166 @@ def getParams(pluginName):
 
 <p>This function allows plugins to set up their own handlers for Spring AutoHost commands received by SPADS from Spring server.</p>
 
-<p><code>\%handlers</code> is a reference to a hash which contains the handlers to be added: each entry associates a Spring AutoHost command to a handler function implemented by the plugin. The Spring AutoHost command names must match the values of <code>%commandCodes</code> defined in SpringAutoHostInterface.pm. For example, with <code>{ SERVER_STARTED =&gt; \&amp;hSpringServerStarted }</code>, the plugin has to implement the function <code>hSpringServerStarted</code>. The parameters passed to the handlers are the command tokens: the command name followed by command parameters. Refer to <a href="https://raw.github.com/spring/spring/master/rts/Net/AutohostInterface.cpp">Spring autohost protocol specifications (from source comments)</a> for more information.</p>
+<p><code>\%handlers</code> is a reference to a hash which contains the handlers to be added: each entry associates a Spring AutoHost command to a handler function implemented by the plugin. The Spring AutoHost command names must match the entries declared in the <code>EVENT</code> enum in <a href="https://github.com/beyond-all-reason/RecoilEngine/blob/master/rts/Net/AutohostInterface.cpp#L36">engine source code</a>. For example, with <code>{ SERVER_STARTED =&gt; \&amp;hSpringServerStarted }</code>, the plugin has to implement the function <code>hSpringServerStarted</code>. This function will be called every time the <code>SERVER_STARTED</code> command is received by SPADS on the AutoHost interface. The first parameter passed to the handler is always the command name. The other parameters are the ones coming from the engine, as documented in <a href="https://raw.github.com/beyond-all-reason/RecoilEngine/master/rts/Net/AutohostInterface.cpp">engine source code</a> except that the <code>msgsize</code> parameter is processed internally by SPADS and removed from the parameters passed to the plugins.</p>
 
 <p><code>$priority</code> is the priority of the handlers. Lowest priority number actually means higher priority. If not provided, the plugin name is used as priority, which means it is executed after handlers having priority &lt; 1000, and before handlers having priority &gt; 1000. Usually you don&#39;t need to provide priority, unless you use data managed by other handlers.</p>
+
+<p>Note: some Spring AutoHost commands use predefined sets of numerical values as parameters. The corresponding sets of constants are provided by the <code>SpringAutoHostInterface</code> module to ease the handling of these parameters, as listed below.</p>
+
+<p>For the <code>destination</code> parameter of the <code>PLAYER_CHAT</code> command:</p>
+
+<ul>
+
+<li><p><code>252</code> - <code>MSG_DEST_ALLIES</code> (message is for allies only)</p>
+
+</li>
+<li><p><code>253</code> - <code>MSG_DEST_SPECTATORS</code> (message is for spectators only)</p>
+
+</li>
+<li><p><code>254</code> - <code>MSG_DEST_EVERYONE</code> (message is for everyone)</p>
+
+</li>
+<li><p><code>255</code> - <code>MSG_DEST_SERVER</code> (message is for server only)</p>
+
+<p>To use these constants, plugins must import the <code>:msgDest</code> export tag from the <code>SpringAutoHostInterface</code> module, like this for example:</p>
+
+<pre><code>use SpringAutoHostInterface &#39;:msgDest&#39;;
+
+[...]
+
+sub new {
+
+  [...]
+
+  addSpringCommandHandler({PLAYER_CHAT =&gt; \&amp;hSpringPlayerChat});
+
+  [...]
+
+}
+
+sub hSpringPlayerChat {
+  my ($command,$playerNb,$dest,$msg)=@_;
+  if($dest == MSG_DEST_EVERYONE) {
+    my $playerName=getSpringInterface()-&gt;getPlayerName($playerNb);
+    slog(&quot;$playerName sent this message to everyone: $msg&quot;,L_NOTICE);
+  }
+}</code></pre>
+
+<pre><code class="language-python">class MyPlugin:
+
+    def __init__(self,context):
+        spads.import_constants(&#39;SpringAutoHostInterface&#39;,&#39;:msgDest&#39;)
+        spads.addSpringCommandHandler({&quot;PLAYER_CHAT&quot;: hSpringPlayerChat})
+
+[...]
+
+def hSpringPlayerChat(command, playerNb, dest, msg):
+    if dest == MSG_DEST_EVERYONE:
+        playerName = spads.getSpringInterface().getPlayerName(playerNb)
+        spads.slog(f&#39;{playerName} sent this message to everyone: {msg}&#39;,L_NOTICE)</code></pre>
+
+</li>
+</ul>
+
+<p>For the <code>script</code> parameter of the <code>GAME_LUAMSG</code> command:</p>
+
+<ul>
+
+<li><p><code>100</code> - <code>LUA_SCRIPT_RULES</code></p>
+
+</li>
+<li><p><code>300</code> - <code>LUA_SCRIPT_GAIA</code></p>
+
+</li>
+<li><p><code>2000</code> - <code>LUA_SCRIPT_UI</code></p>
+
+<p>To use these constants, plugins must import the <code>:luaScript</code> export tag from the <code>SpringAutoHostInterface</code> module, like this for example:</p>
+
+<pre><code>use SpringAutoHostInterface &#39;:luaScript&#39;;
+
+[...]
+
+sub new {
+
+  [...]
+
+  addSpringCommandHandler({GAME_LUAMSG =&gt; \&amp;hSpringGameLuaMsg});
+
+  [...]
+
+}
+
+sub hSpringGameLuaMsg {
+  my ($command, $playerNb, $script, $mode, $data)=@_;
+  if($script == LUA_SCRIPT_RULES) {
+    slog(&#39;Received a Lua message for rules script&#39;,L_NOTICE);
+  }
+}</code></pre>
+
+<pre><code class="language-python">class MyPlugin:
+
+    def __init__(self,context):
+        spads.import_constants(&#39;SpringAutoHostInterface&#39;,&#39;:luaScript&#39;)
+        spads.addSpringCommandHandler({&quot;GAME_LUAMSG&quot;: hSpringGameLuaMsg})
+
+[...]
+
+def hSpringGameLuaMsg(command, playerNb, script, mode, data):
+    if script == LUA_SCRIPT_RULES:
+        spads.slog(&quot;Received a Lua message for rules script&quot;,L_NOTICE)</code></pre>
+
+</li>
+</ul>
+
+<p>For the <code>mode</code> parameter of the <code>GAME_LUAMSG</code> command:</p>
+
+<ul>
+
+<li><p><code>0</code> - <code>LUA_MODE_ALL</code></p>
+
+</li>
+<li><p><code>&#39;a&#39;</code> - <code>LUA_MODE_ALLIES</code></p>
+
+</li>
+<li><p><code>&#39;s&#39;</code> - <code>LUA_MODE_SPECTATORS</code></p>
+
+<p>To use these constants, plugins must import the <code>:luaMode</code> export tag from the <code>SpringAutoHostInterface</code> module, like this for example:</p>
+
+<pre><code>use SpringAutoHostInterface &#39;:luaMode&#39;;
+
+[...]
+
+sub new {
+
+  [...]
+
+  addSpringCommandHandler({GAME_LUAMSG =&gt; \&amp;hSpringGameLuaMsg});
+
+  [...]
+
+}
+
+sub hSpringGameLuaMsg {
+  my ($command, $playerNb, $script, $mode, $data)=@_;
+  if($mode == LUA_MODE_ALL) {
+    slog(&#39;Received a Lua message with mode set to ALL&#39;,L_NOTICE);
+  }
+}</code></pre>
+
+<pre><code class="language-python">class MyPlugin:
+
+    def __init__(self,context):
+        spads.import_constants(&#39;SpringAutoHostInterface&#39;,&#39;:luaMode&#39;)
+        spads.addSpringCommandHandler({&quot;GAME_LUAMSG&quot;: hSpringGameLuaMsg})
+
+[...]
+
+def hSpringGameLuaMsg(command, playerNb, script, mode, data):
+    if mode == LUA_MODE_ALL:
+        spads.slog(&quot;Received a Lua message with mode set to ALL&quot;,L_NOTICE)</code></pre>
+
+</li>
+</ul>
 
 </dd>
 <dt id="removeLobbyCommandHandler(\@commands,$priority=caller(),$isPreCallback)"><a id="removeLobbyCommandHandler"></a><a id="removeLobbyCommandHandler-commands-priority-caller-isPreCallback"></a><code>removeLobbyCommandHandler(\@commands,$priority=caller(),$isPreCallback)</code></dt>
@@ -1328,16 +1752,6 @@ def getParams(pluginName):
 </dd>
 <dt id="rehost($reason)"><a id="rehost"></a><a id="rehost-reason"></a><code>rehost($reason)</code></dt>
 <dd>
-
-</dd>
-<dt id="slog($message,$level)"><a id="slog"></a><a id="slog-message-level"></a><code>slog($message,$level)</code></dt>
-<dd>
-
-<p>This function uses SPADS logging system to write a message in main SPADS log file.</p>
-
-<p><code>$message</code> is the log message</p>
-
-<p><code>$level</code> is the log level of the message: <code>0</code> (critical), <code>1</code> (error), <code>2</code> (warning), <code>3</code> (notice), <code>4</code> (info), <code>5</code> (debug)</p>
 
 </dd>
 <dt id="updateSetting($type,$name,$value)"><a id="updateSetting"></a><a id="updateSetting-type-name-value"></a><code>updateSetting($type,$name,$value)</code></dt>
@@ -1581,12 +1995,7 @@ def getParams(pluginName):
 
 <p>This function allows Python plugins to automatically convert byte strings to normal strings if needed. The function takes any number of byte strings or normal strings as parameters, and returns them converted to normal strings if needed (parameters which are already normal strings are returned without any modification). Refer to section <a href="#Perl-strings-conversions">PYTHON SPECIFIC NOTES - Perl strings conversions</a> for the use case of this function. Here is an example of usage:</p>
 
-<pre><code class="language-python">import perl
-spads=perl.ExamplePlugin
-
-[...]
-
-class ExamplePlugin:
+<pre><code class="language-python">class MyPlugin:
 
 [...]
 
@@ -1623,16 +2032,69 @@ def hMyCommand(source,user,params,checkOnly):
 
 <p>Here is an example of usage:</p>
 
-<pre><code class="language-python">import perl
-spads=perl.ExamplePlugin
+<pre><code class="language-python">if spads.get_flag(&#39;can_add_socket&#39;):
+    spads.addSocket(socket,readSocketCallback)
+else:
+    spads.slog(&quot;This plugin requires the addSocket function&quot;,L_ERROR)
+    return False</code></pre>
+
+</dd>
+<dt id="import_constants(perl_module_name,-constantNameOrTag-[,-...])"><a id="import_constants"></a><a id="import_constants-perl_module_name-constantNameOrTag"></a><code>import_constants(perl_module_name, constantNameOrTag [, ...])</code></dt>
+<dd>
+
+<p>This function allows Python plugins to import constants from Perl modules into their own namespace, as global variables. It is very similar to executing the Python statement <span style="white-space: nowrap;"><code>from &lt;module_name&gt; import &lt;identifier&gt;, ...</code></span>, except it imports symbols from Perl modules instead of Python modules. It only works on global constants (not functions), and can only import symbols from Perl modules that have already been loaded by SPADS. The return value is the number of constants actually imported.</p>
+
+<p><code>perl_module_name</code> is the name of the Perl module from which constants must be imported. This parameter is optional, the default value is <code>&quot;main&quot;</code> which is the main SPADS core namespace.</p>
+
+<p><code>constantNamesOrTags</code> consists in one or several import identifiers. These identifiers can be either the name of a constant to import, or an export tag declared by the Perl module. Export tags are identifiers starting with <code>:</code> that group together multiple symbols, which makes it possible to import them all at once. The special <code>&quot;:all&quot;</code> export tag is usually defined by Perl modules as containing all the identifiers that can be exported by the module. In order to mimic <span style="white-space: nowrap;"><code>from ... import ...</code></span> statement behavior, <code>&quot;*&quot;</code> is defined as an alias for <code>&quot;:all&quot;</code>. It is also the default value if no identifier to import is provided.</p>
+
+<p>Note: This function cannot be called until the plugin module has been fully initialized by the Python interpreter. Therefore, it cannot be called from the top-level code of the module. However, it can be called from the plugin constructor, which is the recommended location.</p>
+
+<p>Here are some examples of usage:</p>
+
+<pre><code class="language-python">class MyPlugin:
+
+    def __init__(self,context):
+
+        # Import the SRV_STATE_GAME_STARTED constant as a global variable
+        spads.import_constants(&#39;SpringAutoHostInterface&#39;, &#39;SRV_STATE_GAME_STARTED&#39;)
+
+        # Import the CLI_STATE_LEFT and CLI_STATE_KICKED constants as global variables
+        spads.import_constants(&#39;SpringAutoHostInterface&#39;, &#39;CLI_STATE_LEFT&#39;, &#39;CLI_STATE_KICKED&#39;)
+
+        # Import all the LOBBY_STATE_* constants as global variables
+        spads.import_constants(&#39;main&#39;,&#39;:lobbyState&#39;)
+
+        # Import all the constants exported by the SpringAutoHostInterface module as global variables
+        spads.import_constants(&#39;SpringAutoHostInterface&#39;, &#39;:all&#39;)
+
+        # Exactly the same thing:
+        spads.import_constants(&#39;SpringAutoHostInterface&#39;, &#39;*&#39;)
+
+        # Same thing again:
+        spads.import_constants(&#39;SpringAutoHostInterface&#39;)
 
 [...]
 
-    if spads.get_flag(&#39;can_add_socket&#39;):
-        spads.addSocket(socket,readSocketCallback)
-    else:
-        spads.slog(&quot;This plugin requires the addSocket function&quot;,1)
-        return False</code></pre>
+def myFunction():
+
+    # All the constants imported previously can be used as global variables anywhere in the plugin code
+    if spads.getLobbyState() &gt;= LOBBY_STATE_CONNECTED:
+        spads.slog(&quot;SPADS is connected to lobby server&quot;,L_NOTICE)
+
+    springInterface = spads.getSpringInterface()
+
+    if springInterface.getState() == SRV_STATE_GAME_STARTED:
+        spads.slog(&quot;A game is in progress&quot;,L_NOTICE)
+
+        playerData = springInterface.getPlayer(&#39;joe&#39;)
+        if playerData:
+            if playerData[&quot;disconnectCause&quot;] == CLI_STATE_LEFT:
+                spads.slog(&quot;Joe has left&quot;,L_NOTICE)
+            elif playerData[&quot;disconnectCause&quot;] == CLI_STATE_KICKED:
+                spads.slog(&quot;Joe has been kicked !&quot;,L_NOTICE)
+        else:
+            spads.slog(&quot;Joe is not a participant of this game&quot;,L_NOTICE)</code></pre>
 
 </dd>
 </dl>
@@ -1737,7 +2199,7 @@ spads=perl.ExamplePlugin
 
 <p><a href="http://springrts.com/dl/LobbyProtocol/ProtocolDescription.html">Spring lobby protocol specifications</a></p>
 
-<p><a href="https://raw.github.com/spring/spring/master/rts/Net/AutohostInterface.cpp">Spring autohost protocol specifications (from source comments)</a></p>
+<p><a href="https://raw.github.com/beyond-all-reason/RecoilEngine/master/rts/Net/AutohostInterface.cpp">Spring autohost protocol specifications (from source comments)</a></p>
 
 <p><a href="http://perldoc.perl.org/perlintro.html">Introduction to Perl</a></p>
 
