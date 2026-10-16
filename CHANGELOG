@@ -1089,6 +1089,10 @@ spads.pl:
          add "inconsistencyTeamStats" flag in end-game data
          workaround for dedicated engine not writing team statistics in demo/replay file
 0.13.55: only apply team statistics workaround when dedicated engine is in use
+0.13.56: in-game private messages (aka whisper) are now logged as "to player <playerName>" instead of "to <playerName>" (previous wording was ambiguous if a player was named "allies" or "spectators")
+         include SpringAutoHostInterface logging in standard output
+         update PLAYER_CHAT and SERVER_GAMEOVER autohost message parameters handling due to non-backward compatible changes in SpringAutoHostInterface module v0.15
+         use constants from SpringAutoHostInterface module instead of hardcoded values for server states, player connection states and player ready states
 
 SpadsConf.pm:
 ============
@@ -1488,7 +1492,7 @@ SpadsPluginApi.pm:
       the "closeBattle" plugin API function now accepts an additional optional parameter to prevent the broadcast message from being triggered (documentation completed)
       the "no warnings 'redefine'" pragma is no longer needed in plugin code (the plugin package namespace is now automatically removed from symbol table on plugin unload)
       enrich the documentation of the plugin event callbacks
-      add the documentation of the "getlobbyInterface" plugin API function
+      add the documentation of the "getLobbyInterface" plugin API function
 0.24: the "forkProcess" and "forkCall" plugin API functions now also return a handle in addition to the PID
       new plugin API function: "removeProcessCallback" (remove a process callback added with the "forkProcess" or "forkCall" plugin API function)
 0.25: add support for Python plugins loading
@@ -1531,7 +1535,12 @@ SpadsPluginApi.pm:
       new plugin API functions: "applyBattlePreset" and "applyHostingPreset"
       the "applyPreset" plugin API function can now take two additional parameters for optional overrides
       add documentation for "applyPreset" plugin API function
-0.46: update POD for syntax highlighting
+0.46: new plugin API function for Python plugins: "import_constants" (import constants from Perl modules as global variables)
+      add the documentation of the "getSpringInterface" function
+      improve the documentation of the "addSpringCommandHandler" function (update engine source code links and detail available constants)
+      use log level constants in code examples
+      update documentation for syntax highlighting
+      other minor documentation fixes and improvements
 
 SpadsUpdater.pm:
 ===============

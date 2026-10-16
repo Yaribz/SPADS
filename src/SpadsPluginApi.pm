@@ -24,7 +24,7 @@ use File::Spec::Functions qw'catdir';
 use List::Util qw'any none';
 
 use Exporter 'import';
-our @EXPORT=qw/$spadsVersion $spadsDir loadPythonPlugin get_flag fix_string getBosses getLobbyState getSpringPid getSpringServerType getTimestamps getUserPref getRunningBattle getConfMacros getCurrentVote getPlugin getPluginList addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess forkCall removeProcessCallback createDetachedProcess addTimer removeTimer addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf isSettingValueAllowed slog updateSetting secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyBattlePreset applyHostingPreset applyPreset quit cancelQuit closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives LOBBY_STATE_DISCONNECTED LOBBY_STATE_CONNECTING LOBBY_STATE_CONNECTED LOBBY_STATE_LOGGED_IN LOBBY_STATE_SYNCHRONIZED LOBBY_STATE_OPENING_BATTLE LOBBY_STATE_BATTLE_OPENED/;
+our @EXPORT=qw/$spadsVersion $spadsDir loadPythonPlugin get_flag fix_string import_constants getBosses getLobbyState getSpringPid getSpringServerType getTimestamps getUserPref getRunningBattle getConfMacros getCurrentVote getPlugin getPluginList addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler forkProcess forkCall removeProcessCallback createDetachedProcess addTimer removeTimer addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf isSettingValueAllowed slog updateSetting secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyBattlePreset applyHostingPreset applyPreset quit cancelQuit closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives LOBBY_STATE_DISCONNECTED LOBBY_STATE_CONNECTING LOBBY_STATE_CONNECTED LOBBY_STATE_LOGGED_IN LOBBY_STATE_SYNCHRONIZED LOBBY_STATE_OPENING_BATTLE LOBBY_STATE_BATTLE_OPENED/;
 
 my $apiVersion='0.46';
 
@@ -151,6 +151,117 @@ sub get_flag {
 }
 
 sub fix_string { map {utf8::upgrade($_)} @_; return @_ }
+
+my %MAIN_CONSTANTS=(
+  exitCodes => [qw'
+                EXIT_SUCCESS
+                EXIT_FAILURE
+                EXIT_USAGE
+                EXIT_CONFIG
+                EXIT_DEPENDENCY
+                EXIT_CONFLICT
+                EXIT_INPUTDATA
+                EXIT_SYSTEM
+                EXIT_SOFTWARE
+                EXIT_REMOTE
+                EXIT_CERTIFICATE
+                EXIT_LOGIN
+                '],
+  lobbyState => [qw'
+                 LOBBY_STATE_DISCONNECTED
+                 LOBBY_STATE_CONNECTING
+                 LOBBY_STATE_CONNECTED
+                 LOBBY_STATE_LOGGED_IN
+                 LOBBY_STATE_SYNCHRONIZED
+                 LOBBY_STATE_OPENING_BATTLE
+                 LOBBY_STATE_BATTLE_OPENED'],
+  loadArchivesMode => [qw'
+                       LOADARCHIVES_DEFAULT
+                       LOADARCHIVES_RELOAD
+                       LOADARCHIVES_GAME_ONLY
+                       '],
+    );
+push(@{$MAIN_CONSTANTS{all}},@{$MAIN_CONSTANTS{$_}}) foreach(keys %MAIN_CONSTANTS);
+sub import_constants {
+  my ($fromModule,@constants)=@_;
+  $fromModule//='main';
+  @constants=(':all') unless(@constants);
+
+  if(! defined($pythonReloadPrefix)) {
+    ::slog('SpadsPluginApi::import_constants() called while no Python plugin is loaded',1);
+    return 0;
+  }
+
+  my $pluginName=getCallerPlugin();
+  my $pythonModule=lc($pluginName);
+
+  if(! Inline::Python::py_eval("'$pythonModule' in dir()",0)) {
+    ::slog("SpadsPluginApi::import_constants() called by plugin \"$pluginName\" which is not a Python plugin or not a plugin fully initialized by SPADS yet",1);
+    return 0;
+  }
+
+  if($fromModule !~ /^[a-zA-Z_][\w\:]*$/) {
+    ::slog("SpadsPluginApi::import_constants() called by plugin \"$pluginName\" on invalid module name \"$fromModule\"",1);
+    return 0;
+  }
+
+  if(! exists $::{"${fromModule}::"}) {
+    ::slog("Unable to import constant from module \"$fromModule\" by plugin \"$pluginName\", module is not loaded",2);
+    return 0;
+  }
+
+  my @constantNames;
+  foreach my $constantToken (@constants) {
+    $constantToken=':all' if($constantToken eq '*');
+    if($constantToken =~ /^:(.+)$/) {
+      my $exportTag=$1;
+      my $r_constantNames;
+      if($fromModule eq 'main') {
+        $r_constantNames=$MAIN_CONSTANTS{$exportTag};
+      }else{
+        if(! (exists $::{"${fromModule}::"}{EXPORT_TAGS} && defined *{$::{"${fromModule}::"}{EXPORT_TAGS}}{HASH})) {
+          ::slog("SpadsPluginApi::import_constants() called by plugin \"$pluginName\" with tag parameter on module $fromModule which has no export tag",1);
+          return 0;
+        }
+        $r_constantNames=*{$::{"${fromModule}::"}{EXPORT_TAGS}}{HASH}{$exportTag};
+      }
+      if(ref $r_constantNames ne 'ARRAY') {
+        ::slog("SpadsPluginApi::import_constants() called by plugin \"$pluginName\" with unknown export tag \"$exportTag\" for "
+               .($fromModule eq 'main' ? 'main namespace' : "$fromModule module"),2);
+        return 0;
+      }
+      push(@constantNames,@{$r_constantNames});
+    }else{
+      if($constantToken !~ /^[\w\-]+$/) {
+        ::slog("SpadsPluginApi::import_constants() called by plugin \"$pluginName\" with invalid constant name \"$constantToken\"",2);
+        return 0;
+      }
+      push(@constantNames,$constantToken);
+    }
+  }
+
+  my @pythonCmds;
+  foreach my $constantName (@constantNames) {
+    next unless($constantName =~ /^[\w\-]+$/);
+    my $constantValue = eval "${fromModule}::$constantName()"; ## no critic (ProhibitStringyEval)
+    if(! defined $constantValue) {
+      ::slog("SpadsPluginApi::import_constants() called by plugin \"$pluginName\" with invalid constant \"$constantName\" for $fromModule module",2);
+      next;
+    }
+    if(ref $constantValue) {
+      ::slog("SpadsPluginApi::import_constants() called by plugin \"$pluginName\" with non-scalar constant \"$constantName\" from $fromModule module",2);
+      next;
+    }
+    $constantValue="\"$constantValue\"" unless($constantValue =~ /^-?\d+(\.\d+)?$/);
+    push(@pythonCmds,"$pythonModule.__dict__[\"$constantName\"] = $constantValue");
+  }
+
+  my $nbImportedConstants = scalar @pythonCmds;
+  Inline::Python::py_eval(join("\n",@pythonCmds))
+      if($nbImportedConstants);
+
+  return $nbImportedConstants;
+}
 
 ################################
 # Accessors
@@ -575,19 +686,20 @@ SpadsPluginApi - SPADS Plugin API
 
   package MyPlugin;
 
+  use SimpleLog ':logLevel';
   use SpadsPluginApi;
 
   my $pluginVersion='0.1';
   my $requiredSpadsVersion='0.11';
 
-  sub getVersion { return $pluginVersion; }
-  sub getRequiredSpadsVersion { return $requiredSpadsVersion; }
+  sub getVersion { return $pluginVersion }
+  sub getRequiredSpadsVersion { return $requiredSpadsVersion }
 
   sub new {
     my $class=shift;
     my $self = {};
     bless($self,$class);
-    slog("MyPlugin plugin loaded (version $pluginVersion)",3);
+    slog("Plugin loaded (version $pluginVersion)",L_NOTICE);
     return $self;
   }
 
@@ -611,7 +723,8 @@ SpadsPluginApi - SPADS Plugin API
   class MyPlugin:
 
       def __init__(self,context):
-          spads.slog("MyPlugin plugin loaded (version %s)" % pluginVersion,3)
+          spads.import_constants('SimpleLog',':logLevel')
+          spads.slog("Plugin loaded (version %s)" % pluginVersion,L_NOTICE)
 
 =for highlighter
 
@@ -632,19 +745,29 @@ Plugins can be coded in Perl (since SPADS 0.11) or Python (since SPADS 0.12.29).
 
 =head2 How to read the documentation
 
-This documentation was written when SPADS was only supporting plugins coded in
-Perl, so types for function parameters and return values are described using
-Perl terminology, with Perl sigils (C<%> for hash, C<@> for array, C<$>  for
-scalars). Python plugins just need to ignore these sigils and use their
+This documentation was mostly written when SPADS was only supporting plugins
+coded in Perl, so types for function parameters and return values are described
+using Perl terminology, with Perl sigils (C<%> for hash, C<@> for array, C<$>
+for scalars). Python plugins just need to ignore these sigils and use their
 equivalent internal Python types instead (Python dictionaries instead of Perl
 hashes, Python lists instead of Perl arrays, Python tuples instead of Perl
 lists, Python None value instead of Perl undef value...).
 
-In order to call functions from the plugin API, Python plugin modules must first
-import the special C<perl> module, and then use the global variable of this
-module named after the plugin name to call the functions (refer to the SYNOPSYS
-for an example of a Python plugin named C<MyPlugin> calling the C<slog> API
-function).
+In order to call functions from the plugin API, Python plugins must first import
+the special package named C<perl>. The plugin API is then available from the
+module of this package that is named after the plugin. The convention is to
+assign this module to the global variable C<spads> within the local namespace
+(refer to the SYNOPSYS for an example of a Python plugin named C<MyPlugin>
+calling the C<slog> function of the API). Therefore, it is assumed in the plugin
+API documentation that Python plugins always start with these two lines
+(replacing C<MyPlugin> by the actual plugin name):
+
+=for highlighter python
+
+  import perl
+  spads=perl.MyPlugin
+
+=for highlighter
 
 =head2 Perl strings conversions
 
@@ -703,6 +826,78 @@ calling the C<get_flag> Python specific plugin API function with parameter
 C<'can_add_socket'>, instead of checking by themselves if the current system is
 Windows. Refer to the L<API FUNCTIONS - Python specific|/"Python specific">
 section for more information regarding this function.
+
+=head1 LOGGING SYSTEM
+
+SPADS logging system is based on the L<SimpleLog|https://github.com/Yaribz/SimpleLog>
+Perl module. This system is made available for plugins through the C<slog>
+function of the plugin API:
+
+=over 2
+
+=item C<slog($message,$level)>
+
+This function uses SPADS logging system to write a message in main SPADS log
+file.
+
+C<$message> is the log message
+
+C<$level> is the log level of the message: C<0> (critical), C<1> (error), C<2>
+(warning), C<3> (notice), C<4> (info), C<5> (debug)
+
+=back
+
+Three sets of log level constants are available to avoid using the hard-coded
+numbers listed above:
+
+=over 2
+
+=item * Full length constants (export tag C<:logLevel>): C<L_CRITICAL>,
+C<L_ERROR>, C<L_WARNING>, C<L_NOTICE>, C<L_INFO>, C<L_DEBUG>
+
+=item * Short length constants (export tag C<:logLvl>): C<L_CRIT>, C<L_ERR>,
+C<L_WARN>, C<L_NOTC>, C<L_INFO>, C<L_DBG>
+
+=item * Constants with 3-character level (export tag C<:logLvl3>): C<L_CRI>,
+C<L_ERR>, C<L_WRN>, C<L_NTC>, C<L_INF>, C<L_DBG>
+
+=back
+
+Plugin developers should choose one (or several) of them and import the
+corresponding export tag(s) from the C<SimpleLog> module, like this for example
+(for Python plugins, refer to the L<import_constants|/import_constants> function
+for more details about how imports work):
+
+  # Import the log level constants at start of the plugin module
+  use SimpleLog ':logLevel';
+
+  [...]
+
+    # Use the log level constants anywhere in the plugin code
+    slog("Example of log message",L_NOTICE);
+
+=for highlighter python
+
+  class MyPlugin:
+
+      def __init__(self,context):
+
+          # Import the log level constants from the plugin constructor
+          spads.import_constants('SimpleLog',':logLevel')
+
+  [...]
+
+      # Use the log level constants anywhere in the plugin code
+      spads.slog("Example of log message",L_NOTICE)
+
+=for highlighter
+
+Note: For clarity in the plugin API documentation, log level constants are
+always used when calling the C<slog> function. However, the import code shown
+above is not repeated in each code example. It is always assumed that the log
+level constants have already been imported by the plugin. The documentation uses
+the full length form of the constants, but this is just a convention. You can
+choose the constants that best suit your coding style.
 
 =head1 CALLBACK FUNCTIONS
 
@@ -794,7 +989,7 @@ Example of implementation:
 
   my %globalPluginParams = ( MyGlobalSetting1 => ['integer'],
                              MyGlobalSetting2 => ['ipAddr']);
-  my %presetPluginParams = ( MyPresetSetting1 => ['readableDir','null'],
+  my %presetPluginParams = ( MyPresetSetting1 => ['readableFile','null'],
                              MyPresetSetting2 => ['bool', \&myCustomSettingValueCheck] );
 
   sub myCustomSettingValueCheck {
@@ -811,7 +1006,7 @@ Example of implementation:
 
   globalPluginParams = { 'MyGlobalSetting1': ['integer'],
                          'MyGlobalSetting2': ['ipAddr'] }
-  presetPluginParams = { 'MyPresetSetting1': ['readableDir','null'],
+  presetPluginParams = { 'MyPresetSetting1': ['readableFile','null'],
                          'MyPresetSetting2': ['bool', myCustomSettingValueCheck], };
 
   def getParams(pluginName):
@@ -847,7 +1042,7 @@ This callback must return the plugin dependencies (list of plugin names).
 
 Example of implementation:
 
-  sub getDependencies { return ('SpringForumInterface','MailAlerts'); }
+  sub getDependencies { return ('SpringForumInterface','MailAlerts') }
 
 =for highlighter python
 
@@ -1925,15 +2120,24 @@ Perl plugins can use these constants directly in the plugin code, like this for
 example:
 
   if(getLobbyState() >= LOBBY_STATE_CONNECTED) {
-    slog("SPADS is connected to lobby server",3);
+    slog("SPADS is connected to lobby server",L_NOTICE);
   }
 
-Python plugins must call them as SPADS functions, like this for example:
+Python plugins must import them using the C<:lobbyState> export tag from main
+SPADS namespace, like this for example (refer to the
+L<import_constants|/import_constants> function for more details):
 
 =for highlighter python
 
-  if spads.getLobbyState() >= spads.LOBBY_STATE_CONNECTED():
-      spads.slog("SPADS is connected to lobby server",3)
+  class MyPlugin:
+
+      def __init__(self,context):
+          spads.import_constants('main',':lobbyState')
+
+  [...]
+
+      if spads.getLobbyState() >= LOBBY_STATE_CONNECTED:
+          spads.slog("SPADS is connected to lobby server",L_NOTICE)
 
 =for highlighter
 
@@ -1964,6 +2168,234 @@ hosted by SPADS are included in the hash.
 =item C<getSpadsConfFull()>
 
 =item C<getSpringInterface()>
+
+This accessor returns the instance of the
+L<SpringAutoHostInterface|https://github.com/Yaribz/SpringAutoHostInterface>
+module used by SPADS.
+
+Following methods, called on the C<SpringAutoHostInterface> object, can be
+useful for plugins to retrieve various data about the game in progress:
+
+=over 3
+
+=item * - C<getState()>
+
+This accessor returns an integer describing the current game server state. The
+corresponding constants are provided to ease game state handling/comparisons,
+as listed below:
+
+=over 4
+
+=item * C<0> - C<SRV_STATE_NOT_RUNNING> (server is not running)
+
+=item * C<1> - C<SRV_STATE_SERVER_STARTED> (server is running but game has not
+started)
+
+=item * C<2> - C<SRV_STATE_GAME_STARTED> (game has started)
+
+=item * C<3> - C<SRV_STATE_GAME_OVER> (game is over but server is still running)
+
+=back
+
+To use these constants, plugins must import the C<:srvState> export tag from the
+C<SpringAutoHostInterface> module, like this for example:
+
+  use SpringAutoHostInterface ':srvState';
+
+  [...]
+
+    if(getSpringInterface()->getState() == SRV_STATE_GAME_STARTED) {
+      slog("A game is in progress",L_NOTICE);
+    }
+
+=for highlighter python
+
+  class MyPlugin:
+
+      def __init__(self,context):
+          spads.import_constants('SpringAutoHostInterface',':srvState')
+
+  [...]
+
+      if spads.getSpringInterface().getState() == SRV_STATE_GAME_STARTED:
+          spads.slog("A game is in progress",L_NOTICE)
+
+=for highlighter
+
+=item * - C<getPlayerName($playerNum)>
+
+This methods retrieves the player name corresponding to the player number
+C<$playerNum>, or C<undef> if the player number is not attributed to any in-game
+player.
+
+Player numbers are the internal identifiers used at game server side. Most of
+the network messages passing through the autohost interface use these
+identifiers rather than player names, so this accessor can be useful to resolve
+them back to player names (as shown in the documentation of the
+L<addSpringCommandHandler|/addSpringCommandHandler> handler management
+function).
+
+=item * - C<getPlayer($playerName)>
+
+This methods retrieves a reference to a hash containing the internal in-game
+data associated with the player whose name is C<$playerName>, or a reference to
+an empty hash if the player is not found.
+
+The returned hash contains following key/value pairs if the player is found:
+
+=over 4
+
+=item * C<name>: the name of the player
+
+=item * C<playerNb>: the internal player number used by the game server to
+identify the player
+
+=item * C<disconnectCause>: a numerical value describing the state of the
+player's connection (see "C<disconnectCause> values" below)
+
+=item * C<ready>: a numerical value describing the ready state of the player
+(see "C<ready> values" below)
+
+=item * C<lost>: a boolean indicating whether the player has lost/resigned or is
+still playing
+
+=item * C<version>: a string containing the engine version used by the player
+
+=item * C<address>: a string containing the IP address of the player
+
+=item * C<winningAllyTeams>: a reference to an array containing the list of the
+ally team numbers the player has declared as winning in his game over message,
+or C<undef> if the player has not sent any game over message yet.
+
+=back
+
+Note: Special care must be taken to not modify the returned data, as doing so
+would likely compromise the consistency of the object's internal state and lead
+to instability.
+
+C<disconnectCause> values:
+
+=over 4
+
+=item * C<-2> - C<CLI_STATE_LOADING> (client is connecting and/or catching-up a
+game in progress)
+
+=item * C<-1> - C<CLI_STATE_CONNECTED> (client is connected)
+
+=item * C<0> - C<CLI_STATE_CONNECTION_LOST> (client connection lost / timeout)
+
+=item * C<1> - C<CLI_STATE_LEFT> (client has disconnected)
+
+=item * C<2> - C<CLI_STATE_KICKED> (client has been kicked)
+
+The corresponding constants are provided to ease player connection status
+handling/comparisons. To use these constants, plugins must import the
+C<:cliState> export tag from the C<SpringAutoHostInterface> module, like this
+for example:
+
+  use SpringAutoHostInterface ':cliState';
+
+  [...]
+
+    my $r_playerData=getSpringInterface()->getPlayer('joe');
+    if(%{$r_playerData} && $r_playerData->{disconnectCause} == CLI_STATE_KICKED) {
+      slog("Joe has been kicked !",L_NOTICE);
+    }
+
+=for highlighter python
+
+  class MyPlugin:
+
+      def __init__(self,context):
+          spads.import_constants('SpringAutoHostInterface',':cliState')
+
+  [...]
+
+      playerData = spads.getSpringInterface().getPlayer('joe')
+      if playerData and playerData["disconnectCause"] == CLI_STATE_KICKED:
+          spads.slog("Joe has been kicked !",L_NOTICE)
+
+=for highlighter
+
+=back
+
+C<ready> values:
+
+=over 4
+
+=item * C<-1> - C<RDY_STATE_NOT_PLACED> (player has not selected start position
+yet)
+
+=item * C<0> - C<RDY_STATE_PLACED> (player has selected a start position but is
+not ready yet)
+
+=item * C<1> - C<RDY_STATE_READY_BY_ENGINE> (player has been set ready by the
+generic code from game engine)
+
+=item * C<2> - C<RDY_STATE_READY_BY_LUA> (player has been set ready by the
+game-specific Lua code)
+
+The corresponding constants are provided to ease player ready status
+handling/comparisons. To use these constants, plugins must import the
+C<:rdyState> export tag from the C<SpringAutoHostInterface> module, like this
+for example:
+
+  use SpringAutoHostInterface ':rdyState';
+
+  [...]
+
+    my $r_playerData=getSpringInterface()->getPlayer('joe');
+    if(%{$r_playerData} && $r_playerData->{ready} > RDY_STATE_PLACED) {
+      slog("Joe is ready !",L_NOTICE);
+    }
+
+=for highlighter python
+
+  class MyPlugin:
+
+      def __init__(self,context):
+          spads.import_constants('SpringAutoHostInterface',':rdyState')
+
+  [...]
+
+      playerData = spads.getSpringInterface().getPlayer('joe')
+      if playerData and playerData["ready"] > RDY_STATE_PLACED:
+          spads.slog("Joe is ready !",L_NOTICE)
+
+=for highlighter
+
+=back
+
+=item * - C<getPlayerByNum($playerNum)>
+
+This methods returns exactly the same data as the C<getPlayer($playerName)>
+method, but it takes a player number as parameter instead of a player name.
+
+Note: Special care must be taken to not modify the returned data, as doing so
+would likely compromise the consistency of the object's internal state and lead
+to instability.
+
+=item * - C<getPlayers()>
+
+This method returns a reference to a hash containing the data regarding all the
+players in the game (including spectators). The hash is indexed by player
+numbers and the values are references to hashes containing the same data as
+returned by the C<getPlayer($playerName)> method.
+
+Note: this method performs a deep copy of the data to prevent external code from
+corrupting internal data. However it is also possible to read the same data
+directly without triggering a deep copy by accessing the C<players> field of the
+C<SpringAutoHostInterface> object.
+
+=item * - C<getPlayersByNames()>
+
+This method returns the same data as the C<getPlayers()> method, except it is
+indexed by player names instead of player numbers.
+
+Note: this method performs a deep copy of the data to prevent external code from
+corrupting internal data.
+
+=back
 
 =item C<getSpringPid()>
 
@@ -2078,19 +2510,187 @@ commands received by SPADS from Spring server.
 C<\%handlers> is a reference to a hash which contains the handlers to be added:
 each entry associates a Spring AutoHost command to a handler function
 implemented by the plugin. The Spring AutoHost command names must match the
-values of C<%commandCodes> defined in SpringAutoHostInterface.pm. For example,
-with C<< { SERVER_STARTED => \&hSpringServerStarted } >>, the plugin has to
-implement the function C<hSpringServerStarted>. The parameters passed to the
-handlers are the command tokens: the command name followed by command
-parameters. Refer to L<Spring autohost protocol specifications
-(from source comments)|https://raw.github.com/spring/spring/master/rts/Net/AutohostInterface.cpp>
-for more information.
+entries declared in the C<EVENT> enum in L<engine source
+code|https://github.com/beyond-all-reason/RecoilEngine/blob/master/rts/Net/AutohostInterface.cpp#L36>.
+For example, with C<< { SERVER_STARTED => \&hSpringServerStarted } >>, the
+plugin has to implement the function C<hSpringServerStarted>. This function will
+be called every time the C<SERVER_STARTED> command is received by SPADS on the
+AutoHost interface. The first parameter passed to the handler is always the
+command name. The other parameters are the ones coming from the engine, as
+documented in L<engine source code|https://raw.github.com/beyond-all-reason/RecoilEngine/master/rts/Net/AutohostInterface.cpp>
+except that the C<msgsize> parameter is processed internally by SPADS and
+removed from the parameters passed to the plugins.
 
 C<$priority> is the priority of the handlers. Lowest priority number actually
 means higher priority. If not provided, the plugin name is used as priority,
 which means it is executed after handlers having priority < 1000, and before
 handlers having priority > 1000. Usually you don't need to provide priority,
 unless you use data managed by other handlers.
+
+Note: some Spring AutoHost commands use predefined sets of numerical values as
+parameters. The corresponding sets of constants are provided by the
+C<SpringAutoHostInterface> module to ease the handling of these parameters, as
+listed below.
+
+For the C<destination> parameter of the C<PLAYER_CHAT> command:
+
+=over 4
+
+=item * C<252> - C<MSG_DEST_ALLIES> (message is for allies only)
+
+=item * C<253> - C<MSG_DEST_SPECTATORS> (message is for spectators only)
+
+=item * C<254> - C<MSG_DEST_EVERYONE> (message is for everyone)
+
+=item * C<255> - C<MSG_DEST_SERVER> (message is for server only)
+
+To use these constants, plugins must import the C<:msgDest> export tag from the
+C<SpringAutoHostInterface> module, like this for example:
+
+  use SpringAutoHostInterface ':msgDest';
+
+  [...]
+
+  sub new {
+
+    [...]
+
+    addSpringCommandHandler({PLAYER_CHAT => \&hSpringPlayerChat});
+
+    [...]
+
+  }
+  
+  sub hSpringPlayerChat {
+    my ($command,$playerNb,$dest,$msg)=@_;
+    if($dest == MSG_DEST_EVERYONE) {
+      my $playerName=getSpringInterface()->getPlayerName($playerNb);
+      slog("$playerName sent this message to everyone: $msg",L_NOTICE);
+    }
+  }
+
+=for highlighter python
+
+  class MyPlugin:
+
+      def __init__(self,context):
+          spads.import_constants('SpringAutoHostInterface',':msgDest')
+          spads.addSpringCommandHandler({"PLAYER_CHAT": hSpringPlayerChat})
+
+  [...]
+  
+  def hSpringPlayerChat(command, playerNb, dest, msg):
+      if dest == MSG_DEST_EVERYONE:
+          playerName = spads.getSpringInterface().getPlayerName(playerNb)
+          spads.slog(f'{playerName} sent this message to everyone: {msg}',L_NOTICE)
+
+=for highlighter
+
+=back
+
+For the C<script> parameter of the C<GAME_LUAMSG> command:
+
+=over 4
+
+=item * C<100> - C<LUA_SCRIPT_RULES>
+
+=item * C<300> - C<LUA_SCRIPT_GAIA>
+
+=item * C<2000> - C<LUA_SCRIPT_UI>
+
+To use these constants, plugins must import the C<:luaScript> export tag from
+the C<SpringAutoHostInterface> module, like this for example:
+
+  use SpringAutoHostInterface ':luaScript';
+
+  [...]
+
+  sub new {
+
+    [...]
+
+    addSpringCommandHandler({GAME_LUAMSG => \&hSpringGameLuaMsg});
+
+    [...]
+
+  }
+  
+  sub hSpringGameLuaMsg {
+    my ($command, $playerNb, $script, $mode, $data)=@_;
+    if($script == LUA_SCRIPT_RULES) {
+      slog('Received a Lua message for rules script',L_NOTICE);
+    }
+  }
+
+=for highlighter python
+
+  class MyPlugin:
+
+      def __init__(self,context):
+          spads.import_constants('SpringAutoHostInterface',':luaScript')
+          spads.addSpringCommandHandler({"GAME_LUAMSG": hSpringGameLuaMsg})
+
+  [...]
+
+  def hSpringGameLuaMsg(command, playerNb, script, mode, data):
+      if script == LUA_SCRIPT_RULES:
+          spads.slog("Received a Lua message for rules script",L_NOTICE)
+
+=for highlighter
+
+=back
+
+For the C<mode> parameter of the C<GAME_LUAMSG> command:
+
+=over 4
+
+=item * C<0> - C<LUA_MODE_ALL>
+
+=item * C<'a'> - C<LUA_MODE_ALLIES>
+
+=item * C<'s'> - C<LUA_MODE_SPECTATORS>
+
+To use these constants, plugins must import the C<:luaMode> export tag from the
+C<SpringAutoHostInterface> module, like this for example:
+
+  use SpringAutoHostInterface ':luaMode';
+
+  [...]
+
+  sub new {
+
+    [...]
+
+    addSpringCommandHandler({GAME_LUAMSG => \&hSpringGameLuaMsg});
+
+    [...]
+
+  }
+  
+  sub hSpringGameLuaMsg {
+    my ($command, $playerNb, $script, $mode, $data)=@_;
+    if($mode == LUA_MODE_ALL) {
+      slog('Received a Lua message with mode set to ALL',L_NOTICE);
+    }
+  }
+
+=for highlighter python
+
+  class MyPlugin:
+
+      def __init__(self,context):
+          spads.import_constants('SpringAutoHostInterface',':luaMode')
+          spads.addSpringCommandHandler({"GAME_LUAMSG": hSpringGameLuaMsg})
+
+  [...]
+
+  def hSpringGameLuaMsg(command, playerNb, script, mode, data):
+      if mode == LUA_MODE_ALL:
+          spads.slog("Received a Lua message with mode set to ALL",L_NOTICE)
+
+=for highlighter
+
+=back
 
 =item C<removeLobbyCommandHandler(\@commands,$priority=caller(),$isPreCallback)>
 
@@ -2205,16 +2805,6 @@ C<$value> is the value that must be checked
 =item C<quit($type,$reason,$exitCode=0)>
 
 =item C<rehost($reason)>
-
-=item C<slog($message,$level)>
-
-This function uses SPADS logging system to write a message in main SPADS log
-file.
-
-C<$message> is the log message
-
-C<$level> is the log level of the message: C<0> (critical), C<1> (error), C<2>
-(warning), C<3> (notice), C<4> (info), C<5> (debug)
 
 =item C<updateSetting($type,$name,$value)>
 
@@ -2499,12 +3089,7 @@ for the use case of this function. Here is an example of usage:
 
 =for highlighter python
 
-  import perl
-  spads=perl.ExamplePlugin
-  
-  [...]
-  
-  class ExamplePlugin:
+  class MyPlugin:
 
   [...]
   
@@ -2542,16 +3127,90 @@ Here is an example of usage:
 
 =for highlighter python
 
-  import perl
-  spads=perl.ExamplePlugin
-  
+  if spads.get_flag('can_add_socket'):
+      spads.addSocket(socket,readSocketCallback)
+  else:
+      spads.slog("This plugin requires the addSocket function",L_ERROR)
+      return False
+
+=for highlighter
+
+=item C<import_constants(perl_module_name, constantNameOrTag [, ...])>
+
+This function allows Python plugins to import constants from Perl modules into
+their own namespace, as global variables. It is very similar to executing the
+Python statement S<C<< from <module_name> import <identifier>, ... >>>, except
+it imports symbols from Perl modules instead of Python modules. It only works on
+global constants (not functions), and can only import symbols from Perl modules
+that have already been loaded by SPADS. The return value is the number of
+constants actually imported.
+
+C<perl_module_name> is the name of the Perl module from which constants must be
+imported. This parameter is optional, the default value is C<"main"> which is
+the main SPADS core namespace.
+
+C<constantNamesOrTags> consists in one or several import identifiers. These
+identifiers can be either the name of a constant to import, or an export tag
+declared by the Perl module. Export tags are identifiers starting with C<:> that
+group together multiple symbols, which makes it possible to import them all at
+once. The special C<":all"> export tag is usually defined by Perl modules as
+containing all the identifiers that can be exported by the module. In order to
+mimic S<C<from ... import ...>> statement behavior, C<"*"> is defined as an
+alias for C<":all">. It is also the default value if no identifier to import is
+provided.
+
+Note: This function cannot be called until the plugin module has been fully
+initialized by the Python interpreter. Therefore, it cannot be called from the
+top-level code of the module. However, it can be called from the plugin
+constructor, which is the recommended location.
+
+Here are some examples of usage:
+
+=for highlighter python
+
+  class MyPlugin:
+
+      def __init__(self,context):
+
+          # Import the SRV_STATE_GAME_STARTED constant as a global variable
+          spads.import_constants('SpringAutoHostInterface', 'SRV_STATE_GAME_STARTED')
+
+          # Import the CLI_STATE_LEFT and CLI_STATE_KICKED constants as global variables
+          spads.import_constants('SpringAutoHostInterface', 'CLI_STATE_LEFT', 'CLI_STATE_KICKED')
+
+          # Import all the LOBBY_STATE_* constants as global variables
+          spads.import_constants('main',':lobbyState')
+
+          # Import all the constants exported by the SpringAutoHostInterface module as global variables
+          spads.import_constants('SpringAutoHostInterface', ':all')
+
+          # Exactly the same thing:
+          spads.import_constants('SpringAutoHostInterface', '*')
+
+          # Same thing again:
+          spads.import_constants('SpringAutoHostInterface')
+
   [...]
-  
-      if spads.get_flag('can_add_socket'):
-          spads.addSocket(socket,readSocketCallback)
-      else:
-          spads.slog("This plugin requires the addSocket function",1)
-          return False
+
+  def myFunction():
+
+      # All the constants imported previously can be used as global variables anywhere in the plugin code
+      if spads.getLobbyState() >= LOBBY_STATE_CONNECTED:
+          spads.slog("SPADS is connected to lobby server",L_NOTICE)
+
+      springInterface = spads.getSpringInterface()
+
+      if springInterface.getState() == SRV_STATE_GAME_STARTED:
+          spads.slog("A game is in progress",L_NOTICE)
+
+          playerData = springInterface.getPlayer('joe')
+          if playerData:
+              if playerData["disconnectCause"] == CLI_STATE_LEFT:
+                  spads.slog("Joe has left",L_NOTICE)
+              elif playerData["disconnectCause"] == CLI_STATE_KICKED:
+                  spads.slog("Joe has been kicked !",L_NOTICE)
+          else:
+              spads.slog("Joe is not a participant of this game",L_NOTICE)
 
 =for highlighter
 
@@ -2626,7 +3285,7 @@ L<SPADS documentation|http://planetspads.free.fr/spads/doc/spadsDoc.html>, espec
 
 L<Spring lobby protocol specifications|http://springrts.com/dl/LobbyProtocol/ProtocolDescription.html>
 
-L<Spring autohost protocol specifications (from source comments)|https://raw.github.com/spring/spring/master/rts/Net/AutohostInterface.cpp>
+L<Spring autohost protocol specifications (from source comments)|https://raw.github.com/beyond-all-reason/RecoilEngine/master/rts/Net/AutohostInterface.cpp>
 
 L<Introduction to Perl|http://perldoc.perl.org/perlintro.html>
 

@@ -47,7 +47,7 @@ use SimpleEvent;
 use SimpleLog;
 use SpadsConf;
 use SpadsUpdater;
-use SpringAutoHostInterface;
+use SpringAutoHostInterface qw':srvState :cliState :rdyState :msgDest';
 
 my $SLI_LOADING_ERROR;
 BEGIN { eval {require SpringLobbyInterface; 1} or do { $SLI_LOADING_ERROR=$@;chomp($SLI_LOADING_ERROR) } }
@@ -113,7 +113,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.55';
+our $SPADS_VERSION='0.13.56';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -572,29 +572,37 @@ my $lobbyReconnectDelay;
 my $useTls;
 my %hostingParams;
 
-my $lobbySimpleLog=SimpleLog->new(logFiles => [$conf{logDir}."/spads.log",''],
-                                  logLevels => [$conf{lobbyInterfaceLogLevel},3],
-                                  useANSICodes => [0,-t STDOUT ? 1 : 0],
-                                  useTimestamps => [1,-t STDOUT ? 0 : 1],
-                                  prefix => "[SpringLobbyInterface] ");
+my ($lobbySimpleLog,$autohostSimpleLog,$updaterSimpleLog,$simpleEventSimpleLog);
 
-my $autohostSimpleLog=SimpleLog->new(logFiles => [$conf{logDir}."/spads.log"],
-                                     logLevels => [$conf{autoHostInterfaceLogLevel}],
-                                     useANSICodes => [0],
-                                     useTimestamps => [1],
-                                     prefix => "[SpringAutoHostInterface] ");
+{
+  my $spadsLogFile=catfile($conf{logDir},'spads.log');
+  my $useAnsiCodesStdout = -t STDOUT ? 1 : 0;
+  my $useTimestampsStdout = -t STDOUT ? 0 : 1;
 
-my $updaterSimpleLog=SimpleLog->new(logFiles => [$conf{logDir}."/spads.log",""],
-                                    logLevels => [$conf{updaterLogLevel},3],
-                                    useANSICodes => [0,-t STDOUT ? 1 : 0],
-                                    useTimestamps => [1,-t STDOUT ? 0 : 1],
-                                    prefix => "[SpadsUpdater] ");
+  $lobbySimpleLog=SimpleLog->new(logFiles => [$spadsLogFile,''],
+                                 logLevels => [$conf{lobbyInterfaceLogLevel},3],
+                                 useANSICodes => [0,$useAnsiCodesStdout],
+                                 useTimestamps => [1,$useTimestampsStdout],
+                                 prefix => '[SpringLobbyInterface] ');
 
-my $simpleEventSimpleLog=SimpleLog->new(logFiles => [$conf{logDir}.'/spads.log',''],
-                                        logLevels => [$conf{simpleEventLogLevel},3],
-                                        useANSICodes => [0,-t STDOUT ? 1 : 0],
-                                        useTimestamps => [1,-t STDOUT ? 0 : 1],
-                                        prefix => "[SimpleEvent] ");
+  $autohostSimpleLog=SimpleLog->new(logFiles => [$spadsLogFile,''],
+                                    logLevels => [$conf{autoHostInterfaceLogLevel},3],
+                                    useANSICodes => [0,$useAnsiCodesStdout],
+                                    useTimestamps => [1,$useTimestampsStdout],
+                                    prefix => '[SpringAutoHostInterface] ');
+
+  $updaterSimpleLog=SimpleLog->new(logFiles => [$spadsLogFile,''],
+                                   logLevels => [$conf{updaterLogLevel},3],
+                                   useANSICodes => [0,$useAnsiCodesStdout],
+                                   useTimestamps => [1,$useTimestampsStdout],
+                                   prefix => '[SpadsUpdater] ');
+
+  $simpleEventSimpleLog=SimpleLog->new(logFiles => [$spadsLogFile,''],
+                                       logLevels => [$conf{simpleEventLogLevel},3],
+                                       useANSICodes => [0,$useAnsiCodesStdout],
+                                       useTimestamps => [1,$useTimestampsStdout],
+                                       prefix => '[SimpleEvent] ');
+}
 
 our $lobby;
 $lobby = SpringLobbyInterface->new(serverHost => $conf{lobbyHost},
@@ -2997,7 +3005,7 @@ sub getCommandLevels {
   if($gameState eq "running" && exists $p_runningBattle->{users}{$user} && %{$autohost->getPlayer($user)}) {
     if(defined $p_runningBattle->{users}{$user}{battleStatus} && $p_runningBattle->{users}{$user}{battleStatus}{mode}) {
       my $p_ahPlayer=$autohost->getPlayer($user);
-      if($p_ahPlayer->{disconnectCause} == -1 && $p_ahPlayer->{lost} == 0) {
+      if($p_ahPlayer->{disconnectCause} == CLI_STATE_CONNECTED && $p_ahPlayer->{lost} == 0) {
         $status="playing";
       }else{
         $status="player";
@@ -3835,7 +3843,7 @@ sub setupEnginePostActions {
 }
 
 sub checkAutoForceStart {
-  if($timestamps{autoForcePossible} > 0 && time - $timestamps{autoForcePossible} > 5 && $autohost->getState() == 1) {
+  if($timestamps{autoForcePossible} > 0 && time - $timestamps{autoForcePossible} > 5 && $autohost->getState() == SRV_STATE_SERVER_STARTED) {
     $timestamps{autoForcePossible}=-2;
     my $alreadyBroadcasted=0;
     if(%currentVote && exists $currentVote{command} && @{$currentVote{command}}) {
@@ -7274,21 +7282,21 @@ sub getSmurfsData {
 }
 
 sub checkAutoStop {
-  return unless(($conf{autoStop} =~ /^noOpponent/ || $conf{autoStop} =~ /^onlySpec/) && $springPid && $autohost->getState() == 2 && $timestamps{autoStop} == 0);
+  return unless(($conf{autoStop} =~ /^noOpponent/ || $conf{autoStop} =~ /^onlySpec/) && $springPid && $autohost->getState() == SRV_STATE_GAME_STARTED && $timestamps{autoStop} == 0);
   my %aliveTeams;
   foreach my $player (keys %{$p_runningBattle->{users}}) {
     next unless(defined $p_runningBattle->{users}{$player}{battleStatus} && $p_runningBattle->{users}{$player}{battleStatus}{mode});
     my $playerTeam=$p_runningBattle->{users}{$player}{battleStatus}{team};
     next if(exists $aliveTeams{$playerTeam});
     my $p_ahPlayer=$autohost->getPlayer($player);
-    next unless(%{$p_ahPlayer} && $p_ahPlayer->{disconnectCause} == -1 && $p_ahPlayer->{lost} == 0);
+    next unless(%{$p_ahPlayer} && $p_ahPlayer->{disconnectCause} == CLI_STATE_CONNECTED && $p_ahPlayer->{lost} == 0);
     $aliveTeams{$playerTeam}=1;
   }
   foreach my $bot (keys %{$p_runningBattle->{bots}}) {
     my $botTeam=$p_runningBattle->{bots}{$bot}{battleStatus}{team};
     next if(exists $aliveTeams{$botTeam});
     my $p_ahPlayer=$autohost->getPlayer($p_runningBattle->{bots}{$bot}{owner});
-    next unless(%{$p_ahPlayer} && $p_ahPlayer->{disconnectCause} == -1);
+    next unless(%{$p_ahPlayer} && $p_ahPlayer->{disconnectCause} == CLI_STATE_CONNECTED);
     $aliveTeams{$botTeam}=1;
   }
   my $nbAliveTeams=keys %aliveTeams;
@@ -8477,13 +8485,13 @@ sub hCancelQuit {
 
 sub isNotAllowedToVoteForResign {
   my ($user,$resignedPlayer)=@_;
-  return 1 unless($autohost->getState() == 2);
+  return 1 unless($autohost->getState() == SRV_STATE_GAME_STARTED);
   return 2 unless(exists $p_runningBattle->{users}{$user}
                   && defined $p_runningBattle->{users}{$user}{battleStatus}
                   && $p_runningBattle->{users}{$user}{battleStatus}{mode});
   return 3 unless($p_runningBattle->{users}{$user}{battleStatus}{team} == $p_runningBattle->{users}{$resignedPlayer}{battleStatus}{team});
   my $p_ahPlayer=$autohost->getPlayer($user);
-  return 4 unless(%{$p_ahPlayer} && $p_ahPlayer->{disconnectCause} == -1);
+  return 4 unless(%{$p_ahPlayer} && $p_ahPlayer->{disconnectCause} == CLI_STATE_CONNECTED);
   return 5 if($p_ahPlayer->{lost});
   return 0;
 }
@@ -8580,7 +8588,7 @@ sub hCallVote {
   }
   if($autohost->getState()) {
     foreach my $gUserNb (keys %{$autohost->{players}}) {
-      next if($autohost->{players}{$gUserNb}{disconnectCause} != -1);
+      next if($autohost->{players}{$gUserNb}{disconnectCause} != CLI_STATE_CONNECTED);
       my $gUser=$autohost->{players}{$gUserNb}{name};
       next if($gUser eq $user || $gUser eq $conf{lobbyLogin} || exists $remainingVoters{$gUser});
       my $p_levels=getCommandLevels($source,$gUser,$lcCmd);
@@ -8650,7 +8658,7 @@ sub hCallVote {
 sub hCheat {
   my ($source,$user,$p_params,$checkOnly)=@_;
 
-  if($autohost->getState() == 0) {
+  if($autohost->getState() == SRV_STATE_NOT_RUNNING) {
     answer("Unable to send data on AutoHost interface, game is not running");
     return 0;
   }
@@ -9182,7 +9190,7 @@ sub hForceStart {
   }
 
   my $gameState=$autohost->getState();
-  if($gameState == 0) {
+  if($gameState == SRV_STATE_NOT_RUNNING) {
     if($lobbyState < LOBBY_STATE_BATTLE_OPENED) {
       answer("Unable to start game, battle lobby is closed");
       return 0;
@@ -9192,7 +9200,7 @@ sub hForceStart {
       return 0;
     }
     return launchGame(1,$checkOnly);
-  }elsif($gameState == 1) {
+  }elsif($gameState == SRV_STATE_SERVER_STARTED) {
     return 1 if($checkOnly);
     broadcastMsg("Forcing game start by $user");
     $timestamps{autoForcePossible}=-2;
@@ -9215,13 +9223,13 @@ sub hGKick {
   }
 
   my $gameState=$autohost->getState();
-  if($gameState == 0) {
+  if($gameState == SRV_STATE_NOT_RUNNING) {
     answer("Unable to kick from game, game is not running");
     return 0;
   }
 
   my $p_ahPlayers=$autohost->getPlayersByNames();
-  my @players=grep {%{$p_ahPlayers->{$_}} && $p_ahPlayers->{$_}{disconnectCause} == -1} (keys %{$p_ahPlayers});
+  my @players=grep {%{$p_ahPlayers->{$_}} && $p_ahPlayers->{$_}{disconnectCause} == CLI_STATE_CONNECTED} (keys %{$p_ahPlayers});
   my $p_kickedUsers=cleverSearch($p_params->[0],\@players);
   if(! @{$p_kickedUsers}) {
     answer("Unable to find matching player for \"$p_params->[0]\" in game");
@@ -9776,7 +9784,7 @@ sub hKickBan {
 
   if($autohost->getState()) {
     my $p_ahPlayers=$autohost->getPlayersByNames();
-    if(exists $p_ahPlayers->{$bannedUser} && %{$p_ahPlayers->{$bannedUser}} && $p_ahPlayers->{$bannedUser}{disconnectCause} == -1) {
+    if(exists $p_ahPlayers->{$bannedUser} && %{$p_ahPlayers->{$bannedUser}} && $p_ahPlayers->{$bannedUser}{disconnectCause} == CLI_STATE_CONNECTED) {
       $autohost->sendChatMessage("/kickbynum $p_ahPlayers->{$bannedUser}{playerNb}");
     }
   }
@@ -11362,11 +11370,11 @@ sub hResign {
   my ($source,$user,$p_params,$checkOnly)=@_;
 
   my $ahState=$autohost->getState();
-  if($ahState != 2) {
+  if($ahState != SRV_STATE_GAME_STARTED) {
     my $reason='game is not running';
-    if($ahState == 1) {
+    if($ahState == SRV_STATE_SERVER_STARTED) {
       $reason='game has not started yet';
-    }elsif($ahState == 3) {
+    }elsif($ahState == SRV_STATE_GAME_OVER) {
       $reason='game is already over';
     }
     answer("Unable to resign, $reason!");
@@ -11429,7 +11437,7 @@ sub hResign {
     my @resignablePlayers;
     foreach my $bPlayer (@bPlayers) {
       my $p_ahPlayer=$autohost->getPlayer($bPlayer);
-      push(@resignablePlayers,$bPlayer) if(%{$p_ahPlayer} && $p_ahPlayer->{disconnectCause} == -1 && $p_ahPlayer->{lost} == 0);
+      push(@resignablePlayers,$bPlayer) if(%{$p_ahPlayer} && $p_ahPlayer->{disconnectCause} == CLI_STATE_CONNECTED && $p_ahPlayer->{lost} == 0);
     }
     @playersToResign=grep {$p_runningBattle->{users}{$_}{battleStatus}{team} == $p_runningBattle->{users}{$resignedPlayer}{battleStatus}{team}} @resignablePlayers;
     if(! @playersToResign) {
@@ -11438,7 +11446,7 @@ sub hResign {
     }
   }else{
     my $p_ahPlayer=$autohost->getPlayer($resignedPlayer);
-    if(! %{$p_ahPlayer} || $p_ahPlayer->{disconnectCause} != -1) {
+    if(! %{$p_ahPlayer} || $p_ahPlayer->{disconnectCause} != CLI_STATE_CONNECTED) {
       answer("Unable to resign $resignedPlayer, player is not connected!");
       return 0;
     }
@@ -11592,7 +11600,7 @@ sub hRing {
   my $ringType='unready/unsynced player';
 
   my $p_bUsers=$lobby->{battle}{users};
-  if($autohost->getState() == 1) {
+  if($autohost->getState() == SRV_STATE_SERVER_STARTED) {
     foreach my $gUserNb (keys %{$autohost->{players}}) {
       my $player=$autohost->{players}{$gUserNb}{name};
       my $minRingDelay=getUserPref($player,"minRingDelay");
@@ -11607,7 +11615,7 @@ sub hRing {
         }
       }else{
         $ringType='unready player';
-        if($autohost->{players}{$gUserNb}{ready} < 1
+        if($autohost->{players}{$gUserNb}{ready} < RDY_STATE_READY_BY_ENGINE
            && exists $p_bUsers->{$player}
            && exists $p_runningBattle->{users}{$player}
            && (! defined $p_runningBattle->{users}{$player}{battleStatus} 
@@ -11709,7 +11717,7 @@ sub hSay {
     return 0;
   }
 
-  if($autohost->getState() == 0) {
+  if($autohost->getState() == SRV_STATE_NOT_RUNNING) {
     answer("Unable to send data on AutoHost interface, game is not running");
     return 0;
   }
@@ -11917,7 +11925,7 @@ sub hSend {
     return 0;
   }
 
-  if($autohost->getState() == 0) {
+  if($autohost->getState() == SRV_STATE_NOT_RUNNING) {
     answer("Unable to send data on AutoHost interface, game is not running");
     return 0;
   }
@@ -12407,24 +12415,24 @@ sub getGameStatus {
           }
           my $p_ahPlayer=$autohost->getPlayer($player);
           if(%{$p_ahPlayer}) {
-            if($p_ahPlayer->{ready} == 0) {
+            if($p_ahPlayer->{ready} == RDY_STATE_PLACED) {
               $clientStatus{Ready}="$C{7}Placed$C{1}";
-            }elsif($p_ahPlayer->{ready} > 0) {
+            }elsif($p_ahPlayer->{ready} > RDY_STATE_PLACED) {
               $clientStatus{Ready}="$C{3}Yes$C{1}";
             }else{
               $clientStatus{Ready}="$C{4}No$C{1}";
             }
-            if($p_ahPlayer->{disconnectCause} == -2) {
+            if($p_ahPlayer->{disconnectCause} == CLI_STATE_LOADING) {
               $clientStatus{Status}="$C{14}Loading$C{1}";
-            }elsif($p_ahPlayer->{disconnectCause} == 0) {
+            }elsif($p_ahPlayer->{disconnectCause} == CLI_STATE_CONNECTION_LOST) {
               $clientStatus{Status}="$C{4}Timeouted$C{1}";
-            }elsif($p_ahPlayer->{disconnectCause} == 1) {
+            }elsif($p_ahPlayer->{disconnectCause} == CLI_STATE_LEFT) {
               $clientStatus{Status}="$C{7}Disconnected$C{1}";
-            }elsif($p_ahPlayer->{disconnectCause} == 2) {
+            }elsif($p_ahPlayer->{disconnectCause} == CLI_STATE_KICKED) {
               $clientStatus{Status}="$C{13}Kicked$C{1}";
-            }elsif($p_ahPlayer->{disconnectCause} == -1) {
+            }elsif($p_ahPlayer->{disconnectCause} == CLI_STATE_CONNECTED) {
               if($p_ahPlayer->{lost} == 0) {
-                if($ahState == 1) {
+                if($ahState == SRV_STATE_SERVER_STARTED) {
                   $clientStatus{Status}="$C{10}Waiting$C{1}";
                 }else{
                   $clientStatus{Status}="$C{3}Playing$C{1}";
@@ -12473,15 +12481,15 @@ sub getGameStatus {
       $clientStatus{Name}="+ $spec" unless(exists $p_runningBattle->{users}{$spec});
       my $p_ahPlayer=$autohost->getPlayer($spec);
       if(%{$p_ahPlayer}) {
-        if($p_ahPlayer->{disconnectCause} == -2) {
+        if($p_ahPlayer->{disconnectCause} == CLI_STATE_LOADING) {
           $clientStatus{Status}="$C{14}Loading$C{1}";
-        }elsif($p_ahPlayer->{disconnectCause} == 0) {
+        }elsif($p_ahPlayer->{disconnectCause} == CLI_STATE_CONNECTION_LOST) {
           $clientStatus{Status}="$C{4}Timeouted$C{1}";
-        }elsif($p_ahPlayer->{disconnectCause} == 1) {
+        }elsif($p_ahPlayer->{disconnectCause} == CLI_STATE_LEFT) {
           $clientStatus{Status}="$C{7}Disconnected$C{1}";
-        }elsif($p_ahPlayer->{disconnectCause} == 2) {
+        }elsif($p_ahPlayer->{disconnectCause} == CLI_STATE_KICKED) {
           $clientStatus{Status}="$C{13}Kicked$C{1}";
-        }elsif($p_ahPlayer->{disconnectCause} == -1) {
+        }elsif($p_ahPlayer->{disconnectCause} == CLI_STATE_CONNECTED) {
           $clientStatus{Status}="$C{12}Spectating$C{1}";
         }else{
           $clientStatus{Status}="$C{6}Unknown$C{1}";
@@ -12513,15 +12521,15 @@ sub getGameStatus {
           $coloredStatus{"$C{5}$k$C{1}"}=$clientStatus{$k};
         }
       }
-      push(@clientsStatus,\%coloredStatus) if(exists $p_runningBattle->{users}{$spec} || (%{$p_ahPlayer} && $p_ahPlayer->{disconnectCause} < 0));
+      push(@clientsStatus,\%coloredStatus) if(exists $p_runningBattle->{users}{$spec} || (%{$p_ahPlayer} && $p_ahPlayer->{disconnectCause} <= CLI_STATE_CONNECTED));
     }
   }
-  my %globalStatus = ("$B$C{10}Game status$B$C{1}" => $ahState == 1 ? 'waiting for ready in game (since '.secToTime(time-$timestamps{lastGameStart}).')' : 'running since '.secToTime(time-$timestamps{lastGameStartPlaying}),
+  my %globalStatus = ("$B$C{10}Game status$B$C{1}" => $ahState == SRV_STATE_SERVER_STARTED ? 'waiting for ready in game (since '.secToTime(time-$timestamps{lastGameStart}).')' : 'running since '.secToTime(time-$timestamps{lastGameStartPlaying}),
                       "$B$C{10}Map$B$C{1}" => $p_runningBattle->{map},
                       "$B$C{10}Mod$B$C{1}" => $p_runningBattle->{mod});
   if(ref $user) {
-    $globalStatus{gameStatus} = $ahState == 1 ? 'waiting' : 'running';
-    $globalStatus{gameTime} = $ahState == 1 ? time-$timestamps{lastGameStart} : time-$timestamps{lastGameStartPlaying};
+    $globalStatus{gameStatus} = $ahState == SRV_STATE_SERVER_STARTED ? 'waiting' : 'running';
+    $globalStatus{gameTime} = $ahState == SRV_STATE_SERVER_STARTED ? time-$timestamps{lastGameStart} : time-$timestamps{lastGameStartPlaying};
   }
   return (\@clientsStatus,\%statusDataFromPlugin,\%globalStatus);
 }
@@ -14547,7 +14555,7 @@ sub cbLeftBattle {
       my $userIsStillInGame;
       if($autohost->getState()) {
         my $p_ahUser=$autohost->getPlayer($user);
-        $userIsStillInGame=1 if(%{$p_ahUser} && $p_ahUser->{disconnectCause} == -1);
+        $userIsStillInGame=1 if(%{$p_ahUser} && $p_ahUser->{disconnectCause} == CLI_STATE_CONNECTED);
       }
       delete $currentVote{remainingVoters}{$user} unless($userIsStillInGame);
     }
@@ -14597,7 +14605,7 @@ sub cbKickFromBattle {
   return if(exists $p_endVoteLevels->{directLevel} && $bannedUserLevel >= $p_endVoteLevels->{directLevel});
 
   my $p_ahPlayers=$autohost->getPlayersByNames();
-  if(exists $p_ahPlayers->{$bannedUser} && %{$p_ahPlayers->{$bannedUser}} && $p_ahPlayers->{$bannedUser}{disconnectCause} == -1) {
+  if(exists $p_ahPlayers->{$bannedUser} && %{$p_ahPlayers->{$bannedUser}} && $p_ahPlayers->{$bannedUser}{disconnectCause} == CLI_STATE_CONNECTED) {
     $autohost->sendChatMessage("/kickbynum $p_ahPlayers->{$bannedUser}{playerNb}");
   }
 
@@ -14845,7 +14853,7 @@ sub cbUpdateBattleInfo {
 sub cbAhPlayerJoined {
   my (undef,undef,$name)=@_;
   logMsg("game","=== $name joined ===") if($conf{logGameJoinLeave});
-  if($autohost->getState() == 1 && $timestamps{autoForcePossible} == 0 && exists($p_runningBattle->{scriptTags}{"game/startpostype"})) {
+  if($autohost->getState() == SRV_STATE_SERVER_STARTED && $timestamps{autoForcePossible} == 0 && exists($p_runningBattle->{scriptTags}{"game/startpostype"})) {
     if(%{$p_runningBattle->{bots}}) {
       slog("Game is using AI bots, cancelling auto-force start check.",5);
       $timestamps{autoForcePossible}=-1;
@@ -14862,16 +14870,16 @@ sub cbAhPlayerJoined {
         return;
       }
       if($p_rBUsers->{$user}{battleStatus}{mode}) {
-        if(! exists $p_ahPlayers->{$user} || $p_ahPlayers->{$user}{disconnectCause} == -2) {
+        if(! exists $p_ahPlayers->{$user} || $p_ahPlayers->{$user}{disconnectCause} == CLI_STATE_LOADING) {
           slog("Player \"$user\" hasn't joined yet, auto-force start isn't possible.",5);
           return;
         }
-        if($startPosType == 2 && $p_ahPlayers->{$user}{ready} < 1) {
+        if($startPosType == 2 && $p_ahPlayers->{$user}{ready} < RDY_STATE_READY_BY_ENGINE) {
           slog("Player \"$user\" isn't ready yet, auto-force start isn't possible.",5);
           return;
         }
       }else{
-        if(! exists $p_ahPlayers->{$user} || $p_ahPlayers->{$user}{disconnectCause} == -2) {
+        if(! exists $p_ahPlayers->{$user} || $p_ahPlayers->{$user}{disconnectCause} == CLI_STATE_LOADING) {
           if($p_rBUsers->{$user}{battleStatus}{sync} != 1) {
             slog("Ignoring unsynced spectator \"$user\" for auto-force start check.",5);
           }elsif($p_rBUsers->{$user}{status}{inGame} == 1) {
@@ -14894,7 +14902,7 @@ sub cbAhPlayerReady {
   return unless($readyState > 0);
   logMsg("game","=== $name is ready ===") if($conf{logGameServerMsg});
 
-  if($autohost->getState() == 1 && $timestamps{autoForcePossible} == 0 && exists($p_runningBattle->{scriptTags}{"game/startpostype"})) {
+  if($autohost->getState() == SRV_STATE_SERVER_STARTED && $timestamps{autoForcePossible} == 0 && exists($p_runningBattle->{scriptTags}{"game/startpostype"})) {
     if(%{$p_runningBattle->{bots}}) {
       slog("Game is using AI bots, cancelling auto-force start check.",5);
       $timestamps{autoForcePossible}=-1;
@@ -14911,16 +14919,16 @@ sub cbAhPlayerReady {
         return;
       }
       if($p_rBUsers->{$user}{battleStatus}{mode}) {
-        if(! exists $p_ahPlayers->{$user} || $p_ahPlayers->{$user}{disconnectCause} == -2) {
+        if(! exists $p_ahPlayers->{$user} || $p_ahPlayers->{$user}{disconnectCause} == CLI_STATE_LOADING) {
           slog("Player \"$user\" hasn't joined yet, auto-force start isn't possible.",5);
           return;
         }
-        if($startPosType == 2 && $p_ahPlayers->{$user}{ready} < 1) {
+        if($startPosType == 2 && $p_ahPlayers->{$user}{ready} < RDY_STATE_READY_BY_ENGINE) {
           slog("Player \"$user\" isn't ready yet, auto-force start isn't possible.",5);
           return;
         }
       }else{
-        if(! exists $p_ahPlayers->{$user} || $p_ahPlayers->{$user}{disconnectCause} == -2) {
+        if(! exists $p_ahPlayers->{$user} || $p_ahPlayers->{$user}{disconnectCause} == CLI_STATE_LOADING) {
           if($p_rBUsers->{$user}{battleStatus}{sync} != 1) {
             slog("Ignoring unsynced spectator \"$user\" for auto-force start check.",5);
           }elsif($p_rBUsers->{$user}{status}{inGame} == 1) {
@@ -14954,7 +14962,7 @@ sub cbAhPlayerLeft {
   }else{
     logMsg("game","=== \#$playerNb (unknown) left ===")  if($conf{logGameJoinLeave});
   }
-  if($springServerType eq 'dedicated' && $autohost->{state} == 3 && $timestamps{gameOver} == 0) {
+  if($springServerType eq 'dedicated' && $autohost->{state} == SRV_STATE_GAME_OVER && $timestamps{gameOver} == 0) {
     $timestamps{gameOver}=time;
     $timestamps{autoStop}=time + ($conf{autoStop} =~ /\((\d+)\)$/ ? $1 : 5) if($timestamps{autoStop} == 0 && $conf{autoStop} ne 'off');
   }else{
@@ -14964,25 +14972,36 @@ sub cbAhPlayerLeft {
 
 sub cbAhPlayerChat {
   my (undef,$playerNb,$dest,$msg)=@_;
+
   $msg =~ s/\cJ/<LF>/g;
   $msg =~ s/\cM/<CR>/g;
+
   my $player=$autohost->{players}{$playerNb}{name};
+
   my $destString;
-  if($dest eq '') {
-    $destString=isUserAllowedToSpeakInGame($player)?'':'(to spectators, forced) '
+  if($dest == MSG_DEST_ALLIES) {
+    $destString='(to allies) ';
+  }elsif($dest == MSG_DEST_SPECTATORS) {
+    $destString='(to spectators) ';
+  }elsif($dest == MSG_DEST_EVERYONE) {
+    $destString = isUserAllowedToSpeakInGame($player) ? '' : '(to spectators, forced) ';
+  }elsif($dest == MSG_DEST_SERVER) {
+    $destString='(to server) ';
   }else{
-    $destString="(to $dest) ";
+    my $destPlayer = exists $autohost->{players}{$dest} ? $autohost->{players}{$dest}{name} : "#$dest";
+    $destString="(to player $destPlayer) ";
   }
-  logMsg("game","$destString<$player> $msg") if($conf{logGameChat});
+  logMsg('game',"$destString<$player> $msg")
+      if($conf{logGameChat});
+
   if($destString eq '') {
-    my $p_messages=splitMsg($msg,$conf{maxChatMessageLength}-13-length($player));
-    foreach my $mes (@{$p_messages}) {
-      queueLobbyCommand(["SAYBATTLE","<$player> $mes"]);
-    }
+    my $r_messages=splitMsg($msg,$conf{maxChatMessageLength}-13-length($player));
+    queueLobbyCommand(['SAYBATTLE',"<$player> $_"])
+        foreach(@{$r_messages});
   }
-  if($dest eq '' && "$msg" =~ /^!(\w.*)$/) {
-    handleRequest("game",$player,$1);
-  }
+
+  handleRequest('game',$player,$1)
+      if($dest == MSG_DEST_EVERYONE && $msg =~ /^!(\w.*)$/);
 }
 
 sub cbAhServerStarted {
@@ -15086,17 +15105,25 @@ sub cbAhGameTeamStat {
 }
 
 sub cbAhServerGameOver {
-  my (undef,undef,$playerNb,@winningAllyTeams)=@_;
+  my (undef,$playerNb,$r_winningAllyTeams)=@_;
+
   if(! exists $autohost->{players}{$playerNb}) {
     slog("Ignoring Game Over message from unknown player number $playerNb",2);
     return;
   }
-  $p_gameOverResults->{$autohost->{players}{$playerNb}{name}}=\@winningAllyTeams;
-  slog("Game over ($autohost->{players}{$playerNb}{name})",4);
-  return if(($springServerType eq 'dedicated' && $autohost->{state} < 3)
-            || ($springServerType eq 'headless' && $autohost->{players}{$playerNb}{name} ne $conf{lobbyLogin}));
-  $timestamps{autoStop}=time + ($conf{autoStop} =~ /\((\d+)\)$/ ? $1 : 5) if($timestamps{autoStop} == 0 && $conf{autoStop} ne 'off');
-  $timestamps{gameOver}=time if($timestamps{gameOver} == 0);
+
+  my $playerName=$autohost->{players}{$playerNb}{name};
+  $p_gameOverResults->{$playerName}=$r_winningAllyTeams;
+  slog("Game over ($playerName)",4);
+
+  return if(($springServerType eq 'dedicated' && $autohost->{state} < SRV_STATE_GAME_OVER)
+            || ($springServerType eq 'headless' && $playerName ne $conf{lobbyLogin}));
+
+  $timestamps{autoStop} = time + ($conf{autoStop} =~ /\((\d+)\)$/ ? $1 : 5)
+      if($timestamps{autoStop} == 0 && $conf{autoStop} ne 'off');
+
+  $timestamps{gameOver}=time
+      if($timestamps{gameOver} == 0);
 }
 
 sub cbAhServerQuit {
@@ -16297,7 +16324,7 @@ sub manageBattle {
 
   if($lobbyState >= LOBBY_STATE_BATTLE_OPENED
      && $closeBattleAfterGame
-     && $autohost->getState() == 0) {
+     && $autohost->getState() == SRV_STATE_NOT_RUNNING) {
     closeBattle();
     return;
   }
@@ -16332,7 +16359,7 @@ sub manageBattle {
 
 sub checkExit {
   return if($simpleEventLoopStopping);
-  return unless($autohost->getState() == 0 && $springPid == 0 && defined $quitAfterGame{action});
+  return unless($autohost->getState() == SRV_STATE_NOT_RUNNING && $springPid == 0 && defined $quitAfterGame{action});
   if($loadArchivesInProgress || $engineVersionAutoManagementInProgress || (any {$plugins{$_}->can('delayShutdown') && $plugins{$_}->delayShutdown()} @pluginsOrder)) {
     return if($closeBattleAfterGame == 1);
     if($quitAfterGame{condition} == 0) {
