@@ -1,0 +1,8 @@
+[cliPerf]
+!cliPerf [-s|-p] [-a] [filter] - displays system and/or performance data for clients of current game
+"!cliPerf" displays system and performance data for all game clients currently connected
+"!cliPerf -s" displays system information for all game clients currently connected
+"!cliPerf -p" displays performance data for all game clients currently connected
+"!cliPerf -a" displays system and performance data for all game clients, even if they disconnected
+"!cliPerf foo" displays system and performance data for game clients currently connected matching name filter "foo"
+"!cliPerf -a -p bar" displays performance data for game clients matching name filter "foo", even if they disconnected
