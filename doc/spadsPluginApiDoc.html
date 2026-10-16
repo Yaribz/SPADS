@@ -38,6 +38,7 @@
       <li><a href="#Accessors">Accessors</a></li>
       <li><a href="#Plugin-management">Plugin management</a></li>
       <li><a href="#Handlers-management">Handlers management</a></li>
+      <li><a href="#Lua-messages-management">Lua messages management</a></li>
       <li><a href="#SPADS-operations">SPADS operations</a></li>
       <li><a href="#AutoHost-messaging-system">AutoHost messaging system</a></li>
       <li><a href="#Time-utils">Time utils</a></li>
@@ -65,6 +66,8 @@
 <h1 id="SYNOPSIS">SYNOPSIS</h1>
 
 <pre><code>package MyPlugin;
+
+use strict;
 
 use SimpleLog &#39;:logLevel&#39;;
 use SpadsPluginApi;
@@ -177,7 +180,7 @@ def fix_spads_strings(*spads_strings):
 </li>
 </ul>
 
-<p>Plugin developers should choose one (or several) of them and import the corresponding export tag(s) from the <code>SimpleLog</code> module, like this for example (for Python plugins, refer to the <a href="#import_constants">import_constants</a> function for more details about how imports work):</p>
+<p>Plugin developers should choose one (or several) of them and import the corresponding export tag(s) from the <code>SimpleLog</code> module, like this for example (for Python plugins, refer to the <a href="#import_constants">&quot;import_constants&quot;</a> function for more details about how imports work):</p>
 
 <pre><code># Import the log level constants at start of the plugin module
 use SimpleLog &#39;:logLevel&#39;;
@@ -217,6 +220,8 @@ use SimpleLog &#39;:logLevel&#39;;
 <p>This is the plugin constructor, it is called when SPADS (re)loads the plugin.</p>
 
 <p>The <code>$context</code> parameter is a string which indicates in which context the plugin constructor has been called: <code>&quot;autoload&quot;</code> means the plugin is being loaded automatically at startup, <code>&quot;load&quot;</code> means the plugin is being loaded manually using <code>!plugin &lt;pluginName&gt; load</code> command, <code>&quot;reload&quot;</code> means the plugin is being reloaded manually using <code>!plugin &lt;pluginName&gt; reload</code> command.</p>
+
+<p>In case of error preventing the plugin from starting, this function must return <code>undef</code> (for Perl plugins) or raise an exception (for Python plugins). It is important to maintain state consistency: if the plugin had already successfully registered handlers on lobby commands, SPADS commands, Spring commands or Lua messages for example, then all these actions should be canceled before returning from the constructor. This ensures that a subsequent attempt to load the plugin should be possible once the error has been resolved, without requiring a restart of SPADS.</p>
 
 </dd>
 <dt id="getVersion($self)"><a id="getVersion"></a><a id="getVersion-self"></a><code>getVersion($self)</code></dt>
@@ -1163,7 +1168,7 @@ def getParams(pluginName):
   slog(&quot;SPADS is connected to lobby server&quot;,L_NOTICE);
 }</code></pre>
 
-<p>Python plugins must import them using the <code>:lobbyState</code> export tag from main SPADS namespace, like this for example (refer to the <a href="#import_constants">import_constants</a> function for more details):</p>
+<p>Python plugins must import them using the <code>:lobbyState</code> export tag from main SPADS namespace, like this for example (refer to the <a href="#import_constants">&quot;import_constants&quot;</a> function for more details):</p>
 
 <pre><code class="language-python">class MyPlugin:
 
@@ -1254,7 +1259,7 @@ def getParams(pluginName):
 
 <p>This methods retrieves the player name corresponding to the player number <code>$playerNum</code>, or <code>undef</code> if the player number is not attributed to any in-game player.</p>
 
-<p>Player numbers are the internal identifiers used at game server side. Most of the network messages passing through the autohost interface use these identifiers rather than player names, so this accessor can be useful to resolve them back to player names (as shown in the documentation of the <a href="#addSpringCommandHandler">addSpringCommandHandler</a> handler management function).</p>
+<p>Player numbers are the internal identifiers used at game server side. Most of the network messages passing through the autohost interface use these identifiers rather than player names, so this accessor can be useful to resolve them back to player names (as shown in the documentation of the <a href="#addSpringCommandHandler">&quot;addSpringCommandHandler&quot;</a> handler management function).</p>
 
 </li>
 <li><p>- <code>getPlayer($playerName)</code></p>
@@ -1446,13 +1451,13 @@ def getParams(pluginName):
 <dt id="addLobbyCommandHandler(\%handlers,$priority=caller(),$isPreCallback)"><a id="addLobbyCommandHandler"></a><a id="addLobbyCommandHandler-handlers-priority-caller-isPreCallback"></a><code>addLobbyCommandHandler(\%handlers,$priority=caller(),$isPreCallback)</code></dt>
 <dd>
 
-<p>This function allows plugins to set up their own handlers for Spring lobby commands received by SPADS from lobby server.</p>
+<p>This function allows plugins to set up their own handlers for Spring lobby commands received by SPADS from lobby server. If handlers already exist for the same command with the same priority, they are replaced.</p>
 
 <p><code>\%handlers</code> is a reference to a hash which contains the handlers to be added: each entry associates a lobby command (in uppercase) to a handler function implemented by the plugin. For example, with <code>{ JOINBATTLEREQUEST =&gt; \&amp;hLobbyJoinBattleRequest }</code>, the plugin has to implement the function <code>hLobbyJoinBattleRequest</code>. The parameters passed to the handlers are the command tokens: the command name followed by command parameters. Refer to <a href="http://springrts.com/dl/LobbyProtocol/ProtocolDescription.html">Spring lobby protocol specifications</a> for more information.</p>
 
 <p><code>$priority</code> is the priority of the handlers. Lowest priority number actually means higher priority. If not provided, the plugin name is used as priority, which means it is executed after handlers having priority &lt; 1000, and before handlers having priority &gt; 1000. Usually you don&#39;t need to provide priority, unless you use data managed by other handlers.</p>
 
-<p><code>$isPreCallback</code> specifies whether the command handlers must be called before or after the lobby interface module handlers. If this parameter is set to a true value, the command handlers will be called before the lobby interface module handlers. If this parameter is not provided or set to a false value, the command handlers will be called after the lobby interface module handlers.</p>
+<p><code>$isPreCallback</code> specifies whether the command handlers must be called before or after the internal handlers of the lobby interface module. If this parameter is set to a true value, the command handlers will be called before the lobby interface module handlers. If this parameter is not provided or set to a false value, the command handlers will be called after the lobby interface module handlers.</p>
 
 <p>Note: As all lobby command handlers are automatically removed by SPADS when it is disconnected from the lobby server (due to network problems for example), plugins should always re-set up their lobby command handlers each time SPADS successfully reconnects. This can be done automatically by doing the <code>addLobbyCommandHandler</code> call in the <code>onLobbySynchronized</code> event-based callback (for plugins that don&#39;t need to process the commands sent by the lobby server during the initial lobby state synchronization phase) or in the <code>onLobbyLoggedIn</code> event-based callback (for plugins that need to process the commands sent by the lobby server during the initial lobby state synchronization phase).</p>
 
@@ -1480,30 +1485,33 @@ def getParams(pluginName):
 <dt id="addSpringCommandHandler(\%handlers,$priority=caller())"><a id="addSpringCommandHandler"></a><a id="addSpringCommandHandler-handlers-priority-caller"></a><code>addSpringCommandHandler(\%handlers,$priority=caller())</code></dt>
 <dd>
 
-<p>This function allows plugins to set up their own handlers for Spring AutoHost commands received by SPADS from Spring server.</p>
+<p>This function allows plugins to set up their own handlers for Spring AutoHost commands received by SPADS from Spring server. If handlers already exist for the same command with the same priority, they are replaced.</p>
 
 <p><code>\%handlers</code> is a reference to a hash which contains the handlers to be added: each entry associates a Spring AutoHost command to a handler function implemented by the plugin. The Spring AutoHost command names must match the entries declared in the <code>EVENT</code> enum in <a href="https://github.com/beyond-all-reason/RecoilEngine/blob/master/rts/Net/AutohostInterface.cpp#L36">engine source code</a>. For example, with <code>{ SERVER_STARTED =&gt; \&amp;hSpringServerStarted }</code>, the plugin has to implement the function <code>hSpringServerStarted</code>. This function will be called every time the <code>SERVER_STARTED</code> command is received by SPADS on the AutoHost interface. The first parameter passed to the handler is always the command name. The other parameters are the ones coming from the engine, as documented in <a href="https://raw.github.com/beyond-all-reason/RecoilEngine/master/rts/Net/AutohostInterface.cpp">engine source code</a> except that the <code>msgsize</code> parameter is processed internally by SPADS and removed from the parameters passed to the plugins.</p>
 
 <p><code>$priority</code> is the priority of the handlers. Lowest priority number actually means higher priority. If not provided, the plugin name is used as priority, which means it is executed after handlers having priority &lt; 1000, and before handlers having priority &gt; 1000. Usually you don&#39;t need to provide priority, unless you use data managed by other handlers.</p>
 
-<p>Note: some Spring AutoHost commands use predefined sets of numerical values as parameters. The corresponding sets of constants are provided by the <code>SpringAutoHostInterface</code> module to ease the handling of these parameters, as listed below.</p>
+<p>Note 1: <code>GAME_LUAMSG</code> commands (i.e. Lua messages) often require specific additional parsing. That&#39;s why a set of higher-level functions is dedicated to these messages, which notably provides automatic handling of the frequently used serialization formats (refer to the <a href="#Lua-messages-management">&quot;Lua messages management&quot;</a> section for more details). It is recommended to use these functions when dealing with Lua messages rather than the lower-level <code>addSpringCommandHandler</code> function.</p>
 
-<p>For the <code>destination</code> parameter of the <code>PLAYER_CHAT</code> command:</p>
+<p>Note 2: <code>PLAYER_CHAT</code> commands (i.e. in-game chat messages) include a numeric <code>destination</code> parameter. This parameter is either a player number for a private message, or a special value indicating the type of recipients in other cases. The corresponding constants are provided by the <code>SpringAutoHostInterface</code> module to ease the handling of this parameter, as listed below.</p>
 
 <ul>
 
-<li><p><code>252</code> - <code>MSG_DEST_ALLIES</code> (message is for allies only)</p>
+<li><p><code>MSG_DEST_ALLIES = 252</code> (message is for allies only)</p>
 
 </li>
-<li><p><code>253</code> - <code>MSG_DEST_SPECTATORS</code> (message is for spectators only)</p>
+<li><p><code>MSG_DEST_SPECTATORS = 253</code> (message is for spectators only)</p>
 
 </li>
-<li><p><code>254</code> - <code>MSG_DEST_EVERYONE</code> (message is for everyone)</p>
+<li><p><code>MSG_DEST_EVERYONE = 254</code> (message is for everyone)</p>
 
 </li>
-<li><p><code>255</code> - <code>MSG_DEST_SERVER</code> (message is for server only)</p>
+<li><p><code>MSG_DEST_SERVER = 255</code> (message is for server only)</p>
 
-<p>To use these constants, plugins must import the <code>:msgDest</code> export tag from the <code>SpringAutoHostInterface</code> module, like this for example:</p>
+<p>To use these constants, plugins must import the <code>:msgDest</code> export tag from the <code>SpringAutoHostInterface</code> module, as shown in the usage example below.</p>
+
+</li>
+</ul>
 
 <pre><code>use SpringAutoHostInterface &#39;:msgDest&#39;;
 
@@ -1519,6 +1527,10 @@ sub new {
 
 }
 
+sub onUnload {
+  removeSpringCommandHandler([&#39;PLAYER_CHAT&#39;]);
+}
+
 sub hSpringPlayerChat {
   my ($command,$playerNb,$dest,$msg)=@_;
   if($dest == MSG_DEST_EVERYONE) {
@@ -1531,7 +1543,10 @@ sub hSpringPlayerChat {
 
     def __init__(self,context):
         spads.import_constants(&#39;SpringAutoHostInterface&#39;,&#39;:msgDest&#39;)
-        spads.addSpringCommandHandler({&quot;PLAYER_CHAT&quot;: hSpringPlayerChat})
+        spads.addSpringCommandHandler({&#39;PLAYER_CHAT&#39;: hSpringPlayerChat})
+
+    def onUnload(self,context):
+        spads.removeSpringCommandHandler([&#39;PLAYER_CHAT&#39;]);
 
 [...]
 
@@ -1539,109 +1554,6 @@ def hSpringPlayerChat(command, playerNb, dest, msg):
     if dest == MSG_DEST_EVERYONE:
         playerName = spads.getSpringInterface().getPlayerName(playerNb)
         spads.slog(f&#39;{playerName} sent this message to everyone: {msg}&#39;,L_NOTICE)</code></pre>
-
-</li>
-</ul>
-
-<p>For the <code>script</code> parameter of the <code>GAME_LUAMSG</code> command:</p>
-
-<ul>
-
-<li><p><code>100</code> - <code>LUA_SCRIPT_RULES</code></p>
-
-</li>
-<li><p><code>300</code> - <code>LUA_SCRIPT_GAIA</code></p>
-
-</li>
-<li><p><code>2000</code> - <code>LUA_SCRIPT_UI</code></p>
-
-<p>To use these constants, plugins must import the <code>:luaScript</code> export tag from the <code>SpringAutoHostInterface</code> module, like this for example:</p>
-
-<pre><code>use SpringAutoHostInterface &#39;:luaScript&#39;;
-
-[...]
-
-sub new {
-
-  [...]
-
-  addSpringCommandHandler({GAME_LUAMSG =&gt; \&amp;hSpringGameLuaMsg});
-
-  [...]
-
-}
-
-sub hSpringGameLuaMsg {
-  my ($command, $playerNb, $script, $mode, $data)=@_;
-  if($script == LUA_SCRIPT_RULES) {
-    slog(&#39;Received a Lua message for rules script&#39;,L_NOTICE);
-  }
-}</code></pre>
-
-<pre><code class="language-python">class MyPlugin:
-
-    def __init__(self,context):
-        spads.import_constants(&#39;SpringAutoHostInterface&#39;,&#39;:luaScript&#39;)
-        spads.addSpringCommandHandler({&quot;GAME_LUAMSG&quot;: hSpringGameLuaMsg})
-
-[...]
-
-def hSpringGameLuaMsg(command, playerNb, script, mode, data):
-    if script == LUA_SCRIPT_RULES:
-        spads.slog(&quot;Received a Lua message for rules script&quot;,L_NOTICE)</code></pre>
-
-</li>
-</ul>
-
-<p>For the <code>mode</code> parameter of the <code>GAME_LUAMSG</code> command:</p>
-
-<ul>
-
-<li><p><code>0</code> - <code>LUA_MODE_ALL</code></p>
-
-</li>
-<li><p><code>&#39;a&#39;</code> - <code>LUA_MODE_ALLIES</code></p>
-
-</li>
-<li><p><code>&#39;s&#39;</code> - <code>LUA_MODE_SPECTATORS</code></p>
-
-<p>To use these constants, plugins must import the <code>:luaMode</code> export tag from the <code>SpringAutoHostInterface</code> module, like this for example:</p>
-
-<pre><code>use SpringAutoHostInterface &#39;:luaMode&#39;;
-
-[...]
-
-sub new {
-
-  [...]
-
-  addSpringCommandHandler({GAME_LUAMSG =&gt; \&amp;hSpringGameLuaMsg});
-
-  [...]
-
-}
-
-sub hSpringGameLuaMsg {
-  my ($command, $playerNb, $script, $mode, $data)=@_;
-  if($mode == LUA_MODE_ALL) {
-    slog(&#39;Received a Lua message with mode set to ALL&#39;,L_NOTICE);
-  }
-}</code></pre>
-
-<pre><code class="language-python">class MyPlugin:
-
-    def __init__(self,context):
-        spads.import_constants(&#39;SpringAutoHostInterface&#39;,&#39;:luaMode&#39;)
-        spads.addSpringCommandHandler({&quot;GAME_LUAMSG&quot;: hSpringGameLuaMsg})
-
-[...]
-
-def hSpringGameLuaMsg(command, playerNb, script, mode, data):
-    if mode == LUA_MODE_ALL:
-        spads.slog(&quot;Received a Lua message with mode set to ALL&quot;,L_NOTICE)</code></pre>
-
-</li>
-</ul>
 
 </dd>
 <dt id="removeLobbyCommandHandler(\@commands,$priority=caller(),$isPreCallback)"><a id="removeLobbyCommandHandler"></a><a id="removeLobbyCommandHandler-commands-priority-caller-isPreCallback"></a><code>removeLobbyCommandHandler(\@commands,$priority=caller(),$isPreCallback)</code></dt>
@@ -1672,6 +1584,314 @@ def hSpringGameLuaMsg(command, playerNb, script, mode, data):
 <p><code>\@commands</code> is a reference to an array containing the Spring AutoHost command names for which the handlers must be removed.</p>
 
 <p><code>$priority</code> is the priority of the handlers to remove. It must be the same as the priority used when adding the handlers. If not provided, the plugin name is used as priority. Usually you don&#39;t need to provide priority, unless you use data managed by other handlers.</p>
+
+</dd>
+</dl>
+
+<h2 id="Lua-messages-management"><a id="Lua"></a>Lua messages management</h2>
+
+<p>Lua messages are just one of the various types of commands that can be received from the engine via the autohost interface. As such, they can very well be handled using the <a href="#addSpringCommandHandler">&quot;addSpringCommandHandler&quot;</a> function with the <code>GAME_LUAMSG</code> command type. However, Lua messages differ from the other types of message coming from the engine in that they are actually generated by the game code. So there are a lot of different &quot;subtypes&quot;, which depend on the game being used (and even its version). And each one of these types of Lua message has its own specific format / serialization form. Using the <code>addSpringCommandHandler</code> function to implement a generic Lua message handler isn&#39;t convenient because it leaves a lot of work to do in the plugin code just to identify the type of Lua message and extract the useful data from the specific serialized form. Also, doing so means each plugin will have to implement its own Lua message parsing code just to identify those it is interested in.</p>
+
+<p>Unfortunately, it is not practicable to perform the parsing and deserialization of all these Lua messages automatically in SPADS neither, due to the high variability of their format (both in time and depending on the game used). The solution adopted for the plugin API involves implementing only the core functionalities required to identify and deserialize Lua messages, while leaving it to the plugins to specify which of these functionalities must be used to preprocess each Lua message. Plugins are then left only to perform the final and very specific parsing of the Lua message, if any. Thus, the plugin API offers two main features for Lua messages management: registering/specifying Lua messages using the <a href="#registerLuaMsg">&quot;registerLuaMsg&quot;</a> function (to let SPADS know how to recognize them from their prefix and deserialize them), and declaring handlers on these high-level messages using the <a href="#addLuaMsgHandler">&quot;addLuaMsgHandler&quot;</a> function (to let SPADS know which functions must be called when such Lua messages are received from the engine).</p>
+
+<p>In addition to factorizing all the generic code for Lua message handling (message recognition via prefix identification, extraction of the Lua &quot;validation string&quot;, deserialization of common formats, etc.), this approach offers the significant benefit of enforcing a clear separation between the lower-level code responsible for parsing Lua messages, and the higher-level code that actually uses the information they convey. Except for some Lua messages that serve a unique and highly specific purpose, it is even often preferable to split these tasks between two separate plugins to facilitate code reuse through plugin dependencies (i.e. one plugin is handling the parsing while others benefit from it). A good practice is for example to implement the parsing of all the Lua messages of a given game in one plugin dedicated to this task, and let the other plugins just use these messages without having to worry about their exact format.</p>
+
+<p>The functions dedicated to Lua messages management are detailed hereafter:</p>
+
+<dl>
+
+<dt id="registerLuaMsg($msgName,-$msgScript,-$msgPrefix-[,$valStrLength]-[,$paramPreproc]-[,\&amp;parsingFunction]-[,$expectedFrequency])"><a id="registerLuaMsg"></a><a id="registerLuaMsg-msgName-msgScript-msgPrefix-valStrLength-paramPreproc-parsingFunction-expectedFrequency"></a><code>registerLuaMsg($msgName, $msgScript, $msgPrefix [,$valStrLength] [,$paramPreproc] [,\&amp;parsingFunction] [,$expectedFrequency])</code></dt>
+<dd>
+
+<p>This function allows plugins to declare a new Lua message, specifying how it can be identified through a specific prefix and how its parameters must be parsed. A Lua message can only be registered once (this function should not be confused with the <a href="#addLuaMsgHandler">&quot;addLuaMsgHandler&quot;</a> function, which is the one to use to associate a handler with a Lua message). Registering new Lua messages does not impact performance, as these messages are only parsed by SPADS when a handler is associated with them. This function returns <code>1</code> on success and <code>0</code> on failure.</p>
+
+<p><code>$msgName</code> is an arbitrary name given to the Lua message, that will be used by all the other Lua message management functions.</p>
+
+<p><code>$msgScript</code> is the Lua script number (aka handle) used by the message, usually either <code>100</code> (Lua rules) or <code>2000</code> (Lua UI). The following corresponding constants are exported by the <code>SpringAutoHostInterface</code> module through the <code>:luaScript</code> export tag (see a little further down for a complete usage example showing how to import and use these constants):</p>
+
+<ul>
+
+<li><p><code>LUA_SCRIPT_RULES = 100</code></p>
+
+</li>
+<li><p><code>LUA_SCRIPT_GAIA = 300</code></p>
+
+</li>
+<li><p><code>LUA_SCRIPT_UI = 2000</code></p>
+
+</li>
+</ul>
+
+<p><code>$msgPrefix</code> is the prefix string used to identify the message (this string is searched at the beginning of each Lua message to determine the message type).</p>
+
+<p><code>$valStrLength</code> is the length of the Lua &quot;validation string&quot;. Some Lua messages include a &quot;validation string&quot; consisting of a few characters, randomly generated at the start of each game, that are added to their prefix (usually after the prefix, but sometimes before). The <code>$valStrLength</code> parameter informs SPADS of their presence, length, and location: <code>0</code> means there is no validation string. A positive value indicates the number of characters added after the prefix. A negative value indicates the number of characters inserted before the prefix. A reference to an array indicates an optional validation string located after the prefix, whose length is the first element of the array. This parameter is optional (default value: <code>0</code>).</p>
+
+<p><code>$paramPreproc</code> is the preprocessing mode for the parameters. SPADS provides automatic management of some serialization formats commonly used by Lua messages. These preprocessing modes can be enabled by providing the corresponding constants as <code>$paramPreproc</code> value (the base64, zlib, and JSON preprocessing modes can be combined by performing a bitwise OR operation on the constants). Here are the preprocessing modes available and the corresponding constants that can be imported from the <code>SpringAutoHostInterface</code> module with the <code>:luaPreproc</code> export tag (see a little further down for a complete usage example showing how to import and use these constants):</p>
+
+<ul>
+
+<li><p><code>LUA_PREPROC_NONE = 0</code> (no parameter preprocessing: parameters are passed as is to the custom parsing function if defined, or directly to the handlers otherwise)</p>
+
+</li>
+<li><p><code>LUA_PREPROC_NOPARAM = 1</code> (no parameter expected: a check is performed to ensure that the Lua message contains no parameter)</p>
+
+</li>
+<li><p><code>LUA_PREPROC_BASE64 = 2</code> (the parameter must be decoded using Base64URL)</p>
+
+</li>
+<li><p><code>LUA_PREPROC_ZLIB = 4</code> (the parameter must be uncompressed using zlib)</p>
+
+</li>
+<li><p><code>LUA_PREPROC_JSON = 8</code> (the parameter must be parsed as JSON data)</p>
+
+<p>This parameter is optional (default value: <code>LUA_PREPROC_NONE</code>)</p>
+
+</li>
+</ul>
+
+<p><code>\&amp;parsingFunction</code> is a reference to the custom parsing function in charge of performing any remaining specific tasks on the message parameter before passing it to the handlers. This function receives the Lua parameter as first parameter (either raw binary data if <code>$paramPreproc</code> is set to <code>LUA_PREPROC_NONE</code>, or data preprocessed according to the selected mode(s) otherwise), and the Lua message prefix as second parameter. Upon success, the function must return the parsed/deserialized parameter, which will be passed to the message handlers. Upon failure, the function must return <code>undef</code> (or <code>None</code> for Python plugins) as first value, and the error message (typically a decoding or parsing error) as second value. The <code>\&amp;parsingFunction</code> parameter is optional. If omitted, it implies that no additional processing is required on the message parameter and that it will be passed to the handlers as is.</p>
+
+<p><code>$expectedFrequency</code> is the expected frequency of the Lua message, defined as the estimated number (integer) of messages of this type received by the engine per client per minute. This value doesn&#39;t need to be accurate, as SPADS uses this parameter solely to optimize the order in which prefixes are tested when identifying a Lua message: the prefixes of the most frequent messages are tested first. This parameter can also be used to force the prioritization of longer prefixes in case of ambiguity (i.e. when some prefixes are contained within others), in order to resolve conflicts. This parameter is optional (default value: 0).</p>
+
+<p>Here is an example that registers a Lua message as it is currently used by the game Beyond All Reason to broadcast the activity of a client every 2 seconds. The message has a validation string of 2 characters and no parameter:</p>
+
+<pre><code>registerLuaMsg(
+  &#39;ActivityBroadcast&#39;,  # Arbitrary name given to the Lua message
+  LUA_SCRIPT_RULES,     # Lua script number (aka handle) used by the message
+  &#39;^&#39;,                  # Prefix string used to identify the message
+  2,                    # Length of the Lua &quot;validation string&quot;
+  LUA_PREPROC_NOPARAM,  # Lua parameter preprocessing mode
+  undef,                # Callback for custom Lua parameter parsing
+  30,                   # Expected frequency of the Lua message
+);</code></pre>
+
+<pre><code class="language-python">spads.registerLuaMsg(
+  &#39;ActivityBroadcast&#39;, # Arbitrary name given to the Lua message
+  LUA_SCRIPT_RULES,    # Lua script number (aka handle) used by the message
+  &#39;^&#39;,                 # Prefix string used to identify the message
+  2,                   # Length of the Lua &quot;validation string&quot;
+  LUA_PREPROC_NOPARAM, # Lua parameter preprocessing mode
+  None,                # Callback for custom Lua parameter parsing
+  30,                  # Expected frequency of the Lua message
+)</code></pre>
+
+<p>Here is another example, that registers a Lua message as it is currently used by the game Beyond All Reason to send the unit definitions at start of the game. The message uses a compressed JSON structure as parameter and no validation string:</p>
+
+<pre><code>registerLuaMsg(
+  &#39;UnitDefs&#39;,                           # Arbitrary name given to the Lua message
+  LUA_SCRIPT_RULES,                     # Lua script number (aka handle) used by the message
+  &#39;unitdefs:&#39;,                          # Prefix string used to identify the message
+  0,                                    # Length of the Lua &quot;validation string&quot;
+  LUA_PREPROC_ZLIB | LUA_PREPROC_JSON,  # Lua parameter preprocessing mode
+);</code></pre>
+
+<pre><code class="language-python">spads.registerLuaMsg(
+  &#39;UnitDefs&#39;,                           # Arbitrary name given to the Lua message
+  LUA_SCRIPT_RULES,                     # Lua script number (aka handle) used by the message
+  &#39;unitdefs:&#39;,                          # Prefix string used to identify the message
+  0,                                    # Length of the Lua &quot;validation string&quot;
+  LUA_PREPROC_ZLIB | LUA_PREPROC_JSON,  # Lua parameter preprocessing mode
+)</code></pre>
+
+<p>Finally, here is a a complete usage example, including the imports of the required constants from the <code>SpringAutoHostInterface</code> module and the automatic unregistration of the message when the plugin is unloaded. This example registers a Lua message as it is current used by the game Beyond All Reason to transmit game events to SPADS for custom processing. The message does not include a validation string but contains a parameter with the custom syntax <code>&lt;playerName&gt; &lt;event&gt; &lt;gameTime&gt;</code>, encoded in Base64URL:</p>
+
+<pre><code>use SpringAutoHostInterface (&#39;:luaScript&#39;,&#39;:luaPreproc&#39;);
+
+sub new {
+
+  [...]
+
+  my $regResult = registerLuaMsg(
+    &#39;LuaSpads&#39;,           # Arbitrary name given to the Lua message
+    LUA_SCRIPT_RULES,     # Lua script number (aka handle) used by the message
+    &#39;lu@$p@d$:&#39;,          # Prefix string used to identify the message
+    0,                    # Length of the Lua &quot;validation string&quot;
+    LUA_PREPROC_BASE64,   # Lua parameter preprocessing mode
+    \&amp;luaSpadsParser,     # Callback for custom Lua parameter parsing
+    0,                    # Expected frequency of the Lua message
+  );
+
+  if(! $regResult) {
+    slog(&quot;Failed to register Lua message&quot;,L_ERROR);
+    return undef;
+  }
+
+  [...]
+
+}
+
+sub onUnload {
+  unregisterLuaMsg(&#39;LuaSpads&#39;,1);
+}
+
+sub luaSpadsParser {
+  my ($luaMsgParam,$luaMsgPrefix)=@_;
+  return (undef,&#39;invalid data&#39;)
+      unless($luaMsgParam =~ /^&lt;([^&gt;]+)&gt; &lt;(.+)&gt; &lt;(\d+)&gt;$/);
+  return {
+    playerName =&gt; $1,
+    event =&gt; $2,
+    gameTime =&gt; $3,
+  };
+}</code></pre>
+
+<pre><code class="language-python">import re
+
+class MyPlugin:
+
+    def __init__(self,context):
+
+        [...]
+
+        spads.import_constants(&#39;SpringAutoHostInterface&#39;,&#39;:luaScript&#39;,&#39;:luaPreproc&#39;)
+
+        regResult = spads.registerLuaMsg(
+            &#39;LuaSpads&#39;,           # Arbitrary name given to the Lua message
+            LUA_SCRIPT_RULES,     # Lua script number (aka handle) used by the message
+            &#39;lu@$p@d$:&#39;,          # Prefix string used to identify the message
+            0,                    # Length of the Lua &quot;validation string&quot;
+            LUA_PREPROC_BASE64,   # Lua parameter preprocessing mode
+            luaSpadsParser,       # Callback for custom Lua parameter parsing
+            0,                    # Expected frequency of the Lua message
+        )
+
+        if not regResult:
+            spads.slog(&quot;Failed to register Lua message&quot;,L_ERROR)
+            raise Exception(&quot;Plugin initialization failure&quot;)
+
+    def onUnload(self,reason):
+        spads.unregisterLuaMsg(&#39;LuaSpads&#39;,True)
+
+def luaSpadsParser(luaMsgParam,luaMsgPrefix):
+    params = re.search(&#39;^&lt;([^&gt;]+)&gt; &lt;(.+)&gt; &lt;(\\d+)&gt;$&#39;,luaMsgParam)
+    if not params:
+        return (None, &#39;invalid data&#39;)
+    return {
+        &#39;playerName&#39;: params.group(1),
+        &#39;event&#39;: params.group(2),
+        &#39;gameTime&#39;: params.group(3),
+    }</code></pre>
+
+</dd>
+<dt id="unregisterLuaMsg($msgName-[,$force])"><a id="unregisterLuaMsg"></a><a id="unregisterLuaMsg-msgName-force"></a><code>unregisterLuaMsg($msgName [,$force])</code></dt>
+<dd>
+
+<p>This function must be called by plugins that have previously registered Lua messages using the <a href="#registerLuaMsg">&quot;registerLuaMsg&quot;</a> function, when those messages are no longer useful (for example, in the <a href="#onUnload">&quot;onUnload&quot;</a> callback when the plugin is being unloaded). It returns <code>0</code> on failure, and <code>1</code> + the number of auto-removed handlers on success.</p>
+
+<p><code>$msgName</code> is the name of the Lua message to unregister (as provided when it was registered with the <a href="#registerLuaMsg">&quot;registerLuaMsg&quot;</a> function).</p>
+
+<p><code>$force</code> is a boolean indicating whether the Lua message must be unregistered even if it still has associated handlers (in this case the associated handlers are automatically removed). This parameter is optional. The default value is <code>false</code>, which prevents unregistering Lua messages that still have associated handlers.</p>
+
+</dd>
+<dt id="addLuaMsgHandler($msgName,-\&amp;handlerFunction-[,$priority])"><a id="addLuaMsgHandler"></a><a id="addLuaMsgHandler-msgName-handlerFunction-priority"></a><code>addLuaMsgHandler($msgName, \&amp;handlerFunction [,$priority])</code></dt>
+<dd>
+
+<p>This function allows plugins to associate handlers with Lua messages that have been registered beforehand using the <a href="#registerLuaMsg">&quot;registerLuaMsg&quot;</a> function (not necessarily by the same plugin). It returns <code>1</code> on success and <code>0</code> on failure.</p>
+
+<p><code>$msgName</code> is the name of the Lua message to which a handler must be associated. It must match the name provided when the message was registered with the <a href="#registerLuaMsg">&quot;registerLuaMsg&quot;</a> function.</p>
+
+<p><code>\&amp;handlerFunction</code> is a reference to a function that will be called every time the Lua message is received by SPADS on the autohost interface. Here are the parameters passed to this function:</p>
+
+<ul>
+
+<li><p><code>$playerNb</code>: internal player number used by the game server to identify the player who sent the Lua message (this number can be resolved to the player name by using the <code>getPlayerName</code> method of the <code>SpringAutoHostInterface</code> object, as detailed in the <a href="#getSpringInterface">&quot;getSpringInterface&quot;</a> accessor documentation)</p>
+
+</li>
+<li><p><code>$luaScript</code>: Lua script number (aka handle) used by the message (refer to the <code>$msgScript</code> parameter of the <a href="#registerLuaMsg">&quot;registerLuaMsg&quot;</a> function for more details)</p>
+
+</li>
+<li><p><code>$luaMode</code>: Lua mode number used by the message. There are three different modes: <code>0</code> (default), <code>&#39;a&#39;</code> (allies), and <code>&#39;s&#39;</code> (spectators). The following corresponding constants are exported by the <code>SpringAutoHostInterface</code> module through the <code>:luaMode</code> export tag:</p>
+
+<ul>
+
+<li><p><code>LUA_MODE_ALL = 0</code></p>
+
+</li>
+<li><p><code>LUA_MODE_ALLIES = &#39;a&#39;</code></p>
+
+</li>
+<li><p><code>LUA_MODE_SPECTATORS = &#39;s&#39;</code></p>
+
+<p>Plugins can import these constants like this for example:</p>
+
+<pre><code>use SpringAutoHostInterface &#39;:luaMode&#39;;</code></pre>
+
+<pre><code class="language-python">class MyPlugin:
+    def __init__(self,context):
+        spads.import_constants(&#39;SpringAutoHostInterface&#39;,&#39;:luaMode&#39;)</code></pre>
+
+</li>
+</ul>
+
+</li>
+<li><p><code>$msgName</code>: name of the Lua message (as provided when it was registered with the <a href="#registerLuaMsg">&quot;registerLuaMsg&quot;</a> function)</p>
+
+</li>
+<li><p><code>$msgParam</code>: parameter of the message (preprocessed according to the <code>$paramPreproc</code> and <code>\&amp;parsingFunction</code> parameters of the <a href="#registerLuaMsg">&quot;registerLuaMsg&quot;</a> function)</p>
+
+</li>
+<li><p><code>$validationStr</code>: validation string of the message (refer to the <code>$valStrLength</code> parameter of the <a href="#registerLuaMsg">&quot;registerLuaMsg&quot;</a> function for more details)</p>
+
+</li>
+</ul>
+
+<p><code>$priority</code> is the priority of the handler. A lower numerical value actually indicates a higher priority. This parameter is optional. If it is not provided, the plugin name is used as the priority, which behaves as a priority of <code>1000</code> regarding execution order. Usually it is not necessary to specify a priority, except when a handler requires data coming from another handler for instance.</p>
+
+<p>Here is a a complete usage example, including the automatic removal of the handler when the plugin is unloaded:</p>
+
+<pre><code>sub new {
+
+  [...]
+
+  my $addHdlResult = addLuaMsgHandler(&#39;MapMark&#39;,\&amp;hLuaMapMark);
+  if(! $addHdlResult) {
+    slog(&quot;Failed to add Lua message handler&quot;,L_ERROR);
+    return undef;
+  }
+
+  [...]
+
+}
+
+sub onUnload {
+  removeLuaMsgHandler(&#39;MapMark&#39;);
+}
+
+sub hLuaMapMark {
+  my ($playerNb,$luaScript,$luaMode,$msgName,$r_msgParam,$validationStr)=@_;
+  my $playerName=$r_msgParam-&gt;{playerName};
+  my $text=$r_msgParam-&gt;{text};
+  slog(&quot;Player $playerName added a mark with text: $text&quot;,L_NOTICE);
+}</code></pre>
+
+<pre><code class="language-python">class MyPlugin:
+
+    def __init__(self,context):
+
+        [...]
+
+        addHdlResult = spads.addLuaMsgHandler(&#39;MapMark&#39;,hLuaMapMark)
+        if not addHdlResult:
+            spads.slog(&quot;Failed to add Lua message handler&quot;,L_ERROR)
+            raise Exception(&quot;Plugin initialization failure&quot;)
+
+    def onUnload(self,reason):
+        spads.removeLuaMsgHandler(&#39;MapMark&#39;)
+
+def hLuaMapMark(playerNb,luaScript,luaMode,msgName,msgParam,validationStr):
+    playerName=msgParam[&#39;playerName&#39;]
+    text=msgParam[&#39;text&#39;]
+    spads.slog(&quot;Player %s added a mark with text: %s&quot; % (playerName,text),L_NOTICE)</code></pre>
+
+</dd>
+<dt id="removeLuaMsgHandler($msgName-[,$priority])"><a id="removeLuaMsgHandler"></a><a id="removeLuaMsgHandler-msgName-priority"></a><code>removeLuaMsgHandler($msgName [,$priority])</code></dt>
+<dd>
+
+<p>This function must be called by plugins that have previously added Lua message handlers using the <a href="#addLuaMsgHandler">&quot;addLuaMsgHandler&quot;</a> function, when those handlers are no longer useful (for example, in the <a href="#onUnload">&quot;onUnload&quot;</a> callback when the plugin is being unloaded). It returns <code>1</code> on success and <code>0</code> on failure.</p>
+
+<p><code>$msgName</code> is the name of the Lua message to which the handler to remove is associated.</p>
+
+<p><code>$priority</code> is the priority of the handler to remove. It must match the priority that was used when adding the handler. This parameter is optional. If it is not provided, the plugin name is used as the priority.</p>
 
 </dd>
 </dl>
@@ -1740,6 +1960,57 @@ def hSpringGameLuaMsg(command, playerNb, script, mode, data):
 </dd>
 <dt id="loadArchives(\&amp;callback,$printModUpdateMsg,$mode)"><a id="loadArchives"></a><a id="loadArchives-callback-printModUpdateMsg-mode"></a><code>loadArchives(\&amp;callback,$printModUpdateMsg,$mode)</code></dt>
 <dd>
+
+<p>This function triggers a (re)load of the map and mod/game content archive files. This operation can be performed asynchronously (if the <code>\&amp;callback</code> parameter is provided), or synchronously (if the <code>\&amp;callback</code> parameter is not defined). It should never be launched in synchronous mode from main SPADS process.</p>
+
+<p><code>\&amp;callback</code> is the callback function that will be called once the archives loading operation is complete (in asynchronous mode). This callback function receives as unique parameter the number of archive files loaded (<code>0</code> upon failure). The <code>\&amp;callback</code> parameter is optional. If it is not provided, the operation is performed in synchronous mode. In this case it is the <code>loadArchives</code> function itself that returns the number of archive files loaded.</p>
+
+<p><code>$printModUpdateMsg</code> is a boolean indicating whether a message must be sent in lobby and game if, as a result of the operation, a new game/version is identified as target game for current battle lobby. This parameter is optional (default value: <code>false</code>).</p>
+
+<p><code>$mode</code> is the archive loading mode (number). It must be one of the following constants, or combination of them obtained via bitwise OR operation:</p>
+
+<ul>
+
+<li><p><code>LOADARCHIVES_DEFAULT = 0</code> (default loading mode: ignores archives that are already loaded and loads only new archives)</p>
+
+</li>
+<li><p><code>LOADARCHIVES_RELOAD = 1</code> (reload mode: does not ignore archives that are already loaded, which is useful if an archive has been modified in the meantime)</p>
+
+</li>
+<li><p><code>LOADARCHIVES_GAME_ONLY = 2</code> (game only mode: ignores map archives and loads only game archives)</p>
+
+</li>
+</ul>
+
+<p>Perl plugins can use these constants directly by prefixing them with <code>::</code>, like this for example:</p>
+
+<pre><code>sub new {
+
+  [...]
+
+  loadArchives(\&amp;postLoadArchivesFunc,1,::LOADARCHIVES_RELOAD);
+
+  [...]
+}
+
+sub postLoadArchivesFunc {
+  my ($nbArchivesLoaded)=@_;
+  slog(&quot;Number of archives loaded: $nbArchivesLoaded&quot;,L_NOTICE);
+}</code></pre>
+
+<p>Python plugins must import them using the <code>:loadArchivesMode</code> export tag from main SPADS namespace, like this for example:</p>
+
+<pre><code class="language-python">class MyPlugin:
+
+    def __init__(self,context):
+
+        [...]
+
+        spads.import_constants(&#39;main&#39;,&#39;:loadArchivesMode&#39;)
+        spads.loadArchives(postLoadArchivesFunc,True,LOADARCHIVES_RELOAD)
+
+def postLoadArchivesFunc(nbArchivesLoaded):
+    spads.slog(&quot;Number of archives loaded: %d&quot; % nbArchivesLoaded,L_NOTICE)</code></pre>
 
 </dd>
 <dt id="queueLobbyCommand(\@lobbyCommand)"><a id="queueLobbyCommand"></a><a id="queueLobbyCommand-lobbyCommand"></a><code>queueLobbyCommand(\@lobbyCommand)</code></dt>
