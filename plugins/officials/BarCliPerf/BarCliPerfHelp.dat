@@ -5,4 +5,4 @@
 "!cliPerf -p" displays performance data for all game clients currently connected
 "!cliPerf -a" displays system and performance data for all game clients, even if they disconnected
 "!cliPerf foo" displays system and performance data for game clients currently connected matching name filter "foo"
-"!cliPerf -a -p bar" displays performance data for game clients matching name filter "foo", even if they disconnected
+"!cliPerf -a -p bar" displays performance data for game clients matching name filter "bar", even if they disconnected
