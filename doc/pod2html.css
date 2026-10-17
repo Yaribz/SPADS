@@ -79,6 +79,16 @@ pre code {
   background: #dddddd;
 }
 
+pre code a.api-function-call {
+  color: #507;
+  text-decoration: underline #507 dotted;
+}
+
+pre code a.api-function-declaration {
+  color: #dd4a68;
+  text-decoration: underline #dd4a68 dotted;
+}
+
 /* language label on code blocks */
 
 div.language-label {
