@@ -204,6 +204,7 @@ helpSettings.dat:
 0.7.11: update "autoLoadMapPreset" and "hideMapPresets" preset settings documentation (map battle presets are now also supported, in addition to map global presets)
 0.7.12: update "autoLoadMapPreset" preset setting documentation (map presets are now also automatically loaded on preset change under certain conditions)
 0.7.13: new allowed value for "autoLoadMapPreset" preset setting: "2" (sticky mode map presets)
+0.7.14: update "extraBox" preset setting (negative values can now be used to disable some functionalities related to map boxes)
 
 PerlUnitSync.pm:
 ===============
@@ -1093,6 +1094,7 @@ spads.pl:
          include SpringAutoHostInterface logging in standard output
          update PLAYER_CHAT and SERVER_GAMEOVER autohost message parameters handling due to non-backward compatible changes in SpringAutoHostInterface module v0.15
          use constants from SpringAutoHostInterface module instead of hardcoded values for server states, player connection states and player ready states
+0.13.57: allow disabling some functionalities related to map boxes by using negative values for "extraBox" preset setting
 
 SpadsConf.pm:
 ============
@@ -1321,6 +1323,7 @@ SpadsConf.pm:
          split the "applyMapList" function to make the map list computing functionality available separately (makes it possible to compute map lists without altering current configuration)
 0.13.21: new allowed value for "autoLoadMapPreset" preset setting: "2" (sticky mode map presets)
 0.13.22: detect invalid types returned by "getParams" plugin callback
+0.13.23: allow new values for "extraBox" preset setting: -1 and -2
 
 spadsInstaller.pl:
 =================

@@ -39,7 +39,7 @@ use SimpleLog;
 
 # Internal data ###############################################################
 
-my $moduleVersion='0.13.22';
+my $moduleVersion='0.13.23';
 my $win=$^O eq 'MSWin32';
 my $macOs=$^O eq 'darwin';
 my $spadsDir=$FindBin::Bin;
@@ -188,7 +188,7 @@ my %spadsSectionParameters = (description => ['notNull'],
                               teamSize => ['nonNullInteger','nonNullIntegerRange'],
                               minTeamSize => ['integer','integerRange'],
                               nbTeams => ['nonNullInteger','nonNullIntegerRange'],
-                              extraBox => ['integer','integerRange'],
+                              extraBox => ['integer','integerRange','minus1','minus2'],
                               idShareMode => ['idShareModeType'],
                               minPlayers => ['nonNullInteger','nonNullIntegerRange'],
                               endGameCommand => [],
@@ -235,6 +235,7 @@ my %paramTypes = (login => '[\w\[\]]{2,20}',
                   integer => '\d+',
                   integerMax50 => sub { return $_[0] =~  /^[1-5]?\d$/ && $_[0] <= 50 },
                   minus1 => '-1',
+                  minus2 => '-2',
                   nonNullInteger => '[1-9]\d*',
                   percent => sub { return $_[0] =~ /^(\d{1,3})\%$/ && $1 <= 100 },
                   ipAddr => '\d+\.\d+\.\d+\.\d+',

@@ -1380,11 +1380,14 @@ Integer
 [set:extraBox]
 Extra box
 -
-Specifies the number of extra map boxes required by current game, in addition to the normal start boxes.
-Extra boxes are special boxes required by some specific game modes such as King Of The Hill. Contrary to normal start boxes, extra boxes are not used to specify a team start location. Instead, they are used to give special meanings to specific map locations.
-SPADS uses this setting to manage totally independent groups of saved map boxes (one for each value of the extraBox setting).
+Configures the behavior related to map boxes.
+If set to a non-negative value, it specifies the number of extra map boxes required by current game, in addition to the normal start boxes.
+Extra boxes are special boxes required by some specific game modes such as King Of The Hill. Contrary to normal start boxes, extra boxes are not used to specify a team start location. Instead, they are used to give special meanings to specific map locations. SPADS uses this setting to manage totally independent groups of saved map boxes (one for each value of the extraBox setting).
+If set to a negative value, it disables some functionalities related to map boxes: "-1" disables the check that start boxes are properly defined when starting a game in "choose in game" start position type. "-2" fully disables the map boxes system (in this case, start areas are expected to be managed entirely by the game code rather than the engine).
 -
-Integer
+Non-negative integers: number of extra boxes to add
+-1: disable start box check when starting a game in "choose in game" start position type
+-2: disable engine map box system entirely
 -
 0
 

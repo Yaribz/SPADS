@@ -113,7 +113,7 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.56';
+our $SPADS_VERSION='0.13.57';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
@@ -2548,13 +2548,15 @@ sub applyMapBoxes {
   foreach my $teamNb (keys %{$lobby->{battle}{startRects}}) {
     queueLobbyCommand(["REMOVESTARTRECT",$teamNb]);
   }
-  return unless($spads->{bSettings}{startpostype} == 2);
+  my $extraBox=$conf{extraBox};
+  return unless($spads->{bSettings}{startpostype} == 2 && $extraBox > -2);
+  $extraBox=0 if($extraBox < 0);
   my $smfMapName=$conf{map};
   $smfMapName.='.smf' unless($smfMapName =~ /\.smf$/);
-  my $p_boxes=$spads->getMapBoxes($smfMapName,$conf{nbTeams},$conf{extraBox});
+  my $p_boxes=$spads->getMapBoxes($smfMapName,$conf{nbTeams},$extraBox);
   foreach my $pluginName (@pluginsOrder) {
     my $overwritten;
-    $overwritten=$plugins{$pluginName}->setMapStartBoxes($p_boxes,$conf{map},$conf{nbTeams},$conf{extraBox}) if($plugins{$pluginName}->can('setMapStartBoxes'));
+    $overwritten=$plugins{$pluginName}->setMapStartBoxes($p_boxes,$conf{map},$conf{nbTeams},$extraBox) if($plugins{$pluginName}->can('setMapStartBoxes'));
     if(ref $overwritten) {
       my $r_newBoxes;
       ($overwritten,$r_newBoxes)=@{$overwritten};
@@ -5599,7 +5601,7 @@ sub launchGame {
   my $mapIsAvailableLocally = exists $availableMapsNameToNb{$currentMap} ? 1 : 0;
 
   if($spads->{bSettings}{startpostype} == 2) {
-    if(! $force && ! %{$lobby->{battle}{startRects}}) {
+    if(! $force && ! %{$lobby->{battle}{startRects}} && $conf{extraBox} >= 0) {
       answer("Unable to start game, start position type is set to \"Choose in game\" but no start box is set - use !forceStart to bypass") unless($automatic);
       return 0;
     }
@@ -5648,14 +5650,16 @@ sub launchGame {
       $smfMapName.='.smf' unless($smfMapName =~ /\.smf$/);
 
       my $saveBoxes=1;
+      my $extraBox=$conf{extraBox};
+      $extraBox=0 if($extraBox < 0);
       if($conf{autoSaveBoxes} == 2) {
         my @ids=keys %{$p_startRects};
         my $nbTeams=$#ids+1;
-        $nbTeams.="(-$conf{extraBox})" if($conf{extraBox});
+        $nbTeams.="(-$extraBox)" if($extraBox);
         $saveBoxes=0 if($spads->existSavedMapBoxes($smfMapName,$nbTeams));
       }
 
-      $spads->saveMapBoxes($smfMapName,$p_startRects,$conf{extraBox}) if($saveBoxes);
+      $spads->saveMapBoxes($smfMapName,$p_startRects,$extraBox) if($saveBoxes);
     }
   }
 
@@ -7813,6 +7817,10 @@ sub hAddBox {
   }
   if($spads->{bSettings}{startpostype} != 2) {
     answer("Unable to add start box, start position type must be set to \"Choose in game\" (\"!bSet startPosType 2\")");
+    return 0;
+  }
+  if($conf{extraBox} == -2) {
+    answer('Unable to add start box, engine start boxes are disabled [extraBox=-2]');
     return 0;
   }
   for my $i (0..3) {
@@ -10516,6 +10524,10 @@ sub hLoadBoxes {
     answer("Unable to load start boxes, start position type must be set to \"Choose in game\" (\"!bSet startPosType 2\")");
     return 0;
   }
+  if($conf{extraBox} == -2) {
+    answer('Unable to load start boxes, engine start boxes are disabled [extraBox=-2]');
+    return 0;
+  }
 
   my @params=shellwords($p_params->[0]//'');
 
@@ -10549,6 +10561,7 @@ sub hLoadBoxes {
     $nbExtraBox=$conf{extraBox};
   }
 
+  $nbExtraBox=0 if($nbExtraBox < 0);
   my $smfMapName=$mapName;
   $smfMapName.='.smf' unless($smfMapName =~ /\.smf$/);
 
@@ -11704,7 +11717,9 @@ sub hSaveBoxes {
 
   my $smfMapName=$conf{map};
   $smfMapName.='.smf' unless($smfMapName =~ /\.smf$/);
-  $spads->saveMapBoxes($smfMapName,$p_startRects,$conf{extraBox});
+  my $extraBox=$conf{extraBox};
+  $extraBox=0 if($extraBox < 0);
+  $spads->saveMapBoxes($smfMapName,$p_startRects,$extraBox);
   answer("Start boxes saved for map $conf{map}");
   return 1;
 }
@@ -12169,6 +12184,10 @@ sub hSplit {
   }
   if($spads->{bSettings}{startpostype} != 2) {
     answer("Unable to split map, start position type must be set to \"Choose in game\" (\"!bSet startPosType 2\")");
+    return 0;
+  }
+  if($conf{extraBox} == -2) {
+    answer('Unable to split map, engine start boxes are disabled [extraBox=-2]');
     return 0;
   }
   my $splitType=$p_params->[0];
