@@ -1095,6 +1095,9 @@ spads.pl:
          update PLAYER_CHAT and SERVER_GAMEOVER autohost message parameters handling due to non-backward compatible changes in SpringAutoHostInterface module v0.15
          use constants from SpringAutoHostInterface module instead of hardcoded values for server states, player connection states and player ready states
 0.13.57: allow disabling some functionalities related to map boxes by using negative values for "extraBox" preset setting
+0.13.58: add "SpringStartScript" and "TDF" modules to the auto-updated SPADS components
+         update code handling the return value of the "generateStartData" function for new SpringLobbyInterface module version, as it now returns a string rather than an array
+         explicitely enable Perl warnings instead of relying on the default "-w" flag in the shebang line
 
 SpadsConf.pm:
 ============
@@ -1658,3 +1661,5 @@ update.pl:
 0.15: add sequentialSpadsUnitsyncProcess.pl component
 0.16: add SpringLobbyProtocol to the list of auto-updated packages (new dependency of SpringLobbyInterface)
 0.17: allow providing a Git commit hash instead of a SPADS release name for manual selection of specific version
+0.18: add SpringStartScript and TDF to the list of auto-updated packages (new dependencies of SpringLobbyInterface)
+      explicitely enable Perl warnings instead of relying on the default "-w" flag in the shebang line

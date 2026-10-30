@@ -20,6 +20,7 @@
 
 
 use strict;
+use warnings;
 
 use Config;
 use Cwd 'cwd';
@@ -113,13 +114,13 @@ SimpleEvent::addProxyPackage('Inline');
 
 # Constants ###################################################################
 
-our $SPADS_VERSION='0.13.57';
+our $SPADS_VERSION='0.13.58';
 our $spadsVer=$SPADS_VERSION; # TODO: remove this line when AutoRegister plugin versions < 0.3 are no longer used
 
 our $CWD=cwd();
 my $PATH_SEP=MSWIN32?';':':';
 
-my @SPADS_PACKAGES=qw'spads.pl help.dat helpSettings.dat PerlUnitSync.pm springLobbyCertificates.dat SpringAutoHostInterface.pm SpringLobbyProtocol.pm SpringLobbyInterface.pm SimpleEvent.pm SimpleLog.pm SpadsConf.pm SpadsUpdater.pm SpadsPluginApi.pm argparse.py replay_upload.py';
+my @SPADS_PACKAGES=qw'spads.pl help.dat helpSettings.dat PerlUnitSync.pm springLobbyCertificates.dat SpringAutoHostInterface.pm SpringLobbyProtocol.pm SpringLobbyInterface.pm SimpleEvent.pm SimpleLog.pm SpadsConf.pm SpadsUpdater.pm SpadsPluginApi.pm SpringStartScript.pm TDF.pm argparse.py replay_upload.py';
 if(MSWIN32) {
   push(@SPADS_PACKAGES,'7za.exe');
 }elsif(! DARWIN) {
@@ -5719,13 +5720,13 @@ sub launchGame {
     }
   }
   
-  my ($p_startData,$p_teamsMap,$p_allyTeamsMap)=$lobby->generateStartData(
+  my ($startScript,$p_teamsMap,$p_allyTeamsMap)=$lobby->generateStartData(
     \%additionalData,
     getModSides($lobby->{battles}{$lobby->{battle}{battleId}}{mod}),
     undef,
     $springServerType eq 'dedicated' ? 1 : 2,
       );
-  if(! $p_startData) {
+  if(! defined $startScript) {
     slog("Unable to start game: start script generation failed",1);
     closeBattleAfterGame("Unable to start game (start script generation failed)");
     return 0;
@@ -5735,7 +5736,7 @@ sub launchGame {
   open($usLockFhForGameStart,'>',$usLockFile)
       or fatalError("Unable to write unitsync library lock file \"$usLockFile\" for game start ($!)",EXIT_SYSTEM);
   SimpleEvent::win32HdlDisableInheritance($usLockFhForGameStart) if(MSWIN32);
-  return startGameServer($p_startData,$p_teamsMap,$p_allyTeamsMap)
+  return startGameServer($startScript,$p_teamsMap,$p_allyTeamsMap)
       if(flock($usLockFhForGameStart, LOCK_EX|LOCK_NB));
   close($usLockFhForGameStart);
   undef $usLockFhForGameStart;
@@ -5760,7 +5761,7 @@ sub launchGame {
           if($requestDelay > 5);
       $timestamps{usLockRequestForGameStart}=0;
       $usLockFhForGameStart=shift;
-      startGameServer($p_startData,$p_teamsMap,$p_allyTeamsMap,$p_battleState->{players});
+      startGameServer($startScript,$p_teamsMap,$p_allyTeamsMap,$p_battleState->{players});
     },
     30,
     sub {
@@ -5773,7 +5774,7 @@ sub launchGame {
 }
 
 sub startGameServer {
-  my ($p_startData,$p_teamsMap,$p_allyTeamsMap,$p_players)=@_;
+  my ($startScript,$p_teamsMap,$p_allyTeamsMap,$p_players)=@_;
 
   if(defined $p_players) {
     my $cancelMsg;
@@ -5793,9 +5794,7 @@ sub startGameServer {
   }
   
   open(my $startScriptFh,'>',"$conf{instanceDir}/startscript.txt");
-  for my $i (0..$#{$p_startData}) {
-    print $startScriptFh $p_startData->[$i]."\n";
-  }
+  print $startScriptFh $startScript;
   close($startScriptFh);
 
   $timestamps{autoForcePossible}=0;

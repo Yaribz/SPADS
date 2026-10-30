@@ -2,7 +2,7 @@
 #
 # This program update SPADS components in current directory from remote repository.
 #
-# Copyright (C) 2008-2025  Yann Riou <yaribzh@gmail.com>
+# Copyright (C) 2008-2026  Yann Riou <yaribzh@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -18,9 +18,10 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-# Version 0.17 (2025/12/05)
+# Version 0.18 (2026/10/28)
 
 use strict;
+use warnings;
 
 use FindBin;
 use List::Util qw'any all none notall';
@@ -76,6 +77,7 @@ for my $argNb (1..$#ARGV) {
                'SpringAutoHostInterface.pm' => 1,
                'SpringLobbyProtocol.pm' => 1,
                'SpringLobbyInterface.pm' => 1,
+               'SpringStartScript.pm' => 1,
                'SimpleEvent.pm' => 1,
                'SimpleLog.pm' => 1,
                'spads.pl' => 1,
@@ -83,6 +85,7 @@ for my $argNb (1..$#ARGV) {
                'spadsInstaller.pl' => 1,
                'SpadsPluginApi.pm' => 1,
                'SpadsUpdater.pm' => 1,
+               'TDF.pm' => 1,
                'update.pl' => 1,
                'argparse.py' => 1,
                'replay_upload.py' => 1,
