@@ -1,15 +1,164 @@
+/* =========================================================
+   Themes
+   ========================================================= */
+
+/* Light theme palette */
+:root {
+  color-scheme: light;
+
+  /* Main colors */
+  --page-bg: White;
+  --text-color: Black;
+  --link-color: #36c;
+
+  /* Navigation */
+  --navigation-bg: LightYellow;
+  --navigation-border: LightGray;
+  --navigation-current: #2916e5;
+
+  /* Headings */
+  --h1-bg: #adebff;
+  --h1-color: #069;
+  --h2-color: #069;
+
+  /* API entries */
+  --dt-bg: #d0f8c8;
+
+  /* Code blocks */
+  --code-bg: #ddd;
+  --inline-code-bg: #e3e3e3;
+  --code-border: black;
+  --code-color: black;
+
+  /* Language labels */
+  --label-border: black;
+  --label-perl-bg: LightSkyBlue;
+  --label-python-bg: #fe6;
+  --label-default-bg: LightGreen;
+
+  /* API links */
+  --api-call-color: #708;
+  --api-declaration-color: #dd4a68;
+
+  /* Prism syntax highlighting */
+  --prism-comment: SlateGray;
+  --prism-punctuation: #555;
+  --prism-red: #803;
+  --prism-green: #470;
+  --prism-gray: #555;
+  --prism-keyword: #04b;
+  --prism-function: #dd4a68;
+  --prism-regex: #179;
+  --prism-variable: #b60;
+}
+
+/* Dark theme palette */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* Main colors */
+  --page-bg: #0d1117;
+  --text-color: #ddd;
+  --link-color: #69e;
+
+  /* Navigation */
+  --navigation-bg: #151b23;
+  --navigation-border: #50545a;
+  --navigation-current: #2af;
+
+  /* Headings */
+  --h1-bg: #263b49;
+  --h1-color: #2af;
+  --h2-color: #4af;
+
+  /* API entries */
+  --dt-bg: #243;
+
+  /* Code blocks */
+  --code-bg: #292c30;
+  --inline-code-bg: #34384b;
+  --code-border: #555;
+  --code-color: #e6e6e6;
+
+  /* Language labels */
+  --label-border: #555;
+  --label-perl-bg: #23a;
+  --label-python-bg: #500;
+  --label-default-bg: #440;
+
+  /* API links */
+  --api-call-color: #97e;
+  --api-declaration-color: #d68;
+
+  /* Prism syntax highlighting */
+  --prism-comment: #8b949e;
+  --prism-punctuation: #9aa;
+  --prism-red: #fbb;
+  --prism-green: #a5d6a7;
+  --prism-gray: #c9d1d9;
+  --prism-keyword: #79c0ff;
+  --prism-function: #d68;
+  --prism-regex: #d6a0f5;
+  --prism-variable: #d90;
+}
+
+/* =========================================================
+   Document
+   ========================================================= */
+
+/* body */
+
 html {
   background: #002b44;
 }
 
 body {
-  background: white;
-  color: black;
+  background: var(--page-bg);
+  color: var(--text-color);
   font-family: arial,sans-serif;
   padding: 16px;
   min-width: 900px;
   max-width: 1200px;
   margin: 8px auto;
+}
+
+/* theme toggle button */
+
+#theme-toggle {
+  position: fixed;
+  top: 12px;
+  left: calc(50% + 625px);
+  z-index: 1000;
+
+  width: 36px;
+  height: 36px;
+  padding: 0;
+
+  border: 1px solid var(--navigation-border);
+  border-radius: 50%;
+
+  background: var(--navigation-bg);
+  color: var(--text-color);
+
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+}
+
+#theme-toggle .icon-sun {
+  display: inline;
+}
+
+#theme-toggle .icon-moon {
+  display: none;
+}
+
+:root[data-theme="dark"] #theme-toggle .icon-sun {
+  display: none;
+}
+
+:root[data-theme="dark"] #theme-toggle .icon-moon {
+  display: inline;
 }
 
 /* TOC */
@@ -23,10 +172,10 @@ ul#index, body>nav {
 
 ul#index, nav>ul {
   display: inline-block;
-  border: 1px solid lightgray;
+  border: 1px solid var(--navigation-border);
   padding: 1em;
   margin: 0;
-  background: lightyellow;
+  background: var(--navigation-bg);
 }
 
 li {
@@ -40,13 +189,13 @@ ul#index ul, nav>ul ul {
 nav a.current {
   text-decoration-line: underline;
   text-shadow: 0.4px 0 currentColor, -0.4px 0 currentColor;
-  color: #2916e5;
+  color: var(--navigation-current);
 }
 
 /* links */
 
 a {
-  color: #3366cc;
+  color: var(--link-color);
   text-decoration: none;
 }
 
@@ -57,15 +206,15 @@ a:not(.anchorjs-link):hover {
 /* inline code */
 
 code {
-  background: #e3e3e3;
+  background: var(--inline-code-bg);
 }
 
 /* code blocks */
 
 pre {
-  background: #dddddd;
-  border: 1px solid black;
-  color: black;
+  background: var(--code-bg);
+  border: 1px solid var(--code-border);
+  color: var(--code-color);
   padding-top: 1em;
   padding-bottom: 1em;
   padding-left: 10px;
@@ -76,17 +225,17 @@ pre {
 }
 
 pre code {
-  background: #dddddd;
+  background: var(--code-bg);
 }
 
 pre code a.api-function-call {
-  color: #507;
-  text-decoration: underline #507 dotted;
+  color: var(--api-call-color);
+  text-decoration: underline var(--api-call-color) dotted;
 }
 
 pre code a.api-function-declaration {
-  color: #dd4a68;
-  text-decoration: underline #dd4a68 dotted;
+  color: var(--api-declaration-color);
+  text-decoration: underline var(--api-declaration-color) dotted;
 }
 
 /* language label on code blocks */
@@ -99,18 +248,18 @@ div.language-label {
   display: inline-block;
   font-size: 0.6em;
   font-weight: bold;
-  background: LightGreen;
-  border: 1px solid black;
+  background: var(--label-default-bg);
+  border: 1px solid var(--label-border);
   border-bottom: 0;
   border-radius: 4px 4px 0 0;
 }
 
 div.language-perl {
-  background: LightSkyBlue;
+  background: var(--label-perl-bg);
 }
 
 div.language-python {
-  background: #FFEE66;
+  background: var(--label-python-bg);
 }
 
 .language-label + pre {
@@ -120,8 +269,8 @@ div.language-python {
 /* headings */
 
 h1 {
-  background: #ADEBFF;
-  color: #006699;
+  background: var(--h1-bg);
+  color: var(--h1-color);
   font-size: large;
   padding: 5px 5px 3px 5px;
   margin-top: 60px;
@@ -133,7 +282,7 @@ ul#index + h1, nav + h1 {
 
 h2 {
   background: transparent;
-  color: #006699;
+  color: var(--h2-color);
   font-size: medium;
   margin-top: 40px;
 }
@@ -146,12 +295,12 @@ dt {
   margin-left: 10px;
   padding: 4px 5px 6px 12px;
   border-radius: 15px;
-  background: #D0F8C8;
+  background: var(--dt-bg);
   font-weight: bold;
 }
 
 dt code {
-  background: #D0F8C8;
+  background: var(--dt-bg);
 }
 
 dd {
@@ -169,11 +318,11 @@ dd {
 .token.prolog,
 .token.doctype,
 .token.cdata {
-  color: slategray;
+  color: var(--prism-comment);
 }
 
 .token.punctuation {
-  color: #555;
+  color: var(--prism-punctuation);
 }
 
 .token.namespace {
@@ -187,7 +336,7 @@ dd {
 .token.constant,
 .token.symbol,
 .token.deleted {
-  color: #803;
+  color: var(--prism-red);
 }
 
 .token.selector,
@@ -196,7 +345,7 @@ dd {
 .token.char,
 .token.builtin,
 .token.inserted {
-  color: #470;
+  color: var(--prism-green);
 }
 
 .token.operator,
@@ -204,27 +353,27 @@ dd {
 .token.url,
 .language-css .token.string,
 .style .token.string {
-  color: #555;
+  color: var(--prism-gray);
 }
 
 .token.atrule,
 .token.attr-value,
 .token.keyword {
-  color: #04b;
+  color: var(--prism-keyword);
 }
 
 .token.function,
 .token.class-name {
-  color: #DD4A68;
+  color: var(--prism-function);
 }
 
 .token.regex {
-  color: #179;
+  color: var(--prism-regex);
 }
 
 .token.important,
 .token.variable {
-  color: #b60;
+  color: var(--prism-variable);
 }
 
 .token.important,

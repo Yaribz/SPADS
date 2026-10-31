@@ -81,13 +81,70 @@ $parser->force_title($opts{title} // 'SPADS Plugin API Documentation')
 
 $parser->html_header_tags(<<'HEADER_TAGS');
 <meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1" />
+<script>
+  // Initialize the theme before rendering the page.
+  {
+    let theme;
+
+    try {
+      theme = localStorage.getItem('theme');
+    } catch (error) {
+      // Ignore unavailable local storage
+    }
+
+    if (theme !== 'light' && theme !== 'dark') {
+      theme = window.matchMedia('(prefers-color-scheme: dark)').matches
+        ? 'dark'
+        : 'light';
+    }
+
+    document.documentElement.dataset.theme = theme;
+  }
+</script>
 <script src="https://cdn.jsdelivr.net/npm/anchor-js/anchor.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/prismjs@1.30.0/components/prism-core.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/prismjs@1.30.0/plugins/autoloader/prism-autoloader.min.js"></script>
 HEADER_TAGS
 
-$parser->html_footer(<<'JAVASCRIPT');
+$parser->html_footer(<<'HTML_FOOTER');
+<button id="theme-toggle"
+        type="button"
+        aria-label="Switch to dark mode"
+        aria-pressed="false">
+  <span class="icon-moon" aria-hidden="true">&#9789;</span>
+  <span class="icon-sun" aria-hidden="true">&#9728;</span>
+</button>
 <script>
+
+  // Theme toggle button
+  const themeToggle = document.getElementById('theme-toggle');
+
+  function updateThemeButton() {
+    const isDark = document.documentElement.dataset.theme === 'dark';
+
+    themeToggle.setAttribute('aria-pressed', String(isDark));
+    themeToggle.setAttribute(
+      'aria-label',
+      isDark ? 'Switch to light mode' : 'Switch to dark mode'
+    );
+  }
+
+  themeToggle.addEventListener('click', () => {
+    const nextTheme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+
+    document.documentElement.dataset.theme = nextTheme;
+
+    try {
+      localStorage.setItem('theme', nextTheme);
+    } catch (error) {
+      // Ignore unavailable local storage (no persistency)
+    }
+
+    updateThemeButton();
+  });
+
+  updateThemeButton();
+
 
   // Deep anchor links (AnchorJS)
   anchors.options.placement = 'left';
@@ -203,7 +260,7 @@ $parser->html_footer(<<'JAVASCRIPT');
   Prism = Prism || {};
   Prism.hooks.add('complete', function (env) { linkApiFunctions() });
 
-  // Responsive TOC
+  // Responsive TOC and theme button
   const toc = document.querySelector('body > nav');
   if(toc) {
     const totalTocWidth = toc.getBoundingClientRect().width + 17;
@@ -220,14 +277,14 @@ $parser->html_footer(<<'JAVASCRIPT');
   body {
     margin-left: ${totalTocWidth}px;
   }
+  #theme-toggle {
+    left: ${threshold2 - 7}px;
+  }
 }
 @media (max-width: ${threshold2}px) {
   body>nav {
     position: static;
     margin-bottom: 40px;
-  }
-  body {
-    margin-left: auto;
   }
 }`;
     document.head.appendChild(style);
@@ -292,7 +349,7 @@ $parser->html_footer(<<'JAVASCRIPT');
 </script>
 </body>
 </html>
-JAVASCRIPT
+HTML_FOOTER
 
 $parser->output_string(\my $html);
 $parser->parse_file($opts{infile} // 'SpadsPluginApi.pm');
