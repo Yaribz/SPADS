@@ -1552,6 +1552,9 @@ SpadsPluginApi.pm:
       fix "loadArchives" plugin API function not encapsulating callback functions in Python
       add documentation for "loadArchives" plugin API function
       minor documentation improvements
+0.48: use default item entries for methods so that deep anchor links are generated
+      use links rather than inline code when referring to API functions/methods in order to ease navigation
+      minor formatting fixes and rephrasing
 
 SpadsUpdater.pm:
 ===============

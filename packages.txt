@@ -59,7 +59,7 @@ SimpleLog.pm:SimpleLog_0.11.pm
 spads.pl:spads_0.13.58.pl
 SpadsConf.pm:SpadsConf_0.13.23.pm
 spadsInstaller.pl:spadsInstaller_0.49.pl
-SpadsPluginApi.pm:SpadsPluginApi_0.47.pm
+SpadsPluginApi.pm:SpadsPluginApi_0.48.pm
 SpadsUpdater.pm:SpadsUpdater_0.36.pm
 SpringAutoHostInterface.pm:SpringAutoHostInterface_0.16.pm
 SpringLobbyInterface.pm:SpringLobbyInterface_0.58.pm
@@ -84,7 +84,7 @@ SimpleLog.pm:SimpleLog_0.11.pm
 spads.pl:spads_0.13.58.pl
 SpadsConf.pm:SpadsConf_0.13.23.pm
 spadsInstaller.pl:spadsInstaller_0.49.pl
-SpadsPluginApi.pm:SpadsPluginApi_0.47.pm
+SpadsPluginApi.pm:SpadsPluginApi_0.48.pm
 SpadsUpdater.pm:SpadsUpdater_0.36.pm
 SpringAutoHostInterface.pm:SpringAutoHostInterface_0.16.pm
 SpringLobbyInterface.pm:SpringLobbyInterface_0.58.pm
