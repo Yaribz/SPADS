@@ -26,7 +26,7 @@ use List::Util qw'any none';
 use Exporter 'import';
 our @EXPORT=qw/$spadsVersion $spadsDir loadPythonPlugin get_flag fix_string import_constants getBosses getLobbyState getSpringPid getSpringServerType getTimestamps getUserPref getRunningBattle getConfMacros getCurrentVote getPlugin getPluginList addSpadsCommandHandler removeSpadsCommandHandler addLobbyCommandHandler removeLobbyCommandHandler addSpringCommandHandler removeSpringCommandHandler registerLuaMsg unregisterLuaMsg addLuaMsgHandler removeLuaMsgHandler forkProcess forkCall removeProcessCallback createDetachedProcess addTimer removeTimer addSocket removeSocket getLobbyInterface getSpringInterface getSpadsConf getSpadsConfFull getPluginConf isSettingValueAllowed slog updateSetting secToTime secToDayAge formatList formatArray formatFloat formatInteger getDirModifTime applyBattlePreset applyHostingPreset applyPreset quit cancelQuit closeBattle rehost cancelCloseBattle getUserAccessLevel broadcastMsg sayBattleAndGame sayPrivate sayBattle sayBattleUser sayChan sayGame answer invalidSyntax queueLobbyCommand loadArchives LOBBY_STATE_DISCONNECTED LOBBY_STATE_CONNECTING LOBBY_STATE_CONNECTED LOBBY_STATE_LOGGED_IN LOBBY_STATE_SYNCHRONIZED LOBBY_STATE_OPENING_BATTLE LOBBY_STATE_BATTLE_OPENED/;
 
-my $apiVersion='0.47';
+my $apiVersion='0.48';
 
 our $spadsVersion=$::SPADS_VERSION;
 our $spadsDir=$::CWD;
@@ -330,7 +330,7 @@ sub getPlugin {
 sub getPluginConf {
   my $plugin=shift;
   $plugin=getCallerPlugin() unless(defined $plugin);
-  return $::spads->{pluginsConf}->{$plugin}->{conf} if(exists $::spads->{pluginsConf}->{$plugin});
+  return $::spads->{pluginsConf}{$plugin}{conf} if(exists $::spads->{pluginsConf}{$plugin});
 }
 
 sub getPluginList {
@@ -781,16 +781,16 @@ Plugins can be coded in Perl (since SPADS 0.11) or Python (since SPADS 0.12.29).
 This documentation was mostly written when SPADS was only supporting plugins
 coded in Perl, so types for function parameters and return values are described
 using Perl terminology, with Perl sigils (C<%> for hash, C<@> for array, C<$>
-for scalars). Python plugins just need to ignore these sigils and use their
-equivalent internal Python types instead (Python dictionaries instead of Perl
-hashes, Python lists instead of Perl arrays, Python tuples instead of Perl
-lists, Python None value instead of Perl undef value...).
+for scalars). For Python plugins, these sigils just need to be ignored and the
+equivalent internal Python types must be used instead (Python dictionaries
+instead of Perl hashes, Python lists instead of Perl arrays, Python tuples
+instead of Perl lists, Python C<None> value instead of Perl C<undef> value...).
 
 In order to call functions from the plugin API, Python plugins must first import
 the special package named C<perl>. The plugin API is then available from the
 module of this package that is named after the plugin. The convention is to
 assign this module to the global variable C<spads> within the local namespace
-(refer to the SYNOPSYS for an example of a Python plugin named C<MyPlugin>
+(refer to L</SYNOPSIS> for an example of a Python plugin named C<MyPlugin>
 calling the C<slog> function of the API). Therefore, it is assumed in the plugin
 API documentation that Python plugins always start with these two lines
 (replacing C<MyPlugin> by the actual plugin name):
@@ -811,13 +811,12 @@ the version of Python and the version of the C<Inline::Python> Perl module used
 by your system, it is possible that the Python plugin callbacks receive Python
 byte strings as parameters instead of normal Python strings. In order to
 mitigate this problem, the plugin API offers both a way to detect from the
-Python plugin code if current system is affected (by calling the C<get_flag>
+Python plugin code if current system is affected (by calling the L</get_flag>
 function with parameter C<'use_byte_string'>), and a way to workaround the
-problem by calling a dedicated C<fix_string> function which fixes the string
-values if needed. For additional information regarding these Python specific
-functions of the plugin API, refer to the L<API FUNCTIONS - Python specific|/"Python specific">
-section. Python plugins can also choose to implement their own pure Python function which
-fixes strings coming from SPADS if needed like this for example:
+problem by calling a dedicated L</fix_string> function which fixes the string
+values if needed. Python plugins can also choose to implement their own pure
+Python function which fixes strings coming from SPADS if needed like this for
+example:
 
 =for highlighter python
 
@@ -838,27 +837,25 @@ fixes strings coming from SPADS if needed like this for example:
 
 On Windows systems, Perl emulates the C<fork> functionality using threads. As
 the C<Inline::Python> Perl module used by SPADS to interface with Python code
-isn't thread-safe, the fork functions of the plugin API (C<forkProcess> and
-C<forkCall>) aren't available from Python plugins when running on a Windows
+isn't thread-safe, the fork functions of the plugin API (L</forkProcess> and
+L</forkCall>) aren't available from Python plugins when running on a Windows
 system. On Windows systems, using native Win32 processes for parallel processing
 is recommended anyway. Plugins can check if the fork functions of the plugin API
-are available by calling the C<get_flag> Python specific plugin API function
+are available by calling the L</get_flag> Python specific plugin API function
 with parameter C<'can_fork'>, instead of checking by themselves if the current
-system is Windows. Refer to the L<API FUNCTIONS - Python specific|/"Python specific">
-section for more information regarding this function.
+system is Windows.
 
-Automatic asynchronous socket management (C<addSocket> plugin API function) is
+Automatic asynchronous socket management (L</addSocket> plugin API function) is
 also unavailable for Python plugins on Windows systems (this is due to the file
 descriptor numbers being thread-specific on Windows, preventing SPADS from
 accessing sockets opened in Python interpreter scope). However, it is still
 possible to manage asynchronous sockets manually, for example by hooking the
-SPADS event loop (C<eventLoop> plugin callback) to perform non-blocking
-C<select> with 0 timeout (refer to L<Python select documentation|https://docs.python.org/3/library/select.html#select.select>).
-Plugins can check if the C<addSocket> function of the plugin API is available by
-calling the C<get_flag> Python specific plugin API function with parameter
+SPADS event loop (L</eventLoop> plugin callback) to perform non-blocking
+C<select> with C<0> timeout (refer to L<Python select documentation|https://docs.python.org/3/library/select.html#select.select>).
+Plugins can check if the L</addSocket> function of the plugin API is available by
+calling the L</get_flag> Python specific plugin API function with parameter
 C<'can_add_socket'>, instead of checking by themselves if the current system is
-Windows. Refer to the L<API FUNCTIONS - Python specific|/"Python specific">
-section for more information regarding this function.
+Windows.
 
 =head1 LOGGING SYSTEM
 
@@ -996,7 +993,7 @@ first element is a reference to a hash containing the plugin global settings
 declarations, the second one is the same but for plugin preset settings
 declarations. These hashes use setting names as keys, and references to array of
 allowed types as values. The types must be either strings that match the keys of
-the C<%paramTypes> hash defined in SpadsConf.pm file, or custom functions to
+the C<%paramTypes> hash defined in C<SpadsConf.pm> file, or custom functions to
 implement custom value checks. Such custom value checking functions take 2
 parameters: the value to check as first parameter and a boolean specifying if
 the value is the default value (i.e. first value declared in the definition, for
@@ -1170,18 +1167,14 @@ C<$userName> is the name of the user who just left the battle lobby
 
 =item C<onLobbyConnected($self,$lobbyInterface)>
 
-/!\ RENAMED TO C<onLobbySynchronized> /!\
+Deprecated (refer to L</onLobbySynchronized>).
 
-This callback has been renamed to C<onLobbySynchronized> since SPADS v0.13.35.
-It can still be used under the name C<onLobbyConnected> for the sake of backward
-compatibility, however this name is misleading so its usage under this name is
-not recommended (the callback is only called when the lobby connection is fully
-synchronized, i.e. when all the initial commands sent by the lobby server after
-successfully logging in have been received).
-
-The C<$lobbyInterface> parameter is the instance of the
- L<SpringLobbyInterface|https://github.com/Yaribz/SpringLobbyInterface> module
-used by SPADS.
+The C<onLobbyConnected> callback has been renamed to C<onLobbySynchronized>
+since SPADS v0.13.35. It can still be used under the name C<onLobbyConnected>
+for the sake of backward compatibility, however this name is misleading so its
+usage under this name is not recommended (the callback is only called when the
+lobby connection is fully synchronized, i.e. when all the initial commands sent
+by the lobby server after successfully logging in have been received).
 
 =item C<onLobbyDisconnected($self)>
 
@@ -1197,26 +1190,29 @@ order:
 
 =over 4
 
-=item * 1) C<onLobbyLogin> (called when trying to login)
+=item * 1) L<onLobbyLogin|/onLobbyLogin> (called when trying to login)
 
 =item * 2) C<onLobbyLoggedIn> (called when successfully logged in)
 
-=item * 3) C<onLobbySynchronized> (called when state is synchronized with
-server)
+=item * 3) L<onLobbySynchronized|/onLobbySynchronized> (called when state is
+synchronized with server)
 
 =back
 
 The C<$lobbyInterface> parameter is the instance of the
- L<SpringLobbyInterface|https://github.com/Yaribz/SpringLobbyInterface> module
-used by SPADS.
+L<SpringLobbyInterface|https://github.com/Yaribz/SpringLobbyInterface> module
+used by SPADS. It is the same object as the one returned by the
+L</getLobbyInterface> accessor (refer to the documentation of this accessor for
+details about the methods that can be called on this object).
 
 Note: This callback is the ideal place for a plugin to register its lobby
-command handlers using the C<addLobbyCommandHandler> function of the plugin API,
-if this plugin needs to process the commands sent by the lobby server during the
-initial lobby state synchronization phase (i.e. commands sent before the
-C<LOGININFOEND> command). For plugins that do not require being called back
-during the initial lobby state synchronization phase, the C<onLobbySynchronized>
-callback should be used instead to register the lobby command handlers.
+command handlers using the L</addLobbyCommandHandler> function of the plugin
+API, if this plugin needs to process the commands sent by the lobby server
+during the initial lobby state synchronization phase (i.e. commands sent before
+the C<LOGININFOEND> command). For plugins that do not require being called back
+during the initial lobby state synchronization phase, the
+L</onLobbySynchronized> callback should be used instead to register the lobby
+command handlers.
 
 =item C<onLobbyLogin($self,$lobbyInterface)>
 
@@ -1228,16 +1224,19 @@ lobby server is established. These callbacks are called in following order:
 
 =item * 1) C<onLobbyLogin> (called when trying to login)
 
-=item * 2) C<onLobbyLoggedIn> (called when successfully logged in)
+=item * 2) L<onLobbyLoggedIn|/onLobbyLoggedIn> (called when successfully logged
+in)
 
-=item * 3) C<onLobbySynchronized> (called when state is synchronized with
-server)
+=item * 3) L<onLobbySynchronized|/onLobbySynchronized> (called when state is
+synchronized with server)
 
 =back
 
 The C<$lobbyInterface> parameter is the instance of the
  L<SpringLobbyInterface|https://github.com/Yaribz/SpringLobbyInterface> module
-used by SPADS.
+used by SPADS. It is the same object as the one returned by the
+L</getLobbyInterface> accessor (refer to the documentation of this accessor for
+details about the methods that can be called on this object).
 
 =item C<onLobbySynchronized($self,$lobbyInterface)>
 
@@ -1248,9 +1247,10 @@ established. These callbacks are called in following order:
 
 =over 4
 
-=item * 1) C<onLobbyLogin> (called when trying to login)
+=item * 1) L<onLobbyLogin|/onLobbyLogin> (called when trying to login)
 
-=item * 2) C<onLobbyLoggedIn> (called when successfully logged in)
+=item * 2) L<onLobbyLoggedIn|/onLobbyLoggedIn> (called when successfully logged
+in)
 
 =item * 3) C<onLobbySynchronized> (called when state is synchronized with
 server)
@@ -1259,15 +1259,18 @@ server)
 
 The C<$lobbyInterface> parameter is the instance of the
  L<SpringLobbyInterface|https://github.com/Yaribz/SpringLobbyInterface> module
-used by SPADS.
+used by SPADS. It is the same object as the one returned by the
+L</getLobbyInterface> accessor (refer to the documentation of this accessor for
+details about the methods that can be called on this object).
 
 Note: This callback is the ideal place for a plugin to register its lobby
-command handlers using the C<addLobbyCommandHandler> function of the plugin API,
-as long as this plugin does not need to process the commands sent by the lobby
-server during the initial lobby state synchronization phase (i.e. commands sent
-before the C<LOGININFOEND> command). For plugins that require being called back
-during the initial lobby state synchronization phase, the C<onLobbyLoggedIn>
-callback must be used instead to register the lobby command handlers.
+command handlers using the L</addLobbyCommandHandler> function of the plugin
+API, as long as this plugin does not need to process the commands sent by the
+lobby server during the initial lobby state synchronization phase (i.e. commands
+sent before the C<LOGININFOEND> command). For plugins that require being called
+back during the initial lobby state synchronization phase, the
+L</onLobbyLoggedIn> callback must be used instead to register the lobby command
+handlers.
 
 =item C<onPresetApplied($self,$oldPresetName,$newPresetName)>
 
@@ -1416,7 +1419,7 @@ autoStart functionality, C<0> else
 
 The return value must be the reason for preventing the game from starting (for
 example C<"too many players for current map">), or C<1> if no reason can be given,
-or undef to allow the game to start.
+or C<undef> to allow the game to start.
 
 =item C<preSpadsCommand($self,$command,$source,$user,\@params)>
 
@@ -1481,16 +1484,17 @@ algorithm.
 C<\%players> is a reference to a hash containing the players in the battle
 lobby. This hash is indexed by player names, and the values are references to a
 hash containing player data. For balancing, you should only need to access the
-players skill as follows: C<< $players->{<playerName>}->{skill} >>
+players skill as follows: C<< $players->{<playerName>}{skill} >>
 
 C<\%bots> is a reference to a hash containing the bots in the battle lobby. This
 hash has the exact same structure as C<\%players>.
 
-C<$clanMode> is the current clan mode which must be applied to the balance. Clan
-modes are specified L<here|http://planetspads.free.fr/spads/doc/spadsDoc_All.html#set:clanMode>.
-C<< <maxUnbalance> >> thresholds are automatically managed by SPADS, plugins
-don't need to handle them. So basically, plugins only need to check if C<tag>
-and/or C<pref> clan modes are enabled and apply them to their balance algorithm.
+C<$clanMode> is the current clan mode which must be applied to the balance
+(refer to L<clanMode|http://planetspads.free.fr/spads/doc/spadsDoc_All.html#set:clanMode>
+preset setting documentation). C<< <maxUnbalance> >> thresholds are
+automatically managed by SPADS, plugins don't need to handle them. So basically,
+plugins only need to check if C<tag> and/or C<pref> clan modes are enabled and
+apply them to their balance algorithm.
 
 C<$nbTeams> and C<$teamSize> are the target battle structue computed by SPADS.
 The number of entities to balance is the number of entries in C<\%players> +
@@ -1498,16 +1502,17 @@ number of entries in C<\%bots>. The number of entities to balance is always
 C<< > $nbTeams*($teamSize-1) >>, and C<< <= $nbTeams*$teamSize >>.
 
 If the plugin is unable to balance the battle, it must not update C<\%players>
-and C<\%bots>. The callback must return undef or a negative value so that SPADS
-knows it has to use another plugin or the internal balance algorithm instead.
+and C<\%bots>. The callback must return C<undef> or a negative value so that
+SPADS knows it has to use another plugin or the internal balance algorithm
+instead.
 
 If the plugin is able to balance the battle, it can use two methods to transmit
 the desired balance to SPADS (Python plugins can only use the second method):
 
 The first method consists in updating directly the C<\%players> and C<\%bots>
 hash references with the team and id information. Assigned player teams must be
-written in C<< $players->{<playerName>}->{battleStatus}->{team} >>, and assigned
-player ids must be written in C<< $players->{<playerName>}->{battleStatus}->{id} >>.
+written in C<< $players->{<playerName>}{battleStatus}{team} >>, and assigned
+player ids must be written in C<< $players->{<playerName>}{battleStatus}{id} >>.
 The C<\%bots> hash reference works the same way. The return value is the
 unbalance indicator, defined as follows:
 C<standardDeviationOfTeamSkills * 100 / averageTeamSkill>.
@@ -1540,19 +1545,19 @@ C<$currentAccessLevel> anyway).
 
 C<\%userData> is a reference to a hash containing the lobby data of the user
 
-C<$isAuthenticated> indicates if the user has been authenticated (0: lobby
-server in LAN mode and not authenticated at autohost level, 1: authenticated by
-lobby server only, 2: authenticated by autohost)
+C<$isAuthenticated> indicates if the user has been authenticated (C<0>: lobby
+server in LAN mode and not authenticated at autohost level, C<1>: authenticated by
+lobby server only, C<2>: authenticated by autohost)
 
-The callback must return the new access level value if changed, or undef if not
-changed.
+The callback must return the new access level value if changed, or C<undef> if
+not changed.
 
 =item C<commandRightsOverride($self,$lowerCaseCommandName,\@command,$source,$user,$effectiveUserAccessLevel,$userAccessLevel,\%requiredAccessLevels)>
 
 This callback is called each time a SPADS command is called by a user, just
 before checking the user access level requirements. It allows plugins to bypass
 this check and implement their own logic to allow or disallow the command
-execution. This callback is called before the C<preSpadsCommand> callback,
+execution. This callback is called before the L</preSpadsCommand> callback,
 which can still be used to prevent the command execution later in the workflow
 even though the C<commandRightsOverride> callback allowed it.
 
@@ -1619,7 +1624,7 @@ battle lobby. This hash is indexed by player names, and the values are
 references to hashes containing following player data: C<team> (team number),
 C<id> (id number) and C<color> (current color configured in lobby, i.e. a hash
 containing keys C<"red">, C<"green">, C<"blue"> and whose values are numbers
-between 0 and 255 included).
+between C<0> and C<255> included).
 
 C<\%bots> is a reference to a hash containing the bots currently in the battle
 lobby. This hash has the exact same structure as C<\%players>.
@@ -1644,7 +1649,7 @@ If the plugin is able to fix the players and AI bots colors, then it must return
 a reference to a hash containing all colors assignations, indexed by ID numbers.
 The keys must be the ID numbers and the values are references to hash whose keys
 are C<"red">, C<"green"> and C<"blue"> and values are the corresponding RGB
-values (between 0 and 255 included) of the color assigned to the ID.
+values (between C<0> and C<255> included) of the color assigned to the ID.
 
 =item C<setMapStartBoxes($self,\@boxes,$mapName,$nbTeams,$nbExtraBox)>
 
@@ -1653,8 +1658,8 @@ position type).
 
 C<\@boxes> is a reference to an array containing the start boxes definitions.
 A start box definition is a string containing the box coordinates separated by
-spaces, in following order: left, top, right, bottom (0,0 is top left corner
-and 200,200 is bottom right corner). If the array already contains box
+spaces, in following order: left, top, right, bottom (C<0,0> is top left corner
+and C<200,200> is bottom right corner). If the array already contains box
 definitions, it means SPADS already knows boxes for this map.
 
 C<$mapName> is the name of the map for which start boxes are requested
@@ -1662,8 +1667,8 @@ C<$mapName> is the name of the map for which start boxes are requested
 C<$nbTeams> is the current number of teams configured (at least this number of
 start boxes must be provided)
 
-C<$nbExtraBox> is the number of extra box required. Usually this is 0, unless a
-special game mode is enabled such as King Of The Hill.
+C<$nbExtraBox> is the number of extra box required. Usually this is C<0>, unless
+a special game mode is enabled such as King Of The Hill.
 
 If the plugin isn't able or doesn't need to provide/override start boxes, it must
 not update the C<\@boxes> array. It must return C<0> so that SPADS knows it has
@@ -1704,8 +1709,8 @@ C<$nbRequiredManualVotes> is the minimum number of manual votes required for
 vote to be taken into account.
 
 The callback must return a list containing following 2 elements: the lobby vote
-message, and the in-game vote message (undef values can be used to keep default
-messages).
+message, and the in-game vote message (C<undef> values can be used to keep
+default messages).
 
 =item C<updateCmdAliases($self,\%aliases)>
 
@@ -1824,7 +1829,7 @@ loop. The following callback is called during each iteration of this event loop:
 
 Warning: this callback is called very frequently (during each iteration of SPADS
 main event loop), so performing complex operations here can be very intensive on
-the CPU. It is recommended to use timers (C<addTimer>/C<removeTimer> functions)
+the CPU. It is recommended to use timers (refer to the L</addTimer> function)
 instead for all time related operations (timeouts, scheduled actions, regular
 serialization of persistent data to avoid data loss...). This callback shouldn't
 be blocking, otherwise SPADS may become unstable.
@@ -1931,7 +1936,7 @@ to plugins for accessing various lobby data:
 
 =over 3
 
-=item * - C<getUsers()>
+=item C<getUsers()>
 
 This method returns a reference to a hash containing the data regarding all the
 online users. The hash is indexed by player names and the values are references
@@ -1950,8 +1955,8 @@ to hashes with following content:
 =item * C<status>: the lobby status of the user, which is itself a reference to
 another hash, containing following content: C<access> (C<0>: normal user, C<1>:
 moderator), C<away> (C<0>: active, C<1>: away), C<bot> (C<0>: human, C<1>: bot),
-C<inGame> (C<0>: out of game, C<1>: in game), C<rank> (integer between 0 and 7
-included)
+C<inGame> (C<0>: out of game, C<1>: in game), C<rank> (integer between C<0> and
+C<7> included)
 
 =back
 
@@ -1965,7 +1970,7 @@ names, you can access the C<accounts> field of the C<SpringLobbyInterface>
 object. It contains a reference to a hash whose keys are the lobby account IDs
 and values are the lobby user names.
 
-=item * - C<getChannels()>
+=item C<getChannels()>
 
 This method returns a reference to a hash containing the data regarding all the
 lobby channels joined by SPADS. The hash is indexed by channel names and the
@@ -1986,7 +1991,7 @@ corrupting internal data. However it is also possible to read the same data
 directly without triggering a deep copy by accessing the C<channels> field of
 the C<SpringLobbyInterface> object.
 
-=item * - C<getBattles()>
+=item C<getBattles()>
 
 This method returns a reference to a hash containing the data regarding all the
 battle lobbies currently hosted on the lobby server. The hash is indexed by
@@ -2041,7 +2046,7 @@ corrupting internal data. However it is also possible to read the same data
 directly without triggering a deep copy by accessing the C<battles> field of the
 C<SpringLobbyInterface> object.
 
-=item * - C<getBattle()>
+=item C<getBattle()>
 
 This method returns a reference to a hash containing the data regarding the
 battle lobby currently hosted by SPADS. This hash has following content:
@@ -2200,10 +2205,10 @@ battle lobby data aren't necessarily consistent with the game currently running.
 If no game is in progress, this hash is empty.
 
 If a game is in progress, the hash contains the same data as the data returned
-by the C<getBattle()> and C<getBattles()> methods of the C<SpringLobbyInterface>
-object (see C<getLobbyInterface()> accessor) when the game was launched.
-Concerning the C<getBattles()> data, only the data related to the battle lobby
-hosted by SPADS are included in the hash.
+by both the L</getBattle()> and L</getBattles()> methods of the
+C<SpringLobbyInterface> object when the game was launched (for the
+L</getBattles> data, only the data regarding the battle lobby hosted by SPADS
+are included in the hash).
 
 =item C<getSpadsConf()>
 
@@ -2220,9 +2225,9 @@ useful for plugins to retrieve various data about the game in progress:
 
 =over 3
 
-=item * - C<getState()>
+=item C<getState()>
 
-This accessor returns an integer describing the current game server state. The
+This method returns an integer describing the current game server state. The
 corresponding constants are provided to ease game state handling/comparisons,
 as listed below:
 
@@ -2264,7 +2269,7 @@ C<SpringAutoHostInterface> module, like this for example:
 
 =for highlighter
 
-=item * - C<getPlayerName($playerNum)>
+=item C<getPlayerName($playerNum)>
 
 This methods retrieves the player name corresponding to the player number
 C<$playerNum>, or C<undef> if the player number is not attributed to any in-game
@@ -2276,7 +2281,7 @@ identifiers rather than player names, so this accessor can be useful to resolve
 them back to player names (as shown in the documentation of the
 L</addSpringCommandHandler> handler management function).
 
-=item * - C<getPlayer($playerName)>
+=item C<getPlayer($playerName)>
 
 This methods retrieves a reference to a hash containing the internal in-game
 data associated with the player whose name is C<$playerName>, or a reference to
@@ -2310,9 +2315,10 @@ or C<undef> if the player has not sent any game over message yet.
 
 =back
 
-Note: Special care must be taken to not modify the returned data, as doing so
-would likely compromise the consistency of the object's internal state and lead
-to instability.
+Note for Perl plugins: Special care must be taken to not modify the returned
+data, as doing so would likely compromise the consistency of the object's
+internal state and lead to instability. Python plugins aren't concerned as they
+always receive a copy of the original data.
 
 C<disconnectCause> values:
 
@@ -2407,30 +2413,31 @@ for example:
 
 =back
 
-=item * - C<getPlayerByNum($playerNum)>
+=item C<getPlayerByNum($playerNum)>
 
-This methods returns exactly the same data as the C<getPlayer($playerName)>
-method, but it takes a player number as parameter instead of a player name.
+This methods returns exactly the same data as the L</getPlayer> method, but it
+takes a player number as parameter instead of a player name.
 
-Note: Special care must be taken to not modify the returned data, as doing so
-would likely compromise the consistency of the object's internal state and lead
-to instability.
+Note for Perl plugins: Special care must be taken to not modify the returned
+data, as doing so would likely compromise the consistency of the object's
+internal state and lead to instability. Python plugins aren't concerned as they
+always receive a copy of the original data.
 
-=item * - C<getPlayers()>
+=item C<getPlayers()>
 
 This method returns a reference to a hash containing the data regarding all the
 players in the game (including spectators). The hash is indexed by player
 numbers and the values are references to hashes containing the same data as
-returned by the C<getPlayer($playerName)> method.
+returned by the L</getPlayer> method.
 
 Note: this method performs a deep copy of the data to prevent external code from
 corrupting internal data. However it is also possible to read the same data
 directly without triggering a deep copy by accessing the C<players> field of the
 C<SpringAutoHostInterface> object.
 
-=item * - C<getPlayersByNames()>
+=item C<getPlayersByNames()>
 
-This method returns the same data as the C<getPlayers()> method, except it is
+This method returns the same data as the L</getPlayers> method, except it is
 indexed by player names instead of player numbers.
 
 Note: this method performs a deep copy of the data to prevent external code from
@@ -2491,9 +2498,9 @@ for more information.
 
 C<$priority> is the priority of the handlers. Lowest priority number actually
 means higher priority. If not provided, the plugin name is used as priority,
-which means it is executed after handlers having priority < 1000, and before
-handlers having priority > 1000. Usually you don't need to provide priority,
-unless you use data managed by other handlers.
+which means it is executed after handlers having priority C<< < 1000 >>, and
+before handlers having priority C<< > 1000 >>. Usually you don't need to provide
+priority, unless you use data managed by other handlers.
 
 C<$isPreCallback> specifies whether the command handlers must be called before
 or after the internal handlers of the lobby interface module. If this parameter
@@ -2506,10 +2513,10 @@ Note: As all lobby command handlers are automatically removed by SPADS when it
 is disconnected from the lobby server (due to network problems for example),
 plugins should always re-set up their lobby command handlers each time SPADS
 successfully reconnects. This can be done automatically by doing the
-C<addLobbyCommandHandler> call in the C<onLobbySynchronized> event-based
+C<addLobbyCommandHandler> call in the L</onLobbySynchronized> event-based
 callback (for plugins that don't need to process the commands sent by the lobby
 server during the initial lobby state synchronization phase) or in the
-C<onLobbyLoggedIn> event-based callback (for plugins that need to process the
+L</onLobbyLoggedIn> event-based callback (for plugins that need to process the
 commands sent by the lobby server during the initial lobby state synchronization
 phase).
 
@@ -2567,9 +2574,9 @@ removed from the parameters passed to the plugins.
 
 C<$priority> is the priority of the handlers. Lowest priority number actually
 means higher priority. If not provided, the plugin name is used as priority,
-which means it is executed after handlers having priority < 1000, and before
-handlers having priority > 1000. Usually you don't need to provide priority,
-unless you use data managed by other handlers.
+which means it is executed after handlers having priority C<< < 1000 >>, and
+before handlers having priority C<< > 1000 >>. Usually you don't need to provide
+priority, unless you use data managed by other handlers.
 
 Note 1: C<GAME_LUAMSG> commands (i.e. Lua messages) often require specific
 additional parsing. That's why a set of higher-level functions is dedicated to
@@ -2648,8 +2655,8 @@ C<SpringAutoHostInterface> module, as shown in the usage example below.
 =item C<removeLobbyCommandHandler(\@commands,$priority=caller(),$isPreCallback)>
 
 This function must be called by plugins which added lobby command handlers
-previously using C<addLobbyCommandHandler> function, when these handlers are no
-longer required (for example in the C<onUnload> callback, when the plugin is
+previously using L</addLobbyCommandHandler> function, when these handlers are no
+longer required (for example in the L</onUnload> callback, when the plugin is
 unloaded).
 
 C<\@commands> is a reference to an array containing the lobby command names (in
@@ -2661,14 +2668,14 @@ used as priority. Usually you don't need to provide priority, unless you use
 data managed by other handlers.
 
 C<$isPreCallback> specifies the type of command handlers to remove (must match
-the value used for the C<addLobbyCommandHandler> function call for these
+the value used for the L</addLobbyCommandHandler> function call for these
 handlers)
 
 =item C<removeSpadsCommandHandler(\@commands)>
 
 This function must be called by plugins which added SPADS command handlers
-previously using C<addSpadsCommandHandler> function, when these handlers are no
-longer required (for example in the C<onUnload> callback, when the plugin is
+previously using L</addSpadsCommandHandler> function, when these handlers are no
+longer required (for example in the L</onUnload> callback, when the plugin is
 unloaded).
 
 C<\@commands> is a reference to an array containing the SPADS command names (in
@@ -2677,8 +2684,8 @@ uppercase) for which the handlers must be removed.
 =item C<removeSpringCommandHandler(\@commands,$priority=caller())>
 
 This function must be called by plugins which added Spring AutoHost command
-handlers previously using C<addSpringCommandHandler> function, when these
-handlers are no longer required (for example in the C<onUnload> callback, when
+handlers previously using L</addSpringCommandHandler> function, when these
+handlers are no longer required (for example in the L</onUnload> callback, when
 the plugin is unloaded).
 
 C<\@commands> is a reference to an array containing the Spring AutoHost command
@@ -2700,7 +2707,7 @@ command type. However, Lua messages differ from the other types of message
 coming from the engine in that they are actually generated by the game code. So
 there are a lot of different "subtypes", which depend on the game being used
 (and even its version). And each one of these types of Lua message has its own
-specific format / serialization form. Using the C<addSpringCommandHandler>
+specific format / serialization form. Using the L</addSpringCommandHandler>
 function to implement a generic Lua message handler isn't convenient because it
 leaves a lot of work to do in the plugin code just to identify the type of Lua
 message and extract the useful data from the specific serialized form. Also,
@@ -2834,7 +2841,7 @@ identifying a Lua message: the prefixes of the most frequent messages are tested
 first. This parameter can also be used to force the prioritization of longer
 prefixes in case of ambiguity (i.e. when some prefixes are contained within
 others), in order to resolve conflicts. This parameter is optional (default
-value: 0).
+value: C<0>).
 
 Here is an example that registers a Lua message as it is currently used by the
 game Beyond All Reason to broadcast the activity of a client every 2 seconds.
@@ -3276,7 +3283,7 @@ This function updates current SPADS configuration in memory by changing the
 value of a setting and applying it immediatly. This function does not modify
 configuration files on disk. The new value provided by the plugin is not
 checked: the plugin is reponsible for providing only correct values (see
-C<isSettingValueAllowed> function).
+L</isSettingValueAllowed> function).
 
 C<$type> is the type of setting to update (C<"set"> for preset setting,
 C<"hSet"> for hosting setting, or C<"bSet"> for battle setting)
@@ -3302,7 +3309,8 @@ battle lobby, a message in game or a message in a lobby chat channel.
 
 This function sends a message simultaneously in the battle lobby (if open), in
 the game (if running) and in the broadcast channels (as configured by the
-C<broadcastChannels> global setting).
+L<broadcastChannels|http://planetspads.free.fr/spads/doc/spadsDoc_All.html#global:broadcastChannels>
+global setting).
 
 =item C<invalidSyntax($user,$commandName,$cause='')>
 
@@ -3410,10 +3418,10 @@ parallel processing. In scalar context it returns the PID of the forked process
 on success, C<-1> if the fork request has been queued, or C<0> if the fork
 request failed. In list context it returns the PID as first parameter and a
 handle as second parameter. This handle can be passed as parameter to the
-C<removeProcessCallback> function to remove the C<endProcessCallback> callback.
+L</removeProcessCallback> function to remove the C<endProcessCallback> callback.
 
 Note: this function cannot be used by Python plugins on Windows system (refer to
-section L<PYTHON SPECIFIC NOTES - Windows limitations|/"Windows limitations">
+section L<"PYTHON SPECIFIC NOTES - Windows limitations"|/Windows limitations>
 for details).
 
 C<\&processFunction> is a reference to a function containing the code to be
@@ -3428,7 +3436,7 @@ process), C<$signalNb> (signal number responsible for forked process termination
 if any), C<$hasCoreDump> (boolean flag indicating if a core dump occured in the
 forked process), C<$pid> (PID of the forked process that just exited).
 
-C<$preventQueuing> is an optional boolean parameter (default value: 1)
+C<$preventQueuing> is an optional boolean parameter (default value: C<1>)
 indicating if the fork request must not be queued (i.e., the fork request will
 fail instead of being queued if too many forked processes are already running)
 
@@ -3440,11 +3448,11 @@ execute the function and use a socketpair to transmit the result back to the
 parent process). In scalar context it returns the PID of the forked process on
 success, C<-1> if the fork request has been queued, or C<0> on error. In list
 context it returns the PID as first parameter and a handle as second parameter.
-This handle can be passed as parameter to the C<removeProcessCallback> function
+This handle can be passed as parameter to the L</removeProcessCallback> function
 to remove the C<endProcessCallback> callback.
 
 Note: this function cannot be used by Python plugins on Windows system (refer to
-section L<PYTHON SPECIFIC NOTES - Windows limitations|/"Windows limitations">
+section L<"PYTHON SPECIFIC NOTES - Windows limitations"|/Windows limitations>
 for details).
 
 C<\&processFunction> is a reference to a function containing the code to be
@@ -3457,19 +3465,19 @@ executed in main SPADS process, once the forked function call
 (C<\&processFunction>) returned. The values returned by the forked function call
 will be passed as parameters to this callback.
 
-C<$preventQueuing> is an optional boolean parameter (default value: 0)
+C<$preventQueuing> is an optional boolean parameter (default value: C<0>)
 indicating if the fork request must not be queued (i.e., the fork request will
 fail instead of being queued if too many forked processes are already running)
 
 =item C<removeProcessCallback($processHandle)>
 
 This function can be used by plugins to remove the callbacks on forked processes
-added beforehand with the C<forkProcess> and C<forkCall> functions, if the 
+added beforehand with the L</forkProcess> and L</forkCall> functions, if the 
 callback hasn't been called yet (i.e. the corresponding forked process didn't
 exit yet). It returns C<1> if the callback could be removed, C<0> else.
 
 C<$processHandle> is an internal process handle, returned as second return value
-by the C<forkProcess> and C<forkCall> functions.
+by the L</forkProcess> and L</forkCall> functions.
 
 =back
 
@@ -3488,7 +3496,7 @@ C<$name> is a unique name given by the plugin for this timer.
 C<$delay> is the delay in seconds before executing the C<\&callback> function.
 
 C<$interval> is the interval in seconds between each execution of the
-C<\&callback> function. If this value is set to 0, the C<\&callback> function
+C<\&callback> function. If this value is set to C<0>, the C<\&callback> function
 will be executed only once.
 
 C<\&callback> is a reference to a function containing the code to be executed
@@ -3498,12 +3506,12 @@ may become unstable.
 =item C<removeTimer($name)>
 
 This function must be used by plugins to remove timed events (timers) added
-previously with the C<addTimer> function. It returns C<1> if the timer could be
+previously with the L</addTimer> function. It returns C<1> if the timer could be
 removed, C<0> else. Note: Non-repeating timers (i.e. having null interval value)
 are automatically removed once they are triggered. 
 
 C<$name> is the unique timer name given by the plugin when the timer was added
-using the C<addTimer> function.
+using the L</addTimer> function.
 
 =back
 
@@ -3517,7 +3525,7 @@ This function allows plugins to add sockets to SPADS asynchronous network
 system. It returns C<1> if the socket has correctly been added, C<0> else.
 
 Note: this function cannot be used by Python plugins on Windows system (refer to
-section L<PYTHON SPECIFIC NOTES - Windows limitations|/"Windows limitations">
+section L<"PYTHON SPECIFIC NOTES - Windows limitations"|/Windows limitations>
 for details).
 
 C<\$socketObject> is a reference to a socket object created by the plugin
@@ -3548,7 +3556,7 @@ This function allows Python plugins to automatically convert byte strings to
 normal strings if needed. The function takes any number of byte strings or
 normal strings as parameters, and returns them converted to normal strings if
 needed (parameters which are already normal strings are returned without any
-modification). Refer to section L<PYTHON SPECIFIC NOTES - Perl strings conversions|/"Perl strings conversions">
+modification). Refer to section L<"PYTHON SPECIFIC NOTES - Perl strings conversions"|/Perl strings conversions>
 for the use case of this function. Here is an example of usage:
 
 =for highlighter python
@@ -3579,11 +3587,16 @@ Currently 3 flags are supported:
 
 =over 3
 
-=item * C<can_add_socket> : indicates if the C<addSocket> function of the plugin API is available from Python plugin on this system
+=item * C<can_add_socket> : indicates if the L</addSocket> function of the
+plugin API is available from Python plugin on this system
 
-=item * C<can_fork> : indicates if the fork functions of the plugin API (C<forkProcess> and C<forkCall>) are available from Python plugins on this system
+=item * C<can_fork> : indicates if the fork functions of the plugin API
+(L</forkProcess> and L</forkCall>) are available from Python plugins on this
+system
 
-=item * C<use_byte_string> : indicates if the strings passed as parameters to Python plugin callbacks on this system are Python byte strings or normal Python strings
+=item * C<use_byte_string> : indicates if the strings passed as parameters to
+Python plugin callbacks on this system are Python byte strings or normal Python
+strings
 
 =back
 

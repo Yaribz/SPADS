@@ -139,16 +139,16 @@ class MyPlugin:
 
 <h2 id="How-to-read-the-documentation"><a id="How"></a>How to read the documentation</h2>
 
-<p>This documentation was mostly written when SPADS was only supporting plugins coded in Perl, so types for function parameters and return values are described using Perl terminology, with Perl sigils (<code>%</code> for hash, <code>@</code> for array, <code>$</code> for scalars). Python plugins just need to ignore these sigils and use their equivalent internal Python types instead (Python dictionaries instead of Perl hashes, Python lists instead of Perl arrays, Python tuples instead of Perl lists, Python None value instead of Perl undef value...).</p>
+<p>This documentation was mostly written when SPADS was only supporting plugins coded in Perl, so types for function parameters and return values are described using Perl terminology, with Perl sigils (<code>%</code> for hash, <code>@</code> for array, <code>$</code> for scalars). For Python plugins, these sigils just need to be ignored and the equivalent internal Python types must be used instead (Python dictionaries instead of Perl hashes, Python lists instead of Perl arrays, Python tuples instead of Perl lists, Python <code>None</code> value instead of Perl <code>undef</code> value...).</p>
 
-<p>In order to call functions from the plugin API, Python plugins must first import the special package named <code>perl</code>. The plugin API is then available from the module of this package that is named after the plugin. The convention is to assign this module to the global variable <code>spads</code> within the local namespace (refer to the SYNOPSYS for an example of a Python plugin named <code>MyPlugin</code> calling the <code>slog</code> function of the API). Therefore, it is assumed in the plugin API documentation that Python plugins always start with these two lines (replacing <code>MyPlugin</code> by the actual plugin name):</p>
+<p>In order to call functions from the plugin API, Python plugins must first import the special package named <code>perl</code>. The plugin API is then available from the module of this package that is named after the plugin. The convention is to assign this module to the global variable <code>spads</code> within the local namespace (refer to <a href="#SYNOPSIS">&quot;SYNOPSIS&quot;</a> for an example of a Python plugin named <code>MyPlugin</code> calling the <code>slog</code> function of the API). Therefore, it is assumed in the plugin API documentation that Python plugins always start with these two lines (replacing <code>MyPlugin</code> by the actual plugin name):</p>
 
 <pre><code class="language-python">import perl
 spads=perl.MyPlugin</code></pre>
 
 <h2 id="Perl-strings-conversions"><a id="Perl"></a>Perl strings conversions</h2>
 
-<p>SPADS uses the <code>Inline::Python</code> Perl module to interface Perl code with Python code. Unfortunately, some versions of this module don&#39;t auto-convert Perl strings entirely when used with Python 3 (Python 2 is unaffected): depending on the version of Python and the version of the <code>Inline::Python</code> Perl module used by your system, it is possible that the Python plugin callbacks receive Python byte strings as parameters instead of normal Python strings. In order to mitigate this problem, the plugin API offers both a way to detect from the Python plugin code if current system is affected (by calling the <code>get_flag</code> function with parameter <code>&#39;use_byte_string&#39;</code>), and a way to workaround the problem by calling a dedicated <code>fix_string</code> function which fixes the string values if needed. For additional information regarding these Python specific functions of the plugin API, refer to the <a href="#Python-specific">API FUNCTIONS - Python specific</a> section. Python plugins can also choose to implement their own pure Python function which fixes strings coming from SPADS if needed like this for example:</p>
+<p>SPADS uses the <code>Inline::Python</code> Perl module to interface Perl code with Python code. Unfortunately, some versions of this module don&#39;t auto-convert Perl strings entirely when used with Python 3 (Python 2 is unaffected): depending on the version of Python and the version of the <code>Inline::Python</code> Perl module used by your system, it is possible that the Python plugin callbacks receive Python byte strings as parameters instead of normal Python strings. In order to mitigate this problem, the plugin API offers both a way to detect from the Python plugin code if current system is affected (by calling the <a href="#get_flag">&quot;get_flag&quot;</a> function with parameter <code>&#39;use_byte_string&#39;</code>), and a way to workaround the problem by calling a dedicated <a href="#fix_string">&quot;fix_string&quot;</a> function which fixes the string values if needed. Python plugins can also choose to implement their own pure Python function which fixes strings coming from SPADS if needed like this for example:</p>
 
 <pre><code class="language-python">def fix_spads_string(spads_string):
     if hasattr(spads_string,&#39;decode&#39;):
@@ -163,9 +163,9 @@ def fix_spads_strings(*spads_strings):
 
 <h2 id="Windows-limitations"><a id="Windows"></a>Windows limitations</h2>
 
-<p>On Windows systems, Perl emulates the <code>fork</code> functionality using threads. As the <code>Inline::Python</code> Perl module used by SPADS to interface with Python code isn&#39;t thread-safe, the fork functions of the plugin API (<code>forkProcess</code> and <code>forkCall</code>) aren&#39;t available from Python plugins when running on a Windows system. On Windows systems, using native Win32 processes for parallel processing is recommended anyway. Plugins can check if the fork functions of the plugin API are available by calling the <code>get_flag</code> Python specific plugin API function with parameter <code>&#39;can_fork&#39;</code>, instead of checking by themselves if the current system is Windows. Refer to the <a href="#Python-specific">API FUNCTIONS - Python specific</a> section for more information regarding this function.</p>
+<p>On Windows systems, Perl emulates the <code>fork</code> functionality using threads. As the <code>Inline::Python</code> Perl module used by SPADS to interface with Python code isn&#39;t thread-safe, the fork functions of the plugin API (<a href="#forkProcess">&quot;forkProcess&quot;</a> and <a href="#forkCall">&quot;forkCall&quot;</a>) aren&#39;t available from Python plugins when running on a Windows system. On Windows systems, using native Win32 processes for parallel processing is recommended anyway. Plugins can check if the fork functions of the plugin API are available by calling the <a href="#get_flag">&quot;get_flag&quot;</a> Python specific plugin API function with parameter <code>&#39;can_fork&#39;</code>, instead of checking by themselves if the current system is Windows.</p>
 
-<p>Automatic asynchronous socket management (<code>addSocket</code> plugin API function) is also unavailable for Python plugins on Windows systems (this is due to the file descriptor numbers being thread-specific on Windows, preventing SPADS from accessing sockets opened in Python interpreter scope). However, it is still possible to manage asynchronous sockets manually, for example by hooking the SPADS event loop (<code>eventLoop</code> plugin callback) to perform non-blocking <code>select</code> with 0 timeout (refer to <a href="https://docs.python.org/3/library/select.html#select.select">Python select documentation</a>). Plugins can check if the <code>addSocket</code> function of the plugin API is available by calling the <code>get_flag</code> Python specific plugin API function with parameter <code>&#39;can_add_socket&#39;</code>, instead of checking by themselves if the current system is Windows. Refer to the <a href="#Python-specific">API FUNCTIONS - Python specific</a> section for more information regarding this function.</p>
+<p>Automatic asynchronous socket management (<a href="#addSocket">&quot;addSocket&quot;</a> plugin API function) is also unavailable for Python plugins on Windows systems (this is due to the file descriptor numbers being thread-specific on Windows, preventing SPADS from accessing sockets opened in Python interpreter scope). However, it is still possible to manage asynchronous sockets manually, for example by hooking the SPADS event loop (<a href="#eventLoop">&quot;eventLoop&quot;</a> plugin callback) to perform non-blocking <code>select</code> with <code>0</code> timeout (refer to <a href="https://docs.python.org/3/library/select.html#select.select">Python select documentation</a>). Plugins can check if the <a href="#addSocket">&quot;addSocket&quot;</a> function of the plugin API is available by calling the <a href="#get_flag">&quot;get_flag&quot;</a> Python specific plugin API function with parameter <code>&#39;can_add_socket&#39;</code>, instead of checking by themselves if the current system is Windows.</p>
 
 <h1 id="LOGGING-SYSTEM"><a id="LOGGING"></a>LOGGING SYSTEM</h1>
 
@@ -267,7 +267,7 @@ use SimpleLog &#39;:logLevel&#39;;
 <dt id="getParams($pluginName)"><a id="getParams"></a><a id="getParams-pluginName"></a><code>getParams($pluginName)</code></dt>
 <dd>
 
-<p>This callback must return a reference to an array containing 2 elements. The first element is a reference to a hash containing the plugin global settings declarations, the second one is the same but for plugin preset settings declarations. These hashes use setting names as keys, and references to array of allowed types as values. The types must be either strings that match the keys of the <code>%paramTypes</code> hash defined in SpadsConf.pm file, or custom functions to implement custom value checks. Such custom value checking functions take 2 parameters: the value to check as first parameter and a boolean specifying if the value is the default value (i.e. first value declared in the definition, for preset settings) as second parameter. The function must return <code>true</code> if the value is valid, or <code>false</code> if it is invalid (refer to examples below).</p>
+<p>This callback must return a reference to an array containing 2 elements. The first element is a reference to a hash containing the plugin global settings declarations, the second one is the same but for plugin preset settings declarations. These hashes use setting names as keys, and references to array of allowed types as values. The types must be either strings that match the keys of the <code>%paramTypes</code> hash defined in <code>SpadsConf.pm</code> file, or custom functions to implement custom value checks. Such custom value checking functions take 2 parameters: the value to check as first parameter and a boolean specifying if the value is the default value (i.e. first value declared in the definition, for preset settings) as second parameter. The function must return <code>true</code> if the value is valid, or <code>false</code> if it is invalid (refer to examples below).</p>
 
 <p>As for global SPADS core settings, the global settings of the plugin cannot be changed dynamically except by editing and reloading the configuration files (for example by using the <code>!reloadConf</code> command). The global settings are defined before the preset definition sections in the plugin configuration file. Only one definition is allowed for each global setting, and only one value can be configured in each global setting definition. Global settings aren&#39;t impacted by preset changes. Global settings should be used for the structural parameterization of the plugin, which isn&#39;t supposed to be modified during runtime and isn&#39;t useful from end user point of view (for example file/directory path settings...).</p>
 
@@ -407,11 +407,9 @@ def getParams(pluginName):
 <dt id="onLobbyConnected($self,$lobbyInterface)"><a id="onLobbyConnected"></a><a id="onLobbyConnected-self-lobbyInterface"></a><code>onLobbyConnected($self,$lobbyInterface)</code></dt>
 <dd>
 
-<p>/!\ RENAMED TO <code>onLobbySynchronized</code> /!\</p>
+<p>Deprecated (refer to <a href="#onLobbySynchronized">&quot;onLobbySynchronized&quot;</a>).</p>
 
-<p>This callback has been renamed to <code>onLobbySynchronized</code> since SPADS v0.13.35. It can still be used under the name <code>onLobbyConnected</code> for the sake of backward compatibility, however this name is misleading so its usage under this name is not recommended (the callback is only called when the lobby connection is fully synchronized, i.e. when all the initial commands sent by the lobby server after successfully logging in have been received).</p>
-
-<p>The <code>$lobbyInterface</code> parameter is the instance of the <a href="https://github.com/Yaribz/SpringLobbyInterface">SpringLobbyInterface</a> module used by SPADS.</p>
+<p>The <code>onLobbyConnected</code> callback has been renamed to <code>onLobbySynchronized</code> since SPADS v0.13.35. It can still be used under the name <code>onLobbyConnected</code> for the sake of backward compatibility, however this name is misleading so its usage under this name is not recommended (the callback is only called when the lobby connection is fully synchronized, i.e. when all the initial commands sent by the lobby server after successfully logging in have been received).</p>
 
 </dd>
 <dt id="onLobbyDisconnected($self)"><a id="onLobbyDisconnected"></a><a id="onLobbyDisconnected-self"></a><code>onLobbyDisconnected($self)</code></dt>
@@ -427,20 +425,20 @@ def getParams(pluginName):
 
 <ul>
 
-<li><p>1) <code>onLobbyLogin</code> (called when trying to login)</p>
+<li><p>1) <a href="#onLobbyLogin">onLobbyLogin</a> (called when trying to login)</p>
 
 </li>
 <li><p>2) <code>onLobbyLoggedIn</code> (called when successfully logged in)</p>
 
 </li>
-<li><p>3) <code>onLobbySynchronized</code> (called when state is synchronized with server)</p>
+<li><p>3) <a href="#onLobbySynchronized">onLobbySynchronized</a> (called when state is synchronized with server)</p>
 
 </li>
 </ul>
 
-<p>The <code>$lobbyInterface</code> parameter is the instance of the <a href="https://github.com/Yaribz/SpringLobbyInterface">SpringLobbyInterface</a> module used by SPADS.</p>
+<p>The <code>$lobbyInterface</code> parameter is the instance of the <a href="https://github.com/Yaribz/SpringLobbyInterface">SpringLobbyInterface</a> module used by SPADS. It is the same object as the one returned by the <a href="#getLobbyInterface">&quot;getLobbyInterface&quot;</a> accessor (refer to the documentation of this accessor for details about the methods that can be called on this object).</p>
 
-<p>Note: This callback is the ideal place for a plugin to register its lobby command handlers using the <code>addLobbyCommandHandler</code> function of the plugin API, if this plugin needs to process the commands sent by the lobby server during the initial lobby state synchronization phase (i.e. commands sent before the <code>LOGININFOEND</code> command). For plugins that do not require being called back during the initial lobby state synchronization phase, the <code>onLobbySynchronized</code> callback should be used instead to register the lobby command handlers.</p>
+<p>Note: This callback is the ideal place for a plugin to register its lobby command handlers using the <a href="#addLobbyCommandHandler">&quot;addLobbyCommandHandler&quot;</a> function of the plugin API, if this plugin needs to process the commands sent by the lobby server during the initial lobby state synchronization phase (i.e. commands sent before the <code>LOGININFOEND</code> command). For plugins that do not require being called back during the initial lobby state synchronization phase, the <a href="#onLobbySynchronized">&quot;onLobbySynchronized&quot;</a> callback should be used instead to register the lobby command handlers.</p>
 
 </dd>
 <dt id="onLobbyLogin($self,$lobbyInterface)"><a id="onLobbyLogin"></a><a id="onLobbyLogin-self-lobbyInterface"></a><code>onLobbyLogin($self,$lobbyInterface)</code></dt>
@@ -453,15 +451,15 @@ def getParams(pluginName):
 <li><p>1) <code>onLobbyLogin</code> (called when trying to login)</p>
 
 </li>
-<li><p>2) <code>onLobbyLoggedIn</code> (called when successfully logged in)</p>
+<li><p>2) <a href="#onLobbyLoggedIn">onLobbyLoggedIn</a> (called when successfully logged in)</p>
 
 </li>
-<li><p>3) <code>onLobbySynchronized</code> (called when state is synchronized with server)</p>
+<li><p>3) <a href="#onLobbySynchronized">onLobbySynchronized</a> (called when state is synchronized with server)</p>
 
 </li>
 </ul>
 
-<p>The <code>$lobbyInterface</code> parameter is the instance of the <a href="https://github.com/Yaribz/SpringLobbyInterface">SpringLobbyInterface</a> module used by SPADS.</p>
+<p>The <code>$lobbyInterface</code> parameter is the instance of the <a href="https://github.com/Yaribz/SpringLobbyInterface">SpringLobbyInterface</a> module used by SPADS. It is the same object as the one returned by the <a href="#getLobbyInterface">&quot;getLobbyInterface&quot;</a> accessor (refer to the documentation of this accessor for details about the methods that can be called on this object).</p>
 
 </dd>
 <dt id="onLobbySynchronized($self,$lobbyInterface)"><a id="onLobbySynchronized"></a><a id="onLobbySynchronized-self-lobbyInterface"></a><code>onLobbySynchronized($self,$lobbyInterface)</code></dt>
@@ -471,10 +469,10 @@ def getParams(pluginName):
 
 <ul>
 
-<li><p>1) <code>onLobbyLogin</code> (called when trying to login)</p>
+<li><p>1) <a href="#onLobbyLogin">onLobbyLogin</a> (called when trying to login)</p>
 
 </li>
-<li><p>2) <code>onLobbyLoggedIn</code> (called when successfully logged in)</p>
+<li><p>2) <a href="#onLobbyLoggedIn">onLobbyLoggedIn</a> (called when successfully logged in)</p>
 
 </li>
 <li><p>3) <code>onLobbySynchronized</code> (called when state is synchronized with server)</p>
@@ -482,9 +480,9 @@ def getParams(pluginName):
 </li>
 </ul>
 
-<p>The <code>$lobbyInterface</code> parameter is the instance of the <a href="https://github.com/Yaribz/SpringLobbyInterface">SpringLobbyInterface</a> module used by SPADS.</p>
+<p>The <code>$lobbyInterface</code> parameter is the instance of the <a href="https://github.com/Yaribz/SpringLobbyInterface">SpringLobbyInterface</a> module used by SPADS. It is the same object as the one returned by the <a href="#getLobbyInterface">&quot;getLobbyInterface&quot;</a> accessor (refer to the documentation of this accessor for details about the methods that can be called on this object).</p>
 
-<p>Note: This callback is the ideal place for a plugin to register its lobby command handlers using the <code>addLobbyCommandHandler</code> function of the plugin API, as long as this plugin does not need to process the commands sent by the lobby server during the initial lobby state synchronization phase (i.e. commands sent before the <code>LOGININFOEND</code> command). For plugins that require being called back during the initial lobby state synchronization phase, the <code>onLobbyLoggedIn</code> callback must be used instead to register the lobby command handlers.</p>
+<p>Note: This callback is the ideal place for a plugin to register its lobby command handlers using the <a href="#addLobbyCommandHandler">&quot;addLobbyCommandHandler&quot;</a> function of the plugin API, as long as this plugin does not need to process the commands sent by the lobby server during the initial lobby state synchronization phase (i.e. commands sent before the <code>LOGININFOEND</code> command). For plugins that require being called back during the initial lobby state synchronization phase, the <a href="#onLobbyLoggedIn">&quot;onLobbyLoggedIn&quot;</a> callback must be used instead to register the lobby command handlers.</p>
 
 </dd>
 <dt id="onPresetApplied($self,$oldPresetName,$newPresetName)"><a id="onPresetApplied"></a><a id="onPresetApplied-self-oldPresetName-newPresetName"></a><code>onPresetApplied($self,$oldPresetName,$newPresetName)</code></dt>
@@ -624,7 +622,7 @@ def getParams(pluginName):
 
 <p><code>$automatic</code> is <code>1</code> if the game is being launched automatically through autoStart functionality, <code>0</code> else</p>
 
-<p>The return value must be the reason for preventing the game from starting (for example <code>&quot;too many players for current map&quot;</code>), or <code>1</code> if no reason can be given, or undef to allow the game to start.</p>
+<p>The return value must be the reason for preventing the game from starting (for example <code>&quot;too many players for current map&quot;</code>), or <code>1</code> if no reason can be given, or <code>undef</code> to allow the game to start.</p>
 
 </dd>
 <dt id="preSpadsCommand($self,$command,$source,$user,\@params)"><a id="preSpadsCommand"></a><a id="preSpadsCommand-self-command-source-user-params"></a><code>preSpadsCommand($self,$command,$source,$user,\@params)</code></dt>
@@ -666,19 +664,19 @@ def getParams(pluginName):
 
 <p>This callback is called each time SPADS needs to balance a battle and evaluate the resulting balance quality. It allows plugins to replace the built-in balance algorithm.</p>
 
-<p><code>\%players</code> is a reference to a hash containing the players in the battle lobby. This hash is indexed by player names, and the values are references to a hash containing player data. For balancing, you should only need to access the players skill as follows: <code>$players-&gt;{&lt;playerName&gt;}-&gt;{skill}</code></p>
+<p><code>\%players</code> is a reference to a hash containing the players in the battle lobby. This hash is indexed by player names, and the values are references to a hash containing player data. For balancing, you should only need to access the players skill as follows: <code>$players-&gt;{&lt;playerName&gt;}{skill}</code></p>
 
 <p><code>\%bots</code> is a reference to a hash containing the bots in the battle lobby. This hash has the exact same structure as <code>\%players</code>.</p>
 
-<p><code>$clanMode</code> is the current clan mode which must be applied to the balance. Clan modes are specified <a href="http://planetspads.free.fr/spads/doc/spadsDoc_All.html#set:clanMode">here</a>. <code>&lt;maxUnbalance&gt;</code> thresholds are automatically managed by SPADS, plugins don&#39;t need to handle them. So basically, plugins only need to check if <code>tag</code> and/or <code>pref</code> clan modes are enabled and apply them to their balance algorithm.</p>
+<p><code>$clanMode</code> is the current clan mode which must be applied to the balance (refer to <a href="http://planetspads.free.fr/spads/doc/spadsDoc_All.html#set:clanMode">clanMode</a> preset setting documentation). <code>&lt;maxUnbalance&gt;</code> thresholds are automatically managed by SPADS, plugins don&#39;t need to handle them. So basically, plugins only need to check if <code>tag</code> and/or <code>pref</code> clan modes are enabled and apply them to their balance algorithm.</p>
 
 <p><code>$nbTeams</code> and <code>$teamSize</code> are the target battle structue computed by SPADS. The number of entities to balance is the number of entries in <code>\%players</code> + number of entries in <code>\%bots</code>. The number of entities to balance is always <code>&gt; $nbTeams*($teamSize-1)</code>, and <code>&lt;= $nbTeams*$teamSize</code>.</p>
 
-<p>If the plugin is unable to balance the battle, it must not update <code>\%players</code> and <code>\%bots</code>. The callback must return undef or a negative value so that SPADS knows it has to use another plugin or the internal balance algorithm instead.</p>
+<p>If the plugin is unable to balance the battle, it must not update <code>\%players</code> and <code>\%bots</code>. The callback must return <code>undef</code> or a negative value so that SPADS knows it has to use another plugin or the internal balance algorithm instead.</p>
 
 <p>If the plugin is able to balance the battle, it can use two methods to transmit the desired balance to SPADS (Python plugins can only use the second method):</p>
 
-<p>The first method consists in updating directly the <code>\%players</code> and <code>\%bots</code> hash references with the team and id information. Assigned player teams must be written in <code>$players-&gt;{&lt;playerName&gt;}-&gt;{battleStatus}-&gt;{team}</code>, and assigned player ids must be written in <code>$players-&gt;{&lt;playerName&gt;}-&gt;{battleStatus}-&gt;{id}</code>. The <code>\%bots</code> hash reference works the same way. The return value is the unbalance indicator, defined as follows: <code>standardDeviationOfTeamSkills * 100 / averageTeamSkill</code>.</p>
+<p>The first method consists in updating directly the <code>\%players</code> and <code>\%bots</code> hash references with the team and id information. Assigned player teams must be written in <code>$players-&gt;{&lt;playerName&gt;}{battleStatus}{team}</code>, and assigned player ids must be written in <code>$players-&gt;{&lt;playerName&gt;}{battleStatus}{id}</code>. The <code>\%bots</code> hash reference works the same way. The return value is the unbalance indicator, defined as follows: <code>standardDeviationOfTeamSkills * 100 / averageTeamSkill</code>.</p>
 
 <p>The second method consists in returning an array reference containing the balance information instead of directly editing the <code>\%players</code> and <code>\%bots</code> parameters. The returned array must contain 3 items: the unbalance indicator (as defined in first method description above), the player assignation hash and the bot assignation hash. The player assignation hash and the bot assignation hash have exactly the same structure: the keys are the player/bot names and the values are hashes containing <code>team</code> and <code>id</code> items with the corresponding values for the balanced battle.</p>
 
@@ -696,15 +694,15 @@ def getParams(pluginName):
 
 <p><code>\%userData</code> is a reference to a hash containing the lobby data of the user</p>
 
-<p><code>$isAuthenticated</code> indicates if the user has been authenticated (0: lobby server in LAN mode and not authenticated at autohost level, 1: authenticated by lobby server only, 2: authenticated by autohost)</p>
+<p><code>$isAuthenticated</code> indicates if the user has been authenticated (<code>0</code>: lobby server in LAN mode and not authenticated at autohost level, <code>1</code>: authenticated by lobby server only, <code>2</code>: authenticated by autohost)</p>
 
-<p>The callback must return the new access level value if changed, or undef if not changed.</p>
+<p>The callback must return the new access level value if changed, or <code>undef</code> if not changed.</p>
 
 </dd>
 <dt id="commandRightsOverride($self,$lowerCaseCommandName,\@command,$source,$user,$effectiveUserAccessLevel,$userAccessLevel,\%requiredAccessLevels)"><a id="commandRightsOverride"></a><a id="commandRightsOverride-self-lowerCaseCommandName-command-source-user-effectiveUserAccessLevel-userAccessLevel-requiredAccessLevels"></a><code>commandRightsOverride($self,$lowerCaseCommandName,\@command,$source,$user,$effectiveUserAccessLevel,$userAccessLevel,\%requiredAccessLevels)</code></dt>
 <dd>
 
-<p>This callback is called each time a SPADS command is called by a user, just before checking the user access level requirements. It allows plugins to bypass this check and implement their own logic to allow or disallow the command execution. This callback is called before the <code>preSpadsCommand</code> callback, which can still be used to prevent the command execution later in the workflow even though the <code>commandRightsOverride</code> callback allowed it.</p>
+<p>This callback is called each time a SPADS command is called by a user, just before checking the user access level requirements. It allows plugins to bypass this check and implement their own logic to allow or disallow the command execution. This callback is called before the <a href="#preSpadsCommand">&quot;preSpadsCommand&quot;</a> callback, which can still be used to prevent the command execution later in the workflow even though the <code>commandRightsOverride</code> callback allowed it.</p>
 
 <p><code>$lowerCaseCommandName</code> is the name of the command being called (in lowercase)</p>
 
@@ -746,7 +744,7 @@ def getParams(pluginName):
 
 <p>This callback is called each time SPADS needs to fix the teams colors. It allows plugins to replace the built-in color fixing algorithm.</p>
 
-<p><code>\%players</code> is a reference to a hash containing the players currently in the battle lobby. This hash is indexed by player names, and the values are references to hashes containing following player data: <code>team</code> (team number), <code>id</code> (id number) and <code>color</code> (current color configured in lobby, i.e. a hash containing keys <code>&quot;red&quot;</code>, <code>&quot;green&quot;</code>, <code>&quot;blue&quot;</code> and whose values are numbers between 0 and 255 included).</p>
+<p><code>\%players</code> is a reference to a hash containing the players currently in the battle lobby. This hash is indexed by player names, and the values are references to hashes containing following player data: <code>team</code> (team number), <code>id</code> (id number) and <code>color</code> (current color configured in lobby, i.e. a hash containing keys <code>&quot;red&quot;</code>, <code>&quot;green&quot;</code>, <code>&quot;blue&quot;</code> and whose values are numbers between <code>0</code> and <code>255</code> included).</p>
 
 <p><code>\%bots</code> is a reference to a hash containing the bots currently in the battle lobby. This hash has the exact same structure as <code>\%players</code>.</p>
 
@@ -754,7 +752,7 @@ def getParams(pluginName):
 
 <p>If the plugin is unable to fix colors, then it must return <code>undef</code> so that SPADS knows it has to use another plugin or the internal color fixing algorithm instead.</p>
 
-<p>If the plugin is able to fix the players and AI bots colors, then it must return a reference to a hash containing all colors assignations, indexed by ID numbers. The keys must be the ID numbers and the values are references to hash whose keys are <code>&quot;red&quot;</code>, <code>&quot;green&quot;</code> and <code>&quot;blue&quot;</code> and values are the corresponding RGB values (between 0 and 255 included) of the color assigned to the ID.</p>
+<p>If the plugin is able to fix the players and AI bots colors, then it must return a reference to a hash containing all colors assignations, indexed by ID numbers. The keys must be the ID numbers and the values are references to hash whose keys are <code>&quot;red&quot;</code>, <code>&quot;green&quot;</code> and <code>&quot;blue&quot;</code> and values are the corresponding RGB values (between <code>0</code> and <code>255</code> included) of the color assigned to the ID.</p>
 
 </dd>
 <dt id="setMapStartBoxes($self,\@boxes,$mapName,$nbTeams,$nbExtraBox)"><a id="setMapStartBoxes"></a><a id="setMapStartBoxes-self-boxes-mapName-nbTeams-nbExtraBox"></a><code>setMapStartBoxes($self,\@boxes,$mapName,$nbTeams,$nbExtraBox)</code></dt>
@@ -762,13 +760,13 @@ def getParams(pluginName):
 
 <p>This callback allows plugins to set map start boxes (for &quot;Choose in game&quot; start position type).</p>
 
-<p><code>\@boxes</code> is a reference to an array containing the start boxes definitions. A start box definition is a string containing the box coordinates separated by spaces, in following order: left, top, right, bottom (0,0 is top left corner and 200,200 is bottom right corner). If the array already contains box definitions, it means SPADS already knows boxes for this map.</p>
+<p><code>\@boxes</code> is a reference to an array containing the start boxes definitions. A start box definition is a string containing the box coordinates separated by spaces, in following order: left, top, right, bottom (<code>0,0</code> is top left corner and <code>200,200</code> is bottom right corner). If the array already contains box definitions, it means SPADS already knows boxes for this map.</p>
 
 <p><code>$mapName</code> is the name of the map for which start boxes are requested</p>
 
 <p><code>$nbTeams</code> is the current number of teams configured (at least this number of start boxes must be provided)</p>
 
-<p><code>$nbExtraBox</code> is the number of extra box required. Usually this is 0, unless a special game mode is enabled such as King Of The Hill.</p>
+<p><code>$nbExtraBox</code> is the number of extra box required. Usually this is <code>0</code>, unless a special game mode is enabled such as King Of The Hill.</p>
 
 <p>If the plugin isn&#39;t able or doesn&#39;t need to provide/override start boxes, it must not update the <code>\@boxes</code> array. It must return <code>0</code> so that SPADS knows it has to check other plugins for possible start boxes.</p>
 
@@ -794,7 +792,7 @@ def getParams(pluginName):
 
 <p><code>$nbRequiredManualVotes</code> is the minimum number of manual votes required for vote to be taken into account.</p>
 
-<p>The callback must return a list containing following 2 elements: the lobby vote message, and the in-game vote message (undef values can be used to keep default messages).</p>
+<p>The callback must return a list containing following 2 elements: the lobby vote message, and the in-game vote message (<code>undef</code> values can be used to keep default messages).</p>
 
 </dd>
 <dt id="updateCmdAliases($self,\%aliases)"><a id="updateCmdAliases"></a><a id="updateCmdAliases-self-aliases"></a><code>updateCmdAliases($self,\%aliases)</code></dt>
@@ -870,7 +868,7 @@ def getParams(pluginName):
 <dt id="eventLoop($self)"><a id="eventLoop"></a><a id="eventLoop-self"></a><code>eventLoop($self)</code></dt>
 <dd>
 
-<p>Warning: this callback is called very frequently (during each iteration of SPADS main event loop), so performing complex operations here can be very intensive on the CPU. It is recommended to use timers (<code>addTimer</code>/<code>removeTimer</code> functions) instead for all time related operations (timeouts, scheduled actions, regular serialization of persistent data to avoid data loss...). This callback shouldn&#39;t be blocking, otherwise SPADS may become unstable.</p>
+<p>Warning: this callback is called very frequently (during each iteration of SPADS main event loop), so performing complex operations here can be very intensive on the CPU. It is recommended to use timers (refer to the <a href="#addTimer">&quot;addTimer&quot;</a> function) instead for all time related operations (timeouts, scheduled actions, regular serialization of persistent data to avoid data loss...). This callback shouldn&#39;t be blocking, otherwise SPADS may become unstable.</p>
 
 </dd>
 </dl>
@@ -963,9 +961,10 @@ def getParams(pluginName):
 
 <p>Following methods, called on the <code>SpringLobbyInterface</code> object, can be useful to plugins for accessing various lobby data:</p>
 
-<ul>
+<dl>
 
-<li><p>- <code>getUsers()</code></p>
+<dt id="getUsers()"><a id="getUsers"></a><code>getUsers()</code></dt>
+<dd>
 
 <p>This method returns a reference to a hash containing the data regarding all the online users. The hash is indexed by player names and the values are references to hashes with following content:</p>
 
@@ -983,7 +982,7 @@ def getParams(pluginName):
 <li><p><code>lobbyClient</code>: the name of the lobby client software used by the user</p>
 
 </li>
-<li><p><code>status</code>: the lobby status of the user, which is itself a reference to another hash, containing following content: <code>access</code> (<code>0</code>: normal user, <code>1</code>: moderator), <code>away</code> (<code>0</code>: active, <code>1</code>: away), <code>bot</code> (<code>0</code>: human, <code>1</code>: bot), <code>inGame</code> (<code>0</code>: out of game, <code>1</code>: in game), <code>rank</code> (integer between 0 and 7 included)</p>
+<li><p><code>status</code>: the lobby status of the user, which is itself a reference to another hash, containing following content: <code>access</code> (<code>0</code>: normal user, <code>1</code>: moderator), <code>away</code> (<code>0</code>: active, <code>1</code>: away), <code>bot</code> (<code>0</code>: human, <code>1</code>: bot), <code>inGame</code> (<code>0</code>: out of game, <code>1</code>: in game), <code>rank</code> (integer between <code>0</code> and <code>7</code> included)</p>
 
 </li>
 </ul>
@@ -992,8 +991,9 @@ def getParams(pluginName):
 
 <p>Note 2: if you need to retrieve users indexed by lobby account IDs instead of names, you can access the <code>accounts</code> field of the <code>SpringLobbyInterface</code> object. It contains a reference to a hash whose keys are the lobby account IDs and values are the lobby user names.</p>
 
-</li>
-<li><p>- <code>getChannels()</code></p>
+</dd>
+<dt id="getChannels()"><a id="getChannels"></a><code>getChannels()</code></dt>
+<dd>
 
 <p>This method returns a reference to a hash containing the data regarding all the lobby channels joined by SPADS. The hash is indexed by channel names and the values are references to hashes with following content:</p>
 
@@ -1009,8 +1009,9 @@ def getParams(pluginName):
 
 <p>Note: this method performs a deep copy of the data to prevent external code from corrupting internal data. However it is also possible to read the same data directly without triggering a deep copy by accessing the <code>channels</code> field of the <code>SpringLobbyInterface</code> object.</p>
 
-</li>
-<li><p>- <code>getBattles()</code></p>
+</dd>
+<dt id="getBattles()"><a id="getBattles"></a><code>getBattles()</code></dt>
+<dd>
 
 <p>This method returns a reference to a hash containing the data regarding all the battle lobbies currently hosted on the lobby server. The hash is indexed by battle ID and the values are references to hashes with following content:</p>
 
@@ -1068,8 +1069,9 @@ def getParams(pluginName):
 
 <p>Note: this method performs a deep copy of the data to prevent external code from corrupting internal data. However it is also possible to read the same data directly without triggering a deep copy by accessing the <code>battles</code> field of the <code>SpringLobbyInterface</code> object.</p>
 
-</li>
-<li><p>- <code>getBattle()</code></p>
+</dd>
+<dt id="getBattle()"><a id="getBattle"></a><code>getBattle()</code></dt>
+<dd>
 
 <p>This method returns a reference to a hash containing the data regarding the battle lobby currently hosted by SPADS. This hash has following content:</p>
 
@@ -1148,8 +1150,8 @@ def getParams(pluginName):
 
 <p>Note: this method performs a deep copy of the data to prevent external code from corrupting internal data. However it is also possible to read the same data directly without triggering a deep copy by accessing the <code>battle</code> field of the <code>SpringLobbyInterface</code> object.</p>
 
-</li>
-</ul>
+</dd>
+</dl>
 
 </dd>
 <dt id="getLobbyState()"><a id="getLobbyState"></a><code>getLobbyState()</code></dt>
@@ -1214,7 +1216,7 @@ def getParams(pluginName):
 
 <p>If no game is in progress, this hash is empty.</p>
 
-<p>If a game is in progress, the hash contains the same data as the data returned by the <code>getBattle()</code> and <code>getBattles()</code> methods of the <code>SpringLobbyInterface</code> object (see <code>getLobbyInterface()</code> accessor) when the game was launched. Concerning the <code>getBattles()</code> data, only the data related to the battle lobby hosted by SPADS are included in the hash.</p>
+<p>If a game is in progress, the hash contains the same data as the data returned by both the <a href="#getBattle()">&quot;getBattle()&quot;</a> and <a href="#getBattles()">&quot;getBattles()&quot;</a> methods of the <code>SpringLobbyInterface</code> object when the game was launched (for the <a href="#getBattles">&quot;getBattles&quot;</a> data, only the data regarding the battle lobby hosted by SPADS are included in the hash).</p>
 
 </dd>
 <dt id="getSpadsConf()"><a id="getSpadsConf"></a><code>getSpadsConf()</code></dt>
@@ -1232,11 +1234,12 @@ def getParams(pluginName):
 
 <p>Following methods, called on the <code>SpringAutoHostInterface</code> object, can be useful for plugins to retrieve various data about the game in progress:</p>
 
-<ul>
+<dl>
 
-<li><p>- <code>getState()</code></p>
+<dt id="getState()"><a id="getState"></a><code>getState()</code></dt>
+<dd>
 
-<p>This accessor returns an integer describing the current game server state. The corresponding constants are provided to ease game state handling/comparisons, as listed below:</p>
+<p>This method returns an integer describing the current game server state. The corresponding constants are provided to ease game state handling/comparisons, as listed below:</p>
 
 <ul>
 
@@ -1274,15 +1277,17 @@ def getParams(pluginName):
     if spads.getSpringInterface().getState() == SRV_STATE_GAME_STARTED:
         spads.slog(&quot;A game is in progress&quot;,L_NOTICE)</code></pre>
 
-</li>
-<li><p>- <code>getPlayerName($playerNum)</code></p>
+</dd>
+<dt id="getPlayerName($playerNum)"><a id="getPlayerName"></a><a id="getPlayerName-playerNum"></a><code>getPlayerName($playerNum)</code></dt>
+<dd>
 
 <p>This methods retrieves the player name corresponding to the player number <code>$playerNum</code>, or <code>undef</code> if the player number is not attributed to any in-game player.</p>
 
 <p>Player numbers are the internal identifiers used at game server side. Most of the network messages passing through the autohost interface use these identifiers rather than player names, so this accessor can be useful to resolve them back to player names (as shown in the documentation of the <a href="#addSpringCommandHandler">&quot;addSpringCommandHandler&quot;</a> handler management function).</p>
 
-</li>
-<li><p>- <code>getPlayer($playerName)</code></p>
+</dd>
+<dt id="getPlayer($playerName)"><a id="getPlayer"></a><a id="getPlayer-playerName"></a><code>getPlayer($playerName)</code></dt>
+<dd>
 
 <p>This methods retrieves a reference to a hash containing the internal in-game data associated with the player whose name is <code>$playerName</code>, or a reference to an empty hash if the player is not found.</p>
 
@@ -1316,7 +1321,7 @@ def getParams(pluginName):
 </li>
 </ul>
 
-<p>Note: Special care must be taken to not modify the returned data, as doing so would likely compromise the consistency of the object&#39;s internal state and lead to instability.</p>
+<p>Note for Perl plugins: Special care must be taken to not modify the returned data, as doing so would likely compromise the consistency of the object&#39;s internal state and lead to instability. Python plugins aren&#39;t concerned as they always receive a copy of the original data.</p>
 
 <p><code>disconnectCause</code> values:</p>
 
@@ -1401,29 +1406,32 @@ def getParams(pluginName):
 </li>
 </ul>
 
-</li>
-<li><p>- <code>getPlayerByNum($playerNum)</code></p>
+</dd>
+<dt id="getPlayerByNum($playerNum)"><a id="getPlayerByNum"></a><a id="getPlayerByNum-playerNum"></a><code>getPlayerByNum($playerNum)</code></dt>
+<dd>
 
-<p>This methods returns exactly the same data as the <code>getPlayer($playerName)</code> method, but it takes a player number as parameter instead of a player name.</p>
+<p>This methods returns exactly the same data as the <a href="#getPlayer">&quot;getPlayer&quot;</a> method, but it takes a player number as parameter instead of a player name.</p>
 
-<p>Note: Special care must be taken to not modify the returned data, as doing so would likely compromise the consistency of the object&#39;s internal state and lead to instability.</p>
+<p>Note for Perl plugins: Special care must be taken to not modify the returned data, as doing so would likely compromise the consistency of the object&#39;s internal state and lead to instability. Python plugins aren&#39;t concerned as they always receive a copy of the original data.</p>
 
-</li>
-<li><p>- <code>getPlayers()</code></p>
+</dd>
+<dt id="getPlayers()"><a id="getPlayers"></a><code>getPlayers()</code></dt>
+<dd>
 
-<p>This method returns a reference to a hash containing the data regarding all the players in the game (including spectators). The hash is indexed by player numbers and the values are references to hashes containing the same data as returned by the <code>getPlayer($playerName)</code> method.</p>
+<p>This method returns a reference to a hash containing the data regarding all the players in the game (including spectators). The hash is indexed by player numbers and the values are references to hashes containing the same data as returned by the <a href="#getPlayer">&quot;getPlayer&quot;</a> method.</p>
 
 <p>Note: this method performs a deep copy of the data to prevent external code from corrupting internal data. However it is also possible to read the same data directly without triggering a deep copy by accessing the <code>players</code> field of the <code>SpringAutoHostInterface</code> object.</p>
 
-</li>
-<li><p>- <code>getPlayersByNames()</code></p>
+</dd>
+<dt id="getPlayersByNames()"><a id="getPlayersByNames"></a><code>getPlayersByNames()</code></dt>
+<dd>
 
-<p>This method returns the same data as the <code>getPlayers()</code> method, except it is indexed by player names instead of player numbers.</p>
+<p>This method returns the same data as the <a href="#getPlayers">&quot;getPlayers&quot;</a> method, except it is indexed by player names instead of player numbers.</p>
 
 <p>Note: this method performs a deep copy of the data to prevent external code from corrupting internal data.</p>
 
-</li>
-</ul>
+</dd>
+</dl>
 
 </dd>
 <dt id="getSpringPid()"><a id="getSpringPid"></a><code>getSpringPid()</code></dt>
@@ -1475,11 +1483,11 @@ def getParams(pluginName):
 
 <p><code>\%handlers</code> is a reference to a hash which contains the handlers to be added: each entry associates a lobby command (in uppercase) to a handler function implemented by the plugin. For example, with <code>{ JOINBATTLEREQUEST =&gt; \&amp;hLobbyJoinBattleRequest }</code>, the plugin has to implement the function <code>hLobbyJoinBattleRequest</code>. The parameters passed to the handlers are the command tokens: the command name followed by command parameters. Refer to <a href="http://springrts.com/dl/LobbyProtocol/ProtocolDescription.html">Spring lobby protocol specifications</a> for more information.</p>
 
-<p><code>$priority</code> is the priority of the handlers. Lowest priority number actually means higher priority. If not provided, the plugin name is used as priority, which means it is executed after handlers having priority &lt; 1000, and before handlers having priority &gt; 1000. Usually you don&#39;t need to provide priority, unless you use data managed by other handlers.</p>
+<p><code>$priority</code> is the priority of the handlers. Lowest priority number actually means higher priority. If not provided, the plugin name is used as priority, which means it is executed after handlers having priority <code>&lt; 1000</code>, and before handlers having priority <code>&gt; 1000</code>. Usually you don&#39;t need to provide priority, unless you use data managed by other handlers.</p>
 
 <p><code>$isPreCallback</code> specifies whether the command handlers must be called before or after the internal handlers of the lobby interface module. If this parameter is set to a true value, the command handlers will be called before the lobby interface module handlers. If this parameter is not provided or set to a false value, the command handlers will be called after the lobby interface module handlers.</p>
 
-<p>Note: As all lobby command handlers are automatically removed by SPADS when it is disconnected from the lobby server (due to network problems for example), plugins should always re-set up their lobby command handlers each time SPADS successfully reconnects. This can be done automatically by doing the <code>addLobbyCommandHandler</code> call in the <code>onLobbySynchronized</code> event-based callback (for plugins that don&#39;t need to process the commands sent by the lobby server during the initial lobby state synchronization phase) or in the <code>onLobbyLoggedIn</code> event-based callback (for plugins that need to process the commands sent by the lobby server during the initial lobby state synchronization phase).</p>
+<p>Note: As all lobby command handlers are automatically removed by SPADS when it is disconnected from the lobby server (due to network problems for example), plugins should always re-set up their lobby command handlers each time SPADS successfully reconnects. This can be done automatically by doing the <code>addLobbyCommandHandler</code> call in the <a href="#onLobbySynchronized">&quot;onLobbySynchronized&quot;</a> event-based callback (for plugins that don&#39;t need to process the commands sent by the lobby server during the initial lobby state synchronization phase) or in the <a href="#onLobbyLoggedIn">&quot;onLobbyLoggedIn&quot;</a> event-based callback (for plugins that need to process the commands sent by the lobby server during the initial lobby state synchronization phase).</p>
 
 </dd>
 <dt id="addSpadsCommandHandler(\%handlers,$replace=0)"><a id="addSpadsCommandHandler"></a><a id="addSpadsCommandHandler-handlers-replace-0"></a><code>addSpadsCommandHandler(\%handlers,$replace=0)</code></dt>
@@ -1509,7 +1517,7 @@ def getParams(pluginName):
 
 <p><code>\%handlers</code> is a reference to a hash which contains the handlers to be added: each entry associates a Spring AutoHost command to a handler function implemented by the plugin. The Spring AutoHost command names must match the entries declared in the <code>EVENT</code> enum in <a href="https://github.com/beyond-all-reason/RecoilEngine/blob/master/rts/Net/AutohostInterface.cpp#L36">engine source code</a>. For example, with <code>{ SERVER_STARTED =&gt; \&amp;hSpringServerStarted }</code>, the plugin has to implement the function <code>hSpringServerStarted</code>. This function will be called every time the <code>SERVER_STARTED</code> command is received by SPADS on the AutoHost interface. The first parameter passed to the handler is always the command name. The other parameters are the ones coming from the engine, as documented in <a href="https://raw.github.com/beyond-all-reason/RecoilEngine/master/rts/Net/AutohostInterface.cpp">engine source code</a> except that the <code>msgsize</code> parameter is processed internally by SPADS and removed from the parameters passed to the plugins.</p>
 
-<p><code>$priority</code> is the priority of the handlers. Lowest priority number actually means higher priority. If not provided, the plugin name is used as priority, which means it is executed after handlers having priority &lt; 1000, and before handlers having priority &gt; 1000. Usually you don&#39;t need to provide priority, unless you use data managed by other handlers.</p>
+<p><code>$priority</code> is the priority of the handlers. Lowest priority number actually means higher priority. If not provided, the plugin name is used as priority, which means it is executed after handlers having priority <code>&lt; 1000</code>, and before handlers having priority <code>&gt; 1000</code>. Usually you don&#39;t need to provide priority, unless you use data managed by other handlers.</p>
 
 <p>Note 1: <code>GAME_LUAMSG</code> commands (i.e. Lua messages) often require specific additional parsing. That&#39;s why a set of higher-level functions is dedicated to these messages, which notably provides automatic handling of the frequently used serialization formats (refer to the <a href="#Lua-messages-management">&quot;Lua messages management&quot;</a> section for more details). It is recommended to use these functions when dealing with Lua messages rather than the lower-level <code>addSpringCommandHandler</code> function.</p>
 
@@ -1579,19 +1587,19 @@ def hSpringPlayerChat(command, playerNb, dest, msg):
 <dt id="removeLobbyCommandHandler(\@commands,$priority=caller(),$isPreCallback)"><a id="removeLobbyCommandHandler"></a><a id="removeLobbyCommandHandler-commands-priority-caller-isPreCallback"></a><code>removeLobbyCommandHandler(\@commands,$priority=caller(),$isPreCallback)</code></dt>
 <dd>
 
-<p>This function must be called by plugins which added lobby command handlers previously using <code>addLobbyCommandHandler</code> function, when these handlers are no longer required (for example in the <code>onUnload</code> callback, when the plugin is unloaded).</p>
+<p>This function must be called by plugins which added lobby command handlers previously using <a href="#addLobbyCommandHandler">&quot;addLobbyCommandHandler&quot;</a> function, when these handlers are no longer required (for example in the <a href="#onUnload">&quot;onUnload&quot;</a> callback, when the plugin is unloaded).</p>
 
 <p><code>\@commands</code> is a reference to an array containing the lobby command names (in uppercase) for which the handlers must be removed.</p>
 
 <p><code>$priority</code> is the priority of the handlers to remove. It must be the same as the priority used when adding the handlers. If not provided, the plugin name is used as priority. Usually you don&#39;t need to provide priority, unless you use data managed by other handlers.</p>
 
-<p><code>$isPreCallback</code> specifies the type of command handlers to remove (must match the value used for the <code>addLobbyCommandHandler</code> function call for these handlers)</p>
+<p><code>$isPreCallback</code> specifies the type of command handlers to remove (must match the value used for the <a href="#addLobbyCommandHandler">&quot;addLobbyCommandHandler&quot;</a> function call for these handlers)</p>
 
 </dd>
 <dt id="removeSpadsCommandHandler(\@commands)"><a id="removeSpadsCommandHandler"></a><a id="removeSpadsCommandHandler-commands"></a><code>removeSpadsCommandHandler(\@commands)</code></dt>
 <dd>
 
-<p>This function must be called by plugins which added SPADS command handlers previously using <code>addSpadsCommandHandler</code> function, when these handlers are no longer required (for example in the <code>onUnload</code> callback, when the plugin is unloaded).</p>
+<p>This function must be called by plugins which added SPADS command handlers previously using <a href="#addSpadsCommandHandler">&quot;addSpadsCommandHandler&quot;</a> function, when these handlers are no longer required (for example in the <a href="#onUnload">&quot;onUnload&quot;</a> callback, when the plugin is unloaded).</p>
 
 <p><code>\@commands</code> is a reference to an array containing the SPADS command names (in uppercase) for which the handlers must be removed.</p>
 
@@ -1599,7 +1607,7 @@ def hSpringPlayerChat(command, playerNb, dest, msg):
 <dt id="removeSpringCommandHandler(\@commands,$priority=caller())"><a id="removeSpringCommandHandler"></a><a id="removeSpringCommandHandler-commands-priority-caller"></a><code>removeSpringCommandHandler(\@commands,$priority=caller())</code></dt>
 <dd>
 
-<p>This function must be called by plugins which added Spring AutoHost command handlers previously using <code>addSpringCommandHandler</code> function, when these handlers are no longer required (for example in the <code>onUnload</code> callback, when the plugin is unloaded).</p>
+<p>This function must be called by plugins which added Spring AutoHost command handlers previously using <a href="#addSpringCommandHandler">&quot;addSpringCommandHandler&quot;</a> function, when these handlers are no longer required (for example in the <a href="#onUnload">&quot;onUnload&quot;</a> callback, when the plugin is unloaded).</p>
 
 <p><code>\@commands</code> is a reference to an array containing the Spring AutoHost command names for which the handlers must be removed.</p>
 
@@ -1610,7 +1618,7 @@ def hSpringPlayerChat(command, playerNb, dest, msg):
 
 <h2 id="Lua-messages-management"><a id="Lua"></a>Lua messages management</h2>
 
-<p>Lua messages are just one of the various types of commands that can be received from the engine via the autohost interface. As such, they can very well be handled using the <a href="#addSpringCommandHandler">&quot;addSpringCommandHandler&quot;</a> function with the <code>GAME_LUAMSG</code> command type. However, Lua messages differ from the other types of message coming from the engine in that they are actually generated by the game code. So there are a lot of different &quot;subtypes&quot;, which depend on the game being used (and even its version). And each one of these types of Lua message has its own specific format / serialization form. Using the <code>addSpringCommandHandler</code> function to implement a generic Lua message handler isn&#39;t convenient because it leaves a lot of work to do in the plugin code just to identify the type of Lua message and extract the useful data from the specific serialized form. Also, doing so means each plugin will have to implement its own Lua message parsing code just to identify those it is interested in.</p>
+<p>Lua messages are just one of the various types of commands that can be received from the engine via the autohost interface. As such, they can very well be handled using the <a href="#addSpringCommandHandler">&quot;addSpringCommandHandler&quot;</a> function with the <code>GAME_LUAMSG</code> command type. However, Lua messages differ from the other types of message coming from the engine in that they are actually generated by the game code. So there are a lot of different &quot;subtypes&quot;, which depend on the game being used (and even its version). And each one of these types of Lua message has its own specific format / serialization form. Using the <a href="#addSpringCommandHandler">&quot;addSpringCommandHandler&quot;</a> function to implement a generic Lua message handler isn&#39;t convenient because it leaves a lot of work to do in the plugin code just to identify the type of Lua message and extract the useful data from the specific serialized form. Also, doing so means each plugin will have to implement its own Lua message parsing code just to identify those it is interested in.</p>
 
 <p>Unfortunately, it is not practicable to perform the parsing and deserialization of all these Lua messages automatically in SPADS neither, due to the high variability of their format (both in time and depending on the game used). The solution adopted for the plugin API involves implementing only the core functionalities required to identify and deserialize Lua messages, while leaving it to the plugins to specify which of these functionalities must be used to preprocess each Lua message. Plugins are then left only to perform the final and very specific parsing of the Lua message, if any. Thus, the plugin API offers two main features for Lua messages management: registering/specifying Lua messages using the <a href="#registerLuaMsg">&quot;registerLuaMsg&quot;</a> function (to let SPADS know how to recognize them from their prefix and deserialize them), and declaring handlers on these high-level messages using the <a href="#addLuaMsgHandler">&quot;addLuaMsgHandler&quot;</a> function (to let SPADS know which functions must be called when such Lua messages are received from the engine).</p>
 
@@ -1671,7 +1679,7 @@ def hSpringPlayerChat(command, playerNb, dest, msg):
 
 <p><code>\&amp;parsingFunction</code> is a reference to the custom parsing function in charge of performing any remaining specific tasks on the message parameter before passing it to the handlers. This function receives the Lua parameter as first parameter (either raw binary data if <code>$paramPreproc</code> is set to <code>LUA_PREPROC_NONE</code>, or data preprocessed according to the selected mode(s) otherwise), and the Lua message prefix as second parameter. Upon success, the function must return the parsed/deserialized parameter, which will be passed to the message handlers. Upon failure, the function must return <code>undef</code> (or <code>None</code> for Python plugins) as first value, and the error message (typically a decoding or parsing error) as second value. The <code>\&amp;parsingFunction</code> parameter is optional. If omitted, it implies that no additional processing is required on the message parameter and that it will be passed to the handlers as is.</p>
 
-<p><code>$expectedFrequency</code> is the expected frequency of the Lua message, defined as the estimated number (integer) of messages of this type received by the engine per client per minute. This value doesn&#39;t need to be accurate, as SPADS uses this parameter solely to optimize the order in which prefixes are tested when identifying a Lua message: the prefixes of the most frequent messages are tested first. This parameter can also be used to force the prioritization of longer prefixes in case of ambiguity (i.e. when some prefixes are contained within others), in order to resolve conflicts. This parameter is optional (default value: 0).</p>
+<p><code>$expectedFrequency</code> is the expected frequency of the Lua message, defined as the estimated number (integer) of messages of this type received by the engine per client per minute. This value doesn&#39;t need to be accurate, as SPADS uses this parameter solely to optimize the order in which prefixes are tested when identifying a Lua message: the prefixes of the most frequent messages are tested first. This parameter can also be used to force the prioritization of longer prefixes in case of ambiguity (i.e. when some prefixes are contained within others), in order to resolve conflicts. This parameter is optional (default value: <code>0</code>).</p>
 
 <p>Here is an example that registers a Lua message as it is currently used by the game Beyond All Reason to broadcast the activity of a client every 2 seconds. The message has a validation string of 2 characters and no parameter:</p>
 
@@ -2048,7 +2056,7 @@ def postLoadArchivesFunc(nbArchivesLoaded):
 <dt id="updateSetting($type,$name,$value)"><a id="updateSetting"></a><a id="updateSetting-type-name-value"></a><code>updateSetting($type,$name,$value)</code></dt>
 <dd>
 
-<p>This function updates current SPADS configuration in memory by changing the value of a setting and applying it immediatly. This function does not modify configuration files on disk. The new value provided by the plugin is not checked: the plugin is reponsible for providing only correct values (see <code>isSettingValueAllowed</code> function).</p>
+<p>This function updates current SPADS configuration in memory by changing the value of a setting and applying it immediatly. This function does not modify configuration files on disk. The new value provided by the plugin is not checked: the plugin is reponsible for providing only correct values (see <a href="#isSettingValueAllowed">&quot;isSettingValueAllowed&quot;</a> function).</p>
 
 <p><code>$type</code> is the type of setting to update (<code>&quot;set&quot;</code> for preset setting, <code>&quot;hSet&quot;</code> for hosting setting, or <code>&quot;bSet&quot;</code> for battle setting)</p>
 
@@ -2072,7 +2080,7 @@ def postLoadArchivesFunc(nbArchivesLoaded):
 <dt id="broadcastMsg($message)"><a id="broadcastMsg"></a><a id="broadcastMsg-message"></a><code>broadcastMsg($message)</code></dt>
 <dd>
 
-<p>This function sends a message simultaneously in the battle lobby (if open), in the game (if running) and in the broadcast channels (as configured by the <code>broadcastChannels</code> global setting).</p>
+<p>This function sends a message simultaneously in the battle lobby (if open), in the game (if running) and in the broadcast channels (as configured by the <a href="http://planetspads.free.fr/spads/doc/spadsDoc_All.html#global:broadcastChannels">broadcastChannels</a> global setting).</p>
 
 </dd>
 <dt id="invalidSyntax($user,$commandName,$cause=&#39;&#39;)"><a id="invalidSyntax"></a><a id="invalidSyntax-user-commandName-cause"></a><code>invalidSyntax($user,$commandName,$cause=&#39;&#39;)</code></dt>
@@ -2188,37 +2196,37 @@ def postLoadArchivesFunc(nbArchivesLoaded):
 <dt id="forkProcess(\&amp;processFunction,\&amp;endProcessCallback,$preventQueuing=1)"><a id="forkProcess"></a><a id="forkProcess-processFunction-endProcessCallback-preventQueuing-1"></a><code>forkProcess(\&amp;processFunction,\&amp;endProcessCallback,$preventQueuing=1)</code></dt>
 <dd>
 
-<p>This function allows plugins to fork a process from main SPADS process, for parallel processing. In scalar context it returns the PID of the forked process on success, <code>-1</code> if the fork request has been queued, or <code>0</code> if the fork request failed. In list context it returns the PID as first parameter and a handle as second parameter. This handle can be passed as parameter to the <code>removeProcessCallback</code> function to remove the <code>endProcessCallback</code> callback.</p>
+<p>This function allows plugins to fork a process from main SPADS process, for parallel processing. In scalar context it returns the PID of the forked process on success, <code>-1</code> if the fork request has been queued, or <code>0</code> if the fork request failed. In list context it returns the PID as first parameter and a handle as second parameter. This handle can be passed as parameter to the <a href="#removeProcessCallback">&quot;removeProcessCallback&quot;</a> function to remove the <code>endProcessCallback</code> callback.</p>
 
-<p>Note: this function cannot be used by Python plugins on Windows system (refer to section <a href="#Windows-limitations">PYTHON SPECIFIC NOTES - Windows limitations</a> for details).</p>
+<p>Note: this function cannot be used by Python plugins on Windows system (refer to section <a href="#Windows-limitations">&quot;PYTHON SPECIFIC NOTES - Windows limitations&quot;</a> for details).</p>
 
 <p><code>\&amp;processFunction</code> is a reference to a function containing the code to be executed in the forked process (no parameter is passed to this function). This function can call <code>exit</code> to end the forked process with a specific exit code. If it returns without calling exit, then the exit code <code>0</code> will be used.</p>
 
 <p><code>\&amp;endProcessCallback</code> is a reference to a function containing the code to be executed in main SPADS process, once the forked process exited. Following parameters are passed to this function: <code>$exitCode</code> (exit code of the forked process), <code>$signalNb</code> (signal number responsible for forked process termination if any), <code>$hasCoreDump</code> (boolean flag indicating if a core dump occured in the forked process), <code>$pid</code> (PID of the forked process that just exited).</p>
 
-<p><code>$preventQueuing</code> is an optional boolean parameter (default value: 1) indicating if the fork request must not be queued (i.e., the fork request will fail instead of being queued if too many forked processes are already running)</p>
+<p><code>$preventQueuing</code> is an optional boolean parameter (default value: <code>1</code>) indicating if the fork request must not be queued (i.e., the fork request will fail instead of being queued if too many forked processes are already running)</p>
 
 </dd>
 <dt id="forkCall(\&amp;processFunction,\&amp;endProcessCallback,$preventQueuing=0)"><a id="forkCall"></a><a id="forkCall-processFunction-endProcessCallback-preventQueuing-0"></a><code>forkCall(\&amp;processFunction,\&amp;endProcessCallback,$preventQueuing=0)</code></dt>
 <dd>
 
-<p>This function allows plugins to call a function asynchronously and retrieve the data returned by this function (this is done internally by forking a process to execute the function and use a socketpair to transmit the result back to the parent process). In scalar context it returns the PID of the forked process on success, <code>-1</code> if the fork request has been queued, or <code>0</code> on error. In list context it returns the PID as first parameter and a handle as second parameter. This handle can be passed as parameter to the <code>removeProcessCallback</code> function to remove the <code>endProcessCallback</code> callback.</p>
+<p>This function allows plugins to call a function asynchronously and retrieve the data returned by this function (this is done internally by forking a process to execute the function and use a socketpair to transmit the result back to the parent process). In scalar context it returns the PID of the forked process on success, <code>-1</code> if the fork request has been queued, or <code>0</code> on error. In list context it returns the PID as first parameter and a handle as second parameter. This handle can be passed as parameter to the <a href="#removeProcessCallback">&quot;removeProcessCallback&quot;</a> function to remove the <code>endProcessCallback</code> callback.</p>
 
-<p>Note: this function cannot be used by Python plugins on Windows system (refer to section <a href="#Windows-limitations">PYTHON SPECIFIC NOTES - Windows limitations</a> for details).</p>
+<p>Note: this function cannot be used by Python plugins on Windows system (refer to section <a href="#Windows-limitations">&quot;PYTHON SPECIFIC NOTES - Windows limitations&quot;</a> for details).</p>
 
 <p><code>\&amp;processFunction</code> is a reference to a function containing the code to be executed in the forked process (no parameter is passed to this function). This function must not call <code>exit</code>, it should use <code>return</code> instead to return values (scalars, arrays, hashes...) that will be passed to the callback.</p>
 
 <p><code>\&amp;endProcessCallback</code> is a reference to a function containing the code to be executed in main SPADS process, once the forked function call (<code>\&amp;processFunction</code>) returned. The values returned by the forked function call will be passed as parameters to this callback.</p>
 
-<p><code>$preventQueuing</code> is an optional boolean parameter (default value: 0) indicating if the fork request must not be queued (i.e., the fork request will fail instead of being queued if too many forked processes are already running)</p>
+<p><code>$preventQueuing</code> is an optional boolean parameter (default value: <code>0</code>) indicating if the fork request must not be queued (i.e., the fork request will fail instead of being queued if too many forked processes are already running)</p>
 
 </dd>
 <dt id="removeProcessCallback($processHandle)"><a id="removeProcessCallback"></a><a id="removeProcessCallback-processHandle"></a><code>removeProcessCallback($processHandle)</code></dt>
 <dd>
 
-<p>This function can be used by plugins to remove the callbacks on forked processes added beforehand with the <code>forkProcess</code> and <code>forkCall</code> functions, if the callback hasn&#39;t been called yet (i.e. the corresponding forked process didn&#39;t exit yet). It returns <code>1</code> if the callback could be removed, <code>0</code> else.</p>
+<p>This function can be used by plugins to remove the callbacks on forked processes added beforehand with the <a href="#forkProcess">&quot;forkProcess&quot;</a> and <a href="#forkCall">&quot;forkCall&quot;</a> functions, if the callback hasn&#39;t been called yet (i.e. the corresponding forked process didn&#39;t exit yet). It returns <code>1</code> if the callback could be removed, <code>0</code> else.</p>
 
-<p><code>$processHandle</code> is an internal process handle, returned as second return value by the <code>forkProcess</code> and <code>forkCall</code> functions.</p>
+<p><code>$processHandle</code> is an internal process handle, returned as second return value by the <a href="#forkProcess">&quot;forkProcess&quot;</a> and <a href="#forkCall">&quot;forkCall&quot;</a> functions.</p>
 
 </dd>
 </dl>
@@ -2236,7 +2244,7 @@ def postLoadArchivesFunc(nbArchivesLoaded):
 
 <p><code>$delay</code> is the delay in seconds before executing the <code>\&amp;callback</code> function.</p>
 
-<p><code>$interval</code> is the interval in seconds between each execution of the <code>\&amp;callback</code> function. If this value is set to 0, the <code>\&amp;callback</code> function will be executed only once.</p>
+<p><code>$interval</code> is the interval in seconds between each execution of the <code>\&amp;callback</code> function. If this value is set to <code>0</code>, the <code>\&amp;callback</code> function will be executed only once.</p>
 
 <p><code>\&amp;callback</code> is a reference to a function containing the code to be executed when the timed event occurs. This callback must not be blocking, otherwise SPADS may become unstable.</p>
 
@@ -2244,9 +2252,9 @@ def postLoadArchivesFunc(nbArchivesLoaded):
 <dt id="removeTimer($name)"><a id="removeTimer"></a><a id="removeTimer-name"></a><code>removeTimer($name)</code></dt>
 <dd>
 
-<p>This function must be used by plugins to remove timed events (timers) added previously with the <code>addTimer</code> function. It returns <code>1</code> if the timer could be removed, <code>0</code> else. Note: Non-repeating timers (i.e. having null interval value) are automatically removed once they are triggered.</p>
+<p>This function must be used by plugins to remove timed events (timers) added previously with the <a href="#addTimer">&quot;addTimer&quot;</a> function. It returns <code>1</code> if the timer could be removed, <code>0</code> else. Note: Non-repeating timers (i.e. having null interval value) are automatically removed once they are triggered.</p>
 
-<p><code>$name</code> is the unique timer name given by the plugin when the timer was added using the <code>addTimer</code> function.</p>
+<p><code>$name</code> is the unique timer name given by the plugin when the timer was added using the <a href="#addTimer">&quot;addTimer&quot;</a> function.</p>
 
 </dd>
 </dl>
@@ -2260,7 +2268,7 @@ def postLoadArchivesFunc(nbArchivesLoaded):
 
 <p>This function allows plugins to add sockets to SPADS asynchronous network system. It returns <code>1</code> if the socket has correctly been added, <code>0</code> else.</p>
 
-<p>Note: this function cannot be used by Python plugins on Windows system (refer to section <a href="#Windows-limitations">PYTHON SPECIFIC NOTES - Windows limitations</a> for details).</p>
+<p>Note: this function cannot be used by Python plugins on Windows system (refer to section <a href="#Windows-limitations">&quot;PYTHON SPECIFIC NOTES - Windows limitations&quot;</a> for details).</p>
 
 <p><code>\$socketObject</code> is a reference to a socket object created by the plugin</p>
 
@@ -2284,7 +2292,7 @@ def postLoadArchivesFunc(nbArchivesLoaded):
 <dt id="fix_string(spads_string[,...])"><a id="fix_string"></a><a id="fix_string-spads_string"></a><code>fix_string(spads_string[,...])</code></dt>
 <dd>
 
-<p>This function allows Python plugins to automatically convert byte strings to normal strings if needed. The function takes any number of byte strings or normal strings as parameters, and returns them converted to normal strings if needed (parameters which are already normal strings are returned without any modification). Refer to section <a href="#Perl-strings-conversions">PYTHON SPECIFIC NOTES - Perl strings conversions</a> for the use case of this function. Here is an example of usage:</p>
+<p>This function allows Python plugins to automatically convert byte strings to normal strings if needed. The function takes any number of byte strings or normal strings as parameters, and returns them converted to normal strings if needed (parameters which are already normal strings are returned without any modification). Refer to section <a href="#Perl-strings-conversions">&quot;PYTHON SPECIFIC NOTES - Perl strings conversions&quot;</a> for the use case of this function. Here is an example of usage:</p>
 
 <pre><code class="language-python">class MyPlugin:
 
@@ -2310,10 +2318,10 @@ def hMyCommand(source,user,params,checkOnly):
 
 <ul>
 
-<li><p><code>can_add_socket</code> : indicates if the <code>addSocket</code> function of the plugin API is available from Python plugin on this system</p>
+<li><p><code>can_add_socket</code> : indicates if the <a href="#addSocket">&quot;addSocket&quot;</a> function of the plugin API is available from Python plugin on this system</p>
 
 </li>
-<li><p><code>can_fork</code> : indicates if the fork functions of the plugin API (<code>forkProcess</code> and <code>forkCall</code>) are available from Python plugins on this system</p>
+<li><p><code>can_fork</code> : indicates if the fork functions of the plugin API (<a href="#forkProcess">&quot;forkProcess&quot;</a> and <a href="#forkCall">&quot;forkCall&quot;</a>) are available from Python plugins on this system</p>
 
 </li>
 <li><p><code>use_byte_string</code> : indicates if the strings passed as parameters to Python plugin callbacks on this system are Python byte strings or normal Python strings</p>
@@ -2587,8 +2595,13 @@ def myFunction():
     // Build index for short anchors of the API functions
     // (generated by Pod::Simple::Role::XHTML::WithExtraTargets)
     const apiTargets = new Map(
-      Array.from(document.querySelectorAll('dt[id] a[id]'))
+      Array.from(document.querySelectorAll('body > dl > dt[id] > a[id]'))
         .map(anchor => [anchor.id, anchor.id])
+    );
+
+    const apiMethods = new Set(
+      Array.from(document.querySelectorAll('body > dl > dd > dl > dt[id] > a[id]'))
+        .map(anchor => anchor.id)
     );
 
     // Special entry for constructor
@@ -2627,8 +2640,14 @@ def myFunction():
         if (node.parentElement.closest('.token, a'))
           continue;
 
-        const match = node.textContent.match(/^(\s*)(\w+)(\s*)$/);
-        if (!match || !apiTargets.has(match[2]))
+        let leadingWhitespaces, functionName, trailingWhitespaces;
+        {
+          const match = node.textContent.match(/^(\s*)(\w+)(\s*)$/);
+          if (!match)
+            continue;
+          [,leadingWhitespaces, functionName, trailingWhitespaces] = match;
+        }
+        if(!apiTargets.has(functionName) && !apiMethods.has(functionName))
           continue;
 
         // Next character must be an opening parenthesis
@@ -2640,14 +2659,21 @@ def myFunction():
           continue;
 
         const link = document.createElement('a');
-        link.href = '#' + encodeURIComponent(apiTargets.get(match[2]));
-        link.className = 'api-function-call';
-        link.textContent = match[2];
+        let linkHref;
+        if (apiTargets.has(functionName)) {
+          linkHref = apiTargets.get(functionName);
+          link.className = 'api-function-call';
+        } else {
+          linkHref = functionName;
+          link.className = 'api-method-call';
+        }
+        link.href = '#' + encodeURIComponent(linkHref);
+        link.textContent = functionName;
 
         node.replaceWith(
-          document.createTextNode(match[1]),
+          document.createTextNode(leadingWhitespaces),
           link,
-          document.createTextNode(match[3])
+          document.createTextNode(trailingWhitespaces)
         );
       }
     });
